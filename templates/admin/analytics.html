@@ -1,0 +1,675 @@
+{% extends "base.html" %}
+{% block title %}マーケティング分析 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📈 マーケティング分析</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('admin_analytics_settings') }}" class="btn btn-secondary">⚙️ ウィジェット設定</a>
+    </div>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">👥 ユーザー管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">📈 分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+</div>
+
+{% set enabled_keys = widgets|selectattr('is_enabled')|map(attribute='widget_key')|list %}
+
+<!-- 売上・利益（月別推移） -->
+{% if 'sales_profit' in enabled_keys and monthly_sales %}
+<div class="admin-section widget-section">
+    <h2>💰 売上・利益（月別推移）</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>月</th>
+                    <th>販売件数</th>
+                    <th>売上金額</th>
+                    <th>利益</th>
+                    <th>グラフ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set max_sales = monthly_sales|map(attribute='sales')|max if monthly_sales else 1 %}
+                {% for month in monthly_sales %}
+                <tr>
+                    <td><strong>{{ month.month }}</strong></td>
+                    <td>{{ month.count }}件</td>
+                    <td>¥{{ "{:,}".format(month.sales or 0) }}</td>
+                    <td class="{% if month.profit and month.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(month.profit or 0) }}
+                    </td>
+                    <td>
+                        <div class="bar-chart">
+                            <div class="bar" style="width: {{ ((month.sales or 0) / max_sales * 100)|round(1) }}%"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="empty-cell">データがありません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- 売れた商品（Top10） -->
+{% if 'top_products' in enabled_keys and top_products %}
+<div class="admin-section widget-section">
+    <h2>🏆 売れた商品（売上Top10）</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>順位</th>
+                    <th>商品名</th>
+                    <th>ブランド</th>
+                    <th>売上</th>
+                    <th>利益</th>
+                    <th>販売日</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in top_products %}
+                <tr>
+                    <td><span class="rank-badge">{{ loop.index }}</span></td>
+                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.sale_price or 0) }}</td>
+                    <td class="amount {% if item.profit and item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(item.profit or 0) }}
+                    </td>
+                    <td>{{ item.sale_date or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-cell">データがありません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- 売れない商品（在庫滞留） -->
+{% if 'slow_products' in enabled_keys and slow_products %}
+<div class="admin-section widget-section">
+    <h2>📦 売れない商品（在庫滞留）</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>商品名</th>
+                    <th>ブランド</th>
+                    <th>仕入額</th>
+                    <th>仕入日</th>
+                    <th>在庫日数</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in slow_products %}
+                <tr>
+                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td>{{ item.purchase_date or '-' }}</td>
+                    <td>
+                        <span class="days-badge {% if item.days_in_stock and item.days_in_stock > 60 %}danger{% elif item.days_in_stock and item.days_in_stock > 30 %}warning{% endif %}">
+                            {{ item.days_in_stock|int if item.days_in_stock else 0 }}日
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="empty-cell">在庫中の商品がありません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="admin-grid-2">
+    <!-- 回転率・在庫日数 -->
+    {% if 'turnover_rate' in enabled_keys and turnover_stats %}
+    <div class="admin-section widget-section">
+        <h2>🔄 回転率・在庫日数</h2>
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                    <span class="stat-value">
+                        {% if turnover_stats.total_count and turnover_stats.total_count > 0 %}
+                        {{ ((turnover_stats.sold_count or 0) / turnover_stats.total_count * 100)|round(1) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                    <span class="stat-label">回転率（売却率）</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-info">
+                    <span class="stat-value">{{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats.avg_days_to_sell else '-' }}日</span>
+                    <span class="stat-label">平均販売日数</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📦</div>
+                <div class="stat-info">
+                    <span class="stat-value">{{ turnover_stats.avg_days_in_stock|round(1) if turnover_stats.avg_days_in_stock else '-' }}日</span>
+                    <span class="stat-label">平均在庫日数</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 成約率 -->
+    {% if 'closing_rate' in enabled_keys and closing_stats %}
+    <div class="admin-section widget-section">
+        <h2>🎯 成約率</h2>
+        <div class="stats-cards">
+            <div class="stat-card wide">
+                <div class="closing-rate-chart">
+                    {% set total = closing_stats.total_count or 1 %}
+                    {% set sold = closing_stats.sold_count or 0 %}
+                    {% set listed = closing_stats.listed_count or 0 %}
+                    <div class="rate-bar">
+                        <div class="rate-sold" style="width: {{ (sold / total * 100)|round(1) }}%"></div>
+                        <div class="rate-listed" style="width: {{ ((listed - sold) / total * 100 if listed > sold else 0)|round(1) }}%"></div>
+                    </div>
+                    <div class="rate-labels">
+                        <span class="rate-label sold">売却済: {{ sold }}件 ({{ (sold / total * 100)|round(1) }}%)</span>
+                        <span class="rate-label listed">出品中: {{ listed - sold if listed > sold else 0 }}件</span>
+                        <span class="rate-label total">全体: {{ total }}件</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="admin-grid-2">
+    <!-- 平均単価 -->
+    {% if 'avg_price' in enabled_keys and avg_price_stats %}
+    <div class="admin-section widget-section">
+        <h2>💵 平均単価</h2>
+        <div class="stats-cards vertical">
+            <div class="stat-card horizontal">
+                <span class="stat-label">平均仕入額</span>
+                <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_purchase or 0)|int) }}</span>
+            </div>
+            <div class="stat-card horizontal">
+                <span class="stat-label">平均売上</span>
+                <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_sale or 0)|int) }}</span>
+            </div>
+            <div class="stat-card horizontal">
+                <span class="stat-label">平均利益</span>
+                <span class="stat-value {% if avg_price_stats.avg_profit and avg_price_stats.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                    ¥{{ "{:,}".format((avg_price_stats.avg_profit or 0)|int) }}
+                </span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- リピート率（販売先別） -->
+    {% if 'repeat_rate' in enabled_keys and repeat_stats %}
+    <div class="admin-section widget-section">
+        <h2>🔁 リピート率（販売先別）</h2>
+        <div class="repeat-list">
+            {% for item in repeat_stats[:5] %}
+            <div class="repeat-item">
+                <span class="repeat-dest">{{ item.sales_destination or '(未設定)' }}</span>
+                <span class="repeat-count">{{ item.purchase_count }}件販売</span>
+                <div class="repeat-bar">
+                    {% set max_count = repeat_stats[0].purchase_count if repeat_stats else 1 %}
+                    <div class="repeat-fill" style="width: {{ (item.purchase_count / max_count * 100)|round(1) }}%"></div>
+                </div>
+            </div>
+            {% else %}
+            <p class="empty-message">データがありません</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 時間帯・曜日別売上 -->
+{% if 'time_sales' in enabled_keys and day_sales %}
+<div class="admin-section widget-section">
+    <h2>🕐 曜日別売上</h2>
+    <div class="day-sales-chart">
+        {% set max_day_sales = day_sales|map(attribute='sales')|max if day_sales else 1 %}
+        {% for day in day_sales %}
+        <div class="day-bar-container">
+            <div class="day-bar" style="height: {{ ((day.sales or 0) / max_day_sales * 150)|round(0) }}px">
+                <span class="day-value">¥{{ "{:,}".format((day.sales or 0)|int) }}</span>
+            </div>
+            <span class="day-label">{{ day.day_of_week|trim }}</span>
+            <span class="day-count">{{ day.count }}件</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="admin-grid-2">
+    <!-- 販売先別統計 -->
+    {% if 'destination_stats' in enabled_keys and destination_stats %}
+    <div class="admin-section widget-section">
+        <h2>🛒 販売先別統計</h2>
+        <div class="analytics-cards">
+            {% for dest in destination_stats %}
+            <div class="analytics-card">
+                <div class="analytics-icon">
+                    {% if dest.sales_destination == 'メルカリ' %}🛍️
+                    {% elif dest.sales_destination == 'ヤフオク' %}🔨
+                    {% elif dest.sales_destination == 'ラクマ' %}📱
+                    {% elif dest.sales_destination == 'Amazon' %}📦
+                    {% else %}🏪{% endif %}
+                </div>
+                <div class="analytics-content">
+                    <h4>{{ dest.sales_destination }}</h4>
+                    <p class="analytics-value">¥{{ "{:,}".format(dest.total_sales or 0) }}</p>
+                    <p class="analytics-sub">{{ dest.count }}件の販売</p>
+                </div>
+            </div>
+            {% else %}
+            <p class="empty-message">データがありません</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- ブランド別利益率統計 -->
+    {% if 'brand_stats' in enabled_keys and brand_stats %}
+    <div class="admin-section widget-section">
+        <h2>🏷️ ブランド別利益率</h2>
+        <div class="brand-stats-list">
+            {% for brand in brand_stats %}
+            <div class="brand-stat-item">
+                <div class="brand-rank">{{ loop.index }}</div>
+                <div class="brand-info">
+                    <h4>{{ brand.brand_name or '(未設定)' }}</h4>
+                    <p class="brand-detail">{{ brand.count }}件販売 / 売上¥{{ "{:,}".format(brand.total_sales or 0) }}</p>
+                </div>
+                <div class="brand-profit">
+                    <span class="profit-rate {% if brand.profit_rate and brand.profit_rate > 0 %}positive{% else %}negative{% endif %}">
+                        {{ brand.profit_rate or 0 }}%
+                    </span>
+                    <span class="profit-amount {% if brand.total_profit and brand.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(brand.total_profit or 0) }}
+                    </span>
+                </div>
+            </div>
+            {% else %}
+            <p class="empty-message">データがありません</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ウィジェットが何も有効でない場合 -->
+{% if not enabled_keys %}
+<div class="admin-section">
+    <div class="empty-state">
+        <p>📊 表示するウィジェットがありません</p>
+        <a href="{{ url_for('admin_analytics_settings') }}" class="btn btn-primary">ウィジェットを設定する</a>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.widget-section {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ランクバッジ */
+.rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.rank-badge:nth-of-type(1) { background: linear-gradient(135deg, #ffd700, #ffb700); color: #7c5c00; }
+.rank-badge:nth-of-type(2) { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #505050; }
+.rank-badge:nth-of-type(3) { background: linear-gradient(135deg, #cd7f32, #a66a2a); color: #fff; }
+
+tr:nth-child(1) .rank-badge { background: linear-gradient(135deg, #ffd700, #ffb700); color: #7c5c00; }
+tr:nth-child(2) .rank-badge { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #505050; }
+tr:nth-child(3) .rank-badge { background: linear-gradient(135deg, #cd7f32, #a66a2a); color: #fff; }
+tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
+
+/* 日数バッジ */
+.days-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.days-badge.warning {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.days-badge.danger {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* 統計カード */
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.stats-cards.vertical {
+    grid-template-columns: 1fr;
+}
+
+.stat-card {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+}
+
+.stat-card.horizontal {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+}
+
+.stat-card.wide {
+    grid-column: 1 / -1;
+}
+
+.stat-card .stat-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-card .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.stat-card .stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+/* 成約率チャート */
+.closing-rate-chart {
+    width: 100%;
+}
+
+.rate-bar {
+    height: 30px;
+    background: #e2e8f0;
+    border-radius: 15px;
+    overflow: hidden;
+    display: flex;
+    margin-bottom: 15px;
+}
+
+.rate-sold {
+    background: linear-gradient(90deg, #10b981, #34d399);
+    transition: width 0.5s ease;
+}
+
+.rate-listed {
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    transition: width 0.5s ease;
+}
+
+.rate-labels {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.rate-label {
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.rate-label.sold {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.rate-label.listed {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.rate-label.total {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+/* リピートリスト */
+.repeat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.repeat-item {
+    display: grid;
+    grid-template-columns: 100px 80px 1fr;
+    align-items: center;
+    gap: 15px;
+}
+
+.repeat-dest {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.repeat-count {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.repeat-bar {
+    height: 10px;
+    background: #e2e8f0;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.repeat-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 5px;
+    transition: width 0.5s ease;
+}
+
+/* 曜日別売上チャート */
+.day-sales-chart {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    height: 220px;
+    padding: 20px 10px;
+    background: #f8fafc;
+    border-radius: 10px;
+}
+
+.day-bar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.day-bar {
+    width: 50px;
+    background: linear-gradient(180deg, #667eea, #764ba2);
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 10px;
+    position: relative;
+}
+
+.day-value {
+    position: absolute;
+    top: -25px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.day-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #1e293b;
+}
+
+.day-count {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+/* ブランド統計リスト */
+.brand-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.brand-stat-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8fafc;
+    border-radius: 8px;
+    gap: 15px;
+}
+
+.brand-stat-item:hover {
+    background: #f1f5f9;
+}
+
+.brand-rank {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.brand-info {
+    flex: 1;
+}
+
+.brand-info h4 {
+    margin: 0 0 3px 0;
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+.brand-detail {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.brand-profit {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.profit-rate {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.profit-rate.positive {
+    color: #10b981;
+}
+
+.profit-rate.negative {
+    color: #ef4444;
+}
+
+.profit-amount {
+    font-size: 0.8rem;
+    font-family: 'Consolas', monospace;
+}
+
+/* 空の状態 */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #64748b;
+}
+
+.empty-state p {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .day-sales-chart {
+        flex-wrap: wrap;
+        height: auto;
+    }
+    
+    .day-bar-container {
+        flex: 1;
+        min-width: 45px;
+    }
+    
+    .repeat-item {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+}
+</style>
+{% endblock %}

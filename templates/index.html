@@ -1,0 +1,1285 @@
+{% extends "base.html" %}
+{% block title %}商品一覧 - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+/* お知らせエリア */
+.announcement-area {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    padding: 12px 20px;
+    margin-bottom: 15px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.announcement-slider {
+    flex: 1;
+}
+
+.announcement-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.announcement-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.announcement-important .announcement-badge { background: #ef4444; }
+.announcement-warning .announcement-badge { background: #f59e0b; }
+.announcement-success .announcement-badge { background: #10b981; }
+
+.announcement-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.announcement-content {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.announcement-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 15px;
+}
+
+.ann-nav-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: background 0.2s;
+}
+
+.ann-nav-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+#annCounter {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+/* コンパクト統計バー */
+.compact-stats {
+    background: white;
+    border-radius: 10px;
+    padding: 12px 20px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    flex-wrap: wrap;
+}
+
+.compact-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.compact-stat-label {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.compact-stat-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+    font-family: 'Consolas', monospace;
+}
+
+.compact-stat-divider {
+    width: 1px;
+    height: 20px;
+    background: #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .announcement-area {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    .announcement-item {
+        flex-direction: column;
+        gap: 6px;
+    }
+    .announcement-nav {
+        margin-left: 0;
+    }
+    .compact-stats {
+        gap: 10px;
+        padding: 10px 15px;
+    }
+    .compact-stat-divider {
+        display: none;
+    }
+    .compact-stat {
+        flex-direction: column;
+        gap: 2px;
+    }
+}
+
+/* テーブルスタイル */
+.table-container {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    margin-top: 1rem;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.data-table th {
+    background: #f8fafc;
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.data-table th.sortable:hover {
+    background: #f1f5f9;
+}
+
+.data-table th .filter-icon {
+    margin-left: 5px;
+    opacity: 0.5;
+}
+
+.data-table td {
+    padding: 10px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.data-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.data-table tbody tr.row-sold {
+    background: #f8f8f8;
+    color: #94a3b8;
+}
+
+.data-table tbody tr.row-sold:hover {
+    background: #f1f1f1;
+}
+
+/* サムネイル */
+.table-thumb {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.no-thumb {
+    width: 50px;
+    height: 50px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+}
+
+/* ステータスバッジ */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.sold {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.listed {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-badge.unlisted {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+/* 金額表示 */
+.amount {
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.amount.positive {
+    color: #10b981;
+}
+
+.amount.negative {
+    color: #ef4444;
+}
+
+/* コンディションバッジ */
+.condition-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 28px;
+}
+
+.condition-N { background: #dbeafe; color: #1d4ed8; }
+.condition-S { background: #d1fae5; color: #059669; }
+.condition-A { background: #fef3c7; color: #d97706; }
+.condition-AB { background: #fed7aa; color: #c2410c; }
+.condition-B { background: #fecaca; color: #dc2626; }
+
+/* アクションボタン */
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell .btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    margin-right: 3px;
+}
+
+/* フィルター行 */
+.filter-row input,
+.filter-row select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.filter-row input:focus,
+.filter-row select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+/* 料金フィルター */
+.price-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.price-filter input {
+    width: 100%;
+    min-width: 50px;
+    max-width: 70px;
+    padding: 2px 4px;
+    font-size: 0.7rem;
+    text-align: right;
+}
+
+.price-filter span {
+    display: none;
+}
+
+.price-filter input::-webkit-outer-spin-button,
+.price-filter input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.price-filter input[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* テーブルスクロール - PC用 */
+.table-scroll {
+    /* PCではページ全体でスクロール */
+}
+
+/* ====================
+   レスポンシブ表示切替
+   ==================== */
+
+/* スマホ用カード表示 */
+.mobile-cards {
+    display: none;
+}
+
+.mobile-only {
+    display: none;
+}
+
+/* スマホ（768px以下）*/
+@media (max-width: 768px) {
+    /* テーブルを非表示 */
+    .table-container {
+        display: none;
+    }
+    
+    .desktop-only {
+        display: none;
+    }
+    
+    /* カードを表示 */
+    .mobile-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 10px 0;
+    }
+    
+    .mobile-only {
+        display: flex;
+    }
+    
+    /* フィルターバーを横スクロール可能に */
+    .filter-bar {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 10px;
+    }
+    
+    .filter-buttons {
+        flex-wrap: nowrap;
+    }
+}
+
+/* カードスタイル */
+.item-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.item-card:active {
+    transform: scale(0.98);
+}
+
+.item-card.card-sold {
+    background: #f8f8f8;
+    opacity: 0.8;
+}
+
+.card-header {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    gap: 12px;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.card-photo {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+}
+
+.card-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.card-photo .no-photo {
+    width: 100%;
+    height: 100%;
+    background: #e2e8f0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #94a3b8;
+}
+
+.card-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-id {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.card-title h3 {
+    margin: 2px 0 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-brand {
+    font-size: 0.85rem;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card-status {
+    flex-shrink: 0;
+}
+
+.card-body {
+    padding: 12px;
+}
+
+.card-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.85rem;
+}
+
+.card-label {
+    color: #64748b;
+}
+
+.card-value {
+    color: #1e293b;
+    font-weight: 500;
+}
+
+.card-prices {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.card-prices.three-col {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.price-item {
+    background: #f8fafc;
+    padding: 8px 6px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.price-item.profit {
+    grid-column: 1 / -1;
+    background: #f0fdf4;
+}
+
+.price-label {
+    display: block;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-bottom: 2px;
+}
+
+.price-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.price-value.positive {
+    color: #10b981;
+}
+
+.price-value.negative {
+    color: #ef4444;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #fafafa;
+    border-top: 1px solid #f0f0f0;
+}
+
+.card-actions .btn {
+    flex: 1;
+    text-align: center;
+    padding: 8px;
+    font-size: 0.85rem;
+}
+
+.empty-card {
+    text-align: center;
+    padding: 40px 20px;
+    color: #94a3b8;
+    background: white;
+    border-radius: 12px;
+}
+
+/* スマホ用フィルター */
+.mobile-filter {
+    display: none;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+@media (max-width: 768px) {
+    .mobile-filter {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+.mobile-search {
+    flex: 1;
+}
+
+.mobile-search input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 1rem;
+    background: white;
+}
+
+.mobile-search input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.mobile-filter-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.mobile-filter-buttons select {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: white;
+}
+
+/* スマホ用料金フィルター */
+.mobile-price-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.mobile-price-filter {
+    flex: 1;
+    min-width: 140px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.mobile-price-filter label {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+
+.mobile-price-range {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mobile-price-range input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    text-align: right;
+    max-width: 70px;
+}
+
+.mobile-price-range input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.mobile-price-range span {
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+.mobile-price-range input::-webkit-outer-spin-button,
+.mobile-price-range input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.mobile-price-range input[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* 件数表示 */
+.table-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+</style>
+
+<div class="page-header">
+    <h1>📦 商品一覧</h1>
+    <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 新規登録</a>
+</div>
+
+<!-- お知らせエリア -->
+{% if announcements %}
+<div class="announcement-area">
+    <div class="announcement-slider" id="announcementSlider">
+        {% for ann in announcements %}
+        <div class="announcement-item announcement-{{ ann.announcement_type }}" {% if not loop.first %}style="display: none;"{% endif %}>
+            <span class="announcement-badge">
+                {% if ann.announcement_type == 'important' %}🔴 重要
+                {% elif ann.announcement_type == 'warning' %}⚠️ 注意
+                {% elif ann.announcement_type == 'success' %}✅ 完了
+                {% else %}📢 お知らせ
+                {% endif %}
+            </span>
+            <span class="announcement-title">{{ ann.title }}</span>
+            <span class="announcement-content">{{ ann.content }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% if announcements|length > 1 %}
+    <div class="announcement-nav">
+        <button onclick="prevAnnouncement()" class="ann-nav-btn">◀</button>
+        <span id="annCounter">1/{{ announcements|length }}</span>
+        <button onclick="nextAnnouncement()" class="ann-nav-btn">▶</button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- コンパクト統計バー -->
+<div class="compact-stats">
+    <div class="compact-stat">
+        <span class="compact-stat-label">📊 登録</span>
+        <span class="compact-stat-value">{{ stats.total_items or 0 }}件</span>
+    </div>
+    <div class="compact-stat-divider"></div>
+    <div class="compact-stat">
+        <span class="compact-stat-label">💰 仕入</span>
+        <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+    </div>
+    <div class="compact-stat-divider"></div>
+    <div class="compact-stat">
+        <span class="compact-stat-label">💵 売上</span>
+        <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
+    </div>
+    <div class="compact-stat-divider"></div>
+    <div class="compact-stat">
+        <span class="compact-stat-label">📈 利益</span>
+        <span class="compact-stat-value {% if stats.total_profit and stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
+    </div>
+</div>
+
+<!-- ツールバー -->
+<div class="filter-bar">
+    <div class="filter-buttons">
+        <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+        <a href="{{ url_for('index', filter='today') }}" class="filter-btn {% if filter_type == 'today' %}active{% endif %}">今日</a>
+        <a href="{{ url_for('index', filter='yesterday') }}" class="filter-btn {% if filter_type == 'yesterday' %}active{% endif %}">昨日</a>
+        <a href="{{ url_for('index', filter='week') }}" class="filter-btn {% if filter_type == 'week' %}active{% endif %}">今週</a>
+        <a href="{{ url_for('index', filter='month') }}" class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
+        <a href="{{ url_for('index', filter='sold') }}" class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
+        <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
+    </div>
+    
+    <a href="{{ url_for('export_csv') }}" class="btn btn-export">📥 CSV</a>
+</div>
+
+<!-- 商品テーブル -->
+<div class="table-container">
+    <div class="table-scroll">
+        <table class="data-table" id="itemsTable">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">写真</th>
+                    <th class="sortable" data-sort="id">No</th>
+                    <th class="sortable" data-sort="product_name">商品名</th>
+                    <th class="sortable" data-sort="brand_name">ブランド</th>
+                    <th>状態</th>
+                    <th class="sortable" data-sort="store_name">店舗</th>
+                    <th class="sortable" data-sort="purchase_date">仕入日</th>
+                    <th class="sortable" data-sort="purchase_price">仕入額</th>
+                    <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable" data-sort="sale_price">売上</th>
+                    <th class="sortable" data-sort="profit">利益</th>
+                    <th>販売状況</th>
+                    <th style="width: 130px;">操作</th>
+                </tr>
+                <!-- フィルター行 -->
+                <tr class="filter-row">
+                    <th></th>
+                    <th><input type="text" id="filter-id" placeholder="No" onkeyup="filterTable()"></th>
+                    <th><input type="text" id="filter-name" placeholder="商品名" onkeyup="filterTable()"></th>
+                    <th><input type="text" id="filter-brand" placeholder="ブランド" onkeyup="filterTable()"></th>
+                    <th>
+                        <select id="filter-condition" onchange="filterTable()">
+                            <option value="">全て</option>
+                            <option value="N">N</option>
+                            <option value="S">S</option>
+                            <option value="A">A</option>
+                            <option value="AB">AB</option>
+                            <option value="B">B</option>
+                        </select>
+                    </th>
+                    <th><input type="text" id="filter-store" placeholder="店舗" onkeyup="filterTable()"></th>
+                    <th><input type="date" id="filter-date" onchange="filterTable()"></th>
+                    <th>
+                        <div class="price-filter">
+                            <input type="number" id="filter-purchase-min" placeholder="▲以上" onchange="filterTable()">
+                            <input type="number" id="filter-purchase-max" placeholder="▼以下" onchange="filterTable()">
+                        </div>
+                    </th>
+                    <th>
+                        <div class="price-filter">
+                            <input type="number" id="filter-listing-min" placeholder="▲以上" onchange="filterTable()">
+                            <input type="number" id="filter-listing-max" placeholder="▼以下" onchange="filterTable()">
+                        </div>
+                    </th>
+                    <th>
+                        <div class="price-filter">
+                            <input type="number" id="filter-sale-min" placeholder="▲以上" onchange="filterTable()">
+                            <input type="number" id="filter-sale-max" placeholder="▼以下" onchange="filterTable()">
+                        </div>
+                    </th>
+                    <th>
+                        <div class="price-filter">
+                            <input type="number" id="filter-profit-min" placeholder="▲以上" onchange="filterTable()">
+                            <input type="number" id="filter-profit-max" placeholder="▼以下" onchange="filterTable()">
+                        </div>
+                    </th>
+                    <th>
+                        <select id="filter-status" onchange="filterTable()">
+                            <option value="">すべて</option>
+                            <option value="sold">売却済</option>
+                            <option value="listed">出品中</option>
+                            <option value="unlisted">未出品</option>
+                        </select>
+                    </th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="{% if item.sale_date %}row-sold{% endif %}" 
+                    data-id="{{ item.id }}"
+                    data-name="{{ item.product_name or '' }}"
+                    data-brand="{{ item.brand_name or '' }}"
+                    data-condition="{{ item.item_condition or '' }}"
+                    data-store="{{ item.store_name or '' }}"
+                    data-date="{{ item.purchase_date or '' }}"
+                    data-purchase-price="{{ item.purchase_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}"
+                    data-sale-price="{{ item.sale_price or 0 }}"
+                    data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    <td>
+                        {% if item.photo_path %}
+                        <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
+                        {% else %}
+                        <div class="no-thumb">📷</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.id }}</td>
+                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td>
+                        {% if item.item_condition %}
+                        <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>{{ item.store_name or '-' }}</td>
+                    <td>{{ item.purchase_date or '-' }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td class="amount">
+                        {% if item.listing_price %}
+                        ¥{{ "{:,}".format(item.listing_price) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount {% if item.sale_date %}{% if item.profit > 0 %}positive{% else %}negative{% endif %}{% elif item.expected_profit %}{% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.profit) }}
+                        <small>({{ item.profit_rate }}%)</small>
+                        {% elif item.expected_profit is defined %}
+                        <small>想定</small>¥{{ "{:,}".format(item.expected_profit) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% if item.sale_date %}
+                        <span class="status-badge sold">売却済</span>
+                        {% elif item.is_listed %}
+                        <span class="status-badge listed">出品中</span>
+                        {% else %}
+                        <span class="status-badge unlisted">未出品</span>
+                        {% endif %}
+                    </td>
+                    <td class="action-cell">
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
+                           onclick="return confirm('削除しますか？')">✕</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="13" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="table-info desktop-only">
+        <span id="filtered-count">{{ items|length }}件表示</span>
+        <span>全{{ stats.total_items or 0 }}件中</span>
+    </div>
+</div>
+
+<!-- スマホ用フィルター -->
+<div class="mobile-filter">
+    <div class="mobile-search">
+        <input type="text" id="mobile-search" placeholder="🔍 商品名・ブランドで検索" onkeyup="mobileFilter()">
+    </div>
+    <div class="mobile-filter-buttons">
+        <select id="mobile-status-filter" onchange="mobileFilter()">
+            <option value="">すべて</option>
+            <option value="sold">売却済</option>
+            <option value="listed">出品中</option>
+            <option value="unlisted">未出品</option>
+        </select>
+    </div>
+    <div class="mobile-price-filters">
+        <div class="mobile-price-filter">
+            <label>💰 仕入額</label>
+            <div class="mobile-price-range">
+                <input type="number" id="mobile-purchase-min" placeholder="最小" onchange="mobileFilter()">
+                <span>〜</span>
+                <input type="number" id="mobile-purchase-max" placeholder="最大" onchange="mobileFilter()">
+            </div>
+        </div>
+        <div class="mobile-price-filter">
+            <label>📈 利益</label>
+            <div class="mobile-price-range">
+                <input type="number" id="mobile-profit-min" placeholder="最小" onchange="mobileFilter()">
+                <span>〜</span>
+                <input type="number" id="mobile-profit-max" placeholder="最大" onchange="mobileFilter()">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- スマホ用カード表示 -->
+<div class="mobile-cards" id="mobileCards">
+    {% for item in items %}
+    <div class="item-card {% if item.sale_date %}card-sold{% endif %}"
+         data-id="{{ item.id }}"
+         data-name="{{ item.product_name or '' }}"
+         data-brand="{{ item.brand_name or '' }}"
+         data-condition="{{ item.item_condition or '' }}"
+         data-store="{{ item.store_name or '' }}"
+         data-date="{{ item.purchase_date or '' }}"
+         data-purchase-price="{{ item.purchase_price or 0 }}"
+         data-listing-price="{{ item.listing_price or 0 }}"
+         data-sale-price="{{ item.sale_price or 0 }}"
+         data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+         data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+        <div class="card-header">
+            <div class="card-photo">
+                {% if item.photo_path %}
+                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% else %}
+                <div class="no-photo">📷</div>
+                {% endif %}
+            </div>
+            <div class="card-title">
+                <span class="card-id">#{{ item.id }}</span>
+                <h3>{{ item.product_name or '-' }}</h3>
+                <div class="card-brand">
+                    {{ item.brand_name or '-' }}
+                    {% if item.item_condition %}
+                    <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-status">
+                {% if item.sale_date %}
+                <span class="status-badge sold">売却済</span>
+                {% elif item.is_listed %}
+                <span class="status-badge listed">出品中</span>
+                {% else %}
+                <span class="status-badge unlisted">未出品</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="card-label">店舗</span>
+                <span class="card-value">{{ item.store_name or '-' }}</span>
+            </div>
+            <div class="card-row">
+                <span class="card-label">仕入日</span>
+                <span class="card-value">{{ item.purchase_date or '-' }}</span>
+            </div>
+            <div class="card-prices three-col">
+                <div class="price-item">
+                    <span class="price-label">仕入</span>
+                    <span class="price-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                </div>
+                <div class="price-item">
+                    <span class="price-label">出品</span>
+                    <span class="price-value">{% if item.listing_price %}¥{{ "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
+                </div>
+                <div class="price-item">
+                    <span class="price-label">売上</span>
+                    <span class="price-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
+                </div>
+                {% if item.sale_date %}
+                <div class="price-item profit">
+                    <span class="price-label">利益</span>
+                    <span class="price-value {% if item.profit > 0 %}positive{% else %}negative{% endif %}">
+                        ¥{{ "{:,}".format(item.profit) }} ({{ item.profit_rate }}%)
+                    </span>
+                </div>
+                {% elif item.expected_profit is defined %}
+                <div class="price-item profit">
+                    <span class="price-label">想定利益</span>
+                    <span class="price-value {% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}">
+                        ¥{{ "{:,}".format(item.expected_profit) }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-actions">
+            <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+            <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+            <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
+               onclick="return confirm('削除しますか？')">削除</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-card">
+        商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+    </div>
+    {% endfor %}
+    <div class="table-info mobile-only">
+        <span id="filtered-count-mobile">{{ items|length }}件表示</span>
+        <span>全{{ stats.total_items or 0 }}件中</span>
+    </div>
+</div>
+
+<script>
+// テーブルフィルター機能（PC・スマホ両対応）
+function filterTable() {
+    const filterId = document.getElementById('filter-id').value.toLowerCase();
+    const filterName = document.getElementById('filter-name').value.toLowerCase();
+    const filterBrand = document.getElementById('filter-brand').value.toLowerCase();
+    const filterCondition = document.getElementById('filter-condition').value;
+    const filterStore = document.getElementById('filter-store').value.toLowerCase();
+    const filterDate = document.getElementById('filter-date').value;
+    const filterStatus = document.getElementById('filter-status').value;
+    
+    // 料金フィルター
+    const filterPurchaseMin = document.getElementById('filter-purchase-min').value;
+    const filterPurchaseMax = document.getElementById('filter-purchase-max').value;
+    const filterListingMin = document.getElementById('filter-listing-min').value;
+    const filterListingMax = document.getElementById('filter-listing-max').value;
+    const filterSaleMin = document.getElementById('filter-sale-min').value;
+    const filterSaleMax = document.getElementById('filter-sale-max').value;
+    const filterProfitMin = document.getElementById('filter-profit-min').value;
+    const filterProfitMax = document.getElementById('filter-profit-max').value;
+    
+    let visibleCount = 0;
+    
+    // 料金範囲チェック関数
+    function checkPriceRange(value, min, max) {
+        const numValue = parseInt(value) || 0;
+        if (min !== '' && numValue < parseInt(min)) return false;
+        if (max !== '' && numValue > parseInt(max)) return false;
+        return true;
+    }
+    
+    // フィルタリング共通関数
+    function shouldShow(element) {
+        if (!element.dataset.id) return false;
+        
+        const id = element.dataset.id;
+        const name = (element.dataset.name || '').toLowerCase();
+        const brand = (element.dataset.brand || '').toLowerCase();
+        const condition = element.dataset.condition || '';
+        const store = (element.dataset.store || '').toLowerCase();
+        const date = element.dataset.date || '';
+        const status = element.dataset.status || '';
+        const purchasePrice = element.dataset.purchasePrice || '0';
+        const listingPrice = element.dataset.listingPrice || '0';
+        const salePrice = element.dataset.salePrice || '0';
+        const profit = element.dataset.profit || '0';
+        
+        if (filterId && !id.includes(filterId)) return false;
+        if (filterName && !name.includes(filterName)) return false;
+        if (filterBrand && !brand.includes(filterBrand)) return false;
+        if (filterCondition && condition !== filterCondition) return false;
+        if (filterStore && !store.includes(filterStore)) return false;
+        if (filterDate && date !== filterDate) return false;
+        if (filterStatus && status !== filterStatus) return false;
+        
+        // 料金フィルター
+        if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
+        if (!checkPriceRange(listingPrice, filterListingMin, filterListingMax)) return false;
+        if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) return false;
+        if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) return false;
+        
+        return true;
+    }
+    
+    // テーブル行をフィルタリング
+    const rows = document.querySelectorAll('#itemsTable tbody tr');
+    rows.forEach(row => {
+        if (!row.dataset.id) return;
+        const show = shouldShow(row);
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    // カードをフィルタリング
+    const cards = document.querySelectorAll('.item-card');
+    let mobileVisibleCount = 0;
+    cards.forEach(card => {
+        const show = shouldShow(card);
+        card.style.display = show ? '' : 'none';
+        if (show) mobileVisibleCount++;
+    });
+    
+    // 件数表示を更新
+    const countEl = document.getElementById('filtered-count');
+    if (countEl) countEl.textContent = visibleCount + '件表示';
+    
+    const mobileCountEl = document.getElementById('filtered-count-mobile');
+    if (mobileCountEl) mobileCountEl.textContent = mobileVisibleCount + '件表示';
+}
+
+// スマホ用フィルター機能
+function mobileFilter() {
+    const searchText = (document.getElementById('mobile-search').value || '').toLowerCase();
+    const statusFilter = document.getElementById('mobile-status-filter').value;
+    
+    // スマホ用料金フィルター
+    const mobilePurchaseMin = document.getElementById('mobile-purchase-min').value;
+    const mobilePurchaseMax = document.getElementById('mobile-purchase-max').value;
+    const mobileProfitMin = document.getElementById('mobile-profit-min').value;
+    const mobileProfitMax = document.getElementById('mobile-profit-max').value;
+    
+    // 料金範囲チェック関数
+    function checkPriceRange(value, min, max) {
+        const numValue = parseInt(value) || 0;
+        if (min !== '' && numValue < parseInt(min)) return false;
+        if (max !== '' && numValue > parseInt(max)) return false;
+        return true;
+    }
+    
+    const cards = document.querySelectorAll('.item-card');
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        const name = (card.dataset.name || '').toLowerCase();
+        const brand = (card.dataset.brand || '').toLowerCase();
+        const status = card.dataset.status || '';
+        const purchasePrice = card.dataset.purchasePrice || '0';
+        const profit = card.dataset.profit || '0';
+        
+        let show = true;
+        
+        // テキスト検索（商品名とブランド名）
+        if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+            show = false;
+        }
+        
+        // ステータスフィルター
+        if (statusFilter && status !== statusFilter) {
+            show = false;
+        }
+        
+        // 料金フィルター
+        if (!checkPriceRange(purchasePrice, mobilePurchaseMin, mobilePurchaseMax)) {
+            show = false;
+        }
+        if (!checkPriceRange(profit, mobileProfitMin, mobileProfitMax)) {
+            show = false;
+        }
+        
+        card.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    const mobileCountEl = document.getElementById('filtered-count-mobile');
+    if (mobileCountEl) mobileCountEl.textContent = visibleCount + '件表示';
+}
+
+// ソート機能
+let sortDirection = {};
+
+document.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', function() {
+        const column = this.dataset.sort;
+        sortDirection[column] = !sortDirection[column];
+        sortTable(column, sortDirection[column]);
+    });
+});
+
+function sortTable(column, ascending) {
+    const tbody = document.querySelector('#itemsTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    rows.sort((a, b) => {
+        if (!a.dataset.id) return 1;
+        if (!b.dataset.id) return -1;
+        
+        let aVal, bVal;
+        
+        switch(column) {
+            case 'id':
+            case 'purchase_price':
+            case 'listing_price':
+            case 'sale_price':
+            case 'profit':
+                aVal = parseInt(a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
+                bVal = parseInt(b.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
+                break;
+            default:
+                aVal = a.dataset[column.replace('_', '')] || '';
+                bVal = b.dataset[column.replace('_', '')] || '';
+        }
+        
+        if (ascending) {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+    
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+function getColumnIndex(column) {
+    const map = {
+        'id': 2,
+        'product_name': 3,
+        'brand_name': 4,
+        'item_condition': 5,
+        'store_name': 6,
+        'purchase_date': 7,
+        'purchase_price': 8,
+        'listing_price': 9,
+        'sale_price': 10,
+        'profit': 11
+    };
+    return map[column] || 2;
+}
+
+// お知らせスライダー
+let currentAnnouncement = 0;
+const announcementItems = document.querySelectorAll('.announcement-item');
+const totalAnnouncements = announcementItems.length;
+
+function showAnnouncement(index) {
+    announcementItems.forEach((item, i) => {
+        item.style.display = i === index ? 'flex' : 'none';
+    });
+    const counter = document.getElementById('annCounter');
+    if (counter) {
+        counter.textContent = (index + 1) + '/' + totalAnnouncements;
+    }
+}
+
+function nextAnnouncement() {
+    currentAnnouncement = (currentAnnouncement + 1) % totalAnnouncements;
+    showAnnouncement(currentAnnouncement);
+}
+
+function prevAnnouncement() {
+    currentAnnouncement = (currentAnnouncement - 1 + totalAnnouncements) % totalAnnouncements;
+    showAnnouncement(currentAnnouncement);
+}
+
+// 自動スライド（5秒ごと）
+if (totalAnnouncements > 1) {
+    setInterval(nextAnnouncement, 5000);
+}
+</script>
+{% endblock %}

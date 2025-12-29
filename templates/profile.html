@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}プロフィール - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>⚙️ プロフィール設定</h1>
+</div>
+
+<div class="profile-container">
+    <form method="POST" class="profile-form">
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" 
+                       value="{{ current_user.display_name }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">メールアドレス</label>
+                <input type="email" id="email" name="email" 
+                       value="{{ current_user.email }}">
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>パスワード変更</h2>
+            
+            <div class="form-group">
+                <label for="current_password">現在のパスワード</label>
+                <input type="password" id="current_password" name="current_password">
+            </div>
+            
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合のみ入力</small>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+

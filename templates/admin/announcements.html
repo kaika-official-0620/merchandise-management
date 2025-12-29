@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}お知らせ管理 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📢 お知らせ管理</h1>
+    <a href="{{ url_for('admin_add_announcement') }}" class="btn btn-primary">+ 新規作成</a>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">👥 ユーザー管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item active">📢 お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+</div>
+
+<div class="admin-section">
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>状態</th>
+                    <th>種類</th>
+                    <th>タイトル</th>
+                    <th>公開開始</th>
+                    <th>公開終了</th>
+                    <th>作成者</th>
+                    <th>作成日</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ann in announcements %}
+                <tr class="{% if not ann.is_active %}row-inactive{% endif %}">
+                    <td>
+                        {% if ann.is_active %}
+                        <span class="badge badge-active">有効</span>
+                        {% else %}
+                        <span class="badge badge-inactive">無効</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ann.announcement_type == 'important' %}
+                        <span class="ann-type ann-type-important">🔴 重要</span>
+                        {% elif ann.announcement_type == 'warning' %}
+                        <span class="ann-type ann-type-warning">⚠️ 注意</span>
+                        {% elif ann.announcement_type == 'success' %}
+                        <span class="ann-type ann-type-success">✅ 完了</span>
+                        {% else %}
+                        <span class="ann-type ann-type-info">📢 通常</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ ann.title }}</strong>
+                        <br><small class="text-muted">{{ ann.content[:50] }}{% if ann.content|length > 50 %}...{% endif %}</small>
+                    </td>
+                    <td>{{ ann.publish_at[:16] if ann.publish_at else '即時' }}</td>
+                    <td>{{ ann.expire_at[:16] if ann.expire_at else '無期限' }}</td>
+                    <td>{{ ann.author_name or '-' }}</td>
+                    <td>{{ ann.created_at[:10] if ann.created_at else '-' }}</td>
+                    <td class="action-cell">
+                        <a href="{{ url_for('admin_toggle_announcement', id=ann.id) }}" 
+                           class="btn btn-sm {% if ann.is_active %}btn-secondary{% else %}btn-primary{% endif %}">
+                            {% if ann.is_active %}無効化{% else %}有効化{% endif %}
+                        </a>
+                        <a href="{{ url_for('admin_edit_announcement', id=ann.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <a href="{{ url_for('admin_delete_announcement', id=ann.id) }}" 
+                           class="btn btn-sm btn-delete" onclick="return confirm('削除しますか？')">削除</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        お知らせがありません。<a href="{{ url_for('admin_add_announcement') }}">最初のお知らせを作成</a>しましょう。
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.row-inactive {
+    opacity: 0.5;
+    background: #f8fafc;
+}
+
+.ann-type {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.ann-type-important { background: #fee2e2; color: #dc2626; }
+.ann-type-warning { background: #fef3c7; color: #d97706; }
+.ann-type-success { background: #d1fae5; color: #059669; }
+.ann-type-info { background: #dbeafe; color: #2563eb; }
+
+.badge-active { background: #d1fae5; color: #059669; }
+.badge-inactive { background: #f1f5f9; color: #64748b; }
+
+.text-muted {
+    color: #94a3b8;
+}
+
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell .btn {
+    margin-right: 3px;
+}
+</style>
+{% endblock %}
+

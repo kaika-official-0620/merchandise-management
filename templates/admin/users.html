@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}ユーザー管理 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>👥 ユーザー管理</h1>
+    <a href="{{ url_for('admin_add_user') }}" class="btn btn-primary">+ ユーザー作成</a>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">👥 ユーザー管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+</div>
+
+<div class="admin-section">
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ユーザー名</th>
+                    <th>表示名</th>
+                    <th>メール</th>
+                    <th>権限</th>
+                    <th>登録日</th>
+                    <th>最終ログイン</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td><strong>{{ user.username }}</strong></td>
+                    <td>{{ user.display_name or '-' }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        {% if user.role == 'admin' %}
+                        <span class="badge badge-admin">管理者</span>
+                        {% else %}
+                        <span class="badge badge-user">ユーザー</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at[:10] if user.created_at else '-' }}</td>
+                    <td>{{ user.last_login[:10] if user.last_login else '-' }}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="{{ url_for('admin_edit_user', id=user.id) }}" class="btn btn-sm btn-edit">編集</a>
+                            <a href="{{ url_for('admin_user_items', id=user.id) }}" class="btn btn-sm">商品</a>
+                            {% if user.id != current_user.id %}
+                            <a href="{{ url_for('toggle_admin', id=user.id) }}" class="btn btn-sm"
+                               onclick="return confirm('権限を変更しますか？')"
+                               title="{% if user.role == 'admin' %}管理者権限を解除{% else %}管理者権限を付与{% endif %}">
+                                {% if user.role == 'admin' %}👤{% else %}👑{% endif %}
+                            </a>
+                            <a href="{{ url_for('delete_user', id=user.id) }}" class="btn btn-sm btn-delete"
+                               onclick="return confirm('このユーザーと関連データをすべて削除しますか？')">削除</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="empty-cell">ユーザーがいません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-section">
+    <h2>💡 操作ガイド</h2>
+    <div class="help-grid">
+        <div class="help-item">
+            <span class="help-icon">📝</span>
+            <div>
+                <strong>編集</strong>
+                <p>ユーザーの表示名、メール、パスワードを変更</p>
+            </div>
+        </div>
+        <div class="help-item">
+            <span class="help-icon">👑</span>
+            <div>
+                <strong>管理者権限付与</strong>
+                <p>一般ユーザーを管理者に昇格</p>
+            </div>
+        </div>
+        <div class="help-item">
+            <span class="help-icon">👤</span>
+            <div>
+                <strong>管理者権限解除</strong>
+                <p>管理者を一般ユーザーに変更</p>
+            </div>
+        </div>
+        <div class="help-item">
+            <span class="help-icon">🗑️</span>
+            <div>
+                <strong>削除</strong>
+                <p>ユーザーと関連する商品・顧客データをすべて削除</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

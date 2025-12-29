@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}{{ '編集' if item else '新規登録' }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+/* 写真関連スタイル */
+.current-photo {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+}
+
+.current-photo img {
+    max-width: 150px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.photo-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.form-help {
+    display: block;
+    color: #64748b;
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.additional-photos-grid {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.photos-count {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.additional-photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.additional-photo-item {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.additional-photo-item img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.photo-number {
+    display: block;
+    text-align: center;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.delete-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 6px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #ef4444;
+}
+
+.delete-checkbox input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.delete-checkbox span {
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .additional-photos-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+</style>
+<div class="page-header">
+    <h1>{{ '📝 商品編集' if item else '➕ 新規登録' }}</h1>
+</div>
+
+<form method="POST" enctype="multipart/form-data" class="item-form">
+    <div class="form-grid">
+        <!-- 左カラム: 基本情報 -->
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
+            <div class="form-group">
+                <label for="purchase_date">仕入日</label>
+                <input type="date" id="purchase_date" name="purchase_date" 
+                       value="{{ item.purchase_date if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="product_name">商品名</label>
+                <input type="text" id="product_name" name="product_name" 
+                       value="{{ item.product_name if item else '' }}" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="brand_name">ブランド名</label>
+                <select id="brand_name" name="brand_name">
+                    <option value="">選択してください</option>
+                    <optgroup label="ラグジュアリーブランド">
+                        <option value="Louis Vuitton" {% if item and item.brand_name == 'Louis Vuitton' %}selected{% endif %}>Louis Vuitton（ルイ・ヴィトン）</option>
+                        <option value="Hermes" {% if item and item.brand_name == 'Hermes' %}selected{% endif %}>Hermes（エルメス）</option>
+                        <option value="Chanel" {% if item and item.brand_name == 'Chanel' %}selected{% endif %}>Chanel（シャネル）</option>
+                        <option value="Gucci" {% if item and item.brand_name == 'Gucci' %}selected{% endif %}>Gucci（グッチ）</option>
+                        <option value="Prada" {% if item and item.brand_name == 'Prada' %}selected{% endif %}>Prada（プラダ）</option>
+                        <option value="Dior" {% if item and item.brand_name == 'Dior' %}selected{% endif %}>Dior（ディオール）</option>
+                        <option value="Celine" {% if item and item.brand_name == 'Celine' %}selected{% endif %}>Celine（セリーヌ）</option>
+                        <option value="Bottega Veneta" {% if item and item.brand_name == 'Bottega Veneta' %}selected{% endif %}>Bottega Veneta（ボッテガ・ヴェネタ）</option>
+                        <option value="Balenciaga" {% if item and item.brand_name == 'Balenciaga' %}selected{% endif %}>Balenciaga（バレンシアガ）</option>
+                        <option value="Saint Laurent" {% if item and item.brand_name == 'Saint Laurent' %}selected{% endif %}>Saint Laurent（サンローラン）</option>
+                        <option value="Loewe" {% if item and item.brand_name == 'Loewe' %}selected{% endif %}>Loewe（ロエベ）</option>
+                        <option value="Fendi" {% if item and item.brand_name == 'Fendi' %}selected{% endif %}>Fendi（フェンディ）</option>
+                        <option value="Burberry" {% if item and item.brand_name == 'Burberry' %}selected{% endif %}>Burberry（バーバリー）</option>
+                        <option value="Valentino" {% if item and item.brand_name == 'Valentino' %}selected{% endif %}>Valentino（ヴァレンティノ）</option>
+                        <option value="Givenchy" {% if item and item.brand_name == 'Givenchy' %}selected{% endif %}>Givenchy（ジバンシィ）</option>
+                        <option value="Miu Miu" {% if item and item.brand_name == 'Miu Miu' %}selected{% endif %}>Miu Miu（ミュウミュウ）</option>
+                    </optgroup>
+                    <optgroup label="時計・ジュエリー">
+                        <option value="Rolex" {% if item and item.brand_name == 'Rolex' %}selected{% endif %}>Rolex（ロレックス）</option>
+                        <option value="Cartier" {% if item and item.brand_name == 'Cartier' %}selected{% endif %}>Cartier（カルティエ）</option>
+                        <option value="Omega" {% if item and item.brand_name == 'Omega' %}selected{% endif %}>Omega（オメガ）</option>
+                        <option value="Patek Philippe" {% if item and item.brand_name == 'Patek Philippe' %}selected{% endif %}>Patek Philippe（パテック・フィリップ）</option>
+                        <option value="Audemars Piguet" {% if item and item.brand_name == 'Audemars Piguet' %}selected{% endif %}>Audemars Piguet（オーデマ・ピゲ）</option>
+                        <option value="Tiffany" {% if item and item.brand_name == 'Tiffany' %}selected{% endif %}>Tiffany（ティファニー）</option>
+                        <option value="Bvlgari" {% if item and item.brand_name == 'Bvlgari' %}selected{% endif %}>Bvlgari（ブルガリ）</option>
+                        <option value="Van Cleef" {% if item and item.brand_name == 'Van Cleef' %}selected{% endif %}>Van Cleef（ヴァンクリーフ）</option>
+                    </optgroup>
+                    <optgroup label="スポーツ・ストリート">
+                        <option value="Nike" {% if item and item.brand_name == 'Nike' %}selected{% endif %}>Nike（ナイキ）</option>
+                        <option value="Adidas" {% if item and item.brand_name == 'Adidas' %}selected{% endif %}>Adidas（アディダス）</option>
+                        <option value="Supreme" {% if item and item.brand_name == 'Supreme' %}selected{% endif %}>Supreme（シュプリーム）</option>
+                        <option value="Off-White" {% if item and item.brand_name == 'Off-White' %}selected{% endif %}>Off-White（オフホワイト）</option>
+                        <option value="A BATHING APE" {% if item and item.brand_name == 'A BATHING APE' %}selected{% endif %}>A BATHING APE（ベイプ）</option>
+                        <option value="Jordan" {% if item and item.brand_name == 'Jordan' %}selected{% endif %}>Jordan（ジョーダン）</option>
+                        <option value="New Balance" {% if item and item.brand_name == 'New Balance' %}selected{% endif %}>New Balance（ニューバランス）</option>
+                    </optgroup>
+                    <optgroup label="日本ブランド">
+                        <option value="COMME des GARCONS" {% if item and item.brand_name == 'COMME des GARCONS' %}selected{% endif %}>COMME des GARCONS（コムデギャルソン）</option>
+                        <option value="Yohji Yamamoto" {% if item and item.brand_name == 'Yohji Yamamoto' %}selected{% endif %}>Yohji Yamamoto（ヨウジヤマモト）</option>
+                        <option value="ISSEY MIYAKE" {% if item and item.brand_name == 'ISSEY MIYAKE' %}selected{% endif %}>ISSEY MIYAKE（イッセイミヤケ）</option>
+                        <option value="sacai" {% if item and item.brand_name == 'sacai' %}selected{% endif %}>sacai（サカイ）</option>
+                        <option value="UNDERCOVER" {% if item and item.brand_name == 'UNDERCOVER' %}selected{% endif %}>UNDERCOVER（アンダーカバー）</option>
+                    </optgroup>
+                    <optgroup label="電子機器">
+                        <option value="Apple" {% if item and item.brand_name == 'Apple' %}selected{% endif %}>Apple（アップル）</option>
+                        <option value="Sony" {% if item and item.brand_name == 'Sony' %}selected{% endif %}>Sony（ソニー）</option>
+                        <option value="Nintendo" {% if item and item.brand_name == 'Nintendo' %}selected{% endif %}>Nintendo（任天堂）</option>
+                        <option value="Dyson" {% if item and item.brand_name == 'Dyson' %}selected{% endif %}>Dyson（ダイソン）</option>
+                        <option value="Bose" {% if item and item.brand_name == 'Bose' %}selected{% endif %}>Bose（ボーズ）</option>
+                    </optgroup>
+                    <optgroup label="その他">
+                        <option value="その他" {% if item and item.brand_name == 'その他' %}selected{% endif %}>その他</option>
+                        <option value="ノーブランド" {% if item and item.brand_name == 'ノーブランド' %}selected{% endif %}>ノーブランド</option>
+                    </optgroup>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="item_condition">商品状態</label>
+                <select id="item_condition" name="item_condition">
+                    <option value="">選択してください</option>
+                    <option value="N" {% if item and item.item_condition == 'N' %}selected{% endif %}>N：新品</option>
+                    <option value="S" {% if item and item.item_condition == 'S' %}selected{% endif %}>S：新品ではないが傷なし</option>
+                    <option value="A" {% if item and item.item_condition == 'A' %}selected{% endif %}>A：未使用に近い（小さい傷や汚れ）</option>
+                    <option value="AB" {% if item and item.item_condition == 'AB' %}selected{% endif %}>AB：傷・汚れあり（小）</option>
+                    <option value="B" {% if item and item.item_condition == 'B' %}selected{% endif %}>B：傷・汚れあり（大）</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="store_name">店舗名</label>
+                <input type="text" id="store_name" name="store_name" 
+                       value="{{ item.store_name if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="purchase_price">仕入額</label>
+                <input type="number" id="purchase_price" name="purchase_price" 
+                       value="{{ item.purchase_price if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="payment_method">支払方法</label>
+                <select id="payment_method" name="payment_method">
+                    <option value="">選択してください</option>
+                    <option value="現金" {% if item and item.payment_method == '現金' %}selected{% endif %}>現金</option>
+                    <option value="クレジット" {% if item and item.payment_method == 'クレジット' %}selected{% endif %}>クレジット</option>
+                    <option value="PayPay" {% if item and item.payment_method == 'PayPay' %}selected{% endif %}>PayPay</option>
+                    <option value="その他" {% if item and item.payment_method == 'その他' %}selected{% endif %}>その他</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="photo">📷 メイン写真（1枚目）</label>
+                <input type="file" id="photo" name="photo" accept="image/*">
+                {% if item and item.photo_path %}
+                <div class="current-photo">
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="現在の写真">
+                    <span class="photo-label">現在のメイン写真</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="additional_photos">📸 追加写真（最大19枚）</label>
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
+                <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
+                
+                {% if item and item.additional_photos_list and item.additional_photos_list|length > 0 %}
+                <div class="additional-photos-grid">
+                    <p class="photos-count">現在の追加写真: {{ item.additional_photos_list|length }}枚</p>
+                    {% for photo in item.additional_photos_list %}
+                    <div class="additional-photo-item">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
+                        <span class="photo-number">{{ loop.index + 1 }}枚目</span>
+                        <label class="delete-checkbox">
+                            <input type="checkbox" name="delete_photos" value="{{ photo }}">
+                            <span>削除</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 中央カラム: 出品情報 -->
+        <div class="form-section">
+            <h2>出品情報</h2>
+            
+            <div class="form-group checkbox-group">
+                <label>
+                    <input type="checkbox" name="is_listed" 
+                           {% if item and item.is_listed %}checked{% endif %}>
+                    出品済み
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label for="listing_date">出品日</label>
+                <input type="date" id="listing_date" name="listing_date" 
+                       value="{{ item.listing_date if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="listing_price">出品価格</label>
+                <input type="number" id="listing_price" name="listing_price" 
+                       value="{{ item.listing_price if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="expected_shipping">想定送料</label>
+                <input type="number" id="expected_shipping" name="expected_shipping" 
+                       value="{{ item.expected_shipping if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="expected_commission">想定手数料</label>
+                <input type="number" id="expected_commission" name="expected_commission" 
+                       value="{{ item.expected_commission if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group result-field">
+                <label>想定利益</label>
+                <div class="calculated-value" id="expected_profit">¥0</div>
+            </div>
+        </div>
+        
+        <!-- 右カラム: 売却情報 -->
+        <div class="form-section">
+            <h2>売却情報</h2>
+            
+            <div class="form-group">
+                <label for="sale_date">売却日</label>
+                <input type="date" id="sale_date" name="sale_date" 
+                       value="{{ item.sale_date if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="sale_price">売上金</label>
+                <input type="number" id="sale_price" name="sale_price" 
+                       value="{{ item.sale_price if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="shipping_cost">送料</label>
+                <input type="number" id="shipping_cost" name="shipping_cost" 
+                       value="{{ item.shipping_cost if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="sales_destination">販売先</label>
+                <select id="sales_destination" name="sales_destination">
+                    <option value="">選択してください</option>
+                    <option value="メルカリ" {% if item and item.sales_destination == 'メルカリ' %}selected{% endif %}>メルカリ</option>
+                    <option value="ヤフオク" {% if item and item.sales_destination == 'ヤフオク' %}selected{% endif %}>ヤフオク</option>
+                    <option value="ラクマ" {% if item and item.sales_destination == 'ラクマ' %}selected{% endif %}>ラクマ</option>
+                    <option value="Amazon" {% if item and item.sales_destination == 'Amazon' %}selected{% endif %}>Amazon</option>
+                    <option value="その他" {% if item and item.sales_destination == 'その他' %}selected{% endif %}>その他</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="commission">手数料</label>
+                <input type="number" id="commission" name="commission" 
+                       value="{{ item.commission if item else 0 }}" min="0">
+            </div>
+            
+            <div class="form-group checkbox-group">
+                <label>
+                    <input type="checkbox" name="is_shipped" 
+                           {% if item and item.is_shipped %}checked{% endif %}>
+                    発送済み
+                </label>
+            </div>
+            
+            <div class="form-group result-field">
+                <label>実際の利益</label>
+                <div class="calculated-value" id="actual_profit">¥0</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+        <button type="submit" class="btn btn-primary">{{ '更新' if item else '登録' }}</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function calculateProfit() {
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const listingPrice = parseInt(document.getElementById('listing_price').value) || 0;
+    const expectedShipping = parseInt(document.getElementById('expected_shipping').value) || 0;
+    const expectedCommission = parseInt(document.getElementById('expected_commission').value) || 0;
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
+    const commission = parseInt(document.getElementById('commission').value) || 0;
+    
+    // 想定利益
+    const expectedProfit = listingPrice - purchasePrice - expectedShipping - expectedCommission;
+    const expectedEl = document.getElementById('expected_profit');
+    expectedEl.textContent = '¥' + expectedProfit.toLocaleString();
+    expectedEl.className = 'calculated-value ' + (expectedProfit >= 0 ? 'profit-positive' : 'profit-negative');
+    
+    // 実際の利益
+    const actualProfit = salePrice - purchasePrice - shippingCost - commission;
+    const actualEl = document.getElementById('actual_profit');
+    actualEl.textContent = '¥' + actualProfit.toLocaleString();
+    actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
+}
+
+// イベントリスナー設定
+document.querySelectorAll('input[type="number"]').forEach(input => {
+    input.addEventListener('input', calculateProfit);
+});
+
+// 初期計算
+calculateProfit();
+</script>
+{% endblock %}
+

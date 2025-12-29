@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ user.display_name or user.username }}の商品一覧 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📦 {{ user.display_name or user.username }}の商品一覧</h1>
+    <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">← ユーザー一覧に戻る</a>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">👥 ユーザー管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+</div>
+
+<div class="admin-table-container">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>写真</th>
+                <th>商品名</th>
+                <th>店舗名</th>
+                <th>仕入日</th>
+                <th>仕入額</th>
+                <th>出品価格</th>
+                <th>売上金</th>
+                <th>利益</th>
+                <th>状態</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr class="{% if item.sale_date %}row-sold{% endif %}">
+                <td>{{ item.id }}</td>
+                <td>
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumbnail" alt="">
+                    {% else %}
+                    <span class="no-thumb">📷</span>
+                    {% endif %}
+                </td>
+                <td><strong>{{ item.product_name or '-' }}</strong></td>
+                <td>{{ item.store_name or '-' }}</td>
+                <td>{{ item.purchase_date or '-' }}</td>
+                <td>¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                <td>¥{{ "{:,}".format(item.listing_price or 0) }}</td>
+                <td>{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</td>
+                <td>
+                    {% if item.sale_date %}
+                    <span class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(item.profit) }}
+                    </span>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.sale_date %}
+                    <span class="badge badge-sold">売却済</span>
+                    {% elif item.is_listed %}
+                    <span class="badge badge-listed">出品中</span>
+                    {% else %}
+                    <span class="badge badge-pending">未出品</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="10" class="empty-cell">商品がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+

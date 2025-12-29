@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ '顧客編集' if customer else '顧客登録' }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ '📝 顧客編集' if customer else '➕ 顧客登録' }}</h1>
+</div>
+
+<form method="POST" class="customer-form">
+    <div class="form-section">
+        <h2>基本情報</h2>
+        
+        <div class="form-group">
+            <label for="name">顧客名 *</label>
+            <input type="text" id="name" name="name" 
+                   value="{{ customer.name if customer else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="email">メールアドレス</label>
+            <input type="email" id="email" name="email" 
+                   value="{{ customer.email if customer else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="phone">電話番号</label>
+            <input type="tel" id="phone" name="phone" 
+                   value="{{ customer.phone if customer else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="address">住所</label>
+            <textarea id="address" name="address" rows="3">{{ customer.address if customer else '' }}</textarea>
+        </div>
+    </div>
+    
+    <div class="form-section">
+        <h2>購入情報</h2>
+        
+        <div class="form-group">
+            <label for="total_purchase">累計購入額</label>
+            <input type="number" id="total_purchase" name="total_purchase" 
+                   value="{{ customer.total_purchase if customer else 0 }}" min="0">
+        </div>
+        
+        <div class="form-group">
+            <label for="purchase_count">購入回数</label>
+            <input type="number" id="purchase_count" name="purchase_count" 
+                   value="{{ customer.purchase_count if customer else 0 }}" min="0">
+        </div>
+        
+        <div class="form-group">
+            <label for="notes">メモ</label>
+            <textarea id="notes" name="notes" rows="3">{{ customer.notes if customer else '' }}</textarea>
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        <a href="{{ url_for('customers') }}" class="btn btn-secondary">キャンセル</a>
+        <button type="submit" class="btn btn-primary">{{ '更新' if customer else '登録' }}</button>
+    </div>
+</form>
+{% endblock %}
+
+

@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% block title %}{{ item.product_name }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+.condition-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 8px;
+}
+.condition-N { background: #dbeafe; color: #1d4ed8; }
+.condition-S { background: #d1fae5; color: #059669; }
+.condition-A { background: #fef3c7; color: #d97706; }
+.condition-AB { background: #fed7aa; color: #c2410c; }
+.condition-B { background: #fecaca; color: #dc2626; }
+
+/* ギャラリー表示 */
+.gallery-container {
+    margin-bottom: 20px;
+}
+
+.main-photo {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 15px;
+}
+
+.main-photo img {
+    width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.main-photo img:hover {
+    transform: scale(1.02);
+}
+
+.photo-counter {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.thumbnail-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.thumbnail-strip::-webkit-scrollbar {
+    height: 6px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.thumbnail-item {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.thumbnail-item:hover {
+    border-color: #667eea;
+}
+
+.thumbnail-item.active {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.thumbnail-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ライトボックス */
+.lightbox {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.lightbox.active {
+    display: flex;
+}
+
+.lightbox-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.lightbox-content img {
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 8px;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.lightbox-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-prev {
+    left: 20px;
+}
+
+.lightbox-next {
+    right: 20px;
+}
+
+.lightbox-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
+}
+
+.no-image-large {
+    width: 100%;
+    height: 200px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 1.5rem;
+}
+
+/* スマホ用レイアウト */
+@media (max-width: 768px) {
+    .view-container {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .view-image {
+        order: 1;
+        margin-bottom: 15px;
+    }
+    
+    .view-details {
+        order: 2;
+    }
+    
+    .gallery-container {
+        margin-bottom: 10px;
+    }
+    
+    .main-photo {
+        max-width: 200px;
+        margin: 0 auto 10px;
+    }
+    
+    .main-photo img {
+        border-radius: 8px;
+    }
+    
+    .photo-counter {
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        bottom: 5px;
+        right: 5px;
+    }
+    
+    .thumbnail-strip {
+        gap: 6px;
+        padding: 8px 0;
+        justify-content: center;
+    }
+    
+    .thumbnail-item {
+        width: 45px;
+        height: 45px;
+        border-radius: 6px;
+    }
+    
+    .no-image-large {
+        height: 120px;
+        font-size: 1.2rem;
+        max-width: 200px;
+        margin: 0 auto;
+    }
+    
+    /* ライトボックス調整 */
+    .lightbox-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .lightbox-prev {
+        left: 10px;
+    }
+    
+    .lightbox-next {
+        right: 10px;
+    }
+    
+    .lightbox-close {
+        width: 36px;
+        height: 36px;
+        font-size: 1.2rem;
+        top: 10px;
+        right: 10px;
+    }
+}
+
+/* さらに小さい画面用 */
+@media (max-width: 480px) {
+    .main-photo {
+        max-width: 150px;
+    }
+    
+    .thumbnail-item {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
+<div class="page-header">
+    <h1>📦 商品詳細</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-primary">編集</a>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="view-container">
+    <div class="view-image">
+        {% if item.all_photos and item.all_photos|length > 0 %}
+        <div class="gallery-container">
+            <div class="main-photo" onclick="openLightbox(currentPhotoIndex)">
+                <img id="mainImage" src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="{{ item.product_name }}">
+                {% if item.all_photos|length > 1 %}
+                <span class="photo-counter" id="photoCounter">1 / {{ item.all_photos|length }}</span>
+                {% endif %}
+            </div>
+            {% if item.all_photos|length > 1 %}
+            <div class="thumbnail-strip">
+                {% for photo in item.all_photos %}
+                <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="changePhoto({{ loop.index0 }})">
+                    <img src="{{ url_for('static', filename=photo) }}" alt="写真{{ loop.index }}">
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="no-image-large">📷 写真なし</div>
+        {% endif %}
+    </div>
+    
+    <div class="view-details">
+        <h2>{{ item.product_name }}</h2>
+        
+        <div class="detail-section">
+            <h3>基本情報</h3>
+            <dl class="detail-list">
+                <dt>管理No</dt>
+                <dd>{{ item.id }}</dd>
+                <dt>仕入日</dt>
+                <dd>{{ item.purchase_date or '-' }}</dd>
+                <dt>ブランド</dt>
+                <dd>{{ item.brand_name or '-' }}</dd>
+                <dt>商品状態</dt>
+                <dd>
+                    {% if item.item_condition %}
+                    <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                    {% if item.item_condition == 'N' %}新品
+                    {% elif item.item_condition == 'S' %}新品ではないが傷なし
+                    {% elif item.item_condition == 'A' %}未使用に近い
+                    {% elif item.item_condition == 'AB' %}傷・汚れあり（小）
+                    {% elif item.item_condition == 'B' %}傷・汚れあり（大）
+                    {% endif %}
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>店舗名</dt>
+                <dd>{{ item.store_name or '-' }}</dd>
+                <dt>仕入額</dt>
+                <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
+                <dt>支払方法</dt>
+                <dd>{{ item.payment_method or '-' }}</dd>
+            </dl>
+        </div>
+        
+        <div class="detail-section">
+            <h3>出品情報</h3>
+            <dl class="detail-list">
+                <dt>出品状態</dt>
+                <dd>
+                    {% if item.is_listed %}
+                    <span class="badge badge-listed">出品済み</span>
+                    {% else %}
+                    <span class="badge badge-pending">未出品</span>
+                    {% endif %}
+                </dd>
+                <dt>出品日</dt>
+                <dd>{{ item.listing_date or '-' }}</dd>
+                <dt>出品価格</dt>
+                <dd>¥{{ "{:,}".format(item.listing_price or 0) }}</dd>
+                <dt>想定送料</dt>
+                <dd>¥{{ "{:,}".format(item.expected_shipping or 0) }}</dd>
+                <dt>想定手数料</dt>
+                <dd>¥{{ "{:,}".format(item.expected_commission or 0) }}</dd>
+                {% if not item.sale_date and item.expected_profit is defined %}
+                <dt>想定利益</dt>
+                <dd class="{% if item.expected_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                    ¥{{ "{:,}".format(item.expected_profit) }}
+                </dd>
+                {% endif %}
+            </dl>
+        </div>
+        
+        {% if item.sale_date %}
+        <div class="detail-section">
+            <h3>売却情報</h3>
+            <dl class="detail-list">
+                <dt>売却日</dt>
+                <dd>{{ item.sale_date }}</dd>
+                <dt>売上金</dt>
+                <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
+                <dt>送料</dt>
+                <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
+                <dt>販売先</dt>
+                <dd>{{ item.sales_destination or '-' }}</dd>
+                <dt>手数料</dt>
+                <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
+                <dt>発送状態</dt>
+                <dd>
+                    {% if item.is_shipped %}
+                    <span class="badge badge-shipped">発送済み</span>
+                    {% else %}
+                    <span class="badge badge-pending">未発送</span>
+                    {% endif %}
+                </dd>
+                <dt>利益</dt>
+                <dd class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}" style="font-weight: bold; font-size: 1.2em;">
+                    ¥{{ "{:,}".format(item.profit) }}
+                </dd>
+                <dt>利益率</dt>
+                <dd>{{ item.profit_rate }}%</dd>
+            </dl>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ライトボックス -->
+{% if item.all_photos and item.all_photos|length > 0 %}
+<div class="lightbox" id="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()">×</button>
+    {% if item.all_photos|length > 1 %}
+    <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()">‹</button>
+    <button class="lightbox-nav lightbox-next" onclick="lightboxNext()">›</button>
+    {% endif %}
+    <div class="lightbox-content">
+        <img id="lightboxImage" src="" alt="">
+    </div>
+    {% if item.all_photos|length > 1 %}
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+    {% endif %}
+</div>
+
+<script>
+const photos = {{ item.all_photos | tojson }};
+let currentPhotoIndex = 0;
+
+function changePhoto(index) {
+    currentPhotoIndex = index;
+    const mainImage = document.getElementById('mainImage');
+    mainImage.src = '{{ url_for("static", filename="") }}' + photos[index];
+    
+    // 更新カウンター
+    const counter = document.getElementById('photoCounter');
+    if (counter) {
+        counter.textContent = (index + 1) + ' / ' + photos.length;
+    }
+    
+    // サムネイルのアクティブ状態更新
+    document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === index);
+    });
+}
+
+function openLightbox(index) {
+    currentPhotoIndex = index;
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImage = document.getElementById('lightboxImage');
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    
+    lightboxImage.src = '{{ url_for("static", filename="") }}' + photos[index];
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (index + 1) + ' / ' + photos.length;
+    }
+    
+    lightbox.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function lightboxPrev() {
+    currentPhotoIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
+    updateLightboxImage();
+}
+
+function lightboxNext() {
+    currentPhotoIndex = (currentPhotoIndex + 1) % photos.length;
+    updateLightboxImage();
+}
+
+function updateLightboxImage() {
+    const lightboxImage = document.getElementById('lightboxImage');
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    
+    lightboxImage.src = '{{ url_for("static", filename="") }}' + photos[currentPhotoIndex];
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
+    }
+    
+    // メイン画像も更新
+    changePhoto(currentPhotoIndex);
+}
+
+// キーボードナビゲーション
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('lightbox');
+    if (!lightbox.classList.contains('active')) return;
+    
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    if (e.key === 'ArrowRight') lightboxNext();
+});
+
+// ライトボックス外クリックで閉じる
+document.getElementById('lightbox').addEventListener('click', function(e) {
+    if (e.target === this) closeLightbox();
+});
+</script>
+{% endif %}
+{% endblock %}
+

@@ -1,0 +1,2794 @@
+# -*- coding: utf-8 -*-
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from functools import wraps
+import os
+import io
+import csv
+import json
+import zipfile
+import shutil
+import tempfile
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
+
+# Flask-Login設定
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'ログインが必要です'
+
+# ファイルアップロード設定
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+# テンプレートにnow関数を追加
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# データベース設定（PostgreSQL or SQLite）
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    
+    def get_db():
+        url = urlparse(DATABASE_URL)
+        conn = psycopg2.connect(
+            host=url.hostname,
+            port=url.port,
+            database=url.path[1:],
+            user=url.username,
+            password=url.password,
+            sslmode='require'
+        )
+        return conn
+    
+    def init_db():
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # ユーザーテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(80) UNIQUE NOT NULL,
+                email VARCHAR(120) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                role VARCHAR(20) DEFAULT 'user',
+                display_name VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        ''')
+        
+        # 商品テーブル（user_id追加）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS merchandise (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                purchase_date DATE,
+                photo_path TEXT,
+                product_name VARCHAR(200),
+                brand_name VARCHAR(100),
+                item_condition VARCHAR(10),
+                store_name VARCHAR(200),
+                purchase_price INTEGER DEFAULT 0,
+                payment_method VARCHAR(50),
+                listing_price INTEGER DEFAULT 0,
+                expected_shipping INTEGER DEFAULT 0,
+                expected_commission INTEGER DEFAULT 0,
+                is_listed BOOLEAN DEFAULT FALSE,
+                listing_date DATE,
+                sale_date DATE,
+                sale_price INTEGER DEFAULT 0,
+                shipping_cost INTEGER DEFAULT 0,
+                sales_destination VARCHAR(100),
+                commission INTEGER DEFAULT 0,
+                is_shipped BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # brand_nameカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS brand_name VARCHAR(100)")
+        except:
+            pass
+        
+        # item_conditionカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS item_condition VARCHAR(10)")
+        except:
+            pass
+        
+        # additional_photosカラムを追加（複数画像対応）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS additional_photos TEXT")
+        except:
+            pass
+        
+        # 顧客テーブル（user_id追加）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(120),
+                phone VARCHAR(20),
+                address TEXT,
+                total_purchase INTEGER DEFAULT 0,
+                purchase_count INTEGER DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # お知らせテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(200) NOT NULL,
+                content TEXT NOT NULL,
+                announcement_type VARCHAR(20) DEFAULT 'info',
+                is_active BOOLEAN DEFAULT TRUE,
+                publish_at TIMESTAMP,
+                expire_at TIMESTAMP,
+                created_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ウィジェット設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS widget_settings (
+                id SERIAL PRIMARY KEY,
+                widget_key VARCHAR(50) UNIQUE NOT NULL,
+                widget_name VARCHAR(100) NOT NULL,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                display_order INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # デフォルトウィジェット設定を挿入
+        default_widgets = [
+            ('sales_profit', '売上・利益', True, 1),
+            ('top_products', '売れた商品', True, 2),
+            ('slow_products', '売れない商品', True, 3),
+            ('turnover_rate', '回転率・在庫日数', True, 4),
+            ('closing_rate', '成約率', True, 5),
+            ('avg_price', '平均単価', True, 6),
+            ('repeat_rate', 'リピート率', False, 7),
+            ('time_sales', '時間帯・曜日別売上', False, 8),
+            ('brand_stats', 'ブランド別統計', True, 9),
+            ('destination_stats', '販売先別統計', True, 10),
+        ]
+        for widget in default_widgets:
+            cur.execute('''
+                INSERT INTO widget_settings (widget_key, widget_name, is_enabled, display_order)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (widget_key) DO NOTHING
+            ''', widget)
+        
+        # デフォルト管理者作成
+        cur.execute("SELECT * FROM users WHERE username = 'admin'")
+        if not cur.fetchone():
+            cur.execute('''
+                INSERT INTO users (username, email, password_hash, role, display_name)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', ('admin', 'admin@example.com', generate_password_hash('admin123'), 'admin', '管理者'))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+
+else:
+    import sqlite3
+    
+    DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'merchandise.db')
+    
+    def get_db():
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def init_db():
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # ユーザーテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT DEFAULT 'user',
+                display_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        ''')
+        
+        # 商品テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS merchandise (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                purchase_date DATE,
+                photo_path TEXT,
+                product_name TEXT,
+                brand_name TEXT,
+                item_condition TEXT,
+                store_name TEXT,
+                purchase_price INTEGER DEFAULT 0,
+                payment_method TEXT,
+                listing_price INTEGER DEFAULT 0,
+                expected_shipping INTEGER DEFAULT 0,
+                expected_commission INTEGER DEFAULT 0,
+                is_listed INTEGER DEFAULT 0,
+                listing_date DATE,
+                sale_date DATE,
+                sale_price INTEGER DEFAULT 0,
+                shipping_cost INTEGER DEFAULT 0,
+                sales_destination TEXT,
+                commission INTEGER DEFAULT 0,
+                is_shipped INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # brand_nameカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN brand_name TEXT")
+        except:
+            pass
+        
+        # item_conditionカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN item_condition TEXT")
+        except:
+            pass
+        
+        # additional_photosカラムを追加（複数画像対応）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN additional_photos TEXT")
+        except:
+            pass
+        
+        # 顧客テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                name TEXT NOT NULL,
+                email TEXT,
+                phone TEXT,
+                address TEXT,
+                total_purchase INTEGER DEFAULT 0,
+                purchase_count INTEGER DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # お知らせテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS announcements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                announcement_type TEXT DEFAULT 'info',
+                is_active INTEGER DEFAULT 1,
+                publish_at TIMESTAMP,
+                expire_at TIMESTAMP,
+                created_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ウィジェット設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS widget_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                widget_key TEXT UNIQUE NOT NULL,
+                widget_name TEXT NOT NULL,
+                is_enabled INTEGER DEFAULT 1,
+                display_order INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # デフォルトウィジェット設定を挿入
+        default_widgets = [
+            ('sales_profit', '売上・利益', 1, 1),
+            ('top_products', '売れた商品', 1, 2),
+            ('slow_products', '売れない商品', 1, 3),
+            ('turnover_rate', '回転率・在庫日数', 1, 4),
+            ('closing_rate', '成約率', 1, 5),
+            ('avg_price', '平均単価', 1, 6),
+            ('repeat_rate', 'リピート率', 0, 7),
+            ('time_sales', '時間帯・曜日別売上', 0, 8),
+            ('brand_stats', 'ブランド別統計', 1, 9),
+            ('destination_stats', '販売先別統計', 1, 10),
+        ]
+        for widget in default_widgets:
+            cur.execute('''
+                INSERT OR IGNORE INTO widget_settings (widget_key, widget_name, is_enabled, display_order)
+                VALUES (?, ?, ?, ?)
+            ''', widget)
+        
+        # デフォルト管理者作成
+        cur.execute("SELECT * FROM users WHERE username = 'admin'")
+        if not cur.fetchone():
+            cur.execute('''
+                INSERT INTO users (username, email, password_hash, role, display_name)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ('admin', 'admin@example.com', generate_password_hash('admin123'), 'admin', '管理者'))
+        
+        conn.commit()
+        conn.close()
+
+# ユーザークラス
+class User(UserMixin):
+    def __init__(self, id, username, email, role, display_name):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.role = role
+        self.display_name = display_name or username
+    
+    def is_admin(self):
+        return self.role == 'admin'
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if user:
+        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'])
+    return None
+
+# 管理者専用デコレータ
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('管理者権限が必要です', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ヘルパー関数
+def calculate_profit(sale_price, purchase_price, shipping_cost, commission):
+    return sale_price - purchase_price - shipping_cost - commission
+
+def calculate_profit_rate(profit, sale_price):
+    if sale_price > 0:
+        return round((profit / sale_price) * 100, 1)
+    return 0
+
+def calculate_expected_profit(listing_price, purchase_price, expected_shipping, expected_commission):
+    return listing_price - purchase_price - expected_shipping - expected_commission
+
+def get_customer_rank(total_purchase):
+    if total_purchase >= 100000:
+        return 'platinum'
+    elif total_purchase >= 50000:
+        return 'gold'
+    elif total_purchase >= 20000:
+        return 'silver'
+    else:
+        return 'bronze'
+
+def get_rank_label(rank):
+    labels = {
+        'platinum': 'プラチナ',
+        'gold': 'ゴールド',
+        'silver': 'シルバー',
+        'bronze': 'ブロンズ'
+    }
+    return labels.get(rank, 'ブロンズ')
+
+def get_active_announcements():
+    """アクティブなお知らせを取得"""
+    conn = get_db()
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM announcements 
+            WHERE is_active = TRUE
+            AND (publish_at IS NULL OR publish_at <= %s)
+            AND (expire_at IS NULL OR expire_at > %s)
+            ORDER BY created_at DESC
+            LIMIT 5
+        """, (now, now))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM announcements 
+            WHERE is_active = 1
+            AND (publish_at IS NULL OR publish_at <= ?)
+            AND (expire_at IS NULL OR expire_at > ?)
+            ORDER BY created_at DESC
+            LIMIT 5
+        """, (now.strftime('%Y-%m-%d %H:%M:%S'), now.strftime('%Y-%m-%d %H:%M:%S')))
+    
+    announcements = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(a) for a in announcements]
+
+# データベース初期化
+init_db()
+
+# ===================
+# 認証関連ルート
+# ===================
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+        
+        user = cur.fetchone()
+        
+        if user and check_password_hash(user['password_hash'], password):
+            # ログイン日時更新
+            if DATABASE_URL:
+                cur.execute("UPDATE users SET last_login = %s WHERE id = %s", 
+                           (datetime.now(), user['id']))
+            else:
+                cur.execute("UPDATE users SET last_login = ? WHERE id = ?", 
+                           (datetime.now(), user['id']))
+            conn.commit()
+            
+            user_obj = User(user['id'], user['username'], user['email'], 
+                          user['role'], user['display_name'])
+            login_user(user_obj)
+            
+            flash(f'ようこそ、{user_obj.display_name}さん！', 'success')
+            
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            flash('ユーザー名またはパスワードが正しくありません', 'error')
+        
+        cur.close()
+        conn.close()
+    
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """一般公開の登録は無効化 - 管理者のみがユーザーを作成可能"""
+    flash('新規登録は管理者にお問い合わせください', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('ログアウトしました', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        display_name = request.form.get('display_name')
+        email = request.form.get('email')
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE id = %s", (current_user.id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE id = ?", (current_user.id,))
+        
+        user = cur.fetchone()
+        
+        # パスワード変更
+        if current_password and new_password:
+            if check_password_hash(user['password_hash'], current_password):
+                if DATABASE_URL:
+                    cur.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                               (generate_password_hash(new_password), current_user.id))
+                else:
+                    cur.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                               (generate_password_hash(new_password), current_user.id))
+                flash('パスワードを変更しました', 'success')
+            else:
+                flash('現在のパスワードが正しくありません', 'error')
+        
+        # プロフィール更新
+        if DATABASE_URL:
+            cur.execute("UPDATE users SET display_name = %s, email = %s WHERE id = %s",
+                       (display_name, email, current_user.id))
+        else:
+            cur.execute("UPDATE users SET display_name = ?, email = ? WHERE id = ?",
+                       (display_name, email, current_user.id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('プロフィールを更新しました', 'success')
+        return redirect(url_for('profile'))
+    
+    return render_template('profile.html')
+
+# ===================
+# 商品管理ルート
+# ===================
+
+@app.route('/')
+@login_required
+def index():
+    filter_type = request.args.get('filter', '')
+    search = request.args.get('search', '')
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        query = "SELECT * FROM merchandise WHERE user_id = %s"
+        params = [current_user.id]
+    else:
+        cur = conn.cursor()
+        query = "SELECT * FROM merchandise WHERE user_id = ?"
+        params = [current_user.id]
+    
+    # フィルター
+    today = datetime.now().date()
+    if filter_type == 'today':
+        if DATABASE_URL:
+            query += " AND purchase_date = %s"
+        else:
+            query += " AND purchase_date = ?"
+        params.append(str(today))
+    elif filter_type == 'yesterday':
+        yesterday = today - timedelta(days=1)
+        if DATABASE_URL:
+            query += " AND purchase_date = %s"
+        else:
+            query += " AND purchase_date = ?"
+        params.append(str(yesterday))
+    elif filter_type == 'week':
+        week_ago = today - timedelta(days=7)
+        if DATABASE_URL:
+            query += " AND purchase_date >= %s"
+        else:
+            query += " AND purchase_date >= ?"
+        params.append(str(week_ago))
+    elif filter_type == 'month':
+        month_ago = today - timedelta(days=30)
+        if DATABASE_URL:
+            query += " AND purchase_date >= %s"
+        else:
+            query += " AND purchase_date >= ?"
+        params.append(str(month_ago))
+    elif filter_type == 'sold':
+        query += " AND sale_date IS NOT NULL"
+    elif filter_type == 'unsold':
+        query += " AND sale_date IS NULL"
+    
+    # 検索
+    if search:
+        if DATABASE_URL:
+            query += " AND (product_name ILIKE %s OR store_name ILIKE %s)"
+            params.extend([f'%{search}%', f'%{search}%'])
+        else:
+            query += " AND (product_name LIKE ? OR store_name LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%'])
+    
+    query += " ORDER BY id DESC"
+    cur.execute(query, params)
+    items = cur.fetchall()
+    
+    # 統計
+    if DATABASE_URL:
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+            FROM merchandise WHERE user_id = %s
+        """, (current_user.id,))
+    else:
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+            FROM merchandise WHERE user_id = ?
+        """, (current_user.id,))
+    
+    stats = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    # アイテムに計算フィールド追加
+    processed_items = []
+    for item in items:
+        item_dict = dict(item)
+        if item_dict.get('photo_path'):
+            item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+        
+        if item_dict.get('sale_date'):
+            item_dict['profit'] = calculate_profit(
+                item_dict.get('sale_price', 0) or 0,
+                item_dict.get('purchase_price', 0) or 0,
+                item_dict.get('shipping_cost', 0) or 0,
+                item_dict.get('commission', 0) or 0
+            )
+            item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('sale_price', 0) or 0)
+        else:
+            item_dict['expected_profit'] = calculate_expected_profit(
+                item_dict.get('listing_price', 0) or 0,
+                item_dict.get('purchase_price', 0) or 0,
+                item_dict.get('expected_shipping', 0) or 0,
+                item_dict.get('expected_commission', 0) or 0
+            )
+        processed_items.append(item_dict)
+    
+    # アクティブなお知らせを取得
+    announcements = get_active_announcements()
+    
+    return render_template('index.html', items=processed_items, stats=dict(stats),
+                         filter_type=filter_type, search=search, announcements=announcements)
+
+@app.route('/add', methods=['GET', 'POST'])
+@login_required
+def add_item():
+    if request.method == 'POST':
+        photo_path = None
+        additional_photos = []
+        
+        # メイン写真（1枚目）
+        if 'photo' in request.files:
+            file = request.files['photo']
+            if file and file.filename and allowed_file(file.filename):
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                photo_path = f'uploads/{filename}'
+        
+        # 追加写真（2-20枚目）
+        if 'additional_photos' in request.files:
+            files = request.files.getlist('additional_photos')
+            for i, file in enumerate(files[:19]):  # 最大19枚まで（合計20枚）
+                if file and file.filename and allowed_file(file.filename):
+                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{i+2}_' + secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    additional_photos.append(f'uploads/{filename}')
+        
+        additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
+                    purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                    is_listed, listing_date, sale_date, sale_price, shipping_cost, 
+                    sales_destination, commission, is_shipped)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                current_user.id,
+                request.form.get('purchase_date') or None,
+                photo_path,
+                additional_photos_json,
+                request.form.get('product_name'),
+                request.form.get('brand_name'),
+                request.form.get('item_condition'),
+                request.form.get('store_name'),
+                int(request.form.get('purchase_price') or 0),
+                request.form.get('payment_method'),
+                int(request.form.get('listing_price') or 0),
+                int(request.form.get('expected_shipping') or 0),
+                int(request.form.get('expected_commission') or 0),
+                'is_listed' in request.form,
+                request.form.get('listing_date') or None,
+                request.form.get('sale_date') or None,
+                int(request.form.get('sale_price') or 0),
+                int(request.form.get('shipping_cost') or 0),
+                request.form.get('sales_destination'),
+                int(request.form.get('commission') or 0),
+                'is_shipped' in request.form
+            ))
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
+                    purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                    is_listed, listing_date, sale_date, sale_price, shipping_cost, 
+                    sales_destination, commission, is_shipped)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                current_user.id,
+                request.form.get('purchase_date') or None,
+                photo_path,
+                additional_photos_json,
+                request.form.get('product_name'),
+                request.form.get('brand_name'),
+                request.form.get('item_condition'),
+                request.form.get('store_name'),
+                int(request.form.get('purchase_price') or 0),
+                request.form.get('payment_method'),
+                int(request.form.get('listing_price') or 0),
+                int(request.form.get('expected_shipping') or 0),
+                int(request.form.get('expected_commission') or 0),
+                1 if 'is_listed' in request.form else 0,
+                request.form.get('listing_date') or None,
+                request.form.get('sale_date') or None,
+                int(request.form.get('sale_price') or 0),
+                int(request.form.get('shipping_cost') or 0),
+                request.form.get('sales_destination'),
+                int(request.form.get('commission') or 0),
+                1 if 'is_shipped' in request.form else 0
+            ))
+        
+        conn.commit()
+        conn.close()
+        flash('商品を登録しました', 'success')
+        return redirect(url_for('index'))
+    
+    return render_template('form.html', item=None)
+
+@app.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_item(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    item = cur.fetchone()
+    if not item:
+        flash('商品が見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        photo_path = item['photo_path']
+        
+        # 既存の追加写真を取得
+        existing_additional = item.get('additional_photos')
+        if existing_additional:
+            try:
+                additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
+            except:
+                additional_photos = []
+        else:
+            additional_photos = []
+        
+        # メイン写真の更新
+        if 'photo' in request.files:
+            file = request.files['photo']
+            if file and file.filename and allowed_file(file.filename):
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                photo_path = f'uploads/{filename}'
+        
+        # 追加写真の追加
+        if 'additional_photos' in request.files:
+            files = request.files.getlist('additional_photos')
+            for i, file in enumerate(files):
+                if len(additional_photos) >= 19:  # 最大19枚まで
+                    break
+                if file and file.filename and allowed_file(file.filename):
+                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    additional_photos.append(f'uploads/{filename}')
+        
+        # 削除する写真を処理
+        delete_photos = request.form.getlist('delete_photos')
+        if delete_photos:
+            additional_photos = [p for p in additional_photos if p not in delete_photos]
+        
+        additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+        
+        if DATABASE_URL:
+            cur.execute('''
+                UPDATE merchandise SET 
+                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, item_condition = %s, store_name = %s,
+                    purchase_price = %s, payment_method = %s, listing_price = %s, 
+                    expected_shipping = %s, expected_commission = %s,
+                    is_listed = %s, listing_date = %s, sale_date = %s, sale_price = %s,
+                    shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s
+                WHERE id = %s AND user_id = %s
+            ''', (
+                request.form.get('purchase_date') or None,
+                photo_path,
+                additional_photos_json,
+                request.form.get('product_name'),
+                request.form.get('brand_name'),
+                request.form.get('item_condition'),
+                request.form.get('store_name'),
+                int(request.form.get('purchase_price') or 0),
+                request.form.get('payment_method'),
+                int(request.form.get('listing_price') or 0),
+                int(request.form.get('expected_shipping') or 0),
+                int(request.form.get('expected_commission') or 0),
+                'is_listed' in request.form,
+                request.form.get('listing_date') or None,
+                request.form.get('sale_date') or None,
+                int(request.form.get('sale_price') or 0),
+                int(request.form.get('shipping_cost') or 0),
+                request.form.get('sales_destination'),
+                int(request.form.get('commission') or 0),
+                'is_shipped' in request.form,
+                id, current_user.id
+            ))
+        else:
+            cur.execute('''
+                UPDATE merchandise SET 
+                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, item_condition = ?, store_name = ?,
+                    purchase_price = ?, payment_method = ?, listing_price = ?, 
+                    expected_shipping = ?, expected_commission = ?,
+                    is_listed = ?, listing_date = ?, sale_date = ?, sale_price = ?,
+                    shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?
+                WHERE id = ? AND user_id = ?
+            ''', (
+                request.form.get('purchase_date') or None,
+                photo_path,
+                additional_photos_json,
+                request.form.get('product_name'),
+                request.form.get('brand_name'),
+                request.form.get('item_condition'),
+                request.form.get('store_name'),
+                int(request.form.get('purchase_price') or 0),
+                request.form.get('payment_method'),
+                int(request.form.get('listing_price') or 0),
+                int(request.form.get('expected_shipping') or 0),
+                int(request.form.get('expected_commission') or 0),
+                1 if 'is_listed' in request.form else 0,
+                request.form.get('listing_date') or None,
+                request.form.get('sale_date') or None,
+                int(request.form.get('sale_price') or 0),
+                int(request.form.get('shipping_cost') or 0),
+                request.form.get('sales_destination'),
+                int(request.form.get('commission') or 0),
+                1 if 'is_shipped' in request.form else 0,
+                id, current_user.id
+            ))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('商品を更新しました', 'success')
+        return redirect(url_for('index'))
+    
+    cur.close()
+    conn.close()
+    
+    item_dict = dict(item)
+    if item_dict.get('photo_path'):
+        item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+    
+    # 追加写真をパース
+    if item_dict.get('additional_photos'):
+        try:
+            additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+            item_dict['additional_photos_list'] = [p.replace('\\', '/') for p in additional]
+        except:
+            item_dict['additional_photos_list'] = []
+    else:
+        item_dict['additional_photos_list'] = []
+    
+    return render_template('form.html', item=item_dict)
+
+@app.route('/view/<int:id>')
+@login_required
+def view_item(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    item = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not item:
+        flash('商品が見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    item_dict = dict(item)
+    if item_dict.get('photo_path'):
+        item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+    
+    # 追加写真をパース
+    if item_dict.get('additional_photos'):
+        try:
+            additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+            item_dict['additional_photos_list'] = [p.replace('\\', '/') for p in additional]
+        except:
+            item_dict['additional_photos_list'] = []
+    else:
+        item_dict['additional_photos_list'] = []
+    
+    # 全画像リスト（メイン + 追加）
+    item_dict['all_photos'] = []
+    if item_dict.get('photo_path'):
+        item_dict['all_photos'].append(item_dict['photo_path'])
+    item_dict['all_photos'].extend(item_dict.get('additional_photos_list', []))
+    
+    if item_dict.get('sale_date'):
+        item_dict['profit'] = calculate_profit(
+            item_dict.get('sale_price', 0) or 0,
+            item_dict.get('purchase_price', 0) or 0,
+            item_dict.get('shipping_cost', 0) or 0,
+            item_dict.get('commission', 0) or 0
+        )
+        item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('sale_price', 0) or 0)
+    else:
+        item_dict['expected_profit'] = calculate_expected_profit(
+            item_dict.get('listing_price', 0) or 0,
+            item_dict.get('purchase_price', 0) or 0,
+            item_dict.get('expected_shipping', 0) or 0,
+            item_dict.get('expected_commission', 0) or 0
+        )
+    
+    return render_template('view.html', item=item_dict)
+
+@app.route('/delete/<int:id>')
+@login_required
+def delete_item(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+    conn.commit()
+    conn.close()
+    flash('商品を削除しました', 'info')
+    return redirect(url_for('index'))
+
+@app.route('/export_csv')
+@login_required
+def export_csv():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
+    
+    items = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow(['ID', '仕入日', '商品名', '店舗名', '仕入額', '支払方法', 
+                    '出品価格', '出品済み', '出品日', '売却日', '売上金', 
+                    '送料', '販売先', '手数料', '利益', '利益率', '発送済み'])
+    
+    for item in items:
+        item_dict = dict(item)
+        profit = calculate_profit(
+            item_dict.get('sale_price', 0) or 0,
+            item_dict.get('purchase_price', 0) or 0,
+            item_dict.get('shipping_cost', 0) or 0,
+            item_dict.get('commission', 0) or 0
+        )
+        profit_rate = calculate_profit_rate(profit, item_dict.get('sale_price', 0) or 0)
+        
+        writer.writerow([
+            item_dict['id'],
+            item_dict.get('purchase_date', ''),
+            item_dict.get('product_name', ''),
+            item_dict.get('store_name', ''),
+            item_dict.get('purchase_price', 0),
+            item_dict.get('payment_method', ''),
+            item_dict.get('listing_price', 0),
+            '済' if item_dict.get('is_listed') else '',
+            item_dict.get('listing_date', ''),
+            item_dict.get('sale_date', ''),
+            item_dict.get('sale_price', 0),
+            item_dict.get('shipping_cost', 0),
+            item_dict.get('sales_destination', ''),
+            item_dict.get('commission', 0),
+            profit,
+            f'{profit_rate}%',
+            '済' if item_dict.get('is_shipped') else ''
+        ])
+    
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'merchandise_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    )
+
+# ===================
+# 顧客管理ルート
+# ===================
+
+@app.route('/customers')
+@login_required
+def customers():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM customers WHERE user_id = %s ORDER BY total_purchase DESC", (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM customers WHERE user_id = ? ORDER BY total_purchase DESC", (current_user.id,))
+    
+    customers_list = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    processed_customers = []
+    for c in customers_list:
+        c_dict = dict(c)
+        c_dict['rank'] = get_customer_rank(c_dict.get('total_purchase', 0) or 0)
+        c_dict['rank_label'] = get_rank_label(c_dict['rank'])
+        processed_customers.append(c_dict)
+    
+    return render_template('customers.html', customers=processed_customers)
+
+@app.route('/customers/add', methods=['GET', 'POST'])
+@login_required
+def add_customer():
+    if request.method == 'POST':
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                current_user.id,
+                request.form.get('name'),
+                request.form.get('email'),
+                request.form.get('phone'),
+                request.form.get('address'),
+                int(request.form.get('total_purchase') or 0),
+                int(request.form.get('purchase_count') or 0),
+                request.form.get('notes')
+            ))
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                current_user.id,
+                request.form.get('name'),
+                request.form.get('email'),
+                request.form.get('phone'),
+                request.form.get('address'),
+                int(request.form.get('total_purchase') or 0),
+                int(request.form.get('purchase_count') or 0),
+                request.form.get('notes')
+            ))
+        conn.commit()
+        conn.close()
+        flash('顧客を登録しました', 'success')
+        return redirect(url_for('customers'))
+    
+    return render_template('customer_form.html', customer=None)
+
+@app.route('/customers/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_customer(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM customers WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM customers WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    customer = cur.fetchone()
+    if not customer:
+        flash('顧客が見つかりません', 'error')
+        return redirect(url_for('customers'))
+    
+    if request.method == 'POST':
+        if DATABASE_URL:
+            cur.execute('''
+                UPDATE customers SET name = %s, email = %s, phone = %s, address = %s,
+                    total_purchase = %s, purchase_count = %s, notes = %s
+                WHERE id = %s AND user_id = %s
+            ''', (
+                request.form.get('name'),
+                request.form.get('email'),
+                request.form.get('phone'),
+                request.form.get('address'),
+                int(request.form.get('total_purchase') or 0),
+                int(request.form.get('purchase_count') or 0),
+                request.form.get('notes'),
+                id, current_user.id
+            ))
+        else:
+            cur.execute('''
+                UPDATE customers SET name = ?, email = ?, phone = ?, address = ?,
+                    total_purchase = ?, purchase_count = ?, notes = ?
+                WHERE id = ? AND user_id = ?
+            ''', (
+                request.form.get('name'),
+                request.form.get('email'),
+                request.form.get('phone'),
+                request.form.get('address'),
+                int(request.form.get('total_purchase') or 0),
+                int(request.form.get('purchase_count') or 0),
+                request.form.get('notes'),
+                id, current_user.id
+            ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('顧客情報を更新しました', 'success')
+        return redirect(url_for('customers'))
+    
+    cur.close()
+    conn.close()
+    return render_template('customer_form.html', customer=dict(customer))
+
+@app.route('/customers/delete/<int:id>')
+@login_required
+def delete_customer(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM customers WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM customers WHERE id = ? AND user_id = ?", (id, current_user.id))
+    conn.commit()
+    conn.close()
+    flash('顧客を削除しました', 'info')
+    return redirect(url_for('customers'))
+
+# ===================
+# 管理者機能
+# ===================
+
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_dashboard():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 全ユーザー取得
+        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+        users = cur.fetchall()
+        
+        # ユーザーごとの統計
+        user_stats = []
+        for user in users:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as item_count,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id = %s
+            """, (user['id'],))
+            stats = cur.fetchone()
+            user_stats.append({
+                'user': dict(user),
+                'stats': dict(stats) if stats else {}
+            })
+        
+        # 全体統計
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+            FROM merchandise
+        """)
+        overall_stats = cur.fetchone()
+        
+        # 人気ブランド（利益率）
+        cur.execute("""
+            SELECT brand_name, 
+                   COUNT(*) as count, 
+                   SUM(sale_price) as total_sales,
+                   SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                   CASE WHEN SUM(sale_price) > 0 
+                        THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
+                        ELSE 0 END as profit_rate
+            FROM merchandise 
+            WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+            GROUP BY brand_name
+            ORDER BY profit_rate DESC
+            LIMIT 10
+        """)
+        popular_brands = cur.fetchall()
+        
+        # 店舗別売上
+        cur.execute("""
+            SELECT store_name, COUNT(*) as count, 
+                   SUM(purchase_price) as total_purchase,
+                   SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END) as total_sales
+            FROM merchandise 
+            GROUP BY store_name
+            ORDER BY total_sales DESC
+            LIMIT 10
+        """)
+        store_stats = cur.fetchall()
+        
+    else:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+        users = cur.fetchall()
+        
+        user_stats = []
+        for user in users:
+            user_dict = dict(user)
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as item_count,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id = ?
+            """, (user_dict['id'],))
+            stats = cur.fetchone()
+            user_stats.append({
+                'user': user_dict,
+                'stats': dict(stats) if stats else {}
+            })
+        
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+            FROM merchandise
+        """)
+        overall_stats = cur.fetchone()
+        
+        cur.execute("""
+            SELECT brand_name, 
+                   COUNT(*) as count, 
+                   SUM(sale_price) as total_sales,
+                   SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                   CASE WHEN SUM(sale_price) > 0 
+                        THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
+                        ELSE 0 END as profit_rate
+            FROM merchandise 
+            WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+            GROUP BY brand_name
+            ORDER BY profit_rate DESC
+            LIMIT 10
+        """)
+        popular_brands = cur.fetchall()
+        
+        cur.execute("""
+            SELECT store_name, COUNT(*) as count, 
+                   SUM(purchase_price) as total_purchase,
+                   SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END) as total_sales
+            FROM merchandise 
+            GROUP BY store_name
+            ORDER BY total_sales DESC
+            LIMIT 10
+        """)
+        store_stats = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/dashboard.html', 
+                         user_stats=user_stats,
+                         overall_stats=dict(overall_stats) if overall_stats else {},
+                         popular_brands=[dict(p) for p in popular_brands],
+                         store_stats=[dict(s) for s in store_stats])
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+    
+    users = [dict(u) for u in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/users.html', users=users)
+
+@app.route('/admin/users/<int:id>/toggle_admin')
+@login_required
+@admin_required
+def toggle_admin(id):
+    if id == current_user.id:
+        flash('自分の権限は変更できません', 'error')
+        return redirect(url_for('admin_users'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT role FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        new_role = 'user' if user['role'] == 'admin' else 'admin'
+        cur.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT role FROM users WHERE id = ?", (id,))
+        user = cur.fetchone()
+        new_role = 'user' if user['role'] == 'admin' else 'admin'
+        cur.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('ユーザー権限を変更しました', 'success')
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/users/<int:id>/delete')
+@login_required
+@admin_required
+def delete_user(id):
+    if id == current_user.id:
+        flash('自分は削除できません', 'error')
+        return redirect(url_for('admin_users'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM merchandise WHERE user_id = %s", (id,))
+        cur.execute("DELETE FROM customers WHERE user_id = %s", (id,))
+        cur.execute("DELETE FROM users WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM merchandise WHERE user_id = ?", (id,))
+        cur.execute("DELETE FROM customers WHERE user_id = ?", (id,))
+        cur.execute("DELETE FROM users WHERE id = ?", (id,))
+    
+    conn.commit()
+    conn.close()
+    flash('ユーザーを削除しました', 'info')
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/users/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_add_user():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        display_name = request.form.get('display_name')
+        role = request.form.get('role', 'user')
+        
+        if not username or not email or not password:
+            flash('ユーザー名、メール、パスワードは必須です', 'error')
+            return render_template('admin/user_form.html', user=None)
+        
+        if len(password) < 6:
+            flash('パスワードは6文字以上必要です', 'error')
+            return render_template('admin/user_form.html', user=None)
+        
+        conn = get_db()
+        try:
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute('''
+                    INSERT INTO users (username, email, password_hash, role, display_name)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (username, email, generate_password_hash(password), role, display_name or username))
+            else:
+                cur = conn.cursor()
+                cur.execute('''
+                    INSERT INTO users (username, email, password_hash, role, display_name)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (username, email, generate_password_hash(password), role, display_name or username))
+            conn.commit()
+            flash('ユーザーを作成しました', 'success')
+            return redirect(url_for('admin_users'))
+        except Exception as e:
+            flash('ユーザー名またはメールアドレスが既に使用されています', 'error')
+        finally:
+            conn.close()
+    
+    return render_template('admin/user_form.html', user=None)
+
+@app.route('/admin/users/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_edit_user(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (id,))
+    
+    user = cur.fetchone()
+    if not user:
+        flash('ユーザーが見つかりません', 'error')
+        return redirect(url_for('admin_users'))
+    
+    if request.method == 'POST':
+        display_name = request.form.get('display_name')
+        email = request.form.get('email')
+        role = request.form.get('role', 'user')
+        new_password = request.form.get('new_password')
+        
+        # 自分の権限は変更不可
+        if id == current_user.id:
+            role = user['role']
+        
+        try:
+            if new_password and len(new_password) >= 6:
+                if DATABASE_URL:
+                    cur.execute('''
+                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s
+                        WHERE id = %s
+                    ''', (display_name, email, role, generate_password_hash(new_password), id))
+                else:
+                    cur.execute('''
+                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?
+                        WHERE id = ?
+                    ''', (display_name, email, role, generate_password_hash(new_password), id))
+            else:
+                if DATABASE_URL:
+                    cur.execute('''
+                        UPDATE users SET display_name = %s, email = %s, role = %s
+                        WHERE id = %s
+                    ''', (display_name, email, role, id))
+                else:
+                    cur.execute('''
+                        UPDATE users SET display_name = ?, email = ?, role = ?
+                        WHERE id = ?
+                    ''', (display_name, email, role, id))
+            
+            conn.commit()
+            flash('ユーザー情報を更新しました', 'success')
+            return redirect(url_for('admin_users'))
+        except Exception as e:
+            flash('メールアドレスが既に使用されています', 'error')
+        finally:
+            cur.close()
+            conn.close()
+    else:
+        cur.close()
+        conn.close()
+    
+    return render_template('admin/user_form.html', user=dict(user))
+
+@app.route('/admin/users/<int:id>/items')
+@login_required
+@admin_required
+def admin_user_items(id):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id DESC", (id,))
+        items = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (id,))
+        user = cur.fetchone()
+        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id DESC", (id,))
+        items = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    if not user:
+        flash('ユーザーが見つかりません', 'error')
+        return redirect(url_for('admin_users'))
+    
+    processed_items = []
+    for item in items:
+        item_dict = dict(item)
+        if item_dict.get('photo_path'):
+            item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+        if item_dict.get('sale_date'):
+            item_dict['profit'] = calculate_profit(
+                item_dict.get('sale_price', 0) or 0,
+                item_dict.get('purchase_price', 0) or 0,
+                item_dict.get('shipping_cost', 0) or 0,
+                item_dict.get('commission', 0) or 0
+            )
+        processed_items.append(item_dict)
+    
+    return render_template('admin/user_items.html', user=dict(user), items=processed_items)
+
+@app.route('/admin/analytics')
+@login_required
+@admin_required
+def admin_analytics():
+    conn = get_db()
+    analytics_data = {}
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # ウィジェット設定を取得
+        cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
+        widgets = cur.fetchall()
+        
+        # 有効なウィジェットのデータを取得
+        enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
+        
+        # 売上・利益（月別推移）
+        if 'sales_profit' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    TO_CHAR(sale_date, 'YYYY-MM') as month,
+                    COUNT(*) as count,
+                    SUM(sale_price) as sales,
+                    SUM(sale_price - purchase_price - shipping_cost - commission) as profit
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 12
+            """)
+            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+        
+        # 売れた商品（Top10）
+        if 'top_products' in enabled_widgets:
+            cur.execute("""
+                SELECT product_name, brand_name, sale_price, 
+                       sale_price - purchase_price - shipping_cost - commission as profit,
+                       sale_date
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                ORDER BY sale_price DESC
+                LIMIT 10
+            """)
+            analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
+        
+        # 売れない商品（在庫滞留）
+        if 'slow_products' in enabled_widgets:
+            cur.execute("""
+                SELECT product_name, brand_name, purchase_price, purchase_date,
+                       CURRENT_DATE - purchase_date::date as days_in_stock
+                FROM merchandise 
+                WHERE sale_date IS NULL AND purchase_date IS NOT NULL
+                ORDER BY days_in_stock DESC
+                LIMIT 10
+            """)
+            analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
+        
+        # 回転率・在庫日数
+        if 'turnover_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                    COUNT(*) as total_count,
+                    AVG(CASE WHEN sale_date IS NOT NULL 
+                        THEN sale_date::date - purchase_date::date 
+                        ELSE NULL END) as avg_days_to_sell,
+                    AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                        THEN CURRENT_DATE - purchase_date::date 
+                        ELSE NULL END) as avg_days_in_stock
+                FROM merchandise 
+                WHERE purchase_date IS NOT NULL
+            """)
+            analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+        
+        # 成約率
+        if 'closing_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE is_listed = TRUE OR is_listed = 1) as listed_count,
+                    COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                    COUNT(*) as total_count
+                FROM merchandise
+            """)
+            analytics_data['closing_stats'] = dict(cur.fetchone() or {})
+        
+        # 平均単価
+        if 'avg_price' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    AVG(purchase_price) as avg_purchase,
+                    AVG(sale_price) FILTER (WHERE sale_date IS NOT NULL) as avg_sale,
+                    AVG(sale_price - purchase_price - shipping_cost - commission) FILTER (WHERE sale_date IS NOT NULL) as avg_profit
+                FROM merchandise
+            """)
+            analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
+        
+        # リピート率（顧客別）
+        if 'repeat_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    sales_destination,
+                    COUNT(*) as purchase_count
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                GROUP BY sales_destination
+                ORDER BY purchase_count DESC
+            """)
+            analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
+        
+        # 時間帯・曜日別売上
+        if 'time_sales' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    TO_CHAR(sale_date, 'Day') as day_of_week,
+                    EXTRACT(DOW FROM sale_date) as dow_num,
+                    COUNT(*) as count,
+                    SUM(sale_price) as sales
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                GROUP BY TO_CHAR(sale_date, 'Day'), EXTRACT(DOW FROM sale_date)
+                ORDER BY dow_num
+            """)
+            analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
+        
+        # ブランド別統計
+        if 'brand_stats' in enabled_widgets:
+            cur.execute("""
+                SELECT brand_name, 
+                       COUNT(*) as count, 
+                       SUM(sale_price) as total_sales,
+                       SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                       CASE WHEN SUM(sale_price) > 0 
+                            THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
+                            ELSE 0 END as profit_rate
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+                GROUP BY brand_name
+                ORDER BY profit_rate DESC
+                LIMIT 10
+            """)
+            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+        
+        # 販売先別統計
+        if 'destination_stats' in enabled_widgets:
+            cur.execute("""
+                SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+            """)
+            analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
+        
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        # ウィジェット設定を取得
+        cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
+        widgets = [dict(w) for w in cur.fetchall()]
+        enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
+        
+        # 売上・利益（月別推移）
+        if 'sales_profit' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    strftime('%Y-%m', sale_date) as month,
+                    COUNT(*) as count,
+                    SUM(sale_price) as sales,
+                    SUM(sale_price - purchase_price - shipping_cost - commission) as profit
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                GROUP BY strftime('%Y-%m', sale_date)
+                ORDER BY month DESC
+                LIMIT 12
+            """)
+            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+        
+        # 売れた商品（Top10）
+        if 'top_products' in enabled_widgets:
+            cur.execute("""
+                SELECT product_name, brand_name, sale_price, 
+                       sale_price - purchase_price - shipping_cost - commission as profit,
+                       sale_date
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                ORDER BY sale_price DESC
+                LIMIT 10
+            """)
+            analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
+        
+        # 売れない商品（在庫滞留）
+        if 'slow_products' in enabled_widgets:
+            cur.execute("""
+                SELECT product_name, brand_name, purchase_price, purchase_date,
+                       julianday('now') - julianday(purchase_date) as days_in_stock
+                FROM merchandise 
+                WHERE sale_date IS NULL AND purchase_date IS NOT NULL
+                ORDER BY days_in_stock DESC
+                LIMIT 10
+            """)
+            analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
+        
+        # 回転率・在庫日数
+        if 'turnover_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    COUNT(*) as total_count,
+                    AVG(CASE WHEN sale_date IS NOT NULL 
+                        THEN julianday(sale_date) - julianday(purchase_date) 
+                        ELSE NULL END) as avg_days_to_sell,
+                    AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                        THEN julianday('now') - julianday(purchase_date) 
+                        ELSE NULL END) as avg_days_in_stock
+                FROM merchandise 
+                WHERE purchase_date IS NOT NULL
+            """)
+            analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+        
+        # 成約率
+        if 'closing_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    SUM(CASE WHEN is_listed = 1 THEN 1 ELSE 0 END) as listed_count,
+                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    COUNT(*) as total_count
+                FROM merchandise
+            """)
+            analytics_data['closing_stats'] = dict(cur.fetchone() or {})
+        
+        # 平均単価
+        if 'avg_price' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    AVG(purchase_price) as avg_purchase,
+                    AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END) as avg_sale,
+                    AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END) as avg_profit
+                FROM merchandise
+            """)
+            analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
+        
+        # リピート率
+        if 'repeat_rate' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    sales_destination,
+                    COUNT(*) as purchase_count
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                GROUP BY sales_destination
+                ORDER BY purchase_count DESC
+            """)
+            analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
+        
+        # 時間帯・曜日別売上
+        if 'time_sales' in enabled_widgets:
+            cur.execute("""
+                SELECT 
+                    CASE strftime('%w', sale_date)
+                        WHEN '0' THEN '日曜日'
+                        WHEN '1' THEN '月曜日'
+                        WHEN '2' THEN '火曜日'
+                        WHEN '3' THEN '水曜日'
+                        WHEN '4' THEN '木曜日'
+                        WHEN '5' THEN '金曜日'
+                        WHEN '6' THEN '土曜日'
+                    END as day_of_week,
+                    strftime('%w', sale_date) as dow_num,
+                    COUNT(*) as count,
+                    SUM(sale_price) as sales
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL
+                GROUP BY strftime('%w', sale_date)
+                ORDER BY dow_num
+            """)
+            analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
+        
+        # ブランド別統計
+        if 'brand_stats' in enabled_widgets:
+            cur.execute("""
+                SELECT brand_name, 
+                       COUNT(*) as count, 
+                       SUM(sale_price) as total_sales,
+                       SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                       CASE WHEN SUM(sale_price) > 0 
+                            THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
+                            ELSE 0 END as profit_rate
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+                GROUP BY brand_name
+                ORDER BY profit_rate DESC
+                LIMIT 10
+            """)
+            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+        
+        # 販売先別統計
+        if 'destination_stats' in enabled_widgets:
+            cur.execute("""
+                SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+            """)
+            analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/analytics.html',
+                         widgets=[dict(w) for w in widgets],
+                         **analytics_data)
+
+@app.route('/admin/analytics/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_analytics_settings():
+    conn = get_db()
+    
+    if request.method == 'POST':
+        if DATABASE_URL:
+            cur = conn.cursor()
+            # すべてのウィジェットを無効化
+            cur.execute("UPDATE widget_settings SET is_enabled = FALSE")
+            # 選択されたウィジェットを有効化
+            enabled = request.form.getlist('enabled_widgets')
+            for widget_key in enabled:
+                cur.execute("UPDATE widget_settings SET is_enabled = TRUE WHERE widget_key = %s", (widget_key,))
+            
+            # 表示順を更新
+            order_data = request.form.get('widget_order', '')
+            if order_data:
+                for i, widget_key in enumerate(order_data.split(',')):
+                    cur.execute("UPDATE widget_settings SET display_order = %s WHERE widget_key = %s", (i + 1, widget_key.strip()))
+        else:
+            cur = conn.cursor()
+            cur.execute("UPDATE widget_settings SET is_enabled = 0")
+            enabled = request.form.getlist('enabled_widgets')
+            for widget_key in enabled:
+                cur.execute("UPDATE widget_settings SET is_enabled = 1 WHERE widget_key = ?", (widget_key,))
+            
+            order_data = request.form.get('widget_order', '')
+            if order_data:
+                for i, widget_key in enumerate(order_data.split(',')):
+                    cur.execute("UPDATE widget_settings SET display_order = ? WHERE widget_key = ?", (i + 1, widget_key.strip()))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('ウィジェット設定を保存しました', 'success')
+        return redirect(url_for('admin_analytics'))
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+    
+    cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
+    widgets = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/analytics_settings.html', widgets=[dict(w) for w in widgets])
+
+# ===================
+# バックアップ・リストア
+# ===================
+
+@app.route('/admin/backup')
+@login_required
+@admin_required
+def admin_backup():
+    return render_template('admin/backup.html')
+
+@app.route('/admin/backup/export')
+@login_required
+@admin_required
+def export_backup():
+    """全データをJSON形式でエクスポート"""
+    conn = get_db()
+    backup_data = {
+        'exported_at': datetime.now().isoformat(),
+        'version': '1.0',
+        'users': [],
+        'merchandise': [],
+        'customers': []
+    }
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # ユーザーデータ（パスワードハッシュ含む）
+        cur.execute("SELECT * FROM users ORDER BY id")
+        backup_data['users'] = [dict(u) for u in cur.fetchall()]
+        
+        # 商品データ
+        cur.execute("SELECT * FROM merchandise ORDER BY id")
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        
+        # 顧客データ
+        cur.execute("SELECT * FROM customers ORDER BY id")
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT * FROM users ORDER BY id")
+        backup_data['users'] = [dict(u) for u in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM merchandise ORDER BY id")
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM customers ORDER BY id")
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    # 日付型をJSON用に変換
+    def convert_dates(obj):
+        if isinstance(obj, dict):
+            return {k: convert_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_dates(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return obj
+    
+    backup_data = convert_dates(backup_data)
+    
+    # JSONファイルとしてダウンロード
+    output = io.BytesIO()
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/json',
+        as_attachment=True,
+        download_name=f'merchandise_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+    )
+
+@app.route('/admin/backup/export_with_images')
+@login_required
+@admin_required
+def export_backup_with_images():
+    """全データと画像をZIP形式でエクスポート"""
+    conn = get_db()
+    backup_data = {
+        'exported_at': datetime.now().isoformat(),
+        'version': '2.0',
+        'includes_images': True,
+        'users': [],
+        'merchandise': [],
+        'customers': []
+    }
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users ORDER BY id")
+        backup_data['users'] = [dict(u) for u in cur.fetchall()]
+        cur.execute("SELECT * FROM merchandise ORDER BY id")
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        cur.execute("SELECT * FROM customers ORDER BY id")
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users ORDER BY id")
+        backup_data['users'] = [dict(u) for u in cur.fetchall()]
+        cur.execute("SELECT * FROM merchandise ORDER BY id")
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        cur.execute("SELECT * FROM customers ORDER BY id")
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    # 日付型をJSON用に変換
+    def convert_dates(obj):
+        if isinstance(obj, dict):
+            return {k: convert_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_dates(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return obj
+    
+    backup_data = convert_dates(backup_data)
+    
+    # ZIPファイルを作成
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # JSONデータを追加
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
+        
+        # 画像ファイルを追加
+        uploads_path = os.path.join(app.config['UPLOAD_FOLDER'])
+        if os.path.exists(uploads_path):
+            for item in backup_data['merchandise']:
+                photo_path = item.get('photo_path')
+                if photo_path:
+                    # パスを正規化
+                    photo_path = photo_path.replace('\\', '/')
+                    if photo_path.startswith('uploads/'):
+                        filename = photo_path[8:]  # 'uploads/'を除去
+                    else:
+                        filename = os.path.basename(photo_path)
+                    
+                    full_path = os.path.join(uploads_path, filename)
+                    if os.path.exists(full_path):
+                        zip_file.write(full_path, f'images/{filename}')
+    
+    zip_buffer.seek(0)
+    
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'merchandise_full_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    )
+
+@app.route('/admin/backup/export_user')
+@login_required
+def export_user_backup():
+    """自分のデータのみをJSON形式でエクスポート"""
+    conn = get_db()
+    backup_data = {
+        'exported_at': datetime.now().isoformat(),
+        'version': '1.0',
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'merchandise': [],
+        'customers': []
+    }
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM customers WHERE user_id = %s ORDER BY id", (current_user.id,))
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM customers WHERE user_id = ? ORDER BY id", (current_user.id,))
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    def convert_dates(obj):
+        if isinstance(obj, dict):
+            return {k: convert_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_dates(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return obj
+    
+    backup_data = convert_dates(backup_data)
+    
+    output = io.BytesIO()
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/json',
+        as_attachment=True,
+        download_name=f'my_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+    )
+
+@app.route('/backup/export_with_images')
+@login_required
+def export_user_backup_with_images():
+    """自分のデータと画像をZIP形式でエクスポート"""
+    conn = get_db()
+    backup_data = {
+        'exported_at': datetime.now().isoformat(),
+        'version': '2.0',
+        'includes_images': True,
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'merchandise': [],
+        'customers': []
+    }
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        cur.execute("SELECT * FROM customers WHERE user_id = %s ORDER BY id", (current_user.id,))
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
+        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        cur.execute("SELECT * FROM customers WHERE user_id = ? ORDER BY id", (current_user.id,))
+        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    def convert_dates(obj):
+        if isinstance(obj, dict):
+            return {k: convert_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_dates(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return obj
+    
+    backup_data = convert_dates(backup_data)
+    
+    # ZIPファイルを作成
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # JSONデータを追加
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
+        
+        # 画像ファイルを追加
+        uploads_path = os.path.join(app.config['UPLOAD_FOLDER'])
+        if os.path.exists(uploads_path):
+            for item in backup_data['merchandise']:
+                photo_path = item.get('photo_path')
+                if photo_path:
+                    photo_path = photo_path.replace('\\', '/')
+                    if photo_path.startswith('uploads/'):
+                        filename = photo_path[8:]
+                    else:
+                        filename = os.path.basename(photo_path)
+                    
+                    full_path = os.path.join(uploads_path, filename)
+                    if os.path.exists(full_path):
+                        zip_file.write(full_path, f'images/{filename}')
+    
+    zip_buffer.seek(0)
+    
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'my_full_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    )
+
+@app.route('/admin/backup/import', methods=['POST'])
+@login_required
+@admin_required
+def import_backup():
+    """JSON/ZIPファイルからデータをインポート（リストア）"""
+    if 'backup_file' not in request.files:
+        flash('ファイルが選択されていません', 'error')
+        return redirect(url_for('admin_backup'))
+    
+    file = request.files['backup_file']
+    if file.filename == '':
+        flash('ファイルが選択されていません', 'error')
+        return redirect(url_for('admin_backup'))
+    
+    backup_data = None
+    extracted_images = {}
+    
+    # ZIPファイルの場合
+    if file.filename.endswith('.zip'):
+        try:
+            with zipfile.ZipFile(file, 'r') as zip_file:
+                # JSONデータを読み込み
+                if 'backup_data.json' in zip_file.namelist():
+                    with zip_file.open('backup_data.json') as json_file:
+                        backup_data = json.load(json_file)
+                
+                # 画像ファイルを抽出
+                for name in zip_file.namelist():
+                    if name.startswith('images/') and not name.endswith('/'):
+                        filename = os.path.basename(name)
+                        image_data = zip_file.read(name)
+                        # uploadsフォルダに保存
+                        save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        with open(save_path, 'wb') as f:
+                            f.write(image_data)
+                        extracted_images[filename] = f'uploads/{filename}'
+        except zipfile.BadZipFile:
+            flash('無効なZIPファイルです', 'error')
+            return redirect(url_for('admin_backup'))
+    # JSONファイルの場合
+    elif file.filename.endswith('.json'):
+        try:
+            backup_data = json.load(file)
+        except json.JSONDecodeError:
+            flash('無効なJSONファイルです', 'error')
+            return redirect(url_for('admin_backup'))
+    else:
+        flash('JSONまたはZIPファイルを選択してください', 'error')
+        return redirect(url_for('admin_backup'))
+    
+    if not backup_data:
+        flash('バックアップデータが見つかりません', 'error')
+        return redirect(url_for('admin_backup'))
+    
+    import_mode = request.form.get('import_mode', 'merge')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        imported_counts = {'users': 0, 'merchandise': 0, 'customers': 0}
+        
+        # 全削除モードの場合
+        if import_mode == 'replace':
+            if DATABASE_URL:
+                cur.execute("DELETE FROM merchandise")
+                cur.execute("DELETE FROM customers")
+                cur.execute("DELETE FROM users WHERE id != %s", (current_user.id,))
+            else:
+                cur.execute("DELETE FROM merchandise")
+                cur.execute("DELETE FROM customers")
+                cur.execute("DELETE FROM users WHERE id != ?", (current_user.id,))
+        
+        # ユーザーをインポート（管理者バックアップの場合）
+        if 'users' in backup_data:
+            for user in backup_data['users']:
+                try:
+                    if DATABASE_URL:
+                        cur.execute('''
+                            INSERT INTO users (username, email, password_hash, role, display_name, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (username) DO UPDATE SET
+                                email = EXCLUDED.email,
+                                display_name = EXCLUDED.display_name
+                        ''', (
+                            user.get('username'),
+                            user.get('email'),
+                            user.get('password_hash'),
+                            user.get('role', 'user'),
+                            user.get('display_name'),
+                            user.get('created_at')
+                        ))
+                    else:
+                        cur.execute('''
+                            INSERT OR REPLACE INTO users (username, email, password_hash, role, display_name, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (
+                            user.get('username'),
+                            user.get('email'),
+                            user.get('password_hash'),
+                            user.get('role', 'user'),
+                            user.get('display_name'),
+                            user.get('created_at')
+                        ))
+                    imported_counts['users'] += 1
+                except Exception as e:
+                    print(f"User import error: {e}")
+        
+        # ユーザーIDマッピングを取得
+        user_id_map = {}
+        if DATABASE_URL:
+            cur.execute("SELECT id, username FROM users")
+            for row in cur.fetchall():
+                user_id_map[row[1] if isinstance(row, tuple) else row['username']] = row[0] if isinstance(row, tuple) else row['id']
+        else:
+            cur.execute("SELECT id, username FROM users")
+            for row in cur.fetchall():
+                user_id_map[row['username']] = row['id']
+        
+        # 商品をインポート
+        for item in backup_data.get('merchandise', []):
+            try:
+                # user_idを解決
+                user_id = item.get('user_id')
+                if 'username' in backup_data and not 'users' in backup_data:
+                    # ユーザー個別バックアップの場合、現在のユーザーIDを使用
+                    user_id = current_user.id
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
+                            purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                            is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
+                            commission, is_shipped, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        user_id,
+                        item.get('purchase_date'),
+                        item.get('photo_path'),
+                        item.get('product_name'),
+                        item.get('store_name'),
+                        item.get('purchase_price', 0),
+                        item.get('payment_method'),
+                        item.get('listing_price', 0),
+                        item.get('expected_shipping', 0),
+                        item.get('expected_commission', 0),
+                        item.get('is_listed', False),
+                        item.get('listing_date'),
+                        item.get('sale_date'),
+                        item.get('sale_price', 0),
+                        item.get('shipping_cost', 0),
+                        item.get('sales_destination'),
+                        item.get('commission', 0),
+                        item.get('is_shipped', False),
+                        item.get('created_at')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
+                            purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                            is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
+                            commission, is_shipped, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id,
+                        item.get('purchase_date'),
+                        item.get('photo_path'),
+                        item.get('product_name'),
+                        item.get('store_name'),
+                        item.get('purchase_price', 0),
+                        item.get('payment_method'),
+                        item.get('listing_price', 0),
+                        item.get('expected_shipping', 0),
+                        item.get('expected_commission', 0),
+                        1 if item.get('is_listed') else 0,
+                        item.get('listing_date'),
+                        item.get('sale_date'),
+                        item.get('sale_price', 0),
+                        item.get('shipping_cost', 0),
+                        item.get('sales_destination'),
+                        item.get('commission', 0),
+                        1 if item.get('is_shipped') else 0,
+                        item.get('created_at')
+                    ))
+                imported_counts['merchandise'] += 1
+            except Exception as e:
+                print(f"Merchandise import error: {e}")
+        
+        # 顧客をインポート
+        for customer in backup_data.get('customers', []):
+            try:
+                user_id = customer.get('user_id')
+                if 'username' in backup_data and not 'users' in backup_data:
+                    user_id = current_user.id
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        user_id,
+                        customer.get('name'),
+                        customer.get('email'),
+                        customer.get('phone'),
+                        customer.get('address'),
+                        customer.get('total_purchase', 0),
+                        customer.get('purchase_count', 0),
+                        customer.get('notes'),
+                        customer.get('created_at')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id,
+                        customer.get('name'),
+                        customer.get('email'),
+                        customer.get('phone'),
+                        customer.get('address'),
+                        customer.get('total_purchase', 0),
+                        customer.get('purchase_count', 0),
+                        customer.get('notes'),
+                        customer.get('created_at')
+                    ))
+                imported_counts['customers'] += 1
+            except Exception as e:
+                print(f"Customer import error: {e}")
+        
+        conn.commit()
+        flash(f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件", 'success')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'インポートエラー: {str(e)}', 'error')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('admin_backup'))
+
+@app.route('/backup/import_user', methods=['POST'])
+@login_required
+def import_user_backup():
+    """自分のデータをJSON/ZIPファイルからインポート"""
+    if 'backup_file' not in request.files:
+        flash('ファイルが選択されていません', 'error')
+        return redirect(url_for('index'))
+    
+    file = request.files['backup_file']
+    if file.filename == '':
+        flash('ファイルが選択されていません', 'error')
+        return redirect(url_for('index'))
+    
+    backup_data = None
+    
+    # ZIPファイルの場合
+    if file.filename.endswith('.zip'):
+        try:
+            with zipfile.ZipFile(file, 'r') as zip_file:
+                if 'backup_data.json' in zip_file.namelist():
+                    with zip_file.open('backup_data.json') as json_file:
+                        backup_data = json.load(json_file)
+                
+                # 画像ファイルを抽出
+                for name in zip_file.namelist():
+                    if name.startswith('images/') and not name.endswith('/'):
+                        filename = os.path.basename(name)
+                        image_data = zip_file.read(name)
+                        save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        with open(save_path, 'wb') as f:
+                            f.write(image_data)
+        except zipfile.BadZipFile:
+            flash('無効なZIPファイルです', 'error')
+            return redirect(url_for('index'))
+    # JSONファイルの場合
+    elif file.filename.endswith('.json'):
+        try:
+            backup_data = json.load(file)
+        except json.JSONDecodeError:
+            flash('無効なJSONファイルです', 'error')
+            return redirect(url_for('index'))
+    else:
+        flash('JSONまたはZIPファイルを選択してください', 'error')
+        return redirect(url_for('index'))
+    
+    if not backup_data:
+        flash('バックアップデータが見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        imported_counts = {'merchandise': 0, 'customers': 0}
+        
+        # 商品をインポート
+        for item in backup_data.get('merchandise', []):
+            try:
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
+                            purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                            is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
+                            commission, is_shipped)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        current_user.id,
+                        item.get('purchase_date'),
+                        item.get('photo_path'),
+                        item.get('product_name'),
+                        item.get('store_name'),
+                        item.get('purchase_price', 0),
+                        item.get('payment_method'),
+                        item.get('listing_price', 0),
+                        item.get('expected_shipping', 0),
+                        item.get('expected_commission', 0),
+                        item.get('is_listed', False),
+                        item.get('listing_date'),
+                        item.get('sale_date'),
+                        item.get('sale_price', 0),
+                        item.get('shipping_cost', 0),
+                        item.get('sales_destination'),
+                        item.get('commission', 0),
+                        item.get('is_shipped', False)
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
+                            purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                            is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
+                            commission, is_shipped)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        current_user.id,
+                        item.get('purchase_date'),
+                        item.get('photo_path'),
+                        item.get('product_name'),
+                        item.get('store_name'),
+                        item.get('purchase_price', 0),
+                        item.get('payment_method'),
+                        item.get('listing_price', 0),
+                        item.get('expected_shipping', 0),
+                        item.get('expected_commission', 0),
+                        1 if item.get('is_listed') else 0,
+                        item.get('listing_date'),
+                        item.get('sale_date'),
+                        item.get('sale_price', 0),
+                        item.get('shipping_cost', 0),
+                        item.get('sales_destination'),
+                        item.get('commission', 0),
+                        1 if item.get('is_shipped') else 0
+                    ))
+                imported_counts['merchandise'] += 1
+            except Exception as e:
+                print(f"Merchandise import error: {e}")
+        
+        # 顧客をインポート
+        for customer in backup_data.get('customers', []):
+            try:
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        current_user.id,
+                        customer.get('name'),
+                        customer.get('email'),
+                        customer.get('phone'),
+                        customer.get('address'),
+                        customer.get('total_purchase', 0),
+                        customer.get('purchase_count', 0),
+                        customer.get('notes')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO customers (user_id, name, email, phone, address, total_purchase, purchase_count, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        current_user.id,
+                        customer.get('name'),
+                        customer.get('email'),
+                        customer.get('phone'),
+                        customer.get('address'),
+                        customer.get('total_purchase', 0),
+                        customer.get('purchase_count', 0),
+                        customer.get('notes')
+                    ))
+                imported_counts['customers'] += 1
+            except Exception as e:
+                print(f"Customer import error: {e}")
+        
+        conn.commit()
+        flash(f"インポート完了: 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件", 'success')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'インポートエラー: {str(e)}', 'error')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('index'))
+
+# ===================
+# お知らせ管理ルート（管理者用）
+# ===================
+
+@app.route('/admin/announcements')
+@login_required
+@admin_required
+def admin_announcements():
+    """お知らせ一覧"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT a.*, u.username as author_name 
+            FROM announcements a 
+            LEFT JOIN users u ON a.created_by = u.id 
+            ORDER BY a.created_at DESC
+        """)
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT a.*, u.username as author_name 
+            FROM announcements a 
+            LEFT JOIN users u ON a.created_by = u.id 
+            ORDER BY a.created_at DESC
+        """)
+    
+    announcements = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/announcements.html', announcements=[dict(a) for a in announcements])
+
+@app.route('/admin/announcements/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_add_announcement():
+    """お知らせ追加"""
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        announcement_type = request.form.get('announcement_type', 'info')
+        is_active = 'is_active' in request.form
+        publish_at = request.form.get('publish_at') or None
+        expire_at = request.form.get('expire_at') or None
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO announcements (title, content, announcement_type, is_active, publish_at, expire_at, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (title, content, announcement_type, is_active, publish_at, expire_at, current_user.id))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO announcements (title, content, announcement_type, is_active, publish_at, expire_at, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (title, content, announcement_type, 1 if is_active else 0, publish_at, expire_at, current_user.id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('お知らせを追加しました', 'success')
+        return redirect(url_for('admin_announcements'))
+    
+    return render_template('admin/announcement_form.html', announcement=None)
+
+@app.route('/admin/announcements/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_edit_announcement(id):
+    """お知らせ編集"""
+    conn = get_db()
+    
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        announcement_type = request.form.get('announcement_type', 'info')
+        is_active = 'is_active' in request.form
+        publish_at = request.form.get('publish_at') or None
+        expire_at = request.form.get('expire_at') or None
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE announcements SET title=%s, content=%s, announcement_type=%s, is_active=%s, publish_at=%s, expire_at=%s
+                WHERE id=%s
+            """, (title, content, announcement_type, is_active, publish_at, expire_at, id))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE announcements SET title=?, content=?, announcement_type=?, is_active=?, publish_at=?, expire_at=?
+                WHERE id=?
+            """, (title, content, announcement_type, 1 if is_active else 0, publish_at, expire_at, id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('お知らせを更新しました', 'success')
+        return redirect(url_for('admin_announcements'))
+    
+    # GETリクエスト時はお知らせを取得
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM announcements WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM announcements WHERE id = ?", (id,))
+    
+    announcement = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not announcement:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('admin_announcements'))
+    
+    return render_template('admin/announcement_form.html', announcement=dict(announcement))
+
+@app.route('/admin/announcements/delete/<int:id>')
+@login_required
+@admin_required
+def admin_delete_announcement(id):
+    """お知らせ削除"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM announcements WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM announcements WHERE id = ?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('お知らせを削除しました', 'success')
+    return redirect(url_for('admin_announcements'))
+
+@app.route('/admin/announcements/toggle/<int:id>')
+@login_required
+@admin_required
+def admin_toggle_announcement(id):
+    """お知らせの有効/無効を切り替え"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("UPDATE announcements SET is_active = NOT is_active WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("UPDATE announcements SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('お知らせの状態を更新しました', 'success')
+    return redirect(url_for('admin_announcements'))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
