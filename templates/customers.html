@@ -9,11 +9,7 @@
 
 <div class="customers-grid">
     {% for customer in customers %}
-    <div class="customer-card rank-{{ customer.rank }}">
-        <div class="customer-rank">
-            <span class="rank-badge {{ customer.rank }}">{{ customer.rank_label }}</span>
-        </div>
-        
+    <div class="customer-card">
         <div class="customer-info">
             <h3>{{ customer.name }}</h3>
             {% if customer.email %}
@@ -47,16 +43,6 @@
         <a href="{{ url_for('add_customer') }}" class="btn btn-primary">最初の顧客を登録</a>
     </div>
     {% endfor %}
-</div>
-
-<div class="rank-legend">
-    <h3>ランク基準</h3>
-    <div class="legend-items">
-        <span class="legend-item"><span class="rank-badge bronze">ブロンズ</span> ¥0～</span>
-        <span class="legend-item"><span class="rank-badge silver">シルバー</span> ¥20,000～</span>
-        <span class="legend-item"><span class="rank-badge gold">ゴールド</span> ¥50,000～</span>
-        <span class="legend-item"><span class="rank-badge platinum">プラチナ</span> ¥100,000～</span>
-    </div>
 </div>
 {% endblock %}
 

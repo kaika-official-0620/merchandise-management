@@ -397,25 +397,6 @@ def calculate_profit_rate(profit, sale_price):
 def calculate_expected_profit(listing_price, purchase_price, expected_shipping, expected_commission):
     return listing_price - purchase_price - expected_shipping - expected_commission
 
-def get_customer_rank(total_purchase):
-    if total_purchase >= 100000:
-        return 'platinum'
-    elif total_purchase >= 50000:
-        return 'gold'
-    elif total_purchase >= 20000:
-        return 'silver'
-    else:
-        return 'bronze'
-
-def get_rank_label(rank):
-    labels = {
-        'platinum': 'プラチナ',
-        'gold': 'ゴールド',
-        'silver': 'シルバー',
-        'bronze': 'ブロンズ'
-    }
-    return labels.get(rank, 'ブロンズ')
-
 def get_active_announcements():
     """アクティブなお知らせを取得"""
     conn = get_db()
@@ -1082,8 +1063,6 @@ def customers():
     processed_customers = []
     for c in customers_list:
         c_dict = dict(c)
-        c_dict['rank'] = get_customer_rank(c_dict.get('total_purchase', 0) or 0)
-        c_dict['rank_label'] = get_rank_label(c_dict['rank'])
         processed_customers.append(c_dict)
     
     return render_template('customers.html', customers=processed_customers)
