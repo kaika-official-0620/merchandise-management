@@ -1706,315 +1706,319 @@ def admin_user_items(id):
 @login_required
 @admin_required
 def admin_analytics():
-    conn = get_db()
     analytics_data = {}
+    widgets = []
     
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # ウィジェット設定を取得
+            cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
+            widgets = cur.fetchall()
+            enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
+            
+            # 売上・利益（月別推移）
+            if 'sales_profit' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        TO_CHAR(sale_date, 'YYYY-MM') as month,
+                        COUNT(*) as count,
+                        SUM(sale_price) as sales,
+                        SUM(sale_price - purchase_price - shipping_cost - commission) as profit
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+                    ORDER BY month DESC
+                    LIMIT 12
+                """)
+                analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+            
+            # 売れた商品（Top10）
+            if 'top_products' in enabled_widgets:
+                cur.execute("""
+                    SELECT product_name, brand_name, sale_price, 
+                           sale_price - purchase_price - shipping_cost - commission as profit,
+                           sale_date
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    ORDER BY sale_price DESC
+                    LIMIT 10
+                """)
+                analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
+            
+            # 売れない商品（在庫滞留）
+            if 'slow_products' in enabled_widgets:
+                cur.execute("""
+                    SELECT product_name, brand_name, purchase_price, purchase_date,
+                           CURRENT_DATE - purchase_date::date as days_in_stock
+                    FROM merchandise 
+                    WHERE sale_date IS NULL AND purchase_date IS NOT NULL
+                    ORDER BY days_in_stock DESC
+                    LIMIT 10
+                """)
+                analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
+            
+            # 回転率・在庫日数
+            if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN sale_date::date - purchase_date::date 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN CURRENT_DATE - purchase_date::date 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            
+            # 成約率
+            if 'closing_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE is_listed = TRUE OR is_listed = 1) as listed_count,
+                        COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                        COUNT(*) as total_count
+                    FROM merchandise
+                """)
+                analytics_data['closing_stats'] = dict(cur.fetchone() or {})
+            
+            # 平均単価
+            if 'avg_price' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        AVG(purchase_price) as avg_purchase,
+                        AVG(sale_price) FILTER (WHERE sale_date IS NOT NULL) as avg_sale,
+                        AVG(sale_price - purchase_price - shipping_cost - commission) FILTER (WHERE sale_date IS NOT NULL) as avg_profit
+                    FROM merchandise
+                """)
+                analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
+            
+            # リピート率（顧客別）
+            if 'repeat_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        sales_destination,
+                        COUNT(*) as purchase_count
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                    GROUP BY sales_destination
+                    ORDER BY purchase_count DESC
+                """)
+                analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
+            
+            # 時間帯・曜日別売上
+            if 'time_sales' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        TO_CHAR(sale_date, 'Day') as day_of_week,
+                        EXTRACT(DOW FROM sale_date) as dow_num,
+                        COUNT(*) as count,
+                        SUM(sale_price) as sales
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    GROUP BY TO_CHAR(sale_date, 'Day'), EXTRACT(DOW FROM sale_date)
+                    ORDER BY dow_num
+                """)
+                analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
+            
+            # ブランド別統計
+            if 'brand_stats' in enabled_widgets:
+                cur.execute("""
+                    SELECT brand_name, 
+                           COUNT(*) as count, 
+                           SUM(sale_price) as total_sales,
+                           SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                           CASE WHEN SUM(sale_price) > 0 
+                                THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
+                                ELSE 0 END as profit_rate
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+                    GROUP BY brand_name
+                    ORDER BY profit_rate DESC
+                    LIMIT 10
+                """)
+                analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+            
+            # 販売先別統計
+            if 'destination_stats' in enabled_widgets:
+                cur.execute("""
+                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                    GROUP BY sales_destination
+                    ORDER BY total_sales DESC
+                """)
+                analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
+            
+        else:
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            
+            # ウィジェット設定を取得
+            cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
+            widgets = [dict(w) for w in cur.fetchall()]
+            enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
+            
+            # 売上・利益（月別推移）
+            if 'sales_profit' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        strftime('%Y-%m', sale_date) as month,
+                        COUNT(*) as count,
+                        SUM(sale_price) as sales,
+                        SUM(sale_price - purchase_price - shipping_cost - commission) as profit
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    GROUP BY strftime('%Y-%m', sale_date)
+                    ORDER BY month DESC
+                    LIMIT 12
+                """)
+                analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+            
+            # 売れた商品（Top10）
+            if 'top_products' in enabled_widgets:
+                cur.execute("""
+                    SELECT product_name, brand_name, sale_price, 
+                           sale_price - purchase_price - shipping_cost - commission as profit,
+                           sale_date
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    ORDER BY sale_price DESC
+                    LIMIT 10
+                """)
+                analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
+            
+            # 売れない商品（在庫滞留）
+            if 'slow_products' in enabled_widgets:
+                cur.execute("""
+                    SELECT product_name, brand_name, purchase_price, purchase_date,
+                           julianday('now') - julianday(purchase_date) as days_in_stock
+                    FROM merchandise 
+                    WHERE sale_date IS NULL AND purchase_date IS NOT NULL
+                    ORDER BY days_in_stock DESC
+                    LIMIT 10
+                """)
+                analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
+            
+            # 回転率・在庫日数
+            if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN julianday(sale_date) - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN julianday('now') - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            
+            # 成約率
+            if 'closing_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        SUM(CASE WHEN is_listed = 1 THEN 1 ELSE 0 END) as listed_count,
+                        SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                        COUNT(*) as total_count
+                    FROM merchandise
+                """)
+                analytics_data['closing_stats'] = dict(cur.fetchone() or {})
+            
+            # 平均単価
+            if 'avg_price' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        AVG(purchase_price) as avg_purchase,
+                        AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END) as avg_sale,
+                        AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END) as avg_profit
+                    FROM merchandise
+                """)
+                analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
+            
+            # リピート率
+            if 'repeat_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        sales_destination,
+                        COUNT(*) as purchase_count
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                    GROUP BY sales_destination
+                    ORDER BY purchase_count DESC
+                """)
+                analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
+            
+            # 時間帯・曜日別売上
+            if 'time_sales' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        CASE strftime('%w', sale_date)
+                            WHEN '0' THEN '日曜日'
+                            WHEN '1' THEN '月曜日'
+                            WHEN '2' THEN '火曜日'
+                            WHEN '3' THEN '水曜日'
+                            WHEN '4' THEN '木曜日'
+                            WHEN '5' THEN '金曜日'
+                            WHEN '6' THEN '土曜日'
+                        END as day_of_week,
+                        strftime('%w', sale_date) as dow_num,
+                        COUNT(*) as count,
+                        SUM(sale_price) as sales
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                    GROUP BY strftime('%w', sale_date)
+                    ORDER BY dow_num
+                """)
+                analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
+            
+            # ブランド別統計
+            if 'brand_stats' in enabled_widgets:
+                cur.execute("""
+                    SELECT brand_name, 
+                           COUNT(*) as count, 
+                           SUM(sale_price) as total_sales,
+                           SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                           CASE WHEN SUM(sale_price) > 0 
+                                THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
+                                ELSE 0 END as profit_rate
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
+                    GROUP BY brand_name
+                    ORDER BY profit_rate DESC
+                    LIMIT 10
+                """)
+                analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+            
+            # 販売先別統計
+            if 'destination_stats' in enabled_widgets:
+                cur.execute("""
+                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
+                    GROUP BY sales_destination
+                    ORDER BY total_sales DESC
+                """)
+                analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
-        # ウィジェット設定を取得
-        cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
-        widgets = cur.fetchall()
-        
-        # 有効なウィジェットのデータを取得
-        enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
-        
-        # 売上・利益（月別推移）
-        if 'sales_profit' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    TO_CHAR(sale_date, 'YYYY-MM') as month,
-                    COUNT(*) as count,
-                    SUM(sale_price) as sales,
-                    SUM(sale_price - purchase_price - shipping_cost - commission) as profit
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
-                ORDER BY month DESC
-                LIMIT 12
-            """)
-            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
-        
-        # 売れた商品（Top10）
-        if 'top_products' in enabled_widgets:
-            cur.execute("""
-                SELECT product_name, brand_name, sale_price, 
-                       sale_price - purchase_price - shipping_cost - commission as profit,
-                       sale_date
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                ORDER BY sale_price DESC
-                LIMIT 10
-            """)
-            analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
-        
-        # 売れない商品（在庫滞留）
-        if 'slow_products' in enabled_widgets:
-            cur.execute("""
-                SELECT product_name, brand_name, purchase_price, purchase_date,
-                       CURRENT_DATE - purchase_date::date as days_in_stock
-                FROM merchandise 
-                WHERE sale_date IS NULL AND purchase_date IS NOT NULL
-                ORDER BY days_in_stock DESC
-                LIMIT 10
-            """)
-            analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
-        
-        # 回転率・在庫日数
-        if 'turnover_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
-                    COUNT(*) as total_count,
-                    AVG(CASE WHEN sale_date IS NOT NULL 
-                        THEN sale_date::date - purchase_date::date 
-                        ELSE NULL END) as avg_days_to_sell,
-                    AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
-                        THEN CURRENT_DATE - purchase_date::date 
-                        ELSE NULL END) as avg_days_in_stock
-                FROM merchandise 
-                WHERE purchase_date IS NOT NULL
-            """)
-            analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
-        
-        # 成約率
-        if 'closing_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    COUNT(*) FILTER (WHERE is_listed = TRUE OR is_listed = 1) as listed_count,
-                    COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
-                    COUNT(*) as total_count
-                FROM merchandise
-            """)
-            analytics_data['closing_stats'] = dict(cur.fetchone() or {})
-        
-        # 平均単価
-        if 'avg_price' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    AVG(purchase_price) as avg_purchase,
-                    AVG(sale_price) FILTER (WHERE sale_date IS NOT NULL) as avg_sale,
-                    AVG(sale_price - purchase_price - shipping_cost - commission) FILTER (WHERE sale_date IS NOT NULL) as avg_profit
-                FROM merchandise
-            """)
-            analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
-        
-        # リピート率（顧客別）
-        if 'repeat_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    sales_destination,
-                    COUNT(*) as purchase_count
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                GROUP BY sales_destination
-                ORDER BY purchase_count DESC
-            """)
-            analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
-        
-        # 時間帯・曜日別売上
-        if 'time_sales' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    TO_CHAR(sale_date, 'Day') as day_of_week,
-                    EXTRACT(DOW FROM sale_date) as dow_num,
-                    COUNT(*) as count,
-                    SUM(sale_price) as sales
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                GROUP BY TO_CHAR(sale_date, 'Day'), EXTRACT(DOW FROM sale_date)
-                ORDER BY dow_num
-            """)
-            analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
-        
-        # ブランド別統計
-        if 'brand_stats' in enabled_widgets:
-            cur.execute("""
-                SELECT brand_name, 
-                       COUNT(*) as count, 
-                       SUM(sale_price) as total_sales,
-                       SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                       CASE WHEN SUM(sale_price) > 0 
-                            THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
-                            ELSE 0 END as profit_rate
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                GROUP BY brand_name
-                ORDER BY profit_rate DESC
-                LIMIT 10
-            """)
-            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
-        
-        # 販売先別統計
-        if 'destination_stats' in enabled_widgets:
-            cur.execute("""
-                SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                GROUP BY sales_destination
-                ORDER BY total_sales DESC
-            """)
-            analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
-        
-    else:
-        cur = conn.cursor()
-        cur.row_factory = sqlite3.Row
-        
-        # ウィジェット設定を取得
-        cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
-        widgets = [dict(w) for w in cur.fetchall()]
-        enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
-        
-        # 売上・利益（月別推移）
-        if 'sales_profit' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    strftime('%Y-%m', sale_date) as month,
-                    COUNT(*) as count,
-                    SUM(sale_price) as sales,
-                    SUM(sale_price - purchase_price - shipping_cost - commission) as profit
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                GROUP BY strftime('%Y-%m', sale_date)
-                ORDER BY month DESC
-                LIMIT 12
-            """)
-            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
-        
-        # 売れた商品（Top10）
-        if 'top_products' in enabled_widgets:
-            cur.execute("""
-                SELECT product_name, brand_name, sale_price, 
-                       sale_price - purchase_price - shipping_cost - commission as profit,
-                       sale_date
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                ORDER BY sale_price DESC
-                LIMIT 10
-            """)
-            analytics_data['top_products'] = [dict(p) for p in cur.fetchall()]
-        
-        # 売れない商品（在庫滞留）
-        if 'slow_products' in enabled_widgets:
-            cur.execute("""
-                SELECT product_name, brand_name, purchase_price, purchase_date,
-                       julianday('now') - julianday(purchase_date) as days_in_stock
-                FROM merchandise 
-                WHERE sale_date IS NULL AND purchase_date IS NOT NULL
-                ORDER BY days_in_stock DESC
-                LIMIT 10
-            """)
-            analytics_data['slow_products'] = [dict(p) for p in cur.fetchall()]
-        
-        # 回転率・在庫日数
-        if 'turnover_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
-                    COUNT(*) as total_count,
-                    AVG(CASE WHEN sale_date IS NOT NULL 
-                        THEN julianday(sale_date) - julianday(purchase_date) 
-                        ELSE NULL END) as avg_days_to_sell,
-                    AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
-                        THEN julianday('now') - julianday(purchase_date) 
-                        ELSE NULL END) as avg_days_in_stock
-                FROM merchandise 
-                WHERE purchase_date IS NOT NULL
-            """)
-            analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
-        
-        # 成約率
-        if 'closing_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    SUM(CASE WHEN is_listed = 1 THEN 1 ELSE 0 END) as listed_count,
-                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
-                    COUNT(*) as total_count
-                FROM merchandise
-            """)
-            analytics_data['closing_stats'] = dict(cur.fetchone() or {})
-        
-        # 平均単価
-        if 'avg_price' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    AVG(purchase_price) as avg_purchase,
-                    AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END) as avg_sale,
-                    AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END) as avg_profit
-                FROM merchandise
-            """)
-            analytics_data['avg_price_stats'] = dict(cur.fetchone() or {})
-        
-        # リピート率
-        if 'repeat_rate' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    sales_destination,
-                    COUNT(*) as purchase_count
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                GROUP BY sales_destination
-                ORDER BY purchase_count DESC
-            """)
-            analytics_data['repeat_stats'] = [dict(r) for r in cur.fetchall()]
-        
-        # 時間帯・曜日別売上
-        if 'time_sales' in enabled_widgets:
-            cur.execute("""
-                SELECT 
-                    CASE strftime('%w', sale_date)
-                        WHEN '0' THEN '日曜日'
-                        WHEN '1' THEN '月曜日'
-                        WHEN '2' THEN '火曜日'
-                        WHEN '3' THEN '水曜日'
-                        WHEN '4' THEN '木曜日'
-                        WHEN '5' THEN '金曜日'
-                        WHEN '6' THEN '土曜日'
-                    END as day_of_week,
-                    strftime('%w', sale_date) as dow_num,
-                    COUNT(*) as count,
-                    SUM(sale_price) as sales
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL
-                GROUP BY strftime('%w', sale_date)
-                ORDER BY dow_num
-            """)
-            analytics_data['day_sales'] = [dict(d) for d in cur.fetchall()]
-        
-        # ブランド別統計
-        if 'brand_stats' in enabled_widgets:
-            cur.execute("""
-                SELECT brand_name, 
-                       COUNT(*) as count, 
-                       SUM(sale_price) as total_sales,
-                       SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                       CASE WHEN SUM(sale_price) > 0 
-                            THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
-                            ELSE 0 END as profit_rate
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                GROUP BY brand_name
-                ORDER BY profit_rate DESC
-                LIMIT 10
-            """)
-            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
-        
-        # 販売先別統計
-        if 'destination_stats' in enabled_widgets:
-            cur.execute("""
-                SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
-                FROM merchandise 
-                WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                GROUP BY sales_destination
-                ORDER BY total_sales DESC
-            """)
-            analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
-    
-    cur.close()
-    conn.close()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Analytics error: {e}")
+        import traceback
+        traceback.print_exc()
     
     return render_template('admin/analytics.html',
-                         widgets=[dict(w) for w in widgets],
+                         widgets=[dict(w) for w in widgets] if widgets else [],
                          **analytics_data)
 
 @app.route('/admin/analytics/settings', methods=['GET', 'POST'])
