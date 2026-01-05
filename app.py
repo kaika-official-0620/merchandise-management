@@ -96,6 +96,7 @@ if DATABASE_URL:
                 is_listed BOOLEAN DEFAULT FALSE,
                 listing_date DATE,
                 sale_date DATE,
+                sale_type VARCHAR(50) DEFAULT 'normal',
                 sale_price INTEGER DEFAULT 0,
                 shipping_cost INTEGER DEFAULT 0,
                 sales_destination VARCHAR(100),
@@ -120,6 +121,12 @@ if DATABASE_URL:
         # additional_photosカラムを追加（複数画像対応）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS additional_photos TEXT")
+        except:
+            pass
+        
+        # sale_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS sale_type VARCHAR(50) DEFAULT 'normal'")
         except:
             pass
         
@@ -321,6 +328,7 @@ else:
                 is_listed INTEGER DEFAULT 0,
                 listing_date DATE,
                 sale_date DATE,
+                sale_type TEXT DEFAULT 'normal',
                 sale_price INTEGER DEFAULT 0,
                 shipping_cost INTEGER DEFAULT 0,
                 sales_destination TEXT,
@@ -345,6 +353,12 @@ else:
         # additional_photosカラムを追加（複数画像対応）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN additional_photos TEXT")
+        except:
+            pass
+        
+        # sale_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN sale_type TEXT DEFAULT 'normal'")
         except:
             pass
         
@@ -851,9 +865,9 @@ def add_item():
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
-                    is_listed, listing_date, sale_date, sale_price, shipping_cost, 
+                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -871,6 +885,7 @@ def add_item():
                 'is_listed' in request.form,
                 request.form.get('listing_date') or None,
                 request.form.get('sale_date') or None,
+                request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
@@ -882,9 +897,9 @@ def add_item():
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
-                    is_listed, listing_date, sale_date, sale_price, shipping_cost, 
+                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -902,6 +917,7 @@ def add_item():
                 1 if 'is_listed' in request.form else 0,
                 request.form.get('listing_date') or None,
                 request.form.get('sale_date') or None,
+                request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
@@ -977,7 +993,7 @@ def edit_item(id):
                     purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, item_condition = %s, store_name = %s,
                     purchase_price = %s, payment_method = %s, listing_price = %s, 
                     expected_shipping = %s, expected_commission = %s,
-                    is_listed = %s, listing_date = %s, sale_date = %s, sale_price = %s,
+                    is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
                     shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s
                 WHERE id = %s AND user_id = %s
             ''', (
@@ -996,6 +1012,7 @@ def edit_item(id):
                 'is_listed' in request.form,
                 request.form.get('listing_date') or None,
                 request.form.get('sale_date') or None,
+                request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
@@ -1009,7 +1026,7 @@ def edit_item(id):
                     purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, item_condition = ?, store_name = ?,
                     purchase_price = ?, payment_method = ?, listing_price = ?, 
                     expected_shipping = ?, expected_commission = ?,
-                    is_listed = ?, listing_date = ?, sale_date = ?, sale_price = ?,
+                    is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
                     shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?
                 WHERE id = ? AND user_id = ?
             ''', (
@@ -1028,6 +1045,7 @@ def edit_item(id):
                 1 if 'is_listed' in request.form else 0,
                 request.form.get('listing_date') or None,
                 request.form.get('sale_date') or None,
+                request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),

@@ -265,7 +265,18 @@
             </div>
             
             <div class="form-group">
-                <label for="sale_price">売上金</label>
+                <label for="sale_type">販売タイプ</label>
+                <select id="sale_type" name="sale_type">
+                    <option value="normal" {% if not item or not item.sale_type or item.sale_type == 'normal' %}selected{% endif %}>通常（手数料10%）</option>
+                    <option value="photo_packing" {% if item and item.sale_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行サービス（25,000円以上:2%、未満:500円）</option>
+                    <option value="wholesale" {% if item and item.sale_type == 'wholesale' %}selected{% endif %}>業者卸販売（10%、30,000円以上で送料無料）</option>
+                    <option value="multi_listing" {% if item and item.sale_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
+                    <option value="auction" {% if item and item.sale_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="sale_price">売上金（税込販売価格）</label>
                 <input type="number" id="sale_price" name="sale_price" 
                        value="{{ item.sale_price if item else 0 }}" min="0">
             </div>
@@ -274,25 +285,20 @@
                 <label for="shipping_cost">送料</label>
                 <input type="number" id="shipping_cost" name="shipping_cost" 
                        value="{{ item.shipping_cost if item else 0 }}" min="0">
+                <small class="form-help" id="shipping_hint"></small>
             </div>
             
             <div class="form-group">
-                <label for="sales_destination">販売先</label>
-                <select id="sales_destination" name="sales_destination">
-                    <option value="">選択してください</option>
-                    <option value="メルカリ" {% if item and item.sales_destination == 'メルカリ' %}selected{% endif %}>メルカリ</option>
-                    <option value="ヤフオク" {% if item and item.sales_destination == 'ヤフオク' %}selected{% endif %}>ヤフオク</option>
-                    <option value="ラクマ" {% if item and item.sales_destination == 'ラクマ' %}selected{% endif %}>ラクマ</option>
-                    <option value="Amazon" {% if item and item.sales_destination == 'Amazon' %}selected{% endif %}>Amazon</option>
-                    <option value="その他" {% if item and item.sales_destination == 'その他' %}selected{% endif %}>その他</option>
-                </select>
+                <label for="sales_destination">販売先（メモ）</label>
+                <input type="text" id="sales_destination" name="sales_destination" 
+                       value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力">
             </div>
             
             <div class="form-group">
-                <label for="commission">手数料（売上金の10%で自動計算）</label>
+                <label for="commission">手数料</label>
                 <input type="number" id="commission" name="commission" 
                        value="{{ item.commission if item else 0 }}" min="0">
-                <small class="form-help">売上金入力時に自動計算されますが、手動で変更も可能です</small>
+                <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
             </div>
             
             <div class="form-group checkbox-group">
@@ -322,6 +328,41 @@
 // 手数料の自動計算フラグ（手動変更されたらfalseに）
 let autoCalculateCommission = true;
 
+// 販売タイプごとの手数料計算ルール
+const saleTypeRules = {
+    'normal': {
+        name: '通常',
+        calculate: (price) => Math.floor(price * 0.10),
+        hint: '手数料: 売上金の10%',
+        shippingHint: ''
+    },
+    'photo_packing': {
+        name: '撮影梱包等代行サービス',
+        calculate: (price) => price >= 25000 ? Math.floor(price * 0.02) : 500,
+        hint: (price) => price >= 25000 ? '手数料: 売上金の2%（25,000円以上）' : '手数料: 500円（税込）（25,000円未満）',
+        shippingHint: ''
+    },
+    'wholesale': {
+        name: '業者卸販売',
+        calculate: (price) => Math.floor(price * 0.10),
+        hint: '手数料: 売上金の10%',
+        shippingHint: (price) => price >= 30000 ? '💡 30,000円以上のため送料無料' : '※30,000円以上で送料無料',
+        freeShipping: (price) => price >= 30000
+    },
+    'multi_listing': {
+        name: '同時出品サービス',
+        calculate: (price) => Math.floor(price * 0.03),
+        hint: '手数料: 売上金の3%',
+        shippingHint: ''
+    },
+    'auction': {
+        name: 'オークション流し',
+        calculate: (price) => Math.floor(price * 0.05),
+        hint: '手数料: 売上金の5%',
+        shippingHint: ''
+    }
+};
+
 function calculateProfit() {
     const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
@@ -335,17 +376,58 @@ function calculateProfit() {
     actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
 }
 
-// 売上金が変更されたら手数料を自動計算（10%）
+// 販売タイプと売上金に基づいて手数料を計算
 function calculateCommission() {
     if (!autoCalculateCommission) return;
     
+    const saleType = document.getElementById('sale_type').value;
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const commission = Math.floor(salePrice * 0.10); // 10%（切り捨て）
-    document.getElementById('commission').value = commission;
+    const rule = saleTypeRules[saleType];
+    
+    if (rule) {
+        // 手数料計算
+        const commission = rule.calculate(salePrice);
+        document.getElementById('commission').value = commission;
+        
+        // ヒント更新
+        const hintEl = document.getElementById('commission_hint');
+        if (typeof rule.hint === 'function') {
+            hintEl.textContent = rule.hint(salePrice);
+        } else {
+            hintEl.textContent = rule.hint;
+        }
+        
+        // 送料ヒント更新
+        const shippingHintEl = document.getElementById('shipping_hint');
+        if (rule.shippingHint) {
+            if (typeof rule.shippingHint === 'function') {
+                shippingHintEl.textContent = rule.shippingHint(salePrice);
+                shippingHintEl.style.color = rule.freeShipping && rule.freeShipping(salePrice) ? '#10b981' : '#64748b';
+            } else {
+                shippingHintEl.textContent = rule.shippingHint;
+            }
+        } else {
+            shippingHintEl.textContent = '';
+        }
+        
+        // 業者卸販売で30,000円以上の場合、送料を0にする提案
+        if (saleType === 'wholesale' && salePrice >= 30000) {
+            const shippingInput = document.getElementById('shipping_cost');
+            if (shippingInput.value === '0' || shippingInput.value === '') {
+                // 既に0の場合はそのまま
+            }
+        }
+    }
+    
     calculateProfit();
 }
 
 // イベントリスナー設定
+document.getElementById('sale_type').addEventListener('change', function() {
+    autoCalculateCommission = true; // タイプ変更時は自動計算を有効化
+    calculateCommission();
+});
+
 document.getElementById('sale_price').addEventListener('input', function() {
     calculateCommission();
 });
@@ -363,7 +445,7 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
     }
 });
 
-// 初期計算（編集時に既存の手数料がある場合は自動計算を無効化）
+// 初期計算
 document.addEventListener('DOMContentLoaded', function() {
     const existingCommission = parseInt(document.getElementById('commission').value) || 0;
     const existingSalePrice = parseInt(document.getElementById('sale_price').value) || 0;
@@ -371,6 +453,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // 既存データがある場合は手動入力と見なす
     if (existingCommission > 0 && existingSalePrice > 0) {
         autoCalculateCommission = false;
+    }
+    
+    // 初期ヒント表示
+    const saleType = document.getElementById('sale_type').value;
+    const rule = saleTypeRules[saleType];
+    if (rule) {
+        const hintEl = document.getElementById('commission_hint');
+        if (typeof rule.hint === 'function') {
+            hintEl.textContent = rule.hint(existingSalePrice);
+        } else {
+            hintEl.textContent = rule.hint;
+        }
     }
     
     calculateProfit();

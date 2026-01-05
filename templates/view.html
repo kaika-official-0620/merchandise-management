@@ -393,11 +393,20 @@
             <dl class="detail-list">
                 <dt>売却日</dt>
                 <dd>{{ item.sale_date }}</dd>
+                <dt>販売タイプ</dt>
+                <dd>
+                    {% if item.sale_type == 'photo_packing' %}撮影梱包等代行サービス
+                    {% elif item.sale_type == 'wholesale' %}業者卸販売
+                    {% elif item.sale_type == 'multi_listing' %}同時出品サービス
+                    {% elif item.sale_type == 'auction' %}オークション流し
+                    {% else %}通常
+                    {% endif %}
+                </dd>
                 <dt>売上金</dt>
                 <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
                 <dt>送料</dt>
                 <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
-                <dt>販売先</dt>
+                <dt>販売先（メモ）</dt>
                 <dd>{{ item.sales_destination or '-' }}</dd>
                 <dt>手数料</dt>
                 <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>

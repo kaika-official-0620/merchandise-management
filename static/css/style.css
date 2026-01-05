@@ -316,6 +316,19 @@ a:hover {
     font-size: 0.875rem;
 }
 
+.form-group .form-help {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.form-group .form-help.highlight-success {
+    color: var(--success);
+    font-weight: 500;
+}
+
 .checkbox-group label {
     display: flex;
     align-items: center;
