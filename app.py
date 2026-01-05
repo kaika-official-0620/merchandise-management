@@ -3199,11 +3199,8 @@ def admin_shikiriosho_edit(id):
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
-        shikiriosho = dict(cur.fetchone()) if cur.fetchone() else None
-        cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
-        shikiriosho = cur.fetchone()
-        if shikiriosho:
-            shikiriosho = dict(shikiriosho)
+        row = cur.fetchone()
+        shikiriosho = dict(row) if row else None
         cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
         cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
@@ -3211,9 +3208,8 @@ def admin_shikiriosho_edit(id):
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM shikiriosho WHERE id = ?", (id,))
-        shikiriosho = cur.fetchone()
-        if shikiriosho:
-            shikiriosho = dict(shikiriosho)
+        row = cur.fetchone()
+        shikiriosho = dict(row) if row else None
         cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
         cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
