@@ -3995,9 +3995,8 @@ def admin_invoice_view(id):
 def admin_invoice_approve(id):
     """請求書承認（管理者用）- 承認時に仕切書を自動作成"""
     
-    # 仕切書番号を先に生成（別のDB接続を使用するため）
-    shikiriosho_no = generate_shikiriosho_no()
-    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
+    today = now.strftime('%Y-%m-%d')
     
     conn = get_db()
     
@@ -4013,6 +4012,13 @@ def admin_invoice_approve(id):
                 cur.close()
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
+            
+            # 仕切書番号を生成（同じ接続内で）
+            cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
+                       (now.strftime('%Y-%m-01'),))
+            result = cur.fetchone()
+            count = (result['count'] if result else 0) + 1
+            shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
             # 請求書を承認
             cur.execute("""
@@ -4044,7 +4050,11 @@ def admin_invoice_approve(id):
                 10,
                 f"請求書 {invoice.get('invoice_no', '')} より自動作成"
             ))
-            shikiriosho_id = cur.fetchone()['id']
+            result = cur.fetchone()
+            shikiriosho_id = result['id'] if result else None
+            
+            if not shikiriosho_id:
+                raise Exception("仕切書の作成に失敗しました")
             
             # 請求書明細を取得して仕切書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
@@ -4078,6 +4088,13 @@ def admin_invoice_approve(id):
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             invoice = dict(invoice_row)
+            
+            # 仕切書番号を生成（同じ接続内で）
+            cur.execute("SELECT COUNT(*) FROM shikiriosho WHERE issue_date >= ?", 
+                       (now.strftime('%Y-%m-01'),))
+            result = cur.fetchone()
+            count = (result[0] if result else 0) + 1
+            shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
             # 請求書を承認
             cur.execute("""
