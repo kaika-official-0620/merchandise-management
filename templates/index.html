@@ -739,6 +739,12 @@
         <span class="compact-stat-label">📈 利益</span>
         <span class="compact-stat-value {% if stats.total_profit and stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
     </div>
+    <div class="compact-stat-divider"></div>
+    <div class="compact-stat">
+        <span class="compact-stat-label">📊 利益率</span>
+        {% set profit_rate = ((stats.total_profit or 0) / (stats.total_sales or 1) * 100) if stats.total_sales and stats.total_sales > 0 else 0 %}
+        <span class="compact-stat-value {% if profit_rate > 0 %}profit-positive{% elif profit_rate < 0 %}profit-negative{% endif %}">{{ "%.1f"|format(profit_rate) }}%</span>
+    </div>
 </div>
 
 <!-- ツールバー -->
