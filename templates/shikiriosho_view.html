@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}仕切書 - {{ shikiriosho.document_no }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('user_shikiriosho_list') }}" class="btn btn-back">← 一覧に戻る</a>
+    <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">📥 CSVダウンロード</a>
+</div>
+
+<div class="document-container">
+    <div class="document-header">
+        <div class="document-title">
+            <h2>仕 切 書</h2>
+        </div>
+        <div class="document-info">
+            <table>
+                <tr>
+                    <th>仕切書番号</th>
+                    <td>{{ shikiriosho.document_no }}</td>
+                </tr>
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ shikiriosho.issue_date }}</td>
+                </tr>
+                {% if shikiriosho.due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ shikiriosho.due_date }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    <div class="document-recipient">
+        <div class="recipient-name">
+            {{ current_user.display_name }} 様
+        </div>
+        <div class="document-message">
+            下記のとおり、お見積り申し上げます
+        </div>
+    </div>
+
+    <div class="document-total-box">
+        <span class="total-label">税込合計金額</span>
+        <span class="total-value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</span>
+    </div>
+
+    <table class="document-items">
+        <thead>
+            <tr>
+                <th width="5%">No</th>
+                <th width="35%">品名</th>
+                <th width="20%">規格</th>
+                <th width="10%">数量</th>
+                <th width="15%">単価</th>
+                <th width="15%">金額</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.item_no }}</td>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.specification or '-' }}</td>
+                <td class="text-right">{{ item.quantity }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 10) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" rowspan="3" class="footer-notes">
+                    {% if shikiriosho.notes %}
+                    <strong>備考：</strong><br>
+                    {{ shikiriosho.notes|replace('\n', '<br>')|safe }}
+                    {% endif %}
+                </td>
+                <td class="text-right"><strong>小計</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(shikiriosho.subtotal) }}</td>
+            </tr>
+            <tr>
+                <td class="text-right"><strong>消費税（{{ shikiriosho.tax_rate }}%）</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(shikiriosho.tax_amount) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td class="text-right"><strong>合計</strong></td>
+                <td class="text-right"><strong>¥{{ "{:,}".format(shikiriosho.total_amount) }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="document-footer">
+        <div class="company-info">
+            <p><strong>株式会社開花</strong></p>
+        </div>
+    </div>
+</div>
+
+<div class="print-button">
+    <button onclick="window.print()" class="btn btn-print">🖨️ 印刷する</button>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.btn-back {
+    background: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-download {
+    background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.document-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+}
+
+.document-title h2 {
+    font-size: 28px;
+    letter-spacing: 1em;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 3px double #333;
+}
+
+.document-info table {
+    border-collapse: collapse;
+}
+
+.document-info th,
+.document-info td {
+    padding: 5px 10px;
+    text-align: left;
+}
+
+.document-info th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-recipient {
+    margin-bottom: 30px;
+}
+
+.recipient-name {
+    font-size: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333;
+    display: inline-block;
+    min-width: 200px;
+}
+
+.document-message {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.document-total-box {
+    background: #f8f9fa;
+    border: 2px solid #333;
+    padding: 15px 30px;
+    display: inline-block;
+    margin-bottom: 30px;
+}
+
+.total-label {
+    font-size: 14px;
+    margin-right: 20px;
+}
+
+.total-value {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.document-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+
+.document-items th,
+.document-items td {
+    border: 1px solid #333;
+    padding: 10px;
+}
+
+.document-items th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-items .text-center {
+    text-align: center;
+}
+
+.document-items .text-right {
+    text-align: right;
+}
+
+.empty-row td {
+    height: 30px;
+}
+
+.footer-notes {
+    vertical-align: top;
+    font-size: 12px;
+    border-right: none !important;
+}
+
+.total-row td {
+    background: #f8f9fa;
+    font-size: 16px;
+}
+
+.document-footer {
+    text-align: right;
+    margin-top: 40px;
+}
+
+.print-button {
+    text-align: center;
+    margin-top: 30px;
+}
+
+.btn-print {
+    background: #17a2b8;
+    color: white;
+    padding: 15px 40px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.btn-print:hover {
+    background: #138496;
+}
+
+@media print {
+    .page-header,
+    .print-button {
+        display: none;
+    }
+    .document-container {
+        box-shadow: none;
+        padding: 0;
+    }
+    body {
+        background: white;
+    }
+}
+
+@media (max-width: 600px) {
+    .document-container {
+        padding: 20px;
+    }
+    
+    .document-header {
+        flex-direction: column;
+    }
+    
+    .document-title h2 {
+        font-size: 20px;
+        letter-spacing: 0.5em;
+    }
+    
+    .document-info {
+        margin-top: 15px;
+    }
+    
+    .document-items th,
+    .document-items td {
+        padding: 6px;
+        font-size: 12px;
+    }
+}
+</style>
+{% endblock %}
+

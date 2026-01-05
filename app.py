@@ -186,6 +186,43 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
+        # 仕切書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS shikiriosho (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                sender_id INTEGER REFERENCES users(id),
+                recipient_id INTEGER REFERENCES users(id),
+                recipient_name VARCHAR(100),
+                issue_date DATE NOT NULL,
+                due_date DATE,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate DECIMAL(5,2) DEFAULT 10.0,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 仕切書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS shikiriosho_items (
+                id SERIAL PRIMARY KEY,
+                shikiriosho_id INTEGER REFERENCES shikiriosho(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name VARCHAR(200) NOT NULL,
+                specification VARCHAR(200),
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -333,6 +370,43 @@ else:
                 INSERT OR IGNORE INTO widget_settings (widget_key, widget_name, is_enabled, display_order)
                 VALUES (?, ?, ?, ?)
             ''', widget)
+        
+        # 仕切書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS shikiriosho (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                sender_id INTEGER REFERENCES users(id),
+                recipient_id INTEGER REFERENCES users(id),
+                recipient_name TEXT,
+                issue_date DATE NOT NULL,
+                due_date DATE,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate REAL DEFAULT 10.0,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 仕切書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS shikiriosho_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shikiriosho_id INTEGER REFERENCES shikiriosho(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                specification TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
+            )
+        ''')
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -2767,6 +2841,568 @@ def admin_toggle_announcement(id):
     
     flash('お知らせの状態を更新しました', 'success')
     return redirect(url_for('admin_announcements'))
+
+# ===================
+# 仕切書管理（管理者用）
+# ===================
+
+def generate_document_no():
+    """仕切書番号を生成"""
+    now = datetime.now()
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
+                   (now.strftime('%Y-%m-01'),))
+        result = cur.fetchone()
+        count = result['count'] + 1
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= ?", 
+                   (now.strftime('%Y-%m-01'),))
+        result = cur.fetchone()
+        count = result['count'] + 1
+    cur.close()
+    conn.close()
+    return f"SK-{now.strftime('%Y%m')}-{count:04d}"
+
+@app.route('/admin/shikiriosho')
+@login_required
+@admin_required
+def admin_shikiriosho_list():
+    """仕切書一覧（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT s.*, u.display_name as recipient_display_name, u.username as recipient_username
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.recipient_id = u.id
+            ORDER BY s.created_at DESC
+        """)
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT s.*, u.display_name as recipient_display_name, u.username as recipient_username
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.recipient_id = u.id
+            ORDER BY s.created_at DESC
+        """)
+    
+    shikiriosho_list = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/shikiriosho_list.html', shikiriosho_list=shikiriosho_list)
+
+@app.route('/admin/shikiriosho/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_shikiriosho_add():
+    """仕切書作成（管理者用）"""
+    conn = get_db()
+    
+    if request.method == 'POST':
+        recipient_id = request.form.get('recipient_id')
+        recipient_name = request.form.get('recipient_name', '')
+        issue_date = request.form.get('issue_date')
+        due_date = request.form.get('due_date') or None
+        tax_rate = float(request.form.get('tax_rate', 10))
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細データ取得
+        item_names = request.form.getlist('item_name[]')
+        specifications = request.form.getlist('specification[]')
+        quantities = request.form.getlist('quantity[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        items = []
+        for i, name in enumerate(item_names):
+            if name.strip():
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                subtotal += amount
+                items.append({
+                    'item_no': i + 1,
+                    'product_name': name,
+                    'specification': specifications[i] if i < len(specifications) else '',
+                    'quantity': qty,
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        tax_amount = int(subtotal * tax_rate / 100)
+        total_amount = subtotal + tax_amount
+        document_no = generate_document_no()
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO shikiriosho 
+                (document_no, sender_id, recipient_id, recipient_name, issue_date, due_date,
+                 subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (document_no, current_user.id, recipient_id or None, recipient_name,
+                  issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status))
+            shikiriosho_id = cur.fetchone()[0]
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO shikiriosho_items 
+                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (shikiriosho_id, item['item_no'], item['product_name'], item['specification'],
+                      item['quantity'], item['unit_price'], item['amount']))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO shikiriosho 
+                (document_no, sender_id, recipient_id, recipient_name, issue_date, due_date,
+                 subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (document_no, current_user.id, recipient_id or None, recipient_name,
+                  issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status))
+            shikiriosho_id = cur.lastrowid
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO shikiriosho_items 
+                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (shikiriosho_id, item['item_no'], item['product_name'], item['specification'],
+                      item['quantity'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        if status == 'sent':
+            flash(f'仕切書 {document_no} を作成・送信しました', 'success')
+        else:
+            flash(f'仕切書 {document_no} を下書き保存しました', 'success')
+        return redirect(url_for('admin_shikiriosho_list'))
+    
+    # ユーザー一覧取得
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+    
+    users = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/shikiriosho_form.html', 
+                          users=users, 
+                          document_no=generate_document_no(),
+                          today=datetime.now().strftime('%Y-%m-%d'))
+
+@app.route('/admin/shikiriosho/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_shikiriosho_edit(id):
+    """仕切書編集（管理者用）"""
+    conn = get_db()
+    
+    if request.method == 'POST':
+        recipient_id = request.form.get('recipient_id')
+        recipient_name = request.form.get('recipient_name', '')
+        issue_date = request.form.get('issue_date')
+        due_date = request.form.get('due_date') or None
+        tax_rate = float(request.form.get('tax_rate', 10))
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細データ取得
+        item_names = request.form.getlist('item_name[]')
+        specifications = request.form.getlist('specification[]')
+        quantities = request.form.getlist('quantity[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        items = []
+        for i, name in enumerate(item_names):
+            if name.strip():
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                subtotal += amount
+                items.append({
+                    'item_no': i + 1,
+                    'product_name': name,
+                    'specification': specifications[i] if i < len(specifications) else '',
+                    'quantity': qty,
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        tax_amount = int(subtotal * tax_rate / 100)
+        total_amount = subtotal + tax_amount
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE shikiriosho SET
+                recipient_id = %s, recipient_name = %s, issue_date = %s, due_date = %s,
+                subtotal = %s, tax_amount = %s, total_amount = %s, tax_rate = %s, 
+                notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (recipient_id or None, recipient_name, issue_date, due_date,
+                  subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
+            
+            cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = %s", (id,))
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO shikiriosho_items 
+                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['product_name'], item['specification'],
+                      item['quantity'], item['unit_price'], item['amount']))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE shikiriosho SET
+                recipient_id = ?, recipient_name = ?, issue_date = ?, due_date = ?,
+                subtotal = ?, tax_amount = ?, total_amount = ?, tax_rate = ?, 
+                notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (recipient_id or None, recipient_name, issue_date, due_date,
+                  subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
+            
+            cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = ?", (id,))
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO shikiriosho_items 
+                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['product_name'], item['specification'],
+                      item['quantity'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('仕切書を更新しました', 'success')
+        return redirect(url_for('admin_shikiriosho_list'))
+    
+    # 仕切書データ取得
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
+        shikiriosho = dict(cur.fetchone()) if cur.fetchone() else None
+        cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM shikiriosho WHERE id = ?", (id,))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not shikiriosho:
+        flash('仕切書が見つかりません', 'error')
+        return redirect(url_for('admin_shikiriosho_list'))
+    
+    return render_template('admin/shikiriosho_form.html', 
+                          shikiriosho=shikiriosho, 
+                          items=items,
+                          users=users,
+                          today=datetime.now().strftime('%Y-%m-%d'))
+
+@app.route('/admin/shikiriosho/delete/<int:id>')
+@login_required
+@admin_required
+def admin_shikiriosho_delete(id):
+    """仕切書削除（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = %s", (id,))
+        cur.execute("DELETE FROM shikiriosho WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = ?", (id,))
+        cur.execute("DELETE FROM shikiriosho WHERE id = ?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('仕切書を削除しました', 'success')
+    return redirect(url_for('admin_shikiriosho_list'))
+
+@app.route('/admin/shikiriosho/send/<int:id>')
+@login_required
+@admin_required
+def admin_shikiriosho_send(id):
+    """仕切書を送信（ステータスを'sent'に変更）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("UPDATE shikiriosho SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("UPDATE shikiriosho SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('仕切書を送信しました', 'success')
+    return redirect(url_for('admin_shikiriosho_list'))
+
+@app.route('/admin/shikiriosho/view/<int:id>')
+@login_required
+@admin_required
+def admin_shikiriosho_view(id):
+    """仕切書詳細（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT s.*, u.display_name as recipient_display_name, u.username as recipient_username
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.recipient_id = u.id
+            WHERE s.id = %s
+        """, (id,))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT s.*, u.display_name as recipient_display_name, u.username as recipient_username
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.recipient_id = u.id
+            WHERE s.id = ?
+        """, (id,))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not shikiriosho:
+        flash('仕切書が見つかりません', 'error')
+        return redirect(url_for('admin_shikiriosho_list'))
+    
+    return render_template('admin/shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
+
+# ===================
+# 仕切書（ユーザー用）
+# ===================
+
+@app.route('/shikiriosho')
+@login_required
+def user_shikiriosho_list():
+    """受信した仕切書一覧（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = %s AND s.status = 'sent'
+            ORDER BY s.created_at DESC
+        """, (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = ? AND s.status = 'sent'
+            ORDER BY s.created_at DESC
+        """, (current_user.id,))
+    
+    shikiriosho_list = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('shikiriosho_list.html', shikiriosho_list=shikiriosho_list)
+
+@app.route('/shikiriosho/view/<int:id>')
+@login_required
+def user_shikiriosho_view(id):
+    """仕切書詳細（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.id = %s AND s.recipient_id = %s
+        """, (id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+            # 既読にする
+            cur.execute("UPDATE shikiriosho SET is_read = 1 WHERE id = %s", (id,))
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.id = ? AND s.recipient_id = ?
+        """, (id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+            # 既読にする
+            cur.execute("UPDATE shikiriosho SET is_read = 1 WHERE id = ?", (id,))
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    if not shikiriosho:
+        flash('仕切書が見つかりません', 'error')
+        return redirect(url_for('user_shikiriosho_list'))
+    
+    return render_template('shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
+
+@app.route('/shikiriosho/download/<int:id>')
+@login_required
+def user_shikiriosho_download(id):
+    """仕切書CSVダウンロード（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM shikiriosho WHERE id = %s AND recipient_id = %s", (id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM shikiriosho WHERE id = ? AND recipient_id = ?", (id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not shikiriosho:
+        flash('仕切書が見つかりません', 'error')
+        return redirect(url_for('user_shikiriosho_list'))
+    
+    # CSV作成
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    
+    # ヘッダー情報
+    writer.writerow(['株式会社開花'])
+    writer.writerow([''])
+    writer.writerow(['仕切書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
+    writer.writerow([''])
+    writer.writerow(['宛先', shikiriosho['recipient_name'] or ''])
+    writer.writerow([''])
+    writer.writerow(['下記のとおり、お見積り申し上げます'])
+    writer.writerow(['税込合計金額', f"¥{shikiriosho['total_amount']:,}"])
+    writer.writerow([''])
+    writer.writerow(['No', '品名', '規格', '数量', '単価', '金額'])
+    
+    for item in items:
+        writer.writerow([
+            item['item_no'],
+            item['product_name'],
+            item['specification'] or '',
+            item['quantity'],
+            f"¥{item['unit_price']:,}",
+            f"¥{item['amount']:,}"
+        ])
+    
+    writer.writerow([''])
+    writer.writerow(['', '', '', '', '小計', f"¥{shikiriosho['subtotal']:,}"])
+    writer.writerow(['', '', '', '', f"消費税（{shikiriosho['tax_rate']}%）", f"¥{shikiriosho['tax_amount']:,}"])
+    writer.writerow(['', '', '', '', '合計', f"¥{shikiriosho['total_amount']:,}"])
+    
+    if shikiriosho['notes']:
+        writer.writerow([''])
+        writer.writerow(['備考', shikiriosho['notes']])
+    
+    output.seek(0)
+    
+    # BOMを追加してExcelで文字化けしないように
+    bom = '\ufeff'
+    csv_content = bom + output.getvalue()
+    
+    return send_file(
+        io.BytesIO(csv_content.encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"仕切書_{shikiriosho['document_no']}.csv"
+    )
+
+# 未読仕切書数を取得するヘルパー関数
+def get_unread_shikiriosho_count(user_id):
+    """未読仕切書数を取得"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT COUNT(*) as count FROM shikiriosho 
+            WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
+        """, (user_id,))
+        result = cur.fetchone()
+        count = result['count']
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COUNT(*) as count FROM shikiriosho 
+            WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
+        """, (user_id,))
+        result = cur.fetchone()
+        count = result['count']
+    cur.close()
+    conn.close()
+    return count
+
+# テンプレートに未読仕切書数を渡す
+@app.context_processor
+def inject_unread_shikiriosho():
+    if current_user.is_authenticated:
+        return {'unread_shikiriosho_count': get_unread_shikiriosho_count(current_user.id)}
+    return {'unread_shikiriosho_count': 0}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

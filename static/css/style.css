@@ -99,6 +99,20 @@ a:hover {
     color: white;
 }
 
+.nav-links a .badge-count {
+    background: var(--danger);
+    color: white;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 4px;
+    font-weight: 600;
+}
+
+.nav-shikiriosho {
+    position: relative;
+}
+
 .nav-links a.nav-admin {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;

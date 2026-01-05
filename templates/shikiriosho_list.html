@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}仕切書一覧 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📄 受信した仕切書</h1>
+</div>
+
+{% if shikiriosho_list %}
+<div class="shikiriosho-cards">
+    {% for doc in shikiriosho_list %}
+    <div class="shikiriosho-card {% if not doc.is_read %}unread{% endif %}">
+        <div class="card-header">
+            <span class="doc-no">{{ doc.document_no }}</span>
+            {% if not doc.is_read %}
+            <span class="new-badge">NEW</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="card-info">
+                <div class="info-row">
+                    <span class="label">発行日</span>
+                    <span class="value">{{ doc.issue_date }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">送信者</span>
+                    <span class="value">{{ doc.sender_display_name or '管理者' }}</span>
+                </div>
+                <div class="info-row total">
+                    <span class="label">税込合計</span>
+                    <span class="value">¥{{ "{:,}".format(doc.total_amount) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-actions">
+            <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-primary">詳細を見る</a>
+            <a href="{{ url_for('user_shikiriosho_download', id=doc.id) }}" class="btn btn-secondary">📥 CSV</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <p>受信した仕切書はありません</p>
+</div>
+{% endif %}
+
+<style>
+.page-header {
+    margin-bottom: 30px;
+}
+
+.page-header h1 {
+    margin: 0;
+    color: #333;
+}
+
+.shikiriosho-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.shikiriosho-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.shikiriosho-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.shikiriosho-card.unread {
+    border-left: 4px solid #007bff;
+}
+
+.card-header {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+}
+
+.new-badge {
+    background: #dc3545;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.info-row .label {
+    color: #666;
+    font-size: 13px;
+}
+
+.info-row .value {
+    font-weight: 500;
+    color: #333;
+}
+
+.info-row.total {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed #ddd;
+}
+
+.info-row.total .value {
+    font-size: 20px;
+    color: #007bff;
+    font-weight: 700;
+}
+
+.card-actions {
+    padding: 15px 20px;
+    background: #fafafa;
+    display: flex;
+    gap: 10px;
+}
+
+.card-actions .btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 12px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.empty-state p {
+    color: #666;
+    font-size: 16px;
+}
+
+@media (max-width: 600px) {
+    .shikiriosho-cards {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
