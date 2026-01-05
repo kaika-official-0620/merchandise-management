@@ -254,48 +254,6 @@
             </div>
         </div>
         
-        <!-- 中央カラム: 出品情報 -->
-        <div class="form-section">
-            <h2>出品情報</h2>
-            
-            <div class="form-group checkbox-group">
-                <label>
-                    <input type="checkbox" name="is_listed" 
-                           {% if item and item.is_listed %}checked{% endif %}>
-                    出品済み
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label for="listing_date">出品日</label>
-                <input type="date" id="listing_date" name="listing_date" 
-                       value="{{ item.listing_date if item else '' }}">
-            </div>
-            
-            <div class="form-group">
-                <label for="listing_price">出品価格</label>
-                <input type="number" id="listing_price" name="listing_price" 
-                       value="{{ item.listing_price if item else 0 }}" min="0">
-            </div>
-            
-            <div class="form-group">
-                <label for="expected_shipping">想定送料</label>
-                <input type="number" id="expected_shipping" name="expected_shipping" 
-                       value="{{ item.expected_shipping if item else 0 }}" min="0">
-            </div>
-            
-            <div class="form-group">
-                <label for="expected_commission">想定手数料</label>
-                <input type="number" id="expected_commission" name="expected_commission" 
-                       value="{{ item.expected_commission if item else 0 }}" min="0">
-            </div>
-            
-            <div class="form-group result-field">
-                <label>想定利益</label>
-                <div class="calculated-value" id="expected_profit">¥0</div>
-            </div>
-        </div>
-        
         <!-- 右カラム: 売却情報 -->
         <div class="form-section">
             <h2>売却情報</h2>
@@ -331,9 +289,10 @@
             </div>
             
             <div class="form-group">
-                <label for="commission">手数料</label>
+                <label for="commission">手数料（売上金の10%で自動計算）</label>
                 <input type="number" id="commission" name="commission" 
                        value="{{ item.commission if item else 0 }}" min="0">
+                <small class="form-help">売上金入力時に自動計算されますが、手動で変更も可能です</small>
             </div>
             
             <div class="form-group checkbox-group">
@@ -360,20 +319,14 @@
 
 {% block scripts %}
 <script>
+// 手数料の自動計算フラグ（手動変更されたらfalseに）
+let autoCalculateCommission = true;
+
 function calculateProfit() {
     const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
-    const listingPrice = parseInt(document.getElementById('listing_price').value) || 0;
-    const expectedShipping = parseInt(document.getElementById('expected_shipping').value) || 0;
-    const expectedCommission = parseInt(document.getElementById('expected_commission').value) || 0;
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
     const commission = parseInt(document.getElementById('commission').value) || 0;
-    
-    // 想定利益
-    const expectedProfit = listingPrice - purchasePrice - expectedShipping - expectedCommission;
-    const expectedEl = document.getElementById('expected_profit');
-    expectedEl.textContent = '¥' + expectedProfit.toLocaleString();
-    expectedEl.className = 'calculated-value ' + (expectedProfit >= 0 ? 'profit-positive' : 'profit-negative');
     
     // 実際の利益
     const actualProfit = salePrice - purchasePrice - shippingCost - commission;
@@ -382,13 +335,46 @@ function calculateProfit() {
     actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
 }
 
+// 売上金が変更されたら手数料を自動計算（10%）
+function calculateCommission() {
+    if (!autoCalculateCommission) return;
+    
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const commission = Math.floor(salePrice * 0.10); // 10%（切り捨て）
+    document.getElementById('commission').value = commission;
+    calculateProfit();
+}
+
 // イベントリスナー設定
-document.querySelectorAll('input[type="number"]').forEach(input => {
-    input.addEventListener('input', calculateProfit);
+document.getElementById('sale_price').addEventListener('input', function() {
+    calculateCommission();
 });
 
-// 初期計算
-calculateProfit();
+// 手数料を手動で変更したら自動計算を無効化
+document.getElementById('commission').addEventListener('input', function() {
+    autoCalculateCommission = false;
+    calculateProfit();
+});
+
+// 売上金以外の数値フィールドの変更時に利益を再計算
+document.querySelectorAll('input[type="number"]').forEach(input => {
+    if (input.id !== 'sale_price' && input.id !== 'commission') {
+        input.addEventListener('input', calculateProfit);
+    }
+});
+
+// 初期計算（編集時に既存の手数料がある場合は自動計算を無効化）
+document.addEventListener('DOMContentLoaded', function() {
+    const existingCommission = parseInt(document.getElementById('commission').value) || 0;
+    const existingSalePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    
+    // 既存データがある場合は手動入力と見なす
+    if (existingCommission > 0 && existingSalePrice > 0) {
+        autoCalculateCommission = false;
+    }
+    
+    calculateProfit();
+});
 </script>
 {% endblock %}
 
