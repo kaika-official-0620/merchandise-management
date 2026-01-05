@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}請求書 - {{ invoice.invoice_no }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('user_invoice_list') }}" class="btn btn-back">← 一覧に戻る</a>
+    <div class="header-actions">
+        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">📥 CSVダウンロード</a>
+        <button onclick="window.print()" class="btn btn-print">🖨️ 印刷</button>
+    </div>
+</div>
+
+<div class="document-container">
+    <div class="document-header">
+        <div class="document-title">
+            <h2>請 求 書</h2>
+        </div>
+        <div class="document-info">
+            <table>
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ invoice.issue_date }}</td>
+                </tr>
+                <tr>
+                    <th>請求書番号</th>
+                    <td>{{ invoice.invoice_no }}</td>
+                </tr>
+                {% if invoice.payment_due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ invoice.payment_due_date }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <th>ステータス</th>
+                    <td>
+                        <span class="status-badge status-{{ invoice.status }}">
+                            {% if invoice.status == 'draft' %}下書き
+                            {% elif invoice.status == 'sent' %}送信済
+                            {% elif invoice.status == 'approved' %}✔ 承認済
+                            {% elif invoice.status == 'rejected' %}✖ 却下
+                            {% endif %}
+                        </span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="document-total-box">
+        <span class="total-label">請求金額 (税込)</span>
+        <span class="total-value">¥{{ "{:,}".format(invoice.total_amount) }}</span>
+    </div>
+
+    <table class="document-items">
+        <thead>
+            <tr>
+                <th width="8%">税区分</th>
+                <th width="12%">日付</th>
+                <th width="32%">品名・品番</th>
+                <th width="10%">数量</th>
+                <th width="8%">単位</th>
+                <th width="15%">単価</th>
+                <th width="15%">合計</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.tax_category }}%</td>
+                <td>{{ item.product_date or '-' }}</td>
+                <td>{{ item.product_name }}</td>
+                <td class="text-right">{{ item.quantity }}</td>
+                <td class="text-center">{{ item.unit or '-' }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 8) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" rowspan="4" class="footer-notes">
+                    {% if invoice.notes %}
+                    <strong>備考：</strong><br>
+                    {{ invoice.notes|replace('\n', '<br>')|safe }}
+                    {% endif %}
+                </td>
+                <td colspan="2" class="text-right"><strong>小計</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.subtotal) }}</td>
+            </tr>
+            <tr>
+                <td colspan="2" class="text-right"><strong>消費税(8%)</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_8) }}</td>
+            </tr>
+            <tr>
+                <td colspan="2" class="text-right"><strong>消費税(10%)</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_10) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td colspan="2" class="text-right"><strong>請求金額</strong></td>
+                <td class="text-right"><strong>¥{{ "{:,}".format(invoice.total_amount) }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    {% if invoice.bank_info %}
+    <div class="bank-info">
+        <h4>🏦 振込先</h4>
+        <p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>
+    </div>
+    {% endif %}
+
+    <div class="document-footer">
+        <p>作成者: {{ current_user.display_name }}</p>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-back {
+    background: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-download {
+    background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-print {
+    background: #17a2b8;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
+.document-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+}
+
+.document-title h2 {
+    font-size: 28px;
+    letter-spacing: 0.8em;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 3px double #333;
+}
+
+.document-info table {
+    border-collapse: collapse;
+}
+
+.document-info th,
+.document-info td {
+    padding: 5px 10px;
+    text-align: left;
+}
+
+.document-info th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.status-sent {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.status-approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.document-total-box {
+    background: #f8f9fa;
+    border: 2px solid #333;
+    padding: 15px 30px;
+    display: inline-block;
+    margin-bottom: 30px;
+}
+
+.total-label {
+    font-size: 14px;
+    margin-right: 20px;
+}
+
+.total-value {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.document-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+
+.document-items th,
+.document-items td {
+    border: 1px solid #333;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.document-items th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-items .text-center {
+    text-align: center;
+}
+
+.document-items .text-right {
+    text-align: right;
+}
+
+.empty-row td {
+    height: 28px;
+}
+
+.footer-notes {
+    vertical-align: top;
+    font-size: 12px;
+    border-right: none !important;
+}
+
+.total-row td {
+    background: #f8f9fa;
+    font-size: 15px;
+}
+
+.bank-info {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.bank-info h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.bank-info p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.document-footer {
+    text-align: right;
+    margin-top: 30px;
+    color: #666;
+    font-size: 13px;
+}
+
+@media print {
+    .page-header {
+        display: none;
+    }
+    .document-container {
+        box-shadow: none;
+        padding: 0;
+    }
+    body {
+        background: white;
+    }
+}
+
+@media (max-width: 600px) {
+    .document-container {
+        padding: 20px;
+    }
+    
+    .document-header {
+        flex-direction: column;
+    }
+    
+    .document-title h2 {
+        font-size: 20px;
+        letter-spacing: 0.5em;
+    }
+    
+    .document-info {
+        margin-top: 15px;
+    }
+    
+    .document-items th,
+    .document-items td {
+        padding: 5px;
+        font-size: 11px;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+

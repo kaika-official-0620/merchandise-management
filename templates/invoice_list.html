@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}請求書一覧 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📝 請求書一覧</h1>
+    <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">➕ 新規作成</a>
+</div>
+
+{% if invoices %}
+<div class="invoice-cards">
+    {% for inv in invoices %}
+    <div class="invoice-card status-{{ inv.status }}">
+        <div class="card-header">
+            <span class="invoice-no">{{ inv.invoice_no }}</span>
+            <span class="status-badge status-{{ inv.status }}">
+                {% if inv.status == 'draft' %}下書き
+                {% elif inv.status == 'sent' %}送信済
+                {% elif inv.status == 'approved' %}承認済
+                {% elif inv.status == 'rejected' %}却下
+                {% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="info-row">
+                <span class="label">発行日</span>
+                <span class="value">{{ inv.issue_date }}</span>
+            </div>
+            {% if inv.payment_due_date %}
+            <div class="info-row">
+                <span class="label">支払期限</span>
+                <span class="value">{{ inv.payment_due_date }}</span>
+            </div>
+            {% endif %}
+            <div class="info-row total">
+                <span class="label">請求金額</span>
+                <span class="value">¥{{ "{:,}".format(inv.total_amount) }}</span>
+            </div>
+        </div>
+        <div class="card-actions">
+            <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
+            {% if inv.status == 'draft' %}
+                <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
+                <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この請求書を送信しますか？')">送信</a>
+                <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を削除しますか？')">削除</a>
+            {% else %}
+                <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary">📥 CSV</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📄</div>
+    <p>請求書がありません</p>
+    <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
+</div>
+{% endif %}
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.page-header h1 {
+    margin: 0;
+    color: #333;
+}
+
+.invoice-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.invoice-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.invoice-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.invoice-card.status-draft {
+    border-left: 4px solid #ffc107;
+}
+
+.invoice-card.status-sent {
+    border-left: 4px solid #17a2b8;
+}
+
+.invoice-card.status-approved {
+    border-left: 4px solid #28a745;
+}
+
+.invoice-card.status-rejected {
+    border-left: 4px solid #dc3545;
+}
+
+.card-header {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.invoice-no {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.status-sent {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.status-approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.info-row .label {
+    color: #666;
+    font-size: 13px;
+}
+
+.info-row .value {
+    font-weight: 500;
+    color: #333;
+}
+
+.info-row.total {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed #ddd;
+}
+
+.info-row.total .value {
+    font-size: 20px;
+    color: #007bff;
+    font-weight: 700;
+}
+
+.card-actions {
+    padding: 15px 20px;
+    background: #fafafa;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.card-actions .btn {
+    padding: 8px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 12px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.empty-state p {
+    color: #666;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 600px) {
+    .invoice-cards {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+

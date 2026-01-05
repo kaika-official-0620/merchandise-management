@@ -24,8 +24,16 @@
                 <span class="badge-count">{{ unread_shikiriosho_count }}</span>
                 {% endif %}
             </a>
+            <a href="{{ url_for('user_invoice_list') }}" class="nav-invoice {% if 'invoice' in request.endpoint and 'admin' not in request.endpoint %}active{% endif %}">
+                📝 請求書
+            </a>
             {% if current_user.is_admin() %}
-            <a href="{{ url_for('admin_dashboard') }}" class="nav-admin {% if 'admin' in request.endpoint %}active{% endif %}">🔧 管理</a>
+            <a href="{{ url_for('admin_dashboard') }}" class="nav-admin {% if 'admin' in request.endpoint %}active{% endif %}">
+                🔧 管理
+                {% if unread_invoice_count > 0 %}
+                <span class="badge-count">{{ unread_invoice_count }}</span>
+                {% endif %}
+            </a>
             {% endif %}
         </div>
         <div class="nav-user">

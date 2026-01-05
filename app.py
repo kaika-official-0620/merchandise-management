@@ -223,6 +223,45 @@ if DATABASE_URL:
             )
         ''')
         
+        # 請求書テーブル（ユーザー→管理者）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS invoices (
+                id SERIAL PRIMARY KEY,
+                invoice_no VARCHAR(50) NOT NULL,
+                sender_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                payment_due_date DATE,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount_8 INTEGER DEFAULT 0,
+                tax_amount_10 INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                bank_info TEXT,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
+                approved_at TIMESTAMP,
+                approved_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 請求書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS invoice_items (
+                id SERIAL PRIMARY KEY,
+                invoice_id INTEGER REFERENCES invoices(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                tax_category VARCHAR(10) DEFAULT '10',
+                product_date DATE,
+                product_name VARCHAR(200) NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit VARCHAR(20),
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -405,6 +444,45 @@ else:
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0,
                 notes TEXT
+            )
+        ''')
+        
+        # 請求書テーブル（ユーザー→管理者）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_no TEXT NOT NULL,
+                sender_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                payment_due_date DATE,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount_8 INTEGER DEFAULT 0,
+                tax_amount_10 INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                bank_info TEXT,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
+                approved_at TIMESTAMP,
+                approved_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 請求書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS invoice_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER REFERENCES invoices(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                tax_category TEXT DEFAULT '10',
+                product_date DATE,
+                product_name TEXT NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit TEXT,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
             )
         ''')
         
@@ -3403,6 +3481,637 @@ def inject_unread_shikiriosho():
     if current_user.is_authenticated:
         return {'unread_shikiriosho_count': get_unread_shikiriosho_count(current_user.id)}
     return {'unread_shikiriosho_count': 0}
+
+# ===================
+# 請求書（ユーザー→管理者）
+# ===================
+
+def generate_invoice_no():
+    """請求書番号を生成"""
+    now = datetime.now()
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT COUNT(*) as count FROM invoices WHERE issue_date >= %s", 
+                   (now.strftime('%Y-%m-01'),))
+        result = cur.fetchone()
+        count = result['count'] + 1
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM invoices WHERE issue_date >= ?", 
+                   (now.strftime('%Y-%m-01'),))
+        result = cur.fetchone()
+        count = result['count'] + 1
+    cur.close()
+    conn.close()
+    return f"INV-{now.strftime('%Y%m')}-{count:04d}"
+
+def get_unread_invoice_count():
+    """未読請求書数を取得（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT COUNT(*) as count FROM invoices 
+            WHERE status = 'sent' AND is_read = 0
+        """)
+        result = cur.fetchone()
+        count = result['count']
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COUNT(*) as count FROM invoices 
+            WHERE status = 'sent' AND is_read = 0
+        """)
+        result = cur.fetchone()
+        count = result['count']
+    cur.close()
+    conn.close()
+    return count
+
+@app.context_processor
+def inject_unread_invoice():
+    if current_user.is_authenticated and current_user.is_admin():
+        return {'unread_invoice_count': get_unread_invoice_count()}
+    return {'unread_invoice_count': 0}
+
+@app.route('/invoices')
+@login_required
+def user_invoice_list():
+    """請求書一覧（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM invoices
+            WHERE sender_id = %s
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM invoices
+            WHERE sender_id = ?
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+    
+    invoices = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('invoice_list.html', invoices=invoices)
+
+@app.route('/invoices/add', methods=['GET', 'POST'])
+@login_required
+def user_invoice_add():
+    """請求書作成（ユーザー用）"""
+    conn = get_db()
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        payment_due_date = request.form.get('payment_due_date') or None
+        bank_info = request.form.get('bank_info', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細データ取得
+        tax_categories = request.form.getlist('tax_category[]')
+        product_dates = request.form.getlist('product_date[]')
+        product_names = request.form.getlist('product_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        subtotal_8 = 0
+        subtotal_10 = 0
+        items = []
+        
+        for i, name in enumerate(product_names):
+            if name.strip():
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                subtotal += amount
+                
+                tax_cat = tax_categories[i] if i < len(tax_categories) else '10'
+                if tax_cat == '8':
+                    subtotal_8 += amount
+                else:
+                    subtotal_10 += amount
+                
+                items.append({
+                    'item_no': i + 1,
+                    'tax_category': tax_cat,
+                    'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
+                    'product_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        tax_amount_8 = int(subtotal_8 * 0.08)
+        tax_amount_10 = int(subtotal_10 * 0.10)
+        total_amount = subtotal + tax_amount_8 + tax_amount_10
+        invoice_no = generate_invoice_no()
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO invoices 
+                (invoice_no, sender_id, issue_date, payment_due_date,
+                 subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (invoice_no, current_user.id, issue_date, payment_due_date,
+                  subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status))
+            invoice_id = cur.fetchone()[0]
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO invoice_items 
+                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
+                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO invoices 
+                (invoice_no, sender_id, issue_date, payment_due_date,
+                 subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (invoice_no, current_user.id, issue_date, payment_due_date,
+                  subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status))
+            invoice_id = cur.lastrowid
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO invoice_items 
+                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
+                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        if status == 'sent':
+            flash(f'請求書 {invoice_no} を作成・送信しました', 'success')
+        else:
+            flash(f'請求書 {invoice_no} を下書き保存しました', 'success')
+        return redirect(url_for('user_invoice_list'))
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('invoice_form.html', 
+                          invoice_no=generate_invoice_no(),
+                          today=datetime.now().strftime('%Y-%m-%d'))
+
+@app.route('/invoices/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def user_invoice_edit(id):
+    """請求書編集（ユーザー用）"""
+    conn = get_db()
+    
+    # 所有者確認
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        invoice = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        invoice = cur.fetchone()
+    
+    if not invoice:
+        flash('請求書が見つかりません', 'error')
+        return redirect(url_for('user_invoice_list'))
+    
+    invoice = dict(invoice)
+    
+    # 送信済みは編集不可
+    if invoice['status'] == 'sent':
+        flash('送信済みの請求書は編集できません', 'error')
+        return redirect(url_for('user_invoice_list'))
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        payment_due_date = request.form.get('payment_due_date') or None
+        bank_info = request.form.get('bank_info', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細データ取得
+        tax_categories = request.form.getlist('tax_category[]')
+        product_dates = request.form.getlist('product_date[]')
+        product_names = request.form.getlist('product_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        subtotal_8 = 0
+        subtotal_10 = 0
+        items = []
+        
+        for i, name in enumerate(product_names):
+            if name.strip():
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                subtotal += amount
+                
+                tax_cat = tax_categories[i] if i < len(tax_categories) else '10'
+                if tax_cat == '8':
+                    subtotal_8 += amount
+                else:
+                    subtotal_10 += amount
+                
+                items.append({
+                    'item_no': i + 1,
+                    'tax_category': tax_cat,
+                    'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
+                    'product_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        tax_amount_8 = int(subtotal_8 * 0.08)
+        tax_amount_10 = int(subtotal_10 * 0.10)
+        total_amount = subtotal + tax_amount_8 + tax_amount_10
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE invoices SET
+                issue_date = %s, payment_due_date = %s,
+                subtotal = %s, tax_amount_8 = %s, tax_amount_10 = %s, total_amount = %s,
+                bank_info = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (issue_date, payment_due_date, subtotal, tax_amount_8, tax_amount_10,
+                  total_amount, bank_info, notes, status, id))
+            
+            cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO invoice_items 
+                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['tax_category'], item['product_date'],
+                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur.execute("""
+                UPDATE invoices SET
+                issue_date = ?, payment_due_date = ?,
+                subtotal = ?, tax_amount_8 = ?, tax_amount_10 = ?, total_amount = ?,
+                bank_info = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (issue_date, payment_due_date, subtotal, tax_amount_8, tax_amount_10,
+                  total_amount, bank_info, notes, status, id))
+            
+            cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
+            
+            for item in items:
+                cur.execute("""
+                    INSERT INTO invoice_items 
+                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['tax_category'], item['product_date'],
+                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('請求書を更新しました', 'success')
+        return redirect(url_for('user_invoice_list'))
+    
+    # 明細データ取得
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+    else:
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+    
+    items = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('invoice_form.html', 
+                          invoice=invoice, 
+                          items=items,
+                          today=datetime.now().strftime('%Y-%m-%d'))
+
+@app.route('/invoices/view/<int:id>')
+@login_required
+def user_invoice_view(id):
+    """請求書詳細（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not invoice:
+        flash('請求書が見つかりません', 'error')
+        return redirect(url_for('user_invoice_list'))
+    
+    return render_template('invoice_view.html', invoice=invoice, items=items)
+
+@app.route('/invoices/delete/<int:id>')
+@login_required
+def user_invoice_delete(id):
+    """請求書削除（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT status FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice and invoice['status'] == 'draft':
+            cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
+            cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
+            conn.commit()
+            flash('請求書を削除しました', 'success')
+        else:
+            flash('送信済みの請求書は削除できません', 'error')
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice and invoice['status'] == 'draft':
+            cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
+            cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
+            conn.commit()
+            flash('請求書を削除しました', 'success')
+        else:
+            flash('送信済みの請求書は削除できません', 'error')
+    
+    cur.close()
+    conn.close()
+    return redirect(url_for('user_invoice_list'))
+
+@app.route('/invoices/send/<int:id>')
+@login_required
+def user_invoice_send(id):
+    """請求書送信（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("UPDATE invoices SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = %s AND sender_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("UPDATE invoices SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?", (id, current_user.id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('請求書を送信しました', 'success')
+    return redirect(url_for('user_invoice_list'))
+
+# ===================
+# 請求書（管理者用）
+# ===================
+
+@app.route('/admin/invoices')
+@login_required
+@admin_required
+def admin_invoice_list():
+    """請求書一覧（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+            FROM invoices i
+            LEFT JOIN users u ON i.sender_id = u.id
+            WHERE i.status = 'sent'
+            ORDER BY i.created_at DESC
+        """)
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+            FROM invoices i
+            LEFT JOIN users u ON i.sender_id = u.id
+            WHERE i.status = 'sent'
+            ORDER BY i.created_at DESC
+        """)
+    
+    invoices = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/invoice_list.html', invoices=invoices)
+
+@app.route('/admin/invoices/view/<int:id>')
+@login_required
+@admin_required
+def admin_invoice_view(id):
+    """請求書詳細（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+            FROM invoices i
+            LEFT JOIN users u ON i.sender_id = u.id
+            WHERE i.id = %s
+        """, (id,))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+            # 既読にする
+            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+            FROM invoices i
+            LEFT JOIN users u ON i.sender_id = u.id
+            WHERE i.id = ?
+        """, (id,))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+            # 既読にする
+            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    if not invoice:
+        flash('請求書が見つかりません', 'error')
+        return redirect(url_for('admin_invoice_list'))
+    
+    return render_template('admin/invoice_view.html', invoice=invoice, items=items)
+
+@app.route('/admin/invoices/approve/<int:id>')
+@login_required
+@admin_required
+def admin_invoice_approve(id):
+    """請求書承認（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
+            approved_by = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s
+        """, (current_user.id, id))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
+            approved_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        """, (current_user.id, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('請求書を承認しました', 'success')
+    return redirect(url_for('admin_invoice_list'))
+
+@app.route('/admin/invoices/reject/<int:id>')
+@login_required
+@admin_required
+def admin_invoice_reject(id):
+    """請求書却下（管理者用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE invoices SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = %s
+        """, (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE invoices SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        """, (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('請求書を却下しました', 'warning')
+    return redirect(url_for('admin_invoice_list'))
+
+@app.route('/invoices/download/<int:id>')
+@login_required
+def invoice_download(id):
+    """請求書CSVダウンロード"""
+    conn = get_db()
+    
+    # 権限確認（送信者または管理者）
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not invoice:
+        flash('請求書が見つかりません', 'error')
+        return redirect(url_for('user_invoice_list'))
+    
+    # CSV作成
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    
+    writer.writerow(['請求書'])
+    writer.writerow([''])
+    writer.writerow(['', '', '', '発行日', '', invoice['issue_date']])
+    writer.writerow([''])
+    writer.writerow(['請求書番号', invoice['invoice_no']])
+    writer.writerow([''])
+    writer.writerow(['', '', '', '支払期限', invoice['payment_due_date'] or ''])
+    writer.writerow([''])
+    writer.writerow(['請求金額 (税込)', '', '', '', '', '', ''])
+    writer.writerow([f"¥{invoice['total_amount']:,}"])
+    writer.writerow([''])
+    writer.writerow(['「8%」…軽減税率対象、「10」…標準税率'])
+    writer.writerow(['税区分', '日付', '品名・品番', '数量', '単位', '単価', '合計'])
+    
+    for item in items:
+        writer.writerow([
+            item['tax_category'] + '%' if item['tax_category'] else '10%',
+            item['product_date'] or '',
+            item['product_name'],
+            item['quantity'],
+            item['unit'] or '',
+            f"¥{item['unit_price']:,}",
+            f"¥{item['amount']:,}"
+        ])
+    
+    writer.writerow([''])
+    writer.writerow(['備考', invoice['notes'] or ''])
+    writer.writerow(['', '', '', '合計', '', '', f"¥{invoice['subtotal']:,}"])
+    writer.writerow(['', '', '', '8%対象', '', '10%対象', '消費税'])
+    writer.writerow(['', '', '', f"¥{invoice['tax_amount_8']:,}", '', f"¥{invoice['tax_amount_10']:,}", f"¥{invoice['tax_amount_8'] + invoice['tax_amount_10']:,}"])
+    writer.writerow(['', '', '', '消費税(8%)', '', '消費税(10%)', '合計'])
+    writer.writerow(['', '', '', f"¥{invoice['tax_amount_8']:,}", '', f"¥{invoice['tax_amount_10']:,}", f"¥{invoice['total_amount']:,}"])
+    
+    if invoice['bank_info']:
+        writer.writerow([''])
+        writer.writerow(['振込先', invoice['bank_info']])
+    
+    output.seek(0)
+    
+    bom = '\ufeff'
+    csv_content = bom + output.getvalue()
+    
+    return send_file(
+        io.BytesIO(csv_content.encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"請求書_{invoice['invoice_no']}.csv"
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
