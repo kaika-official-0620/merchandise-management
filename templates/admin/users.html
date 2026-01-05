@@ -46,8 +46,8 @@
                         <span class="badge badge-user">ユーザー</span>
                         {% endif %}
                     </td>
-                    <td>{{ user.created_at[:10] if user.created_at else '-' }}</td>
-                    <td>{{ user.last_login[:10] if user.last_login else '-' }}</td>
+                    <td>{{ (user.created_at|string)[:10] if user.created_at else '-' }}</td>
+                    <td>{{ (user.last_login|string)[:10] if user.last_login else '-' }}</td>
                     <td>
                         <div class="action-buttons">
                             <a href="{{ url_for('admin_edit_user', id=user.id) }}" class="btn btn-sm btn-edit">編集</a>

@@ -2933,13 +2933,13 @@ def generate_document_no():
         cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
                    (now.strftime('%Y-%m-01'),))
         result = cur.fetchone()
-        count = result['count'] + 1
+        count = (result['count'] if result else 0) + 1
     else:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= ?", 
+        cur.execute("SELECT COUNT(*) FROM shikiriosho WHERE issue_date >= ?", 
                    (now.strftime('%Y-%m-01'),))
         result = cur.fetchone()
-        count = result['count'] + 1
+        count = (result[0] if result else 0) + 1
     cur.close()
     conn.close()
     return f"SK-{now.strftime('%Y%m')}-{count:04d}"
@@ -3481,8 +3481,11 @@ def get_unread_shikiriosho_count(user_id):
 # テンプレートに未読仕切書数を渡す
 @app.context_processor
 def inject_unread_shikiriosho():
-    if current_user.is_authenticated:
-        return {'unread_shikiriosho_count': get_unread_shikiriosho_count(current_user.id)}
+    try:
+        if current_user.is_authenticated:
+            return {'unread_shikiriosho_count': get_unread_shikiriosho_count(current_user.id)}
+    except Exception:
+        pass
     return {'unread_shikiriosho_count': 0}
 
 # ===================
@@ -3537,8 +3540,11 @@ def get_unread_invoice_count():
 
 @app.context_processor
 def inject_unread_invoice():
-    if current_user.is_authenticated and current_user.is_admin():
-        return {'unread_invoice_count': get_unread_invoice_count()}
+    try:
+        if current_user.is_authenticated and current_user.is_admin():
+            return {'unread_invoice_count': get_unread_invoice_count()}
+    except Exception:
+        pass
     return {'unread_invoice_count': 0}
 
 @app.route('/invoices')
