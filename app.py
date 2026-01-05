@@ -3993,27 +3993,136 @@ def admin_invoice_view(id):
 @login_required
 @admin_required
 def admin_invoice_approve(id):
-    """請求書承認（管理者用）"""
+    """請求書承認（管理者用）- 承認時に仕切書を自動作成"""
     conn = get_db()
+    
     if DATABASE_URL:
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 請求書情報を取得
+        cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
+        invoice = cur.fetchone()
+        if not invoice:
+            flash('請求書が見つかりません', 'error')
+            return redirect(url_for('admin_invoice_list'))
+        
+        # 請求書を承認
         cur.execute("""
             UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
             approved_by = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s
         """, (current_user.id, id))
+        
+        # 仕切書番号を生成
+        shikiriosho_no = generate_shikiriosho_no()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 仕切書を作成（下書き状態）
+        cur.execute("""
+            INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
+                issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft')
+            RETURNING id
+        """, (
+            shikiriosho_no,
+            current_user.id,
+            invoice['sender_id'],
+            None,  # recipient_name はユーザーから取得するので不要
+            today,
+            invoice['subtotal'],
+            invoice['tax_amount_8'] + invoice['tax_amount_10'],
+            invoice['total_amount'],
+            10,  # デフォルト税率
+            f"請求書 {invoice['invoice_no']} より自動作成"
+        ))
+        shikiriosho_id = cur.fetchone()['id']
+        
+        # 請求書明細を取得して仕切書明細を作成
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+        items = cur.fetchall()
+        
+        for item in items:
+            cur.execute("""
+                INSERT INTO shikiriosho_items (shikiriosho_id, item_no, product_name, specification, 
+                    quantity, unit_price, amount, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                shikiriosho_id,
+                item['item_no'],
+                item['product_name'],
+                '',  # specification
+                item['quantity'],
+                item['unit_price'],
+                item['amount'],
+                ''
+            ))
+        
     else:
         cur = conn.cursor()
+        
+        # 請求書情報を取得
+        cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
+        invoice_row = cur.fetchone()
+        if not invoice_row:
+            flash('請求書が見つかりません', 'error')
+            return redirect(url_for('admin_invoice_list'))
+        invoice = dict(invoice_row)
+        
+        # 請求書を承認
         cur.execute("""
             UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
             approved_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
         """, (current_user.id, id))
+        
+        # 仕切書番号を生成
+        shikiriosho_no = generate_shikiriosho_no()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 仕切書を作成（下書き状態）
+        cur.execute("""
+            INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
+                issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+        """, (
+            shikiriosho_no,
+            current_user.id,
+            invoice['sender_id'],
+            None,
+            today,
+            invoice['subtotal'],
+            (invoice['tax_amount_8'] or 0) + (invoice['tax_amount_10'] or 0),
+            invoice['total_amount'],
+            10,
+            f"請求書 {invoice['invoice_no']} より自動作成"
+        ))
+        shikiriosho_id = cur.lastrowid
+        
+        # 請求書明細を取得して仕切書明細を作成
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+        items = cur.fetchall()
+        
+        for item in items:
+            item_dict = dict(item)
+            cur.execute("""
+                INSERT INTO shikiriosho_items (shikiriosho_id, item_no, product_name, specification, 
+                    quantity, unit_price, amount, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                shikiriosho_id,
+                item_dict['item_no'],
+                item_dict['product_name'],
+                '',
+                item_dict['quantity'],
+                item_dict['unit_price'],
+                item_dict['amount'],
+                ''
+            ))
     
     conn.commit()
     cur.close()
     conn.close()
     
-    flash('請求書を承認しました', 'success')
-    return redirect(url_for('admin_invoice_list'))
+    flash(f'請求書を承認し、仕切書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
+    return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/invoices/reject/<int:id>')
 @login_required
