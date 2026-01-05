@@ -3665,7 +3665,7 @@ def user_invoice_add():
             flash(f'請求書 {invoice_no} を下書き保存しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
-    cur.close()
+    # GETリクエストの場合はconnを閉じる
     conn.close()
     
     return render_template('invoice_form.html', 
