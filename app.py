@@ -3454,26 +3454,29 @@ def user_shikiriosho_download(id):
 # 未読仕切書数を取得するヘルパー関数
 def get_unread_shikiriosho_count(user_id):
     """未読仕切書数を取得"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT COUNT(*) as count FROM shikiriosho 
-            WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
-        """, (user_id,))
-        result = cur.fetchone()
-        count = result['count']
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT COUNT(*) as count FROM shikiriosho 
-            WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
-        """, (user_id,))
-        result = cur.fetchone()
-        count = result['count']
-    cur.close()
-    conn.close()
-    return count
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT COUNT(*) as count FROM shikiriosho 
+                WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
+            """, (user_id,))
+            result = cur.fetchone()
+            count = result['count'] if result else 0
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) FROM shikiriosho 
+                WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
+            """, (user_id,))
+            result = cur.fetchone()
+            count = result[0] if result else 0
+        cur.close()
+        conn.close()
+        return count
+    except Exception:
+        return 0
 
 # テンプレートに未読仕切書数を渡す
 @app.context_processor
@@ -3495,39 +3498,42 @@ def generate_invoice_no():
         cur.execute("SELECT COUNT(*) as count FROM invoices WHERE issue_date >= %s", 
                    (now.strftime('%Y-%m-01'),))
         result = cur.fetchone()
-        count = result['count'] + 1
+        count = (result['count'] if result else 0) + 1
     else:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as count FROM invoices WHERE issue_date >= ?", 
+        cur.execute("SELECT COUNT(*) FROM invoices WHERE issue_date >= ?", 
                    (now.strftime('%Y-%m-01'),))
         result = cur.fetchone()
-        count = result['count'] + 1
+        count = (result[0] if result else 0) + 1
     cur.close()
     conn.close()
     return f"INV-{now.strftime('%Y%m')}-{count:04d}"
 
 def get_unread_invoice_count():
     """未読請求書数を取得（管理者用）"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT COUNT(*) as count FROM invoices 
-            WHERE status = 'sent' AND is_read = 0
-        """)
-        result = cur.fetchone()
-        count = result['count']
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT COUNT(*) as count FROM invoices 
-            WHERE status = 'sent' AND is_read = 0
-        """)
-        result = cur.fetchone()
-        count = result['count']
-    cur.close()
-    conn.close()
-    return count
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT COUNT(*) as count FROM invoices 
+                WHERE status = 'sent' AND is_read = 0
+            """)
+            result = cur.fetchone()
+            count = result['count'] if result else 0
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) FROM invoices 
+                WHERE status = 'sent' AND is_read = 0
+            """)
+            result = cur.fetchone()
+            count = result[0] if result else 0
+        cur.close()
+        conn.close()
+        return count
+    except Exception:
+        return 0
 
 @app.context_processor
 def inject_unread_invoice():
