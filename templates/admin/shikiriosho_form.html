@@ -58,6 +58,13 @@
 
     <div class="form-section">
         <h3>📦 明細</h3>
+        <div class="product-selector">
+            <label>📦 登録商品から追加：</label>
+            <select id="product-select" class="form-control">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
         <table class="items-table" id="items-table">
             <thead>
                 <tr>
@@ -266,6 +273,31 @@
     padding: 4px 8px;
     font-size: 12px;
 }
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+}
 </style>
 
 <script>
@@ -273,24 +305,83 @@ document.addEventListener('DOMContentLoaded', function() {
     const itemsBody = document.getElementById('items-body');
     const addRowBtn = document.getElementById('add-row');
     const taxRateSelect = document.getElementById('tax_rate');
+    const productSelect = document.getElementById('product-select');
+    const addProductBtn = document.getElementById('add-product-btn');
+    const recipientSelect = document.getElementById('recipient_id');
+    
+    let products = [];
+    
+    // 商品一覧を取得
+    async function loadProducts(userId) {
+        try {
+            let url = '/api/admin/products';
+            if (userId) {
+                url += '?user_id=' + userId;
+            }
+            const response = await fetch(url);
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    }
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const price = product.listing_price || product.purchase_price || 0;
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // 宛先変更時に商品一覧を更新
+    if (recipientSelect) {
+        recipientSelect.addEventListener('change', function() {
+            loadProducts(this.value);
+        });
+        // 初期ロード
+        loadProducts(recipientSelect.value);
+    } else {
+        loadProducts();
+    }
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        const price = product.listing_price || product.purchase_price || 0;
+        
+        addRow(product.product_name, product.brand_name || '', 1, price);
+        productSelect.value = '';
+    });
     
     // 行を追加
-    addRowBtn.addEventListener('click', function() {
+    function addRow(name = '', spec = '', qty = 1, price = 0) {
         const rowCount = itemsBody.querySelectorAll('.item-row').length;
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
             <td class="item-no">${rowCount + 1}</td>
-            <td><input type="text" name="item_name[]" class="form-control item-name"></td>
-            <td><input type="text" name="specification[]" class="form-control"></td>
-            <td><input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1"></td>
-            <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
-            <td class="item-amount">¥0</td>
+            <td><input type="text" name="item_name[]" value="${name}" class="form-control item-name"></td>
+            <td><input type="text" name="specification[]" value="${spec}" class="form-control"></td>
+            <td><input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1"></td>
+            <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
+            <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
         `;
         itemsBody.appendChild(newRow);
         attachRowEvents(newRow);
         renumberRows();
+        calculateTotals();
+    }
+    
+    addRowBtn.addEventListener('click', function() {
+        addRow();
     });
     
     // 行を削除

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>仕切書 - {{ shikiriosho.document_no }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #333;
+            background: white;
+        }
+        
+        .document {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .title h1 {
+            font-size: 24pt;
+            letter-spacing: 1em;
+            border-bottom: 3px double #333;
+            padding-bottom: 10px;
+        }
+        
+        .info-table {
+            border-collapse: collapse;
+        }
+        
+        .info-table th,
+        .info-table td {
+            padding: 5px 10px;
+            text-align: left;
+            font-size: 10pt;
+        }
+        
+        .info-table th {
+            background: #f5f5f5;
+        }
+        
+        .recipient {
+            margin-bottom: 20px;
+        }
+        
+        .recipient-name {
+            font-size: 16pt;
+            border-bottom: 1px solid #333;
+            display: inline-block;
+            padding-right: 50px;
+            padding-bottom: 5px;
+        }
+        
+        .message {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .total-box {
+            background: #f5f5f5;
+            border: 2px solid #333;
+            padding: 15px 30px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .total-label {
+            font-size: 11pt;
+            margin-right: 20px;
+        }
+        
+        .total-value {
+            font-size: 18pt;
+            font-weight: bold;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        .items-table th,
+        .items-table td {
+            border: 1px solid #333;
+            padding: 8px;
+            font-size: 10pt;
+        }
+        
+        .items-table th {
+            background: #f5f5f5;
+        }
+        
+        .items-table .text-right {
+            text-align: right;
+        }
+        
+        .items-table .text-center {
+            text-align: center;
+        }
+        
+        .empty-row td {
+            height: 25px;
+        }
+        
+        .totals-section {
+            margin-top: 10px;
+        }
+        
+        .totals-section td {
+            padding: 5px 10px;
+        }
+        
+        .notes {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background: #fafafa;
+            font-size: 10pt;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            text-align: right;
+        }
+        
+        .company-name {
+            font-size: 14pt;
+            font-weight: bold;
+        }
+        
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14pt;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        
+        .print-btn:hover {
+            background: #0056b3;
+        }
+        
+        @media print {
+            .print-btn {
+                display: none;
+            }
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+    
+    <div class="document">
+        <div class="header">
+            <div class="title">
+                <h1>仕 切 書</h1>
+            </div>
+            <table class="info-table">
+                <tr>
+                    <th>仕切書番号</th>
+                    <td>{{ shikiriosho.document_no }}</td>
+                </tr>
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ shikiriosho.issue_date }}</td>
+                </tr>
+                {% if shikiriosho.due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ shikiriosho.due_date }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        
+        <div class="recipient">
+            <div class="recipient-name">
+                {{ shikiriosho.recipient_name or '　　　　　　　　　　' }} 様
+            </div>
+        </div>
+        
+        <div class="message">
+            下記のとおり、お見積り申し上げます
+        </div>
+        
+        <div class="total-box">
+            <span class="total-label">税込合計金額</span>
+            <span class="total-value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</span>
+        </div>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th width="5%">No</th>
+                    <th width="40%">品名</th>
+                    <th width="20%">規格</th>
+                    <th width="10%">数量</th>
+                    <th width="12%">単価</th>
+                    <th width="13%">金額</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="text-center">{{ item.item_no }}</td>
+                    <td>{{ item.product_name }}</td>
+                    <td>{{ item.specification or '' }}</td>
+                    <td class="text-right">{{ item.quantity }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+                </tr>
+                {% endfor %}
+                {% for i in range(items|length, 15) %}
+                <tr class="empty-row">
+                    <td>&nbsp;</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <table class="totals-section" style="width: 100%;">
+            <tr>
+                <td width="70%">
+                    {% if shikiriosho.notes %}
+                    <div class="notes">
+                        <strong>備考：</strong><br>
+                        {{ shikiriosho.notes|replace('\n', '<br>')|safe }}
+                    </div>
+                    {% endif %}
+                </td>
+                <td width="30%" style="vertical-align: top;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="text-align: right; padding: 5px;">小計</td>
+                            <td style="text-align: right; padding: 5px;">¥{{ "{:,}".format(shikiriosho.subtotal) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: right; padding: 5px;">消費税（{{ shikiriosho.tax_rate }}%）</td>
+                            <td style="text-align: right; padding: 5px;">¥{{ "{:,}".format(shikiriosho.tax_amount) }}</td>
+                        </tr>
+                        <tr style="font-weight: bold; font-size: 12pt;">
+                            <td style="text-align: right; padding: 5px; background: #f5f5f5;">合計</td>
+                            <td style="text-align: right; padding: 5px; background: #f5f5f5;">¥{{ "{:,}".format(shikiriosho.total_amount) }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        <div class="footer">
+            <p class="company-name">株式会社開花</p>
+        </div>
+    </div>
+</body>
+</html>
+

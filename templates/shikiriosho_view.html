@@ -5,7 +5,10 @@
 {% block content %}
 <div class="page-header">
     <a href="{{ url_for('user_shikiriosho_list') }}" class="btn btn-back">← 一覧に戻る</a>
-    <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">📥 CSVダウンロード</a>
+    <div class="header-actions">
+        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">📥 CSV</a>
+        <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">📄 PDF</a>
+    </div>
 </div>
 
 <div class="document-container">
@@ -129,8 +132,21 @@
     text-decoration: none;
 }
 
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
 .btn-download {
     background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-pdf {
+    background: #e74c3c;
     color: white;
     padding: 10px 20px;
     border-radius: 6px;

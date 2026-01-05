@@ -6,7 +6,8 @@
 <div class="page-header">
     <a href="{{ url_for('user_invoice_list') }}" class="btn btn-back">← 一覧に戻る</a>
     <div class="header-actions">
-        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">📥 CSVダウンロード</a>
+        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">📥 CSV</a>
+        <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">📄 PDF</a>
         <button onclick="window.print()" class="btn btn-print">🖨️ 印刷</button>
     </div>
 </div>
@@ -150,6 +151,14 @@
 
 .btn-download {
     background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
+.btn-pdf {
+    background: #e74c3c;
     color: white;
     padding: 10px 20px;
     border-radius: 6px;

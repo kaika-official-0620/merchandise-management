@@ -4113,6 +4113,181 @@ def invoice_download(id):
         download_name=f"請求書_{invoice['invoice_no']}.csv"
     )
 
+# ===================
+# 商品選択API
+# ===================
+
+@app.route('/api/products')
+@login_required
+def api_get_products():
+    """ユーザーの商品一覧をJSON形式で取得"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, is_shipped
+            FROM merchandise 
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, is_shipped
+            FROM merchandise 
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+    
+    products = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return jsonify(products)
+
+@app.route('/api/admin/products')
+@login_required
+@admin_required
+def api_get_all_products():
+    """全商品一覧をJSON形式で取得（管理者用）"""
+    user_id = request.args.get('user_id')
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if user_id:
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+                       u.display_name as user_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.user_id = %s
+                ORDER BY m.created_at DESC
+            """, (user_id,))
+        else:
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+                       u.display_name as user_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            """)
+    else:
+        cur = conn.cursor()
+        if user_id:
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+                       u.display_name as user_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.user_id = ?
+                ORDER BY m.created_at DESC
+            """, (user_id,))
+        else:
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+                       u.display_name as user_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            """)
+    
+    products = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return jsonify(products)
+
+# ===================
+# PDF出力
+# ===================
+
+@app.route('/shikiriosho/pdf/<int:id>')
+@login_required
+def shikiriosho_pdf(id):
+    """仕切書PDF出力"""
+    conn = get_db()
+    
+    # 権限確認（送信者または受信者または管理者）
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM shikiriosho WHERE id = %s AND (sender_id = %s OR recipient_id = %s)", 
+                       (id, current_user.id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM shikiriosho WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM shikiriosho WHERE id = ? AND (sender_id = ? OR recipient_id = ?)", 
+                       (id, current_user.id, current_user.id))
+        shikiriosho = cur.fetchone()
+        if shikiriosho:
+            shikiriosho = dict(shikiriosho)
+        cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not shikiriosho:
+        flash('仕切書が見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    # PDF用HTMLをレンダリング
+    html_content = render_template('pdf/shikiriosho_pdf.html', shikiriosho=shikiriosho, items=items)
+    
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+@app.route('/invoices/pdf/<int:id>')
+@login_required
+def invoice_pdf(id):
+    """請求書PDF出力"""
+    conn = get_db()
+    
+    # 権限確認（送信者または管理者）
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+        cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not invoice:
+        flash('請求書が見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    # PDF用HTMLをレンダリング
+    html_content = render_template('pdf/invoice_pdf.html', invoice=invoice, items=items)
+    
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 

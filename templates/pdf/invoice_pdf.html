@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>請求書 - {{ invoice.invoice_no }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #333;
+            background: white;
+        }
+        
+        .document {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .title h1 {
+            font-size: 24pt;
+            letter-spacing: 0.8em;
+            border-bottom: 3px double #333;
+            padding-bottom: 10px;
+        }
+        
+        .info-table {
+            border-collapse: collapse;
+        }
+        
+        .info-table th,
+        .info-table td {
+            padding: 5px 10px;
+            text-align: left;
+            font-size: 10pt;
+        }
+        
+        .info-table th {
+            background: #f5f5f5;
+        }
+        
+        .total-box {
+            background: #f5f5f5;
+            border: 2px solid #333;
+            padding: 15px 30px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .total-label {
+            font-size: 11pt;
+            margin-right: 20px;
+        }
+        
+        .total-value {
+            font-size: 18pt;
+            font-weight: bold;
+        }
+        
+        .tax-note {
+            font-size: 9pt;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        .items-table th,
+        .items-table td {
+            border: 1px solid #333;
+            padding: 6px;
+            font-size: 9pt;
+        }
+        
+        .items-table th {
+            background: #f5f5f5;
+        }
+        
+        .items-table .text-right {
+            text-align: right;
+        }
+        
+        .items-table .text-center {
+            text-align: center;
+        }
+        
+        .empty-row td {
+            height: 22px;
+        }
+        
+        .bank-info {
+            background: #f9f9f9;
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
+        
+        .bank-info h4 {
+            margin-bottom: 10px;
+            font-size: 11pt;
+        }
+        
+        .notes {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background: #fafafa;
+            font-size: 10pt;
+        }
+        
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14pt;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        
+        .print-btn:hover {
+            background: #0056b3;
+        }
+        
+        @media print {
+            .print-btn {
+                display: none;
+            }
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+    
+    <div class="document">
+        <div class="header">
+            <div class="title">
+                <h1>請 求 書</h1>
+            </div>
+            <table class="info-table">
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ invoice.issue_date }}</td>
+                </tr>
+                <tr>
+                    <th>請求書番号</th>
+                    <td>{{ invoice.invoice_no }}</td>
+                </tr>
+                {% if invoice.payment_due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ invoice.payment_due_date }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        
+        <div class="total-box">
+            <span class="total-label">請求金額 (税込)</span>
+            <span class="total-value">¥{{ "{:,}".format(invoice.total_amount) }}</span>
+        </div>
+        
+        <p class="tax-note">※「8%」は軽減税率対象、「10」は標準税率です</p>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th width="6%">税区分</th>
+                    <th width="10%">日付</th>
+                    <th width="36%">品名・品番</th>
+                    <th width="8%">数量</th>
+                    <th width="8%">単位</th>
+                    <th width="14%">単価</th>
+                    <th width="14%">合計</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="text-center">{{ item.tax_category }}%</td>
+                    <td>{{ item.product_date or '' }}</td>
+                    <td>{{ item.product_name }}</td>
+                    <td class="text-right">{{ item.quantity }}</td>
+                    <td class="text-center">{{ item.unit or '' }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+                </tr>
+                {% endfor %}
+                {% for i in range(items|length, 12) %}
+                <tr class="empty-row">
+                    <td>&nbsp;</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <table style="width: 100%; margin-bottom: 20px;">
+            <tr>
+                <td width="55%">
+                    {% if invoice.notes %}
+                    <div class="notes">
+                        <strong>備考：</strong><br>
+                        {{ invoice.notes|replace('\n', '<br>')|safe }}
+                    </div>
+                    {% endif %}
+                </td>
+                <td width="45%" style="vertical-align: top;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">小計</td>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">¥{{ "{:,}".format(invoice.subtotal) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">消費税(8%)</td>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">¥{{ "{:,}".format(invoice.tax_amount_8) }}</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">消費税(10%)</td>
+                            <td style="text-align: right; padding: 5px; border: 1px solid #333;">¥{{ "{:,}".format(invoice.tax_amount_10) }}</td>
+                        </tr>
+                        <tr style="font-weight: bold; font-size: 12pt;">
+                            <td style="text-align: right; padding: 8px; border: 1px solid #333; background: #f5f5f5;">請求金額</td>
+                            <td style="text-align: right; padding: 8px; border: 1px solid #333; background: #f5f5f5;">¥{{ "{:,}".format(invoice.total_amount) }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        {% if invoice.bank_info %}
+        <div class="bank-info">
+            <h4>🏦 振込先</h4>
+            <p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

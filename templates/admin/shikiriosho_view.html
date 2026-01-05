@@ -11,6 +11,7 @@
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">✏️ 編集</a>
         <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この仕切書を送信しますか？')">📤 送信</a>
         {% endif %}
+        <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">📄 PDF出力</a>
     </div>
 </div>
 
@@ -293,6 +294,11 @@
 
 .btn-success {
     background: #28a745;
+    color: white;
+}
+
+.btn-pdf {
+    background: #e74c3c;
     color: white;
 }
 
