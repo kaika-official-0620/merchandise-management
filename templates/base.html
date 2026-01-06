@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}株式会社開花{% endblock %}</title>
+    <title>{% block title %}株式会社 開花{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -13,7 +13,7 @@
     {% if current_user.is_authenticated %}
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="{{ url_for('index') }}">株式会社開花</a>
+            <a href="{{ url_for('index') }}">株式会社 開花</a>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>

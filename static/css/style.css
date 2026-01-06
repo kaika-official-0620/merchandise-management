@@ -45,8 +45,13 @@ body {
     font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg-main);
     color: var(--text-primary);
-    line-height: 1.6;
+    line-height: 1.7;
     min-height: 100vh;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "palt";
 }
 
 a {
@@ -56,6 +61,19 @@ a {
 
 a:hover {
     color: var(--primary-dark);
+}
+
+/* タイポグラフィ強化 */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
 }
 
 /* ===================
@@ -78,6 +96,7 @@ a:hover {
     font-size: 1.25rem;
     font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: 0.1em;
 }
 
 .nav-links {
