@@ -4,13 +4,13 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📝 {% if invoice %}請求書編集{% else %}請求書作成{% endif %}</h1>
+    <h1>{% if invoice %}請求書編集{% else %}請求書作成{% endif %}</h1>
     <a href="{{ url_for('user_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
 <form method="POST" class="invoice-form">
     <div class="form-section">
-        <h3>📋 基本情報</h3>
+        <h3>基本情報</h3>
         <div class="form-grid">
             <div class="form-group">
                 <label>請求書番号</label>
@@ -28,10 +28,10 @@
     </div>
 
     <div class="form-section">
-        <h3>📦 明細</h3>
+        <h3>明細</h3>
         <p class="help-text">※「8%」は軽減税率対象、「10」は標準税率です</p>
         <div class="product-selector">
-            <label>📦 登録商品から追加：</label>
+            <label>登録商品から追加：</label>
             <select id="product-select" class="form-control">
                 <option value="">-- 商品を選択 --</option>
             </select>
@@ -93,7 +93,7 @@
                 <tfoot>
                     <tr>
                         <td colspan="8">
-                            <button type="button" class="btn btn-secondary" id="add-row">➕ 行を追加</button>
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
                         </td>
                     </tr>
                     <tr class="totals-row">
@@ -133,15 +133,15 @@
     </div>
 
     <div class="form-section">
-        <h3>📝 備考</h3>
+        <h3>備考</h3>
         <div class="form-group">
             <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ invoice.notes if invoice else '' }}</textarea>
         </div>
     </div>
 
     <div class="form-actions">
-        <button type="submit" name="status" value="draft" class="btn btn-secondary">💾 下書き保存</button>
-        <button type="submit" name="status" value="sent" class="btn btn-primary">📤 保存して送信</button>
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="sent" class="btn btn-primary">保存して送信</button>
     </div>
 </form>
 

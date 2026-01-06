@@ -17,19 +17,20 @@
         </div>
         <div class="nav-links">
             <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
+            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
             <a href="{{ url_for('customers') }}" class="{% if request.endpoint in ['customers', 'add_customer', 'edit_customer'] %}active{% endif %}">顧客管理</a>
             <a href="{{ url_for('user_shikiriosho_list') }}" class="nav-shikiriosho {% if 'shikiriosho' in request.endpoint and 'admin' not in request.endpoint %}active{% endif %}">
-                📄 仕切書
+                仕切書
                 {% if unread_shikiriosho_count > 0 %}
                 <span class="badge-count">{{ unread_shikiriosho_count }}</span>
                 {% endif %}
             </a>
             <a href="{{ url_for('user_invoice_list') }}" class="nav-invoice {% if 'invoice' in request.endpoint and 'admin' not in request.endpoint %}active{% endif %}">
-                📝 請求書
+                請求書
             </a>
             {% if current_user.is_admin() %}
             <a href="{{ url_for('admin_dashboard') }}" class="nav-admin {% if 'admin' in request.endpoint %}active{% endif %}">
-                🔧 管理
+                管理
                 {% if unread_invoice_count > 0 %}
                 <span class="badge-count">{{ unread_invoice_count }}</span>
                 {% endif %}
@@ -37,12 +38,20 @@
             {% endif %}
         </div>
         <div class="nav-user">
-            <span class="user-name">{{ current_user.display_name }}</span>
-            {% if current_user.is_admin() %}
-            <span class="user-badge admin">管理者</span>
-            {% endif %}
-            <a href="{{ url_for('profile') }}" class="btn-profile">⚙️</a>
-            <a href="{{ url_for('logout') }}" class="btn-logout">ログアウト</a>
+            <div class="user-menu-trigger">
+                <span class="user-name">{{ current_user.display_name }}</span>
+                {% if current_user.is_owner() %}
+                <span class="user-badge owner">オーナー</span>
+                {% elif current_user.is_admin() %}
+                <span class="user-badge">管理者</span>
+                {% endif %}
+                <span class="menu-arrow">▼</span>
+            </div>
+            <div class="user-dropdown">
+                <a href="{{ url_for('profile') }}">設定</a>
+                <div class="divider"></div>
+                <a href="{{ url_for('logout') }}">ログアウト</a>
+            </div>
         </div>
     </nav>
     {% endif %}

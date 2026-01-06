@@ -3,17 +3,17 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📢 {{ 'お知らせ編集' if announcement else 'お知らせ作成' }}</h1>
+    <h1>{{ 'お知らせ編集' if announcement else 'お知らせ作成' }}</h1>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">👥 ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">📄 仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">📝 請求書</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item active">📢 お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item active">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
 <div class="form-container">
@@ -38,7 +38,7 @@
                 <label for="announcement_type">種類</label>
                 <select id="announcement_type" name="announcement_type">
                     <option value="info" {% if announcement and announcement.announcement_type == 'info' %}selected{% endif %}>
-                        📢 通常のお知らせ
+                        通常のお知らせ
                     </option>
                     <option value="important" {% if announcement and announcement.announcement_type == 'important' %}selected{% endif %}>
                         🔴 重要なお知らせ
@@ -84,7 +84,7 @@
         <div class="form-section preview-section">
             <h2>プレビュー</h2>
             <div class="announcement-preview" id="preview">
-                <div class="preview-badge" id="previewBadge">📢 お知らせ</div>
+                <div class="preview-badge" id="previewBadge">お知らせ</div>
                 <div class="preview-title" id="previewTitle">タイトルがここに表示されます</div>
                 <div class="preview-content" id="previewContent">内容がここに表示されます</div>
             </div>
@@ -264,7 +264,7 @@ function updatePreview() {
             previewBadge.classList.add('success');
             break;
         default:
-            previewBadge.textContent = '📢 お知らせ';
+            previewBadge.textContent = 'お知らせ';
     }
 }
 

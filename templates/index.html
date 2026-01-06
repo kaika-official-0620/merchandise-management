@@ -686,7 +686,7 @@
 </style>
 
 <div class="page-header">
-    <h1>📦 商品一覧</h1>
+    <h1>商品一覧</h1>
     <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 新規登録</a>
 </div>
 
@@ -700,7 +700,7 @@
                 {% if ann.announcement_type == 'important' %}🔴 重要
                 {% elif ann.announcement_type == 'warning' %}⚠️ 注意
                 {% elif ann.announcement_type == 'success' %}✅ 完了
-                {% else %}📢 お知らせ
+                {% else %}お知らせ
                 {% endif %}
             </span>
             <span class="announcement-title">{{ ann.title }}</span>
@@ -721,27 +721,27 @@
 <!-- コンパクト統計バー -->
 <div class="compact-stats">
     <div class="compact-stat">
-        <span class="compact-stat-label">📊 登録</span>
+        <span class="compact-stat-label">登録</span>
         <span class="compact-stat-value">{{ stats.total_items or 0 }}件</span>
     </div>
     <div class="compact-stat-divider"></div>
     <div class="compact-stat">
-        <span class="compact-stat-label">💰 仕入</span>
+        <span class="compact-stat-label">仕入</span>
         <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
     </div>
     <div class="compact-stat-divider"></div>
     <div class="compact-stat">
-        <span class="compact-stat-label">💵 売上</span>
+        <span class="compact-stat-label">売上</span>
         <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
     </div>
     <div class="compact-stat-divider"></div>
     <div class="compact-stat">
-        <span class="compact-stat-label">📈 利益</span>
+        <span class="compact-stat-label">利益</span>
         <span class="compact-stat-value {% if stats.total_profit and stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
     </div>
     <div class="compact-stat-divider"></div>
     <div class="compact-stat">
-        <span class="compact-stat-label">📊 利益率</span>
+        <span class="compact-stat-label">利益率</span>
         {% set profit_rate = ((stats.total_profit or 0) / (stats.total_sales or 1) * 100) if stats.total_sales and stats.total_sales > 0 else 0 %}
         <span class="compact-stat-value {% if profit_rate > 0 %}profit-positive{% elif profit_rate < 0 %}profit-negative{% endif %}">{{ "%.1f"|format(profit_rate) }}%</span>
     </div>
@@ -920,7 +920,7 @@
 <!-- スマホ用フィルター -->
 <div class="mobile-filter">
     <div class="mobile-search">
-        <input type="text" id="mobile-search" placeholder="🔍 商品名・ブランドで検索" onkeyup="mobileFilter()">
+        <input type="text" id="mobile-search" placeholder="商品名・ブランドで検索" onkeyup="mobileFilter()">
     </div>
     <div class="mobile-filter-buttons">
         <select id="mobile-status-filter" onchange="mobileFilter()">
@@ -932,7 +932,7 @@
     </div>
     <div class="mobile-price-filters">
         <div class="mobile-price-filter">
-            <label>💰 仕入額</label>
+            <label>仕入額</label>
             <div class="mobile-price-range">
                 <input type="number" id="mobile-purchase-min" placeholder="最小" onchange="mobileFilter()">
                 <span>〜</span>
@@ -940,7 +940,7 @@
             </div>
         </div>
         <div class="mobile-price-filter">
-            <label>📈 利益</label>
+            <label>利益</label>
             <div class="mobile-price-range">
                 <input type="number" id="mobile-profit-min" placeholder="最小" onchange="mobileFilter()">
                 <span>〜</span>

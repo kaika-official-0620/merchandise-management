@@ -3,20 +3,20 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📈 マーケティング分析</h1>
+    <h1>マーケティング分析</h1>
     <div class="header-actions">
-        <a href="{{ url_for('admin_analytics_settings') }}" class="btn btn-secondary">⚙️ ウィジェット設定</a>
+        <a href="{{ url_for('admin_analytics_settings') }}" class="btn btn-secondary">ウィジェット設定</a>
     </div>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">👥 ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">📄 仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">📝 請求書</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">📈 分析</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
 {% set enabled_keys = widgets|selectattr('is_enabled')|map(attribute='widget_key')|list %}
@@ -24,7 +24,7 @@
 <!-- 売上・利益（月別推移） -->
 {% if 'sales_profit' in enabled_keys and monthly_sales %}
 <div class="admin-section widget-section">
-    <h2>💰 売上・利益（月別推移）</h2>
+    <h2>売上・利益（月別推移）</h2>
     <div class="admin-table-container">
         <table class="admin-table">
             <thead>
@@ -105,7 +105,7 @@
 <!-- 売れない商品（在庫滞留） -->
 {% if 'slow_products' in enabled_keys and slow_products %}
 <div class="admin-section widget-section">
-    <h2>📦 売れない商品（在庫滞留）</h2>
+    <h2>売れない商品（在庫滞留）</h2>
     <div class="admin-table-container">
         <table class="admin-table">
             <thead>
@@ -145,10 +145,10 @@
     <!-- 回転率・在庫日数 -->
     {% if 'turnover_rate' in enabled_keys and turnover_stats %}
     <div class="admin-section widget-section">
-        <h2>🔄 回転率・在庫日数</h2>
+        <h2>回転率・在庫日数</h2>
         <div class="stats-cards">
             <div class="stat-card">
-                <div class="stat-icon">📊</div>
+                <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">
                         {% if turnover_stats.total_count and turnover_stats.total_count > 0 %}
@@ -166,7 +166,7 @@
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">📦</div>
+                <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_in_stock|round(1) if turnover_stats.avg_days_in_stock else '-' }}日</span>
                     <span class="stat-label">平均在庫日数</span>
@@ -179,7 +179,7 @@
     <!-- 成約率 -->
     {% if 'closing_rate' in enabled_keys and closing_stats %}
     <div class="admin-section widget-section">
-        <h2>🎯 成約率</h2>
+        <h2>成約率</h2>
         <div class="stats-cards">
             <div class="stat-card wide">
                 <div class="closing-rate-chart">
@@ -206,7 +206,7 @@
     <!-- 平均単価 -->
     {% if 'avg_price' in enabled_keys and avg_price_stats %}
     <div class="admin-section widget-section">
-        <h2>💵 平均単価</h2>
+        <h2>平均単価</h2>
         <div class="stats-cards vertical">
             <div class="stat-card horizontal">
                 <span class="stat-label">平均仕入額</span>
@@ -271,16 +271,16 @@
     <!-- 販売先別統計 -->
     {% if 'destination_stats' in enabled_keys and destination_stats %}
     <div class="admin-section widget-section">
-        <h2>🛒 販売先別統計</h2>
+        <h2>販売先別統計</h2>
         <div class="analytics-cards">
             {% for dest in destination_stats %}
             <div class="analytics-card">
                 <div class="analytics-icon">
                     {% if dest.sales_destination == 'メルカリ' %}🛍️
                     {% elif dest.sales_destination == 'ヤフオク' %}🔨
-                    {% elif dest.sales_destination == 'ラクマ' %}📱
-                    {% elif dest.sales_destination == 'Amazon' %}📦
-                    {% else %}🏪{% endif %}
+                    {% elif dest.sales_destination == 'ラクマ' %}
+                    {% elif dest.sales_destination == 'Amazon' %}
+                    {% else %}{% endif %}
                 </div>
                 <div class="analytics-content">
                     <h4>{{ dest.sales_destination }}</h4>
@@ -298,7 +298,7 @@
     <!-- ブランド別利益率統計 -->
     {% if 'brand_stats' in enabled_keys and brand_stats %}
     <div class="admin-section widget-section">
-        <h2>🏷️ ブランド別利益率</h2>
+        <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
             {% for brand in brand_stats %}
             <div class="brand-stat-item">
@@ -328,7 +328,7 @@
 {% if not enabled_keys %}
 <div class="admin-section">
     <div class="empty-state">
-        <p>📊 表示するウィジェットがありません</p>
+        <p>表示するウィジェットがありません</p>
         <a href="{{ url_for('admin_analytics_settings') }}" class="btn btn-primary">ウィジェットを設定する</a>
     </div>
 </div>

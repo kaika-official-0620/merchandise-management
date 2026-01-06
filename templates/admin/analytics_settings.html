@@ -3,25 +3,25 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>⚙️ 分析ウィジェット設定</h1>
+    <h1>分析ウィジェット設定</h1>
     <div class="header-actions">
         <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary">← 分析に戻る</a>
     </div>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">👥 ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">📄 仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">📝 請求書</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">📈 分析</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
 <div class="settings-container">
     <div class="settings-info">
-        <p>📊 表示するウィジェットを選択し、ドラッグ&ドロップで表示順を変更できます。</p>
+        <p>表示するウィジェットを選択し、ドラッグ&ドロップで表示順を変更できます。</p>
     </div>
     
     <form method="POST" id="widgetForm">
@@ -35,19 +35,6 @@
                     <span class="checkbox-custom"></span>
                 </label>
                 <div class="widget-info">
-                    <span class="widget-icon">
-                        {% if widget.widget_key == 'sales_profit' %}💰
-                        {% elif widget.widget_key == 'top_products' %}🏆
-                        {% elif widget.widget_key == 'slow_products' %}📦
-                        {% elif widget.widget_key == 'turnover_rate' %}🔄
-                        {% elif widget.widget_key == 'closing_rate' %}🎯
-                        {% elif widget.widget_key == 'avg_price' %}💵
-                        {% elif widget.widget_key == 'repeat_rate' %}🔁
-                        {% elif widget.widget_key == 'time_sales' %}🕐
-                        {% elif widget.widget_key == 'brand_stats' %}🏷️
-                        {% elif widget.widget_key == 'destination_stats' %}🛒
-                        {% else %}📊{% endif %}
-                    </span>
                     <span class="widget-name">{{ widget.widget_name }}</span>
                 </div>
                 <div class="widget-desc">
@@ -70,7 +57,7 @@
         <input type="hidden" name="widget_order" id="widgetOrder">
         
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">💾 設定を保存</button>
+            <button type="submit" class="btn btn-primary">設定を保存</button>
             <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary">キャンセル</a>
         </div>
     </form>

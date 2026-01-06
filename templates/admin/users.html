@@ -3,18 +3,18 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>👥 ユーザー管理</h1>
+    <h1>ユーザー管理</h1>
     <a href="{{ url_for('admin_add_user') }}" class="btn btn-primary">+ ユーザー作成</a>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">👥 ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">📄 仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">📝 請求書</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
 <div class="admin-section">
@@ -40,7 +40,9 @@
                     <td>{{ user.display_name or '-' }}</td>
                     <td>{{ user.email }}</td>
                     <td>
-                        {% if user.role == 'admin' %}
+                        {% if user.role == 'owner' %}
+                        <span class="badge badge-owner">オーナー</span>
+                        {% elif user.role == 'admin' %}
                         <span class="badge badge-admin">管理者</span>
                         {% else %}
                         <span class="badge badge-user">ユーザー</span>
@@ -53,13 +55,28 @@
                             <a href="{{ url_for('admin_edit_user', id=user.id) }}" class="btn btn-sm btn-edit">編集</a>
                             <a href="{{ url_for('admin_user_items', id=user.id) }}" class="btn btn-sm">商品</a>
                             {% if user.id != current_user.id %}
-                            <a href="{{ url_for('toggle_admin', id=user.id) }}" class="btn btn-sm"
-                               onclick="return confirm('権限を変更しますか？')"
-                               title="{% if user.role == 'admin' %}管理者権限を解除{% else %}管理者権限を付与{% endif %}">
-                                {% if user.role == 'admin' %}👤{% else %}👑{% endif %}
-                            </a>
-                            <a href="{{ url_for('delete_user', id=user.id) }}" class="btn btn-sm btn-delete"
-                               onclick="return confirm('このユーザーと関連データをすべて削除しますか？')">削除</a>
+                                {% if user.role != 'owner' or current_user.is_owner() %}
+                                <div class="role-dropdown">
+                                    <button class="btn btn-sm" onclick="toggleRoleMenu({{ user.id }})">権限</button>
+                                    <div class="role-menu" id="role-menu-{{ user.id }}">
+                                        {% if current_user.is_owner() %}
+                                        <a href="{{ url_for('admin_set_role', id=user.id, role='owner') }}" 
+                                           onclick="return confirm('このユーザーにオーナー権限を付与しますか？')"
+                                           class="{% if user.role == 'owner' %}active{% endif %}">オーナー</a>
+                                        {% endif %}
+                                        <a href="{{ url_for('admin_set_role', id=user.id, role='admin') }}" 
+                                           onclick="return confirm('このユーザーを管理者に変更しますか？')"
+                                           class="{% if user.role == 'admin' %}active{% endif %}">管理者</a>
+                                        <a href="{{ url_for('admin_set_role', id=user.id, role='user') }}" 
+                                           onclick="return confirm('このユーザーを一般ユーザーに変更しますか？')"
+                                           class="{% if user.role == 'user' %}active{% endif %}">ユーザー</a>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if user.role != 'owner' or current_user.is_owner() %}
+                                <a href="{{ url_for('delete_user', id=user.id) }}" class="btn btn-sm btn-delete"
+                                   onclick="return confirm('このユーザーと関連データをすべて削除しますか？')">削除</a>
+                                {% endif %}
                             {% endif %}
                         </div>
                     </td>
@@ -75,36 +92,107 @@
 </div>
 
 <div class="admin-section">
-    <h2>💡 操作ガイド</h2>
+    <h2>権限について</h2>
     <div class="help-grid">
         <div class="help-item">
-            <span class="help-icon">📝</span>
             <div>
-                <strong>編集</strong>
-                <p>ユーザーの表示名、メール、パスワードを変更</p>
+                <strong>オーナー</strong>
+                <span class="badge badge-owner" style="margin-left: 8px;">最高権限</span>
+                <p>すべての操作が可能。他ユーザーの権限をオーナーに変更可能。</p>
             </div>
         </div>
         <div class="help-item">
-            <span class="help-icon">👑</span>
             <div>
-                <strong>管理者権限付与</strong>
-                <p>一般ユーザーを管理者に昇格</p>
+                <strong>管理者</strong>
+                <span class="badge badge-admin" style="margin-left: 8px;">管理権限</span>
+                <p>ユーザー管理、分析、バックアップなど管理機能を利用可能。</p>
             </div>
         </div>
         <div class="help-item">
-            <span class="help-icon">👤</span>
             <div>
-                <strong>管理者権限解除</strong>
-                <p>管理者を一般ユーザーに変更</p>
-            </div>
-        </div>
-        <div class="help-item">
-            <span class="help-icon">🗑️</span>
-            <div>
-                <strong>削除</strong>
-                <p>ユーザーと関連する商品・顧客データをすべて削除</p>
+                <strong>ユーザー</strong>
+                <span class="badge badge-user" style="margin-left: 8px;">一般権限</span>
+                <p>自身の商品管理、顧客管理、請求書・仕切書の操作が可能。</p>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.badge-owner {
+    background: #b91c1c;
+    color: white;
+}
+
+.role-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.role-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 100;
+    min-width: 120px;
+    margin-top: 4px;
+}
+
+.role-menu.show {
+    display: block;
+}
+
+.role-menu a {
+    display: block;
+    padding: 8px 12px;
+    color: #1e293b;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: background 0.15s;
+}
+
+.role-menu a:hover {
+    background: #f1f5f9;
+}
+
+.role-menu a.active {
+    background: #2563eb;
+    color: white;
+}
+
+.role-menu a:first-child {
+    border-radius: 6px 6px 0 0;
+}
+
+.role-menu a:last-child {
+    border-radius: 0 0 6px 6px;
+}
+</style>
+
+<script>
+function toggleRoleMenu(userId) {
+    const menu = document.getElementById('role-menu-' + userId);
+    const allMenus = document.querySelectorAll('.role-menu');
+    
+    // 他のメニューを閉じる
+    allMenus.forEach(m => {
+        if (m !== menu) m.classList.remove('show');
+    });
+    
+    // 対象メニューをトグル
+    menu.classList.toggle('show');
+}
+
+// メニュー外をクリックで閉じる
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.role-dropdown')) {
+        document.querySelectorAll('.role-menu').forEach(m => m.classList.remove('show'));
+    }
+});
+</script>
 {% endblock %}

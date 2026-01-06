@@ -520,8 +520,22 @@ class User(UserMixin):
         self.role = role
         self.display_name = display_name or username
     
+    def is_owner(self):
+        """オーナー権限を持っているか"""
+        return self.role == 'owner'
+    
     def is_admin(self):
-        return self.role == 'admin'
+        """管理者以上の権限を持っているか（オーナーも含む）"""
+        return self.role in ['admin', 'owner']
+    
+    def get_role_display(self):
+        """権限の表示名を取得"""
+        role_names = {
+            'owner': 'オーナー',
+            'admin': '管理者',
+            'user': 'ユーザー'
+        }
+        return role_names.get(self.role, self.role)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -547,6 +561,16 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin():
             flash('管理者権限が必要です', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# オーナー専用デコレータ
+def owner_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_owner():
+            flash('オーナー権限が必要です', 'error')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated_function
@@ -832,6 +856,190 @@ def index():
     
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements)
+
+@app.route('/my-analytics')
+@login_required
+def user_analytics():
+    """ユーザー向け分析ページ"""
+    conn = get_db()
+    analytics_data = {}
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 月別売上・利益推移
+        cur.execute("""
+            SELECT 
+                TO_CHAR(sale_date, 'YYYY-MM') as month,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NOT NULL
+            GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+            ORDER BY month DESC
+            LIMIT 12
+        """, (current_user.id,))
+        analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+        
+        # 価格帯別統計
+        cur.execute("""
+            SELECT 
+                CASE 
+                    WHEN sale_price < 10000 THEN '1万円未満'
+                    WHEN sale_price < 30000 THEN '1-3万円'
+                    WHEN sale_price < 50000 THEN '3-5万円'
+                    WHEN sale_price < 100000 THEN '5-10万円'
+                    ELSE '10万円以上'
+                END as price_range,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NOT NULL
+            GROUP BY price_range
+            ORDER BY MIN(sale_price)
+        """, (current_user.id,))
+        analytics_data['price_stats'] = [dict(p) for p in cur.fetchall()]
+        
+        # ブランド別統計
+        cur.execute("""
+            SELECT 
+                COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
+                CASE WHEN SUM(sale_price) > 0 
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                    ELSE 0 END as profit_rate
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NOT NULL
+            GROUP BY brand_name
+            ORDER BY total_profit DESC
+            LIMIT 10
+        """, (current_user.id,))
+        analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+        
+        # 販売タイプ別統計
+        cur.execute("""
+            SELECT 
+                COALESCE(sale_type, 'normal') as sale_type,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NOT NULL
+            GROUP BY sale_type
+            ORDER BY count DESC
+        """, (current_user.id,))
+        analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+        
+        # 総合統計
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
+            FROM merchandise 
+            WHERE user_id = %s
+        """, (current_user.id,))
+        analytics_data['summary'] = dict(cur.fetchone() or {})
+        
+    else:
+        import sqlite3
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        # 月別売上・利益推移
+        cur.execute("""
+            SELECT 
+                strftime('%Y-%m', sale_date) as month,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NOT NULL
+            GROUP BY strftime('%Y-%m', sale_date)
+            ORDER BY month DESC
+            LIMIT 12
+        """, (current_user.id,))
+        analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+        
+        # 価格帯別統計
+        cur.execute("""
+            SELECT 
+                CASE 
+                    WHEN sale_price < 10000 THEN '1万円未満'
+                    WHEN sale_price < 30000 THEN '1-3万円'
+                    WHEN sale_price < 50000 THEN '3-5万円'
+                    WHEN sale_price < 100000 THEN '5-10万円'
+                    ELSE '10万円以上'
+                END as price_range,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NOT NULL
+            GROUP BY price_range
+            ORDER BY MIN(sale_price)
+        """, (current_user.id,))
+        analytics_data['price_stats'] = [dict(p) for p in cur.fetchall()]
+        
+        # ブランド別統計
+        cur.execute("""
+            SELECT 
+                COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
+                CASE WHEN SUM(sale_price) > 0 
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                    ELSE 0 END as profit_rate
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NOT NULL
+            GROUP BY brand_name
+            ORDER BY total_profit DESC
+            LIMIT 10
+        """, (current_user.id,))
+        analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+        
+        # 販売タイプ別統計
+        cur.execute("""
+            SELECT 
+                COALESCE(sale_type, 'normal') as sale_type,
+                COUNT(*) as count,
+                COALESCE(SUM(sale_price), 0) as total_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NOT NULL
+            GROUP BY sale_type
+            ORDER BY count DESC
+        """, (current_user.id,))
+        analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+        
+        # 総合統計
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
+            FROM merchandise 
+            WHERE user_id = ?
+        """, (current_user.id,))
+        analytics_data['summary'] = dict(cur.fetchone() or {})
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('user_analytics.html', analytics=analytics_data)
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -1521,6 +1729,14 @@ def admin_users():
 @login_required
 @admin_required
 def toggle_admin(id):
+    """権限を切り替え（後方互換性のため残す）"""
+    return redirect(url_for('admin_set_role', id=id, role='toggle'))
+
+@app.route('/admin/users/<int:id>/set_role/<role>')
+@login_required
+@admin_required
+def admin_set_role(id, role):
+    """ユーザーの権限を設定"""
     if id == current_user.id:
         flash('自分の権限は変更できません', 'error')
         return redirect(url_for('admin_users'))
@@ -1530,20 +1746,62 @@ def toggle_admin(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT role FROM users WHERE id = %s", (id,))
         user = cur.fetchone()
-        new_role = 'user' if user['role'] == 'admin' else 'admin'
-        cur.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, id))
     else:
         cur = conn.cursor()
         cur.execute("SELECT role FROM users WHERE id = ?", (id,))
         user = cur.fetchone()
-        new_role = 'user' if user['role'] == 'admin' else 'admin'
+    
+    if not user:
+        flash('ユーザーが見つかりません', 'error')
+        cur.close()
+        conn.close()
+        return redirect(url_for('admin_users'))
+    
+    current_role = user['role'] if isinstance(user, dict) else user[0]
+    
+    # toggleの場合は従来の動作
+    if role == 'toggle':
+        if current_role == 'owner':
+            flash('オーナーの権限は変更できません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_users'))
+        new_role = 'user' if current_role == 'admin' else 'admin'
+    else:
+        # オーナー権限の設定はオーナーのみ可能
+        if role == 'owner' and not current_user.is_owner():
+            flash('オーナー権限の付与はオーナーのみ可能です', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_users'))
+        
+        # オーナーの権限変更はオーナーのみ可能
+        if current_role == 'owner' and not current_user.is_owner():
+            flash('オーナーの権限変更はオーナーのみ可能です', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_users'))
+        
+        # 有効な権限値かチェック
+        if role not in ['owner', 'admin', 'user']:
+            flash('無効な権限です', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_users'))
+        
+        new_role = role
+    
+    if DATABASE_URL:
+        cur.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, id))
+    else:
         cur.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, id))
     
     conn.commit()
     cur.close()
     conn.close()
     
-    flash('ユーザー権限を変更しました', 'success')
+    role_names = {'owner': 'オーナー', 'admin': '管理者', 'user': 'ユーザー'}
+    flash(f'権限を「{role_names.get(new_role, new_role)}」に変更しました', 'success')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/users/<int:id>/delete')

@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="admin-header">
-    <h1>📝 請求書詳細</h1>
+    <h1>請求書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if invoice.status == 'sent' %}
@@ -12,7 +12,7 @@
         <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を却下しますか？')">✖ 却下</a>
         {% endif %}
         <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">📥 CSV</a>
-        <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">📄 PDF</a>
+        <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
     </div>
 </div>
 

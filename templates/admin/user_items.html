@@ -3,18 +3,18 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📦 {{ user.display_name or user.username }}の商品一覧</h1>
+    <h1>{{ user.display_name or user.username }}の商品一覧</h1>
     <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">← ユーザー一覧に戻る</a>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">📊 概要</a>
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">👥 ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">📄 仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">📝 請求書</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">📢 お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">📈 分析</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">💾 バックアップ</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
 <div class="admin-table-container">

@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+{% block title %}マイ分析 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>マイ分析</h1>
+</div>
+
+<!-- 総合サマリー -->
+<div class="analytics-summary">
+    <div class="summary-card">
+        <div class="summary-label">総登録数</div>
+        <div class="summary-value">{{ analytics.summary.total_items or 0 }}件</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">販売済</div>
+        <div class="summary-value">{{ analytics.summary.sold_count or 0 }}件</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">総仕入額</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_purchase or 0)|int) }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">総売上</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_sales or 0)|int) }}</div>
+    </div>
+    <div class="summary-card highlight">
+        <div class="summary-label">総利益</div>
+        <div class="summary-value {% if analytics.summary.total_profit and analytics.summary.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+            ¥{{ "{:,}".format((analytics.summary.total_profit or 0)|int) }}
+        </div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">平均売価</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.summary.avg_sale_price or 0)|int) }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">平均利益</div>
+        <div class="summary-value {% if analytics.summary.avg_profit and analytics.summary.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+            ¥{{ "{:,}".format((analytics.summary.avg_profit or 0)|int) }}
+        </div>
+    </div>
+</div>
+
+<div class="analytics-grid">
+    <!-- 月別推移 -->
+    <div class="analytics-section full-width">
+        <h2>月別売上・利益推移</h2>
+        {% if analytics.monthly_sales %}
+        <div class="chart-container">
+            <div class="bar-chart-horizontal">
+                {% set max_sales = analytics.monthly_sales|map(attribute='sales')|max if analytics.monthly_sales else 1 %}
+                {% for month in analytics.monthly_sales|reverse %}
+                <div class="chart-row">
+                    <div class="chart-label">{{ month.month }}</div>
+                    <div class="chart-bars">
+                        <div class="chart-bar-group">
+                            <div class="chart-bar sales" style="width: {{ (month.sales / max_sales * 100) if max_sales > 0 else 0 }}%">
+                                <span class="bar-tooltip">売上: ¥{{ "{:,}".format(month.sales|int) }}</span>
+                            </div>
+                        </div>
+                        <div class="chart-bar-group">
+                            <div class="chart-bar profit {% if month.profit > 0 %}positive{% else %}negative{% endif %}" 
+                                 style="width: {{ (month.profit|abs / max_sales * 100) if max_sales > 0 else 0 }}%">
+                                <span class="bar-tooltip">利益: ¥{{ "{:,}".format(month.profit|int) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-values">
+                        <span class="val-count">{{ month.count }}件</span>
+                        <span class="val-profit {% if month.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            ¥{{ "{:,}".format(month.profit|int) }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="chart-legend">
+            <span class="legend-item"><span class="legend-color sales"></span>売上</span>
+            <span class="legend-item"><span class="legend-color profit"></span>利益</span>
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <!-- 価格帯別統計 -->
+    <div class="analytics-section">
+        <h2>価格帯別販売数</h2>
+        {% if analytics.price_stats %}
+        <div class="stats-list">
+            {% for price in analytics.price_stats %}
+            <div class="stats-item">
+                <div class="stats-info">
+                    <span class="stats-name">{{ price.price_range }}</span>
+                    <span class="stats-count">{{ price.count }}件</span>
+                </div>
+                <div class="stats-bar-container">
+                    {% set max_count = analytics.price_stats|map(attribute='count')|max %}
+                    <div class="stats-bar" style="width: {{ (price.count / max_count * 100) if max_count > 0 else 0 }}%"></div>
+                </div>
+                <div class="stats-values">
+                    <span>売上: ¥{{ "{:,}".format(price.total_sales|int) }}</span>
+                    <span class="{% if price.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        利益: ¥{{ "{:,}".format(price.total_profit|int) }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <!-- ブランド別統計 -->
+    <div class="analytics-section">
+        <h2>ブランド別利益率</h2>
+        {% if analytics.brand_stats %}
+        <div class="stats-list">
+            {% for brand in analytics.brand_stats %}
+            <div class="stats-item">
+                <div class="stats-info">
+                    <span class="stats-rank">#{{ loop.index }}</span>
+                    <span class="stats-name">{{ brand.brand_name }}</span>
+                    <span class="stats-count">{{ brand.count }}件</span>
+                </div>
+                <div class="stats-bar-container">
+                    {% set max_profit = analytics.brand_stats|map(attribute='total_profit')|map('abs')|max %}
+                    <div class="stats-bar {% if brand.total_profit > 0 %}positive{% else %}negative{% endif %}" 
+                         style="width: {{ (brand.total_profit|abs / max_profit * 100) if max_profit > 0 else 0 }}%"></div>
+                </div>
+                <div class="stats-values">
+                    <span class="{% if brand.profit_rate > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        利益率: {{ brand.profit_rate }}%
+                    </span>
+                    <span class="{% if brand.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(brand.total_profit|int) }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <!-- 販売タイプ別統計 -->
+    <div class="analytics-section">
+        <h2>販売タイプ別</h2>
+        {% if analytics.sale_type_stats %}
+        <div class="pie-chart-container">
+            <div class="pie-chart-data">
+                {% set total_count = analytics.sale_type_stats|map(attribute='count')|sum %}
+                {% set colors = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] %}
+                {% for stat in analytics.sale_type_stats %}
+                <div class="pie-item">
+                    <div class="pie-color" style="background: {{ colors[loop.index0 % 5] }}"></div>
+                    <div class="pie-info">
+                        <span class="pie-label">
+                            {% if stat.sale_type == 'normal' %}通常
+                            {% elif stat.sale_type == 'photo_packing' %}撮影梱包等代行
+                            {% elif stat.sale_type == 'wholesale' %}業者卸販売
+                            {% elif stat.sale_type == 'multi_listing' %}同時出品
+                            {% elif stat.sale_type == 'auction' %}オークション流し
+                            {% else %}{{ stat.sale_type }}{% endif %}
+                        </span>
+                        <span class="pie-count">{{ stat.count }}件 ({{ ((stat.count / total_count * 100)|round(1)) if total_count > 0 else 0 }}%)</span>
+                    </div>
+                    <div class="pie-values">
+                        <span class="{% if stat.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                            ¥{{ "{:,}".format(stat.total_profit|int) }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.analytics-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.summary-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.summary-card.highlight {
+    background: #1e293b;
+}
+
+.summary-card.highlight .summary-label {
+    color: #94a3b8;
+}
+
+.summary-card.highlight .summary-value {
+    color: white;
+}
+
+.summary-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.analytics-section {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.analytics-section.full-width {
+    grid-column: 1 / -1;
+}
+
+.analytics-section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* 横棒グラフ */
+.bar-chart-horizontal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.chart-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 140px;
+    align-items: center;
+    gap: 1rem;
+}
+
+.chart-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #475569;
+}
+
+.chart-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chart-bar-group {
+    height: 14px;
+    background: #f1f5f9;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.chart-bar {
+    height: 100%;
+    border-radius: 7px;
+    position: relative;
+    min-width: 4px;
+    transition: width 0.3s ease;
+}
+
+.chart-bar.sales {
+    background: #2563eb;
+}
+
+.chart-bar.profit.positive {
+    background: #10b981;
+}
+
+.chart-bar.profit.negative {
+    background: #ef4444;
+}
+
+.chart-bar:hover .bar-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.bar-tooltip {
+    position: absolute;
+    right: 0;
+    top: -30px;
+    background: #1e293b;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.chart-values {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+    font-size: 0.8rem;
+}
+
+.val-count {
+    color: #64748b;
+}
+
+.val-profit {
+    font-weight: 600;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-color.sales {
+    background: #2563eb;
+}
+
+.legend-color.profit {
+    background: #10b981;
+}
+
+/* 統計リスト */
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.stats-item {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.stats-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.stats-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.stats-rank {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    width: 24px;
+}
+
+.stats-name {
+    flex: 1;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.stats-count {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.stats-bar-container {
+    height: 8px;
+    background: #f1f5f9;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.stats-bar {
+    height: 100%;
+    background: #2563eb;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.stats-bar.positive {
+    background: #10b981;
+}
+
+.stats-bar.negative {
+    background: #ef4444;
+}
+
+.stats-values {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+/* 円グラフ風表示 */
+.pie-chart-container {
+    padding: 0.5rem 0;
+}
+
+.pie-chart-data {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pie-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
+.pie-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.pie-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.pie-label {
+    font-weight: 500;
+    color: #1e293b;
+    font-size: 0.9rem;
+}
+
+.pie-count {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.pie-values {
+    text-align: right;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.empty-message {
+    text-align: center;
+    color: #94a3b8;
+    padding: 2rem;
+}
+
+.profit-positive {
+    color: #10b981;
+}
+
+.profit-negative {
+    color: #ef4444;
+}
+
+@media (max-width: 768px) {
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-row {
+        grid-template-columns: 60px 1fr;
+    }
+    
+    .chart-values {
+        display: none;
+    }
+    
+    .analytics-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+{% endblock %}
+
