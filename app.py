@@ -85,10 +85,16 @@ if DATABASE_URL:
             pass
         
         # オーナーがいない場合、最初の管理者をオーナーに昇格
-        cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
-        owner_count = cur.fetchone()[0]
-        if owner_count == 0:
-            cur.execute("UPDATE users SET role = 'owner' WHERE role = 'admin' ORDER BY id LIMIT 1")
+        try:
+            cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
+            owner_count = cur.fetchone()[0]
+            if owner_count == 0:
+                cur.execute("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1")
+                admin_row = cur.fetchone()
+                if admin_row:
+                    cur.execute("UPDATE users SET role = 'owner' WHERE id = %s", (admin_row[0],))
+        except Exception as e:
+            pass  # テーブルがまだ存在しない場合はスキップ
         
         # 商品テーブル（user_id追加）
         cur.execute('''
@@ -330,10 +336,16 @@ else:
             pass
         
         # オーナーがいない場合、最初の管理者をオーナーに昇格
-        cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
-        owner_count = cur.fetchone()[0]
-        if owner_count == 0:
-            cur.execute("UPDATE users SET role = 'owner' WHERE role = 'admin' AND id = (SELECT MIN(id) FROM users WHERE role = 'admin')")
+        try:
+            cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
+            owner_count = cur.fetchone()[0]
+            if owner_count == 0:
+                cur.execute("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1")
+                admin_row = cur.fetchone()
+                if admin_row:
+                    cur.execute("UPDATE users SET role = 'owner' WHERE id = ?", (admin_row[0],))
+        except Exception as e:
+            pass  # テーブルがまだ存在しない場合はスキップ
         
         # 商品テーブル
         cur.execute('''
@@ -619,7 +631,11 @@ def load_user(user_id):
     conn.close()
     
     if user:
-        admin_permissions = user.get('admin_permissions') if isinstance(user, dict) else (user['admin_permissions'] if 'admin_permissions' in user.keys() else None)
+        # admin_permissionsを安全に取得
+        try:
+            admin_permissions = user['admin_permissions']
+        except (KeyError, TypeError):
+            admin_permissions = None
         return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions)
     return None
 
