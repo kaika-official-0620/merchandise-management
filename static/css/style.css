@@ -26,9 +26,9 @@
     --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     --shadow-lg: 0 10px 25px -3px rgba(0,0,0,0.1);
     
-    --radius-sm: 6px;
-    --radius: 10px;
-    --radius-lg: 16px;
+    --radius-sm: 0;
+    --radius: 0;
+    --radius-lg: 0;
     
 }
 
@@ -123,7 +123,7 @@ h1, h2, h3, h4, h5, h6 {
     color: white;
     font-size: 11px;
     padding: 2px 6px;
-    border-radius: 10px;
+    border-radius: 0;
     margin-left: 4px;
     font-weight: 600;
 }
@@ -168,7 +168,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .user-menu-trigger .user-badge {
     padding: 0.15rem 0.4rem;
-    border-radius: 3px;
+    border-radius: 0;
     font-size: 0.65rem;
     font-weight: 600;
     background: var(--text-primary);
@@ -1146,7 +1146,7 @@ h1, h2, h3, h4, h5, h6 {
     height: 28px;
     background: var(--primary);
     color: white;
-    border-radius: 50%;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
