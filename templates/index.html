@@ -754,8 +754,6 @@
         <a href="{{ url_for('index', filter='sold') }}" class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
         <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
     </div>
-    
-    <a href="{{ url_for('export_csv') }}" class="btn btn-export btn-sm">CSV</a>
 </div>
 
 <!-- 商品テーブル -->
