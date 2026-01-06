@@ -52,14 +52,34 @@
             
             <div class="form-group">
                 <label for="role">権限 *</label>
-                <select id="role" name="role" {% if user and user.id == current_user.id %}disabled{% endif %}>
+                <select id="role" name="role" {% if user and user.id == current_user.id %}disabled{% endif %} onchange="togglePermissions()">
                     <option value="user" {% if user and user.role == 'user' %}selected{% endif %}>一般ユーザー</option>
                     <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>管理者</option>
+                    {% if current_user.is_owner() %}
+                    <option value="owner" {% if user and user.role == 'owner' %}selected{% endif %}>オーナー</option>
+                    {% endif %}
                 </select>
                 {% if user and user.id == current_user.id %}
                 <small>自分の権限は変更できません</small>
                 <input type="hidden" name="role" value="{{ user.role }}">
                 {% endif %}
+            </div>
+            
+            <!-- 管理者権限の詳細設定 -->
+            <div class="form-group permissions-section" id="permissions-section" style="display: none;">
+                <label>管理者権限の範囲</label>
+                <small class="mb-2" style="display: block; margin-bottom: 8px;">チェックなしの場合は全権限が付与されます</small>
+                <div class="permissions-grid">
+                    {% if permission_options %}
+                    {% for key, label in permission_options.items() %}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="admin_permissions" value="{{ key }}"
+                               {% if user and user.admin_permissions_list and key in user.admin_permissions_list %}checked{% endif %}>
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                    {% endif %}
+                </div>
             </div>
         </div>
         
@@ -87,5 +107,64 @@
         </div>
     </form>
 </div>
-{% endblock %}
 
+<style>
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: white;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.checkbox-label:hover {
+    background: #f1f5f9;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.checkbox-label span {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.permissions-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+</style>
+
+<script>
+function togglePermissions() {
+    const roleSelect = document.getElementById('role');
+    const permissionsSection = document.getElementById('permissions-section');
+    
+    if (roleSelect.value === 'admin') {
+        permissionsSection.style.display = 'block';
+    } else {
+        permissionsSection.style.display = 'none';
+    }
+}
+
+// ページ読み込み時に実行
+document.addEventListener('DOMContentLoaded', function() {
+    togglePermissions();
+});
+</script>
+{% endblock %}

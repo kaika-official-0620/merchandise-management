@@ -44,6 +44,9 @@
                         <span class="badge badge-owner">オーナー</span>
                         {% elif user.role == 'admin' %}
                         <span class="badge badge-admin">管理者</span>
+                        {% if user.admin_permissions %}
+                        <small class="permission-hint" title="制限あり">*</small>
+                        {% endif %}
                         {% else %}
                         <span class="badge badge-user">ユーザー</span>
                         {% endif %}
@@ -105,7 +108,8 @@
             <div>
                 <strong>管理者</strong>
                 <span class="badge badge-admin" style="margin-left: 8px;">管理権限</span>
-                <p>ユーザー管理、分析、バックアップなど管理機能を利用可能。</p>
+                <p>ユーザー管理、分析、バックアップなど管理機能を利用可能。<br>
+                <small>※ 権限範囲を個別に設定可能（「*」マークは制限あり）</small></p>
             </div>
         </div>
         <div class="help-item">
@@ -122,6 +126,13 @@
 .badge-owner {
     background: #b91c1c;
     color: white;
+}
+
+.permission-hint {
+    color: #f59e0b;
+    font-weight: bold;
+    margin-left: 4px;
+    cursor: help;
 }
 
 .role-dropdown {

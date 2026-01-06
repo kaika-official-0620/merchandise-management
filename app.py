@@ -72,10 +72,23 @@ if DATABASE_URL:
                 password_hash VARCHAR(255) NOT NULL,
                 role VARCHAR(20) DEFAULT 'user',
                 display_name VARCHAR(100),
+                admin_permissions TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
             )
         ''')
+        
+        # admin_permissionsカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_permissions TEXT")
+        except:
+            pass
+        
+        # オーナーがいない場合、最初の管理者をオーナーに昇格
+        cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
+        owner_count = cur.fetchone()[0]
+        if owner_count == 0:
+            cur.execute("UPDATE users SET role = 'owner' WHERE role = 'admin' ORDER BY id LIMIT 1")
         
         # 商品テーブル（user_id追加）
         cur.execute('''
@@ -304,10 +317,23 @@ else:
                 password_hash TEXT NOT NULL,
                 role TEXT DEFAULT 'user',
                 display_name TEXT,
+                admin_permissions TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
             )
         ''')
+        
+        # admin_permissionsカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN admin_permissions TEXT")
+        except:
+            pass
+        
+        # オーナーがいない場合、最初の管理者をオーナーに昇格
+        cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
+        owner_count = cur.fetchone()[0]
+        if owner_count == 0:
+            cur.execute("UPDATE users SET role = 'owner' WHERE role = 'admin' AND id = (SELECT MIN(id) FROM users WHERE role = 'admin')")
         
         # 商品テーブル
         cur.execute('''
@@ -513,12 +539,33 @@ else:
 
 # ユーザークラス
 class User(UserMixin):
-    def __init__(self, id, username, email, role, display_name):
+    # 管理者が設定可能な権限一覧
+    ADMIN_PERMISSION_OPTIONS = {
+        'users': 'ユーザー管理',
+        'shikiriosho': '仕切書管理',
+        'invoices': '請求書管理',
+        'announcements': 'お知らせ管理',
+        'analytics': '分析',
+        'backup': 'バックアップ'
+    }
+    
+    def __init__(self, id, username, email, role, display_name, admin_permissions=None):
         self.id = id
         self.username = username
         self.email = email
         self.role = role
         self.display_name = display_name or username
+        # admin_permissionsはJSON文字列またはリスト
+        if admin_permissions:
+            if isinstance(admin_permissions, str):
+                try:
+                    self.admin_permissions = json.loads(admin_permissions)
+                except:
+                    self.admin_permissions = []
+            else:
+                self.admin_permissions = admin_permissions
+        else:
+            self.admin_permissions = []
     
     def is_owner(self):
         """オーナー権限を持っているか"""
@@ -528,6 +575,18 @@ class User(UserMixin):
         """管理者以上の権限を持っているか（オーナーも含む）"""
         return self.role in ['admin', 'owner']
     
+    def has_permission(self, permission):
+        """特定の権限を持っているか確認"""
+        # オーナーは全権限を持つ
+        if self.role == 'owner':
+            return True
+        # 管理者は設定された権限を持つ（空の場合は全権限）
+        if self.role == 'admin':
+            if not self.admin_permissions:
+                return True  # 権限が設定されていない場合は全権限
+            return permission in self.admin_permissions
+        return False
+    
     def get_role_display(self):
         """権限の表示名を取得"""
         role_names = {
@@ -536,6 +595,14 @@ class User(UserMixin):
             'user': 'ユーザー'
         }
         return role_names.get(self.role, self.role)
+    
+    def get_permissions_display(self):
+        """権限の表示用リストを取得"""
+        if self.role == 'owner':
+            return ['全権限']
+        if not self.admin_permissions:
+            return ['全権限']
+        return [self.ADMIN_PERMISSION_OPTIONS.get(p, p) for p in self.admin_permissions]
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -552,7 +619,8 @@ def load_user(user_id):
     conn.close()
     
     if user:
-        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'])
+        admin_permissions = user.get('admin_permissions') if isinstance(user, dict) else (user['admin_permissions'] if 'admin_permissions' in user.keys() else None)
+        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions)
     return None
 
 # 管理者専用デコレータ
@@ -574,6 +642,22 @@ def owner_required(f):
             return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated_function
+
+# 特定権限チェック用デコレータ
+def permission_required(permission):
+    """特定の管理者権限が必要なルートに使用するデコレータ"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash('ログインが必要です', 'error')
+                return redirect(url_for('login'))
+            if not current_user.has_permission(permission):
+                flash(f'この機能へのアクセス権限がありません', 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ヘルパー関数
 def calculate_profit(sale_price, purchase_price, shipping_cost, commission):
@@ -1709,7 +1793,7 @@ def admin_dashboard():
 
 @app.route('/admin/users')
 @login_required
-@admin_required
+@permission_required('users')
 def admin_users():
     conn = get_db()
     if DATABASE_URL:
@@ -1734,7 +1818,7 @@ def toggle_admin(id):
 
 @app.route('/admin/users/<int:id>/set_role/<role>')
 @login_required
-@admin_required
+@permission_required('users')
 def admin_set_role(id, role):
     """ユーザーの権限を設定"""
     if id == current_user.id:
@@ -1806,7 +1890,7 @@ def admin_set_role(id, role):
 
 @app.route('/admin/users/<int:id>/delete')
 @login_required
-@admin_required
+@permission_required('users')
 def delete_user(id):
     if id == current_user.id:
         flash('自分は削除できません', 'error')
@@ -1831,7 +1915,7 @@ def delete_user(id):
 
 @app.route('/admin/users/add', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('users')
 def admin_add_user():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -1840,28 +1924,36 @@ def admin_add_user():
         display_name = request.form.get('display_name')
         role = request.form.get('role', 'user')
         
+        # 管理者権限の設定を取得
+        admin_permissions = request.form.getlist('admin_permissions')
+        admin_permissions_json = json.dumps(admin_permissions) if admin_permissions else None
+        
+        # オーナー権限の付与はオーナーのみ
+        if role == 'owner' and not current_user.is_owner():
+            role = 'admin'
+        
         if not username or not email or not password:
             flash('ユーザー名、メール、パスワードは必須です', 'error')
-            return render_template('admin/user_form.html', user=None)
+            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
         
         if len(password) < 6:
             flash('パスワードは6文字以上必要です', 'error')
-            return render_template('admin/user_form.html', user=None)
+            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
         
         conn = get_db()
         try:
             if DATABASE_URL:
                 cur = conn.cursor()
                 cur.execute('''
-                    INSERT INTO users (username, email, password_hash, role, display_name)
-                    VALUES (%s, %s, %s, %s, %s)
-                ''', (username, email, generate_password_hash(password), role, display_name or username))
+                    INSERT INTO users (username, email, password_hash, role, display_name, admin_permissions)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                ''', (username, email, generate_password_hash(password), role, display_name or username, admin_permissions_json))
             else:
                 cur = conn.cursor()
                 cur.execute('''
-                    INSERT INTO users (username, email, password_hash, role, display_name)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (username, email, generate_password_hash(password), role, display_name or username))
+                    INSERT INTO users (username, email, password_hash, role, display_name, admin_permissions)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (username, email, generate_password_hash(password), role, display_name or username, admin_permissions_json))
             conn.commit()
             flash('ユーザーを作成しました', 'success')
             return redirect(url_for('admin_users'))
@@ -1870,11 +1962,11 @@ def admin_add_user():
         finally:
             conn.close()
     
-    return render_template('admin/user_form.html', user=None)
+    return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
 
 @app.route('/admin/users/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('users')
 def admin_edit_user(id):
     conn = get_db()
     if DATABASE_URL:
@@ -1895,33 +1987,42 @@ def admin_edit_user(id):
         role = request.form.get('role', 'user')
         new_password = request.form.get('new_password')
         
+        # 管理者権限の設定を取得
+        admin_permissions = request.form.getlist('admin_permissions')
+        admin_permissions_json = json.dumps(admin_permissions) if admin_permissions else None
+        
         # 自分の権限は変更不可
         if id == current_user.id:
+            role = user['role']
+            admin_permissions_json = user.get('admin_permissions')
+        
+        # オーナー権限の付与はオーナーのみ
+        if role == 'owner' and not current_user.is_owner():
             role = user['role']
         
         try:
             if new_password and len(new_password) >= 6:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, generate_password_hash(new_password), id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, generate_password_hash(new_password), id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, id))
             else:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, id))
+                    ''', (display_name, email, role, admin_permissions_json, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, id))
+                    ''', (display_name, email, role, admin_permissions_json, id))
             
             conn.commit()
             flash('ユーザー情報を更新しました', 'success')
@@ -1935,11 +2036,21 @@ def admin_edit_user(id):
         cur.close()
         conn.close()
     
-    return render_template('admin/user_form.html', user=dict(user))
+    # admin_permissionsをパースしてテンプレートに渡す
+    user_dict = dict(user)
+    if user_dict.get('admin_permissions'):
+        try:
+            user_dict['admin_permissions_list'] = json.loads(user_dict['admin_permissions'])
+        except:
+            user_dict['admin_permissions_list'] = []
+    else:
+        user_dict['admin_permissions_list'] = []
+    
+    return render_template('admin/user_form.html', user=user_dict, permission_options=User.ADMIN_PERMISSION_OPTIONS)
 
 @app.route('/admin/users/<int:id>/items')
 @login_required
-@admin_required
+@permission_required('users')
 def admin_user_items(id):
     conn = get_db()
     if DATABASE_URL:
@@ -1980,7 +2091,7 @@ def admin_user_items(id):
 
 @app.route('/admin/analytics')
 @login_required
-@admin_required
+@permission_required('analytics')
 def admin_analytics():
     analytics_data = {}
     widgets = []
@@ -2355,13 +2466,13 @@ def admin_analytics_settings():
 
 @app.route('/admin/backup')
 @login_required
-@admin_required
+@permission_required('backup')
 def admin_backup():
     return render_template('admin/backup.html')
 
 @app.route('/admin/backup/export')
 @login_required
-@admin_required
+@permission_required('backup')
 def export_backup():
     """全データをJSON形式でエクスポート"""
     conn = get_db()
@@ -2428,7 +2539,7 @@ def export_backup():
 
 @app.route('/admin/backup/export_with_images')
 @login_required
-@admin_required
+@permission_required('backup')
 def export_backup_with_images():
     """全データと画像をZIP形式でエクスポート"""
     conn = get_db()
@@ -2636,7 +2747,7 @@ def export_user_backup_with_images():
 
 @app.route('/admin/backup/import', methods=['POST'])
 @login_required
-@admin_required
+@permission_required('backup')
 def import_backup():
     """JSON/ZIPファイルからデータをインポート（リストア）"""
     if 'backup_file' not in request.files:
@@ -3044,7 +3155,7 @@ def import_user_backup():
 
 @app.route('/admin/announcements')
 @login_required
-@admin_required
+@permission_required('announcements')
 def admin_announcements():
     """お知らせ一覧"""
     conn = get_db()
@@ -3073,7 +3184,7 @@ def admin_announcements():
 
 @app.route('/admin/announcements/add', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('announcements')
 def admin_add_announcement():
     """お知らせ追加"""
     if request.method == 'POST':
@@ -3109,7 +3220,7 @@ def admin_add_announcement():
 
 @app.route('/admin/announcements/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('announcements')
 def admin_edit_announcement(id):
     """お知らせ編集"""
     conn = get_db()
@@ -3162,7 +3273,7 @@ def admin_edit_announcement(id):
 
 @app.route('/admin/announcements/delete/<int:id>')
 @login_required
-@admin_required
+@permission_required('announcements')
 def admin_delete_announcement(id):
     """お知らせ削除"""
     conn = get_db()
@@ -3226,7 +3337,7 @@ def generate_document_no():
 
 @app.route('/admin/shikiriosho')
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_list():
     """仕切書一覧（管理者用）"""
     conn = get_db()
@@ -3255,7 +3366,7 @@ def admin_shikiriosho_list():
 
 @app.route('/admin/shikiriosho/add', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_add():
     """仕切書作成（管理者用）"""
     conn = get_db()
@@ -3364,7 +3475,7 @@ def admin_shikiriosho_add():
 
 @app.route('/admin/shikiriosho/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_edit(id):
     """仕切書編集（管理者用）"""
     conn = get_db()
@@ -3488,7 +3599,7 @@ def admin_shikiriosho_edit(id):
 
 @app.route('/admin/shikiriosho/delete/<int:id>')
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_delete(id):
     """仕切書削除（管理者用）"""
     conn = get_db()
@@ -3510,7 +3621,7 @@ def admin_shikiriosho_delete(id):
 
 @app.route('/admin/shikiriosho/send/<int:id>')
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_send(id):
     """仕切書を送信（ステータスを'sent'に変更）"""
     conn = get_db()
@@ -3530,7 +3641,7 @@ def admin_shikiriosho_send(id):
 
 @app.route('/admin/shikiriosho/view/<int:id>')
 @login_required
-@admin_required
+@permission_required('shikiriosho')
 def admin_shikiriosho_view(id):
     """仕切書詳細（管理者用）"""
     conn = get_db()
@@ -4185,7 +4296,7 @@ def user_invoice_send(id):
 
 @app.route('/admin/invoices')
 @login_required
-@admin_required
+@permission_required('invoices')
 def admin_invoice_list():
     """請求書一覧（管理者用）"""
     conn = get_db()
@@ -4216,7 +4327,7 @@ def admin_invoice_list():
 
 @app.route('/admin/invoices/view/<int:id>')
 @login_required
-@admin_required
+@permission_required('invoices')
 def admin_invoice_view(id):
     """請求書詳細（管理者用）"""
     conn = get_db()
@@ -4263,7 +4374,7 @@ def admin_invoice_view(id):
 
 @app.route('/admin/invoices/approve/<int:id>')
 @login_required
-@admin_required
+@permission_required('invoices')
 def admin_invoice_approve(id):
     """請求書承認（管理者用）- 承認時に仕切書を自動作成"""
     
@@ -4441,7 +4552,7 @@ def admin_invoice_approve(id):
 
 @app.route('/admin/invoices/reject/<int:id>')
 @login_required
-@admin_required
+@permission_required('invoices')
 def admin_invoice_reject(id):
     """請求書却下（管理者用）"""
     conn = get_db()
