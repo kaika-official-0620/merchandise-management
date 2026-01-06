@@ -44,7 +44,7 @@
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この請求書を送信しますか？')">送信</a>
                 <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を削除しますか？')">削除</a>
             {% else %}
-                <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary">📥 CSV</a>
+                <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary btn-sm">CSV</a>
             {% endif %}
         </div>
     </div>

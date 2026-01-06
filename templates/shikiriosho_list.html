@@ -32,7 +32,7 @@
         </div>
         <div class="card-actions">
             <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-primary">詳細を見る</a>
-            <a href="{{ url_for('user_shikiriosho_download', id=doc.id) }}" class="btn btn-secondary">📥 CSV</a>
+            <a href="{{ url_for('user_shikiriosho_download', id=doc.id) }}" class="btn btn-secondary btn-sm">CSV</a>
         </div>
     </div>
     {% endfor %}

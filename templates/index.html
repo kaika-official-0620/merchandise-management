@@ -685,9 +685,6 @@
 }
 </style>
 
-<div class="page-actions">
-    <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 新規登録</a>
-</div>
 
 <!-- お知らせエリア -->
 {% if announcements %}
@@ -758,7 +755,7 @@
         <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
     </div>
     
-    <a href="{{ url_for('export_csv') }}" class="btn btn-export">📥 CSV</a>
+    <a href="{{ url_for('export_csv') }}" class="btn btn-export btn-sm">CSV</a>
 </div>
 
 <!-- 商品テーブル -->

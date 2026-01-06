@@ -11,7 +11,7 @@
         <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="btn btn-success" onclick="return confirm('この請求書を承認しますか？')">✔ 承認</a>
         <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を却下しますか？')">✖ 却下</a>
         {% endif %}
-        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">📥 CSV</a>
+        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download btn-sm">CSV</a>
         <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
     </div>
 </div>
