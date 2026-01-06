@@ -12,8 +12,26 @@
 <body>
     {% if current_user.is_authenticated %}
     <nav class="navbar">
-        <div class="nav-brand">
-            <a href="{{ url_for('index') }}">株式会社 開花</a>
+        <div class="nav-top">
+            <div class="nav-brand">
+                <a href="{{ url_for('index') }}">株式会社 開花</a>
+            </div>
+            <div class="nav-user">
+                <div class="user-menu-trigger">
+                    <span class="user-name">{{ current_user.display_name }}</span>
+                    {% if current_user.is_owner() %}
+                    <span class="user-badge owner">オーナー</span>
+                    {% elif current_user.is_admin() %}
+                    <span class="user-badge">管理者</span>
+                    {% endif %}
+                    <span class="menu-arrow">▼</span>
+                </div>
+                <div class="user-dropdown">
+                    <a href="{{ url_for('profile') }}">設定</a>
+                    <div class="divider"></div>
+                    <a href="{{ url_for('logout') }}">ログアウト</a>
+                </div>
+            </div>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
@@ -36,22 +54,6 @@
                 {% endif %}
             </a>
             {% endif %}
-        </div>
-        <div class="nav-user">
-            <div class="user-menu-trigger">
-                <span class="user-name">{{ current_user.display_name }}</span>
-                {% if current_user.is_owner() %}
-                <span class="user-badge owner">オーナー</span>
-                {% elif current_user.is_admin() %}
-                <span class="user-badge">管理者</span>
-                {% endif %}
-                <span class="menu-arrow">▼</span>
-            </div>
-            <div class="user-dropdown">
-                <a href="{{ url_for('profile') }}">設定</a>
-                <div class="divider"></div>
-                <a href="{{ url_for('logout') }}">ログアウト</a>
-            </div>
         </div>
     </nav>
     {% endif %}
