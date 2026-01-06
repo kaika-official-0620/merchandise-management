@@ -3,10 +3,10 @@
 {% block title %}仕切書 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-actions">
     <a href="{{ url_for('user_shikiriosho_list') }}" class="btn btn-back">← 一覧に戻る</a>
     <div class="header-actions">
-        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">📥 CSV</a>
+        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">CSV</a>
         <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
     </div>
 </div>

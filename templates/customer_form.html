@@ -2,10 +2,6 @@
 {% block title %}{{ '顧客編集' if customer else '顧客登録' }} - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>{{ '顧客編集' if customer else '顧客登録' }}</h1>
-</div>
-
 <form method="POST" class="customer-form">
     <div class="form-section">
         <h2>基本情報</h2>
