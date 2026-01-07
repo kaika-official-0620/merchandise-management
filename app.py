@@ -149,6 +149,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # model_numberカラムを追加（型番）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS model_number VARCHAR(100)")
+        except:
+            pass
+        
         # 顧客テーブル（user_id追加）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS customers (
@@ -397,6 +403,12 @@ else:
         # sale_typeカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN sale_type TEXT DEFAULT 'normal'")
+        except:
+            pass
+        
+        # model_numberカラムを追加（型番）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN model_number TEXT")
         except:
             pass
         
@@ -1171,11 +1183,11 @@ def add_item():
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -1183,6 +1195,7 @@ def add_item():
                 additional_photos_json,
                 request.form.get('product_name'),
                 request.form.get('brand_name'),
+                request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
                 int(request.form.get('purchase_price') or 0),
@@ -1203,11 +1216,11 @@ def add_item():
         else:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -1215,6 +1228,7 @@ def add_item():
                 additional_photos_json,
                 request.form.get('product_name'),
                 request.form.get('brand_name'),
+                request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
                 int(request.form.get('purchase_price') or 0),
@@ -1298,7 +1312,7 @@ def edit_item(id):
         if DATABASE_URL:
             cur.execute('''
                 UPDATE merchandise SET 
-                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, item_condition = %s, store_name = %s,
+                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                     purchase_price = %s, payment_method = %s, listing_price = %s, 
                     expected_shipping = %s, expected_commission = %s,
                     is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
@@ -1310,6 +1324,7 @@ def edit_item(id):
                 additional_photos_json,
                 request.form.get('product_name'),
                 request.form.get('brand_name'),
+                request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
                 int(request.form.get('purchase_price') or 0),
@@ -1331,7 +1346,7 @@ def edit_item(id):
         else:
             cur.execute('''
                 UPDATE merchandise SET 
-                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, item_condition = ?, store_name = ?,
+                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                     purchase_price = ?, payment_method = ?, listing_price = ?, 
                     expected_shipping = ?, expected_commission = ?,
                     is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
@@ -1343,6 +1358,7 @@ def edit_item(id):
                 additional_photos_json,
                 request.form.get('product_name'),
                 request.form.get('brand_name'),
+                request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
                 int(request.form.get('purchase_price') or 0),

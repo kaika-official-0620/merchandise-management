@@ -975,8 +975,17 @@
                 <input type="text" id="tab-filter-brand" placeholder="ブランド">
             </div>
             <div class="filter-item">
-                <label>店舗</label>
-                <input type="text" id="tab-filter-store" placeholder="店舗">
+                <label>型番</label>
+                <input type="text" id="tab-filter-model" placeholder="型番">
+            </div>
+            <div class="filter-item">
+                <label>仕入先</label>
+                <select id="tab-filter-store">
+                    <option value="">すべて</option>
+                    <option value="個人">個人</option>
+                    <option value="代行サービス">代行サービス</option>
+                    <option value="オークション">オークション</option>
+                </select>
             </div>
         </div>
     </div>
@@ -1022,8 +1031,9 @@
                     <th class="sortable" data-sort="id">No</th>
                     <th class="sortable" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
+                    <th>型番</th>
                     <th>状態</th>
-                    <th class="sortable" data-sort="store_name">店舗</th>
+                    <th class="sortable" data-sort="store_name">仕入先</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
                     <th class="sortable" data-sort="purchase_price">仕入額</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
@@ -1039,6 +1049,7 @@
                     data-id="{{ item.id }}"
                     data-name="{{ item.product_name or '' }}"
                     data-brand="{{ item.brand_name or '' }}"
+                    data-model="{{ item.model_number or '' }}"
                     data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
                     data-date="{{ item.purchase_date or '' }}"
@@ -1057,6 +1068,7 @@
                     <td>{{ item.id }}</td>
                     <td><strong>{{ item.product_name or '-' }}</strong></td>
                     <td>{{ item.brand_name or '-' }}</td>
+                    <td>{{ item.model_number or '-' }}</td>
                     <td>
                         {% if item.item_condition %}
                         <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
@@ -1155,6 +1167,7 @@
          data-id="{{ item.id }}"
          data-name="{{ item.product_name or '' }}"
          data-brand="{{ item.brand_name or '' }}"
+         data-model="{{ item.model_number or '' }}"
          data-condition="{{ item.item_condition or '' }}"
          data-store="{{ item.store_name or '' }}"
          data-date="{{ item.purchase_date or '' }}"
@@ -1193,7 +1206,7 @@
         </div>
         <div class="card-body">
             <div class="card-row">
-                <span class="card-label">店舗</span>
+                <span class="card-label">仕入先</span>
                 <span class="card-value">{{ item.store_name or '-' }}</span>
             </div>
             <div class="card-row">
@@ -1290,6 +1303,7 @@ function resetAllFilters() {
     document.getElementById('tab-filter-id').value = '';
     document.getElementById('tab-filter-name').value = '';
     document.getElementById('tab-filter-brand').value = '';
+    document.getElementById('tab-filter-model').value = '';
     document.getElementById('tab-filter-store').value = '';
     document.getElementById('tab-filter-date').value = '';
     
@@ -1325,6 +1339,7 @@ function updateFilterCount() {
     if (document.getElementById('tab-filter-id')?.value) count++;
     if (document.getElementById('tab-filter-name')?.value) count++;
     if (document.getElementById('tab-filter-brand')?.value) count++;
+    if (document.getElementById('tab-filter-model')?.value) count++;
     if (document.getElementById('tab-filter-store')?.value) count++;
     if (document.getElementById('tab-filter-date')?.value) count++;
     if (document.getElementById('tab-filter-condition')?.value) count++;
@@ -1351,8 +1366,9 @@ function filterTable() {
     const filterId = (document.getElementById('tab-filter-id')?.value || '').toLowerCase();
     const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
     const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
+    const filterModel = (document.getElementById('tab-filter-model')?.value || '').toLowerCase();
     const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
-    const filterStore = (document.getElementById('tab-filter-store')?.value || '').toLowerCase();
+    const filterStore = document.getElementById('tab-filter-store')?.value || '';
     const filterDate = document.getElementById('tab-filter-date')?.value || '';
     const filterStatus = document.getElementById('tab-filter-status')?.value || '';
     
@@ -1381,8 +1397,9 @@ function filterTable() {
         const id = element.dataset.id;
         const name = (element.dataset.name || '').toLowerCase();
         const brand = (element.dataset.brand || '').toLowerCase();
+        const model = (element.dataset.model || '').toLowerCase();
         const condition = element.dataset.condition || '';
-        const store = (element.dataset.store || '').toLowerCase();
+        const store = element.dataset.store || '';
         const date = element.dataset.date || '';
         const status = element.dataset.status || '';
         const purchasePrice = element.dataset.purchasePrice || '0';
@@ -1392,8 +1409,9 @@ function filterTable() {
         if (filterId && !id.includes(filterId)) return false;
         if (filterName && !name.includes(filterName)) return false;
         if (filterBrand && !brand.includes(filterBrand)) return false;
+        if (filterModel && !model.includes(filterModel)) return false;
         if (filterCondition && condition !== filterCondition) return false;
-        if (filterStore && !store.includes(filterStore)) return false;
+        if (filterStore && store !== filterStore) return false;
         if (filterDate && date !== filterDate) return false;
         if (filterStatus && status !== filterStatus) return false;
         

@@ -182,6 +182,12 @@
             </div>
             
             <div class="form-group">
+                <label for="model_number">型番</label>
+                <input type="text" id="model_number" name="model_number" 
+                       value="{{ item.model_number if item else '' }}" placeholder="例: M44874, 116500LN">
+            </div>
+            
+            <div class="form-group">
                 <label for="item_condition">商品状態</label>
                 <select id="item_condition" name="item_condition">
                     <option value="">選択してください</option>
@@ -194,9 +200,13 @@
             </div>
             
             <div class="form-group">
-                <label for="store_name">店舗名</label>
-                <input type="text" id="store_name" name="store_name" 
-                       value="{{ item.store_name if item else '' }}">
+                <label for="store_name">仕入先</label>
+                <select id="store_name" name="store_name">
+                    <option value="">選択してください</option>
+                    <option value="個人" {% if item and item.store_name == '個人' %}selected{% endif %}>個人</option>
+                    <option value="代行サービス" {% if item and item.store_name == '代行サービス' %}selected{% endif %}>代行サービス</option>
+                    <option value="オークション" {% if item and item.store_name == 'オークション' %}selected{% endif %}>オークション</option>
+                </select>
             </div>
             
             <div class="form-group">

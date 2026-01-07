@@ -337,6 +337,8 @@
                 <dd>{{ item.purchase_date or '-' }}</dd>
                 <dt>ブランド</dt>
                 <dd>{{ item.brand_name or '-' }}</dd>
+                <dt>型番</dt>
+                <dd>{{ item.model_number or '-' }}</dd>
                 <dt>商品状態</dt>
                 <dd>
                     {% if item.item_condition %}
@@ -349,7 +351,7 @@
                     {% endif %}
                     {% else %}-{% endif %}
                 </dd>
-                <dt>店舗名</dt>
+                <dt>仕入先</dt>
                 <dd>{{ item.store_name or '-' }}</dd>
                 <dt>仕入額</dt>
                 <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
