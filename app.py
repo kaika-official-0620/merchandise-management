@@ -155,6 +155,24 @@ if DATABASE_URL:
         except:
             pass
         
+        # supplier_detailカラムを追加（仕入先詳細）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS supplier_detail VARCHAR(50)")
+        except:
+            pass
+        
+        # id_document_pathカラムを追加（身分証）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS id_document_path TEXT")
+        except:
+            pass
+        
+        # consent_form_pathカラムを追加（同意書）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS consent_form_path TEXT")
+        except:
+            pass
+        
         # 顧客テーブル（user_id追加）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS customers (
@@ -409,6 +427,24 @@ else:
         # model_numberカラムを追加（型番）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN model_number TEXT")
+        except:
+            pass
+        
+        # supplier_detailカラムを追加（仕入先詳細）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN supplier_detail TEXT")
+        except:
+            pass
+        
+        # id_document_pathカラムを追加（身分証）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN id_document_path TEXT")
+        except:
+            pass
+        
+        # consent_form_pathカラムを追加（同意書）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN consent_form_path TEXT")
         except:
             pass
         
@@ -1061,6 +1097,38 @@ def user_analytics():
         """, (current_user.id,))
         analytics_data['summary'] = dict(cur.fetchone() or {})
         
+        # KPI用追加データ
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN EXTRACT(DAY FROM sale_date - purchase_date) END), 0) as avg_days_to_sell
+            FROM merchandise 
+            WHERE user_id = %s
+        """, (current_user.id,))
+        analytics_data['kpi'] = dict(cur.fetchone() or {})
+        
+        # 月別キャッシュフロー
+        cur.execute("""
+            SELECT 
+                TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM') as month,
+                COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN purchase_price ELSE 0 END), 0) as purchase_out,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
+            FROM merchandise 
+            WHERE user_id = %s
+            GROUP BY TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM')
+            ORDER BY month DESC
+            LIMIT 12
+        """, (current_user.id,))
+        analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
+        
     else:
         import sqlite3
         cur = conn.cursor()
@@ -1147,6 +1215,38 @@ def user_analytics():
             WHERE user_id = ?
         """, (current_user.id,))
         analytics_data['summary'] = dict(cur.fetchone() or {})
+        
+        # KPI用追加データ
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
+            FROM merchandise 
+            WHERE user_id = ?
+        """, (current_user.id,))
+        analytics_data['kpi'] = dict(cur.fetchone() or {})
+        
+        # 月別キャッシュフロー
+        cur.execute("""
+            SELECT 
+                strftime('%Y-%m', COALESCE(sale_date, purchase_date)) as month,
+                COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN purchase_price ELSE 0 END), 0) as purchase_out,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
+            FROM merchandise 
+            WHERE user_id = ?
+            GROUP BY strftime('%Y-%m', COALESCE(sale_date, purchase_date))
+            ORDER BY month DESC
+            LIMIT 12
+        """, (current_user.id,))
+        analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -1179,15 +1279,34 @@ def add_item():
         
         additional_photos_json = json.dumps(additional_photos) if additional_photos else None
         
+        # 身分証ファイル
+        id_document_path = None
+        if 'id_document' in request.files:
+            file = request.files['id_document']
+            if file and file.filename:
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                id_document_path = f'uploads/{filename}'
+        
+        # 同意書ファイル
+        consent_form_path = None
+        if 'consent_form' in request.files:
+            file = request.files['consent_form']
+            if file and file.filename:
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                consent_form_path = f'uploads/{filename}'
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
+                    supplier_detail, id_document_path, consent_form_path,
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -1198,6 +1317,9 @@ def add_item():
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
+                request.form.get('supplier_detail'),
+                id_document_path,
+                consent_form_path,
                 int(request.form.get('purchase_price') or 0),
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
@@ -1217,10 +1339,11 @@ def add_item():
             cur = conn.cursor()
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
+                    supplier_detail, id_document_path, consent_form_path,
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -1231,6 +1354,9 @@ def add_item():
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
+                request.form.get('supplier_detail'),
+                id_document_path,
+                consent_form_path,
                 int(request.form.get('purchase_price') or 0),
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
@@ -1309,10 +1435,29 @@ def edit_item(id):
         
         additional_photos_json = json.dumps(additional_photos) if additional_photos else None
         
+        # 身分証ファイル
+        id_document_path = item.get('id_document_path')
+        if 'id_document' in request.files:
+            file = request.files['id_document']
+            if file and file.filename:
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                id_document_path = f'uploads/{filename}'
+        
+        # 同意書ファイル
+        consent_form_path = item.get('consent_form_path')
+        if 'consent_form' in request.files:
+            file = request.files['consent_form']
+            if file and file.filename:
+                filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                consent_form_path = f'uploads/{filename}'
+        
         if DATABASE_URL:
             cur.execute('''
                 UPDATE merchandise SET 
                     purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                    supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
                     purchase_price = %s, payment_method = %s, listing_price = %s, 
                     expected_shipping = %s, expected_commission = %s,
                     is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
@@ -1327,6 +1472,9 @@ def edit_item(id):
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
+                request.form.get('supplier_detail'),
+                id_document_path,
+                consent_form_path,
                 int(request.form.get('purchase_price') or 0),
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
@@ -1347,6 +1495,7 @@ def edit_item(id):
             cur.execute('''
                 UPDATE merchandise SET 
                     purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                    supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
                     purchase_price = ?, payment_method = ?, listing_price = ?, 
                     expected_shipping = ?, expected_commission = ?,
                     is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
@@ -1361,6 +1510,9 @@ def edit_item(id):
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
                 request.form.get('store_name'),
+                request.form.get('supplier_detail'),
+                id_document_path,
+                consent_form_path,
                 int(request.form.get('purchase_price') or 0),
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),

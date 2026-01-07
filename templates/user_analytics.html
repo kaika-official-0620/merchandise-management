@@ -39,6 +39,126 @@
     </div>
 </div>
 
+<!-- KPIダッシュボード -->
+<div class="kpi-dashboard">
+    <h2>KPIダッシュボード</h2>
+    <div class="kpi-grid">
+        {% set sold = analytics.kpi.sold_count or 0 %}
+        {% set total = analytics.kpi.total_items or 1 %}
+        {% set sales = analytics.summary.total_sales or 0 %}
+        {% set purchase = analytics.summary.total_purchase or 1 %}
+        {% set profit = analytics.summary.total_profit or 0 %}
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-content">
+                <div class="kpi-value">{{ "%.1f"|format((sold / total * 100) if total > 0 else 0) }}%</div>
+                <div class="kpi-label">販売率</div>
+                <div class="kpi-detail">{{ sold }}/{{ total }}件</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-content">
+                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format((profit / sales * 100) if sales > 0 else 0) }}%</div>
+                <div class="kpi-label">利益率</div>
+                <div class="kpi-detail">利益 ÷ 売上</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">📈</div>
+            <div class="kpi-content">
+                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format((profit / purchase * 100) if purchase > 0 else 0) }}%</div>
+                <div class="kpi-label">ROI（投資利益率）</div>
+                <div class="kpi-detail">利益 ÷ 仕入額</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">⏱️</div>
+            <div class="kpi-content">
+                <div class="kpi-value">{{ (analytics.kpi.avg_days_to_sell or 0)|int }}日</div>
+                <div class="kpi-label">平均販売日数</div>
+                <div class="kpi-detail">仕入〜売却</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">🔄</div>
+            <div class="kpi-content">
+                {% set turnover = (sold / ((total - sold + 1) if (total - sold) > 0 else 1)) %}
+                <div class="kpi-value">{{ "%.2f"|format(turnover) }}</div>
+                <div class="kpi-label">在庫回転率</div>
+                <div class="kpi-detail">販売数 ÷ 在庫数</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon">💵</div>
+            <div class="kpi-content">
+                <div class="kpi-value">¥{{ "{:,}".format((analytics.summary.avg_profit or 0)|int) }}</div>
+                <div class="kpi-label">平均利益/件</div>
+                <div class="kpi-detail">1商品あたり</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- キャッシュフロー表 -->
+<div class="cashflow-section">
+    <h2>キャッシュフロー表</h2>
+    {% if analytics.cashflow %}
+    <div class="cashflow-table-container">
+        <table class="cashflow-table">
+            <thead>
+                <tr>
+                    <th>月</th>
+                    <th>仕入支出</th>
+                    <th>売上収入</th>
+                    <th>経費（送料・手数料）</th>
+                    <th>純利益</th>
+                    <th>累計</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set ns = namespace(cumulative=0) %}
+                {% for cf in analytics.cashflow|reverse %}
+                {% set ns.cumulative = ns.cumulative + (cf.net_profit|int) %}
+                <tr>
+                    <td>{{ cf.month }}</td>
+                    <td class="amount negative">-¥{{ "{:,}".format((cf.purchase_out or 0)|int) }}</td>
+                    <td class="amount positive">+¥{{ "{:,}".format((cf.sales_in or 0)|int) }}</td>
+                    <td class="amount negative">-¥{{ "{:,}".format((cf.expenses_out or 0)|int) }}</td>
+                    <td class="amount {% if cf.net_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        {% if cf.net_profit >= 0 %}+{% endif %}¥{{ "{:,}".format((cf.net_profit or 0)|int) }}
+                    </td>
+                    <td class="amount {% if ns.cumulative > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        {% if ns.cumulative >= 0 %}+{% endif %}¥{{ "{:,}".format(ns.cumulative) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th>合計</th>
+                    <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='purchase_out')|int) }}</th>
+                    <th class="amount positive">+¥{{ "{:,}".format(analytics.cashflow|sum(attribute='sales_in')|int) }}</th>
+                    <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='expenses_out')|int) }}</th>
+                    <th class="amount {% if analytics.cashflow|sum(attribute='net_profit') > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        {% if analytics.cashflow|sum(attribute='net_profit') >= 0 %}+{% endif %}¥{{ "{:,}".format(analytics.cashflow|sum(attribute='net_profit')|int) }}
+                    </th>
+                    <th></th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-message">データがありません</p>
+    {% endif %}
+</div>
+
 <div class="analytics-grid">
     <!-- 月別売上推移（折れ線グラフ） -->
     <div class="analytics-section full-width">
@@ -206,6 +326,133 @@
 </div>
 
 <style>
+/* KPIダッシュボード */
+.kpi-dashboard {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.kpi-dashboard h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.kpi-icon {
+    font-size: 2rem;
+    opacity: 0.8;
+}
+
+.kpi-content {
+    flex: 1;
+}
+
+.kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.2;
+}
+
+.kpi-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 0.25rem;
+}
+
+.kpi-detail {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+/* キャッシュフロー表 */
+.cashflow-section {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.cashflow-section h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.cashflow-table-container {
+    overflow-x: auto;
+}
+
+.cashflow-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.cashflow-table th,
+.cashflow-table td {
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    text-align: right;
+}
+
+.cashflow-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #475569;
+}
+
+.cashflow-table th:first-child,
+.cashflow-table td:first-child {
+    text-align: left;
+}
+
+.cashflow-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.cashflow-table tfoot tr {
+    background: #f1f5f9;
+    font-weight: 600;
+}
+
+.cashflow-table .amount {
+    font-family: 'Consolas', monospace;
+}
+
+.cashflow-table .positive {
+    color: #2563eb;
+}
+
+.cashflow-table .negative {
+    color: #dc2626;
+}
+
 .analytics-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -554,6 +801,31 @@
     
     .line-chart-container {
         height: 250px;
+    }
+    
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .kpi-card {
+        padding: 0.75rem;
+    }
+    
+    .kpi-icon {
+        font-size: 1.5rem;
+    }
+    
+    .kpi-value {
+        font-size: 1.25rem;
+    }
+    
+    .cashflow-table {
+        font-size: 0.8rem;
+    }
+    
+    .cashflow-table th,
+    .cashflow-table td {
+        padding: 0.5rem;
     }
 }
 </style>

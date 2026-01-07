@@ -353,6 +353,22 @@
                 </dd>
                 <dt>仕入先</dt>
                 <dd>{{ item.store_name or '-' }}</dd>
+                {% if item.store_name == '個人' %}
+                <dt>仕入先詳細</dt>
+                <dd>{{ item.supplier_detail or '-' }}</dd>
+                <dt>身分証</dt>
+                <dd>
+                    {% if item.id_document_path %}
+                    <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>同意書</dt>
+                <dd>
+                    {% if item.consent_form_path %}
+                    <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                {% endif %}
                 <dt>仕入額</dt>
                 <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
                 <dt>支払方法</dt>

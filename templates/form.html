@@ -31,6 +31,23 @@
     margin-top: 4px;
 }
 
+.current-file {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #e8f5e9;
+    border-radius: 4px;
+}
+
+.current-file a {
+    color: #2e7d32;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.current-file a:hover {
+    text-decoration: underline;
+}
+
 .additional-photos-grid {
     margin-top: 15px;
     padding: 15px;
@@ -201,12 +218,47 @@
             
             <div class="form-group">
                 <label for="store_name">仕入先</label>
-                <select id="store_name" name="store_name">
+                <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
                     <option value="">選択してください</option>
                     <option value="個人" {% if item and item.store_name == '個人' %}selected{% endif %}>個人</option>
                     <option value="代行サービス" {% if item and item.store_name == '代行サービス' %}selected{% endif %}>代行サービス</option>
                     <option value="オークション" {% if item and item.store_name == 'オークション' %}selected{% endif %}>オークション</option>
                 </select>
+            </div>
+            
+            <!-- 個人選択時の追加フィールド -->
+            <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="supplier_detail">仕入先詳細</label>
+                    <select id="supplier_detail" name="supplier_detail">
+                        <option value="">選択してください</option>
+                        <option value="業者" {% if item and item.supplier_detail == '業者' %}selected{% endif %}>業者</option>
+                        <option value="クライアント" {% if item and item.supplier_detail == 'クライアント' %}selected{% endif %}>クライアント</option>
+                        <option value="個人顧客" {% if item and item.supplier_detail == '個人顧客' %}selected{% endif %}>個人顧客</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_document">身分証</label>
+                    <input type="file" id="id_document" name="id_document" accept="image/*,.pdf">
+                    {% if item and item.id_document_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="consent_form">同意書</label>
+                    <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf">
+                    {% if item and item.consent_form_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
             </div>
             
             <div class="form-group">
@@ -454,8 +506,23 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
     }
 });
 
+// 仕入先詳細セクションの表示切替
+function toggleSupplierDetail() {
+    const storeType = document.getElementById('store_name').value;
+    const detailSection = document.getElementById('supplier-detail-section');
+    
+    if (storeType === '個人') {
+        detailSection.style.display = 'block';
+    } else {
+        detailSection.style.display = 'none';
+    }
+}
+
 // 初期計算
 document.addEventListener('DOMContentLoaded', function() {
+    // 仕入先詳細の初期表示
+    toggleSupplierDetail();
+    
     const existingCommission = parseInt(document.getElementById('commission').value) || 0;
     const existingSalePrice = parseInt(document.getElementById('sale_price').value) || 0;
     
