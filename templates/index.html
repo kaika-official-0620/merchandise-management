@@ -83,23 +83,73 @@
     opacity: 0.8;
 }
 
-/* フィルタータブ */
-.filter-tabs {
+/* 検索ボタン */
+.search-toggle-container {
+    margin-bottom: 1rem;
+}
+
+.search-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: white;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #1e293b;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.search-toggle-btn:hover {
+    background: #f8fafc;
+    border-color: #2563eb;
+}
+
+.search-toggle-btn.active {
+    background: #2563eb;
+    color: white;
+    border-color: #2563eb;
+}
+
+.search-toggle-btn .search-icon {
+    font-size: 1rem;
+}
+
+.filter-count {
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    margin-left: 0.25rem;
+}
+
+/* フィルターパネル */
+.filter-panel {
+    display: none;
     background: white;
     border: 1px solid #d1d5db;
     margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.filter-panel.open {
+    display: block;
 }
 
 .filter-tabs-header {
     display: flex;
     border-bottom: 1px solid #d1d5db;
+    background: #f8fafc;
 }
 
 .filter-tab-btn {
     padding: 0.75rem 1.25rem;
-    background: #f8fafc;
+    background: transparent;
     border: none;
-    border-right: 1px solid #d1d5db;
+    border-right: 1px solid #e2e8f0;
     cursor: pointer;
     font-size: 0.85rem;
     color: #64748b;
@@ -185,6 +235,42 @@
     background: #e2e8f0;
 }
 
+.filter-panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-apply-btn {
+    padding: 0.5rem 1.25rem;
+    background: #2563eb;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.filter-apply-btn:hover {
+    background: #1d4ed8;
+}
+
+.filter-reset-btn {
+    padding: 0.5rem 1rem;
+    background: white;
+    color: #64748b;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.filter-reset-btn:hover {
+    background: #f1f5f9;
+}
+
 @media (max-width: 768px) {
     .announcement-area {
         flex-direction: column;
@@ -198,12 +284,31 @@
     .announcement-nav {
         margin-left: 0;
     }
+    .search-toggle-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .filter-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        overflow-y: auto;
+        margin: 0;
+    }
     .filter-tabs-header {
         flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
     }
     .filter-tab-btn {
-        padding: 0.5rem 0.75rem;
+        flex: 1;
+        padding: 0.75rem 0.5rem;
         font-size: 0.8rem;
+        text-align: center;
     }
     .filter-group {
         flex-direction: column;
@@ -217,9 +322,9 @@
     .filter-item select {
         width: 100%;
     }
-    .filter-actions {
-        margin-left: 0;
-        margin-top: 0.5rem;
+    .filter-panel-footer {
+        position: sticky;
+        bottom: 0;
     }
 }
 
@@ -792,13 +897,22 @@
 </div>
 {% endif %}
 
-<!-- フィルタータブ -->
-<div class="filter-tabs">
+<!-- 検索ボタン -->
+<div class="search-toggle-container">
+    <button class="search-toggle-btn" id="searchToggleBtn" onclick="toggleFilterPanel()">
+        <span class="search-icon">🔍</span>
+        <span>検索・フィルター</span>
+        <span class="filter-count" id="filterCount" style="display: none;">0</span>
+    </button>
+</div>
+
+<!-- フィルターパネル -->
+<div class="filter-panel" id="filterPanel">
     <div class="filter-tabs-header">
-        <button class="filter-tab-btn active" onclick="showFilterTab('period')">期間</button>
-        <button class="filter-tab-btn" onclick="showFilterTab('status')">状態</button>
-        <button class="filter-tab-btn" onclick="showFilterTab('text')">テキスト検索</button>
-        <button class="filter-tab-btn" onclick="showFilterTab('price')">金額</button>
+        <button class="filter-tab-btn active" onclick="showFilterTab('period', event)">期間</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('text', event)">テキスト検索</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
     </div>
     
     <!-- 期間フィルター -->
@@ -811,7 +925,7 @@
             <a href="{{ url_for('index', filter='month') }}" class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
             <div class="filter-item">
                 <label>日付指定</label>
-                <input type="date" id="tab-filter-date" onchange="filterTable()">
+                <input type="date" id="tab-filter-date">
             </div>
         </div>
     </div>
@@ -824,7 +938,7 @@
             <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
             <div class="filter-item">
                 <label>状態</label>
-                <select id="tab-filter-condition" onchange="filterTable()">
+                <select id="tab-filter-condition">
                     <option value="">全て</option>
                     <option value="N">N</option>
                     <option value="S">S</option>
@@ -835,7 +949,7 @@
             </div>
             <div class="filter-item">
                 <label>販売状況</label>
-                <select id="tab-filter-status" onchange="filterTable()">
+                <select id="tab-filter-status">
                     <option value="">すべて</option>
                     <option value="sold">売却済</option>
                     <option value="listed">出品中</option>
@@ -850,22 +964,19 @@
         <div class="filter-group">
             <div class="filter-item">
                 <label>No</label>
-                <input type="text" id="tab-filter-id" placeholder="No" onkeyup="filterTable()">
+                <input type="text" id="tab-filter-id" placeholder="No">
             </div>
             <div class="filter-item">
                 <label>商品名</label>
-                <input type="text" id="tab-filter-name" placeholder="商品名" onkeyup="filterTable()">
+                <input type="text" id="tab-filter-name" placeholder="商品名">
             </div>
             <div class="filter-item">
                 <label>ブランド</label>
-                <input type="text" id="tab-filter-brand" placeholder="ブランド" onkeyup="filterTable()">
+                <input type="text" id="tab-filter-brand" placeholder="ブランド">
             </div>
             <div class="filter-item">
                 <label>店舗</label>
-                <input type="text" id="tab-filter-store" placeholder="店舗" onkeyup="filterTable()">
-            </div>
-            <div class="filter-actions">
-                <button class="filter-clear-btn" onclick="clearTextFilters()">クリア</button>
+                <input type="text" id="tab-filter-store" placeholder="店舗">
             </div>
         </div>
     </div>
@@ -875,26 +986,29 @@
         <div class="filter-group">
             <div class="filter-item">
                 <label>仕入額</label>
-                <input type="number" id="tab-filter-purchase-min" placeholder="以上" onchange="filterTable()">
+                <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
-                <input type="number" id="tab-filter-purchase-max" placeholder="以下" onchange="filterTable()">
+                <input type="number" id="tab-filter-purchase-max" placeholder="以下">
             </div>
             <div class="filter-item">
                 <label>売上</label>
-                <input type="number" id="tab-filter-sale-min" placeholder="以上" onchange="filterTable()">
+                <input type="number" id="tab-filter-sale-min" placeholder="以上">
                 <span>〜</span>
-                <input type="number" id="tab-filter-sale-max" placeholder="以下" onchange="filterTable()">
+                <input type="number" id="tab-filter-sale-max" placeholder="以下">
             </div>
             <div class="filter-item">
                 <label>利益</label>
-                <input type="number" id="tab-filter-profit-min" placeholder="以上" onchange="filterTable()">
+                <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
-                <input type="number" id="tab-filter-profit-max" placeholder="以下" onchange="filterTable()">
-            </div>
-            <div class="filter-actions">
-                <button class="filter-clear-btn" onclick="clearPriceFilters()">クリア</button>
+                <input type="number" id="tab-filter-profit-max" placeholder="以下">
             </div>
         </div>
+    </div>
+    
+    <!-- フッターボタン -->
+    <div class="filter-panel-footer">
+        <button class="filter-reset-btn" onclick="resetAllFilters()">リセット</button>
+        <button class="filter-apply-btn" onclick="applyFilters()">検索</button>
     </div>
 </div>
 
@@ -1135,8 +1249,16 @@
 </div>
 
 <script>
+// フィルターパネル開閉
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    const btn = document.getElementById('searchToggleBtn');
+    panel.classList.toggle('open');
+    btn.classList.toggle('active');
+}
+
 // フィルタータブ切り替え
-function showFilterTab(tabName) {
+function showFilterTab(tabName, e) {
     // すべてのタブコンテンツを非表示
     document.querySelectorAll('.filter-tab-content').forEach(tab => {
         tab.classList.remove('active');
@@ -1157,27 +1279,70 @@ function showFilterTab(tabName) {
     
     // 選択したタブを表示
     document.getElementById(contentId).classList.add('active');
-    event.target.classList.add('active');
+    if (e && e.target) {
+        e.target.classList.add('active');
+    }
 }
 
-// テキストフィルターをクリア
-function clearTextFilters() {
+// 全フィルターをリセット
+function resetAllFilters() {
+    // テキストフィルター
     document.getElementById('tab-filter-id').value = '';
     document.getElementById('tab-filter-name').value = '';
     document.getElementById('tab-filter-brand').value = '';
     document.getElementById('tab-filter-store').value = '';
-    filterTable();
-}
-
-// 金額フィルターをクリア
-function clearPriceFilters() {
+    document.getElementById('tab-filter-date').value = '';
+    
+    // セレクト
+    document.getElementById('tab-filter-condition').value = '';
+    document.getElementById('tab-filter-status').value = '';
+    
+    // 金額フィルター
     document.getElementById('tab-filter-purchase-min').value = '';
     document.getElementById('tab-filter-purchase-max').value = '';
     document.getElementById('tab-filter-sale-min').value = '';
     document.getElementById('tab-filter-sale-max').value = '';
     document.getElementById('tab-filter-profit-min').value = '';
     document.getElementById('tab-filter-profit-max').value = '';
+    
     filterTable();
+    updateFilterCount();
+}
+
+// フィルター適用
+function applyFilters() {
+    filterTable();
+    updateFilterCount();
+    // パネルを閉じる
+    document.getElementById('filterPanel').classList.remove('open');
+    document.getElementById('searchToggleBtn').classList.remove('active');
+}
+
+// フィルター数をカウント
+function updateFilterCount() {
+    let count = 0;
+    
+    if (document.getElementById('tab-filter-id')?.value) count++;
+    if (document.getElementById('tab-filter-name')?.value) count++;
+    if (document.getElementById('tab-filter-brand')?.value) count++;
+    if (document.getElementById('tab-filter-store')?.value) count++;
+    if (document.getElementById('tab-filter-date')?.value) count++;
+    if (document.getElementById('tab-filter-condition')?.value) count++;
+    if (document.getElementById('tab-filter-status')?.value) count++;
+    if (document.getElementById('tab-filter-purchase-min')?.value) count++;
+    if (document.getElementById('tab-filter-purchase-max')?.value) count++;
+    if (document.getElementById('tab-filter-sale-min')?.value) count++;
+    if (document.getElementById('tab-filter-sale-max')?.value) count++;
+    if (document.getElementById('tab-filter-profit-min')?.value) count++;
+    if (document.getElementById('tab-filter-profit-max')?.value) count++;
+    
+    const countEl = document.getElementById('filterCount');
+    if (count > 0) {
+        countEl.textContent = count;
+        countEl.style.display = 'inline';
+    } else {
+        countEl.style.display = 'none';
+    }
 }
 
 // テーブルフィルター機能（PC・スマホ両対応）
