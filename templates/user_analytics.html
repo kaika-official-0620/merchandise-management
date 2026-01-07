@@ -40,9 +40,33 @@
 </div>
 
 <div class="analytics-grid">
-    <!-- 月別推移 -->
+    <!-- 月別売上推移（折れ線グラフ） -->
     <div class="analytics-section full-width">
-        <h2>月別売上・利益推移</h2>
+        <h2>月別 売上推移</h2>
+        {% if analytics.monthly_sales %}
+        <div class="line-chart-container">
+            <canvas id="salesChart"></canvas>
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+    
+    <!-- 月別利益推移（折れ線グラフ） -->
+    <div class="analytics-section full-width">
+        <h2>月別 利益推移</h2>
+        {% if analytics.monthly_sales %}
+        <div class="line-chart-container">
+            <canvas id="profitChart"></canvas>
+        </div>
+        {% else %}
+        <p class="empty-message">データがありません</p>
+        {% endif %}
+    </div>
+
+    <!-- 月別データテーブル -->
+    <div class="analytics-section full-width">
+        <h2>月別売上・利益一覧</h2>
         {% if analytics.monthly_sales %}
         <div class="chart-container">
             <div class="bar-chart-horizontal">
@@ -198,15 +222,16 @@
 }
 
 .summary-card.highlight {
-    background: #1e293b;
+    background: white;
+    border: 2px solid #10b981;
 }
 
 .summary-card.highlight .summary-label {
-    color: #94a3b8;
+    color: #64748b;
 }
 
 .summary-card.highlight .summary-value {
-    color: white;
+    color: #10b981;
 }
 
 .summary-label {
@@ -503,6 +528,13 @@
     color: #ef4444;
 }
 
+/* 折れ線グラフコンテナ */
+.line-chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
 @media (max-width: 768px) {
     .analytics-grid {
         grid-template-columns: 1fr;
@@ -519,7 +551,157 @@
     .analytics-summary {
         grid-template-columns: repeat(2, 1fr);
     }
+    
+    .line-chart-container {
+        height: 250px;
+    }
 }
 </style>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% if analytics.monthly_sales %}
+    // 月別データを時系列順に並べる
+    const monthlyData = {{ analytics.monthly_sales | tojson }};
+    const sortedData = monthlyData.slice().reverse();
+    
+    const labels = sortedData.map(d => d.month);
+    const salesData = sortedData.map(d => d.sales);
+    const profitData = sortedData.map(d => d.profit);
+    
+    // 共通オプション
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            intersect: false,
+            mode: 'index'
+        },
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                backgroundColor: '#1e293b',
+                titleColor: '#fff',
+                bodyColor: '#fff',
+                padding: 12,
+                displayColors: false,
+                callbacks: {
+                    label: function(context) {
+                        return '¥' + context.raw.toLocaleString();
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    font: {
+                        family: "'Noto Sans JP', sans-serif",
+                        size: 11
+                    },
+                    color: '#64748b'
+                }
+            },
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: '#f1f5f9'
+                },
+                ticks: {
+                    font: {
+                        family: "'Noto Sans JP', sans-serif",
+                        size: 11
+                    },
+                    color: '#64748b',
+                    callback: function(value) {
+                        return '¥' + value.toLocaleString();
+                    }
+                }
+            }
+        }
+    };
+    
+    // 売上推移グラフ
+    const salesCtx = document.getElementById('salesChart');
+    if (salesCtx) {
+        new Chart(salesCtx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '売上',
+                    data: salesData,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#2563eb',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: commonOptions
+        });
+    }
+    
+    // 利益推移グラフ
+    const profitCtx = document.getElementById('profitChart');
+    if (profitCtx) {
+        // 利益の最小値を確認（マイナスがあるか）
+        const minProfit = Math.min(...profitData);
+        const profitOptions = JSON.parse(JSON.stringify(commonOptions));
+        if (minProfit < 0) {
+            profitOptions.scales.y.beginAtZero = false;
+        }
+        
+        new Chart(profitCtx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '利益',
+                    data: profitData,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: function(context) {
+                        const value = context.raw;
+                        return value >= 0 ? '#10b981' : '#ef4444';
+                    },
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    segment: {
+                        borderColor: function(context) {
+                            const p0 = context.p0.parsed.y;
+                            const p1 = context.p1.parsed.y;
+                            if (p0 < 0 || p1 < 0) {
+                                return '#ef4444';
+                            }
+                            return '#10b981';
+                        }
+                    }
+                }]
+            },
+            options: profitOptions
+        });
+    }
+    {% endif %}
+});
+</script>
 {% endblock %}
 
