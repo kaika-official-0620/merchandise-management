@@ -379,10 +379,12 @@
         <div class="detail-section">
             <h3>出品情報</h3>
             <dl class="detail-list">
-                <dt>出品状態</dt>
+                <dt>ステータス</dt>
                 <dd>
-                    {% if item.is_listed %}
-                    <span class="badge badge-listed">出品済み</span>
+                    {% if item.sale_date %}
+                    <span class="badge badge-sold">売却済み</span>
+                    {% elif item.is_listed %}
+                    <span class="badge badge-listed">出品中</span>
                     {% else %}
                     <span class="badge badge-pending">未出品</span>
                     {% endif %}

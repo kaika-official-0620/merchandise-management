@@ -1313,6 +1313,9 @@ def add_item():
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 consent_form_path = f'uploads/{filename}'
         
+        # ステータスを取得（未出品/出品中/売却済み）
+        item_status = request.form.get('item_status', 'unlisted')
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
@@ -1341,9 +1344,9 @@ def add_item():
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                'is_listed' in request.form,
-                request.form.get('listing_date') or None,
-                request.form.get('sale_date') or None,
+                item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                request.form.get('sale_date') or None if item_status == 'sold' else None,
                 request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
@@ -1378,9 +1381,9 @@ def add_item():
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                1 if 'is_listed' in request.form else 0,
-                request.form.get('listing_date') or None,
-                request.form.get('sale_date') or None,
+                1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                request.form.get('sale_date') or None if item_status == 'sold' else None,
                 request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
@@ -1469,6 +1472,9 @@ def edit_item(id):
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 consent_form_path = f'uploads/{filename}'
         
+        # ステータスを取得（未出品/出品中/売却済み）
+        item_status = request.form.get('item_status', 'unlisted')
+        
         if DATABASE_URL:
             cur.execute('''
                 UPDATE merchandise SET 
@@ -1496,9 +1502,9 @@ def edit_item(id):
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                'is_listed' in request.form,
-                request.form.get('listing_date') or None,
-                request.form.get('sale_date') or None,
+                item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                request.form.get('sale_date') or None if item_status == 'sold' else None,
                 request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
@@ -1534,9 +1540,9 @@ def edit_item(id):
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                1 if 'is_listed' in request.form else 0,
-                request.form.get('listing_date') or None,
-                request.form.get('sale_date') or None,
+                1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                request.form.get('sale_date') or None if item_status == 'sold' else None,
                 request.form.get('sale_type') or 'normal',
                 int(request.form.get('sale_price') or 0),
                 int(request.form.get('shipping_cost') or 0),
@@ -2004,6 +2010,41 @@ def admin_users():
         cur.execute("SELECT * FROM users ORDER BY created_at DESC")
     
     users = [dict(u) for u in cur.fetchall()]
+    
+    # 各ユーザーの当月商品数を取得
+    for user in users:
+        if DATABASE_URL:
+            cur.execute("""
+                SELECT COUNT(*) as count FROM merchandise 
+                WHERE user_id = %s 
+                AND DATE_TRUNC('month', COALESCE(purchase_date::date, CURRENT_DATE)) = DATE_TRUNC('month', CURRENT_DATE)
+            """, (user['id'],))
+            result = cur.fetchone()
+            user['monthly_item_count'] = result['count'] if result else 0
+        else:
+            cur.execute("""
+                SELECT COUNT(*) as count FROM merchandise 
+                WHERE user_id = ? 
+                AND strftime('%Y-%m', COALESCE(purchase_date, date('now'))) = strftime('%Y-%m', 'now')
+            """, (user['id'],))
+            result = cur.fetchone()
+            user['monthly_item_count'] = result[0] if result else 0
+        
+        # 月額利用料を計算
+        count = user['monthly_item_count']
+        if count <= 20:
+            user['monthly_fee'] = 2500
+        elif count <= 50:
+            user['monthly_fee'] = 5000
+        elif count <= 100:
+            user['monthly_fee'] = 10000
+        elif count <= 200:
+            user['monthly_fee'] = 20000
+        elif count <= 300:
+            user['monthly_fee'] = 30000
+        else:
+            user['monthly_fee'] = 30000  # 300以上は30000円
+    
     cur.close()
     conn.close()
     

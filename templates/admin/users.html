@@ -27,6 +27,8 @@
                     <th>表示名</th>
                     <th>メール</th>
                     <th>権限</th>
+                    <th>当月商品数<br><small style="font-weight:normal;color:#64748b;">月末締め</small></th>
+                    <th>月額利用料</th>
                     <th>登録日</th>
                     <th>最終ログイン</th>
                     <th>操作</th>
@@ -50,6 +52,14 @@
                         {% else %}
                         <span class="badge badge-user">ユーザー</span>
                         {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <strong>{{ user.monthly_item_count }}個</strong>
+                    </td>
+                    <td class="text-center">
+                        <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
+                            ¥{{ "{:,}".format(user.monthly_fee) }}
+                        </span>
                     </td>
                     <td>{{ (user.created_at|string)[:10] if user.created_at else '-' }}</td>
                     <td>{{ (user.last_login|string)[:10] if user.last_login else '-' }}</td>
@@ -86,9 +96,45 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="empty-cell">ユーザーがいません</td>
+                    <td colspan="10" class="empty-cell">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-section">
+    <h2>月額利用料（月末締め）</h2>
+    <div class="fee-table">
+        <table class="admin-table" style="max-width: 400px;">
+            <thead>
+                <tr>
+                    <th>商品数</th>
+                    <th>月額利用料</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0〜20個</td>
+                    <td><span class="fee-badge fee-low">¥2,500</span></td>
+                </tr>
+                <tr>
+                    <td>21〜50個</td>
+                    <td><span class="fee-badge fee-mid">¥5,000</span></td>
+                </tr>
+                <tr>
+                    <td>51〜100個</td>
+                    <td><span class="fee-badge fee-high">¥10,000</span></td>
+                </tr>
+                <tr>
+                    <td>101〜200個</td>
+                    <td><span class="fee-badge fee-max">¥20,000</span></td>
+                </tr>
+                <tr>
+                    <td>201〜300個</td>
+                    <td><span class="fee-badge fee-max">¥30,000</span></td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -126,6 +172,37 @@
 .badge-owner {
     background: #b91c1c;
     color: white;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.fee-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    font-weight: bold;
+    font-size: 0.875rem;
+}
+
+.fee-low {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.fee-mid {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.fee-high {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.fee-max {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .permission-hint {

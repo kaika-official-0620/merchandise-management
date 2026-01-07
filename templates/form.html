@@ -317,59 +317,80 @@
             <h2>売却情報</h2>
             
             <div class="form-group">
+                <label for="item_status">ステータス</label>
+                <select id="item_status" name="item_status" onchange="updateStatusFields()">
+                    {% set current_status = 'sold' if item and item.sale_date else ('listed' if item and item.is_listed else 'unlisted') %}
+                    <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
+                    <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
+                    <option value="sold" {% if current_status == 'sold' %}selected{% endif %}>売却済み</option>
+                </select>
+            </div>
+            
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-date-group" class="form-group" style="display: none;">
+                <label for="listing_date">出品日</label>
+                <input type="date" id="listing_date" name="listing_date" 
+                       value="{{ item.listing_date if item else '' }}">
+            </div>
+            
+            <!-- 売却済み時のみ表示 -->
+            <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
                 <input type="date" id="sale_date" name="sale_date" 
                        value="{{ item.sale_date if item else '' }}">
             </div>
             
-            <div class="form-group">
-                <label for="sale_type">販売タイプ</label>
-                <select id="sale_type" name="sale_type">
-                    <option value="normal" {% if not item or not item.sale_type or item.sale_type == 'normal' %}selected{% endif %}>通常（手数料10%）</option>
-                    <option value="photo_packing" {% if item and item.sale_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行サービス（25,000円以上:2%、未満:500円）</option>
-                    <option value="wholesale" {% if item and item.sale_type == 'wholesale' %}selected{% endif %}>業者卸販売（10%、30,000円以上で送料無料）</option>
-                    <option value="multi_listing" {% if item and item.sale_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
-                    <option value="auction" {% if item and item.sale_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="sale_price">売上金（税込販売価格）</label>
-                <input type="number" id="sale_price" name="sale_price" 
-                       value="{{ item.sale_price if item else 0 }}" min="0">
-            </div>
-            
-            <div class="form-group">
-                <label for="shipping_cost">送料</label>
-                <input type="number" id="shipping_cost" name="shipping_cost" 
-                       value="{{ item.shipping_cost if item else 0 }}" min="0">
-                <small class="form-help" id="shipping_hint"></small>
-            </div>
-            
-            <div class="form-group">
-                <label for="sales_destination">販売先（メモ）</label>
-                <input type="text" id="sales_destination" name="sales_destination" 
-                       value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力">
-            </div>
-            
-            <div class="form-group">
-                <label for="commission">手数料</label>
-                <input type="number" id="commission" name="commission" 
-                       value="{{ item.commission if item else 0 }}" min="0">
-                <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
-            </div>
-            
-            <div class="form-group checkbox-group">
-                <label>
-                    <input type="checkbox" name="is_shipped" 
-                           {% if item and item.is_shipped %}checked{% endif %}>
-                    発送済み
-                </label>
-            </div>
-            
-            <div class="form-group result-field">
-                <label>実際の利益</label>
-                <div class="calculated-value" id="actual_profit">¥0</div>
+            <!-- 売却済み時のみ表示するフィールド -->
+            <div id="sold-fields" style="display: none;">
+                <div class="form-group">
+                    <label for="sale_type">販売タイプ</label>
+                    <select id="sale_type" name="sale_type">
+                        <option value="normal" {% if not item or not item.sale_type or item.sale_type == 'normal' %}selected{% endif %}>通常（手数料10%）</option>
+                        <option value="photo_packing" {% if item and item.sale_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行サービス（25,000円以上:2%、未満:500円）</option>
+                        <option value="wholesale" {% if item and item.sale_type == 'wholesale' %}selected{% endif %}>業者卸販売（10%、30,000円以上で送料無料）</option>
+                        <option value="multi_listing" {% if item and item.sale_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
+                        <option value="auction" {% if item and item.sale_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sale_price">売上金（税込販売価格）</label>
+                    <input type="number" id="sale_price" name="sale_price" 
+                           value="{{ item.sale_price if item else 0 }}" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">送料</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           value="{{ item.shipping_cost if item else 0 }}" min="0">
+                    <small class="form-help" id="shipping_hint"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sales_destination">販売先（メモ）</label>
+                    <input type="text" id="sales_destination" name="sales_destination" 
+                           value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力">
+                </div>
+                
+                <div class="form-group">
+                    <label for="commission">手数料</label>
+                    <input type="number" id="commission" name="commission" 
+                           value="{{ item.commission if item else 0 }}" min="0">
+                    <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" name="is_shipped" 
+                               {% if item and item.is_shipped %}checked{% endif %}>
+                        発送済み
+                    </label>
+                </div>
+                
+                <div class="form-group result-field">
+                    <label>実際の利益</label>
+                    <div class="calculated-value" id="actual_profit">¥0</div>
+                </div>
             </div>
         </div>
     </div>
@@ -506,6 +527,30 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
     }
 });
 
+// ステータスに応じてフィールドの表示を切り替え
+function updateStatusFields() {
+    const status = document.getElementById('item_status').value;
+    const listingDateGroup = document.getElementById('listing-date-group');
+    const saleDateGroup = document.getElementById('sale-date-group');
+    const soldFields = document.getElementById('sold-fields');
+    
+    // 出品日フィールド：出品中・売却済みで表示
+    if (status === 'listed' || status === 'sold') {
+        listingDateGroup.style.display = 'block';
+    } else {
+        listingDateGroup.style.display = 'none';
+    }
+    
+    // 売却日・売却関連フィールド：売却済みで表示
+    if (status === 'sold') {
+        saleDateGroup.style.display = 'block';
+        soldFields.style.display = 'block';
+    } else {
+        saleDateGroup.style.display = 'none';
+        soldFields.style.display = 'none';
+    }
+}
+
 // 仕入先詳細セクションの表示切替
 function toggleSupplierDetail() {
     const storeType = document.getElementById('store_name').value;
@@ -520,6 +565,9 @@ function toggleSupplierDetail() {
 
 // 初期計算
 document.addEventListener('DOMContentLoaded', function() {
+    // ステータスフィールドの初期表示
+    updateStatusFields();
+    
     // 仕入先詳細の初期表示
     toggleSupplierDetail();
     
