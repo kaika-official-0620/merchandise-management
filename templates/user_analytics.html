@@ -43,16 +43,20 @@
 <div class="kpi-dashboard">
     <h2>KPIダッシュボード</h2>
     <div class="kpi-grid">
-        {% set sold = analytics.kpi.sold_count or 0 %}
-        {% set total = analytics.kpi.total_items or 1 %}
-        {% set sales = analytics.summary.total_sales or 0 %}
-        {% set purchase = analytics.summary.total_purchase or 1 %}
-        {% set profit = analytics.summary.total_profit or 0 %}
+        {% set kpi = analytics.kpi or {} %}
+        {% set sold = (kpi.sold_count or 0)|int %}
+        {% set total = (kpi.total_items or 1)|int %}
+        {% set total_safe = total if total > 0 else 1 %}
+        {% set sales = (analytics.summary.total_sales or 0)|int %}
+        {% set sales_safe = sales if sales > 0 else 1 %}
+        {% set purchase = (analytics.summary.total_purchase or 1)|int %}
+        {% set purchase_safe = purchase if purchase > 0 else 1 %}
+        {% set profit = (analytics.summary.total_profit or 0)|int %}
         
         <div class="kpi-card">
             <div class="kpi-icon">📊</div>
             <div class="kpi-content">
-                <div class="kpi-value">{{ "%.1f"|format((sold / total * 100) if total > 0 else 0) }}%</div>
+                <div class="kpi-value">{{ "%.1f"|format(sold / total_safe * 100) }}%</div>
                 <div class="kpi-label">販売率</div>
                 <div class="kpi-detail">{{ sold }}/{{ total }}件</div>
             </div>
@@ -61,7 +65,7 @@
         <div class="kpi-card">
             <div class="kpi-icon">💰</div>
             <div class="kpi-content">
-                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format((profit / sales * 100) if sales > 0 else 0) }}%</div>
+                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / sales_safe * 100) }}%</div>
                 <div class="kpi-label">利益率</div>
                 <div class="kpi-detail">利益 ÷ 売上</div>
             </div>
@@ -70,7 +74,7 @@
         <div class="kpi-card">
             <div class="kpi-icon">📈</div>
             <div class="kpi-content">
-                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format((profit / purchase * 100) if purchase > 0 else 0) }}%</div>
+                <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / purchase_safe * 100) }}%</div>
                 <div class="kpi-label">ROI（投資利益率）</div>
                 <div class="kpi-detail">利益 ÷ 仕入額</div>
             </div>
@@ -79,7 +83,7 @@
         <div class="kpi-card">
             <div class="kpi-icon">⏱️</div>
             <div class="kpi-content">
-                <div class="kpi-value">{{ (analytics.kpi.avg_days_to_sell or 0)|int }}日</div>
+                <div class="kpi-value">{{ (kpi.avg_days_to_sell or 0)|int }}日</div>
                 <div class="kpi-label">平均販売日数</div>
                 <div class="kpi-detail">仕入〜売却</div>
             </div>
@@ -88,8 +92,9 @@
         <div class="kpi-card">
             <div class="kpi-icon">🔄</div>
             <div class="kpi-content">
-                {% set turnover = (sold / ((total - sold + 1) if (total - sold) > 0 else 1)) %}
-                <div class="kpi-value">{{ "%.2f"|format(turnover) }}</div>
+                {% set unsold = total - sold %}
+                {% set unsold_safe = unsold if unsold > 0 else 1 %}
+                <div class="kpi-value">{{ "%.2f"|format(sold / unsold_safe) }}</div>
                 <div class="kpi-label">在庫回転率</div>
                 <div class="kpi-detail">販売数 ÷ 在庫数</div>
             </div>

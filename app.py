@@ -1098,36 +1098,44 @@ def user_analytics():
         analytics_data['summary'] = dict(cur.fetchone() or {})
         
         # KPI用追加データ
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
-                SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN EXTRACT(DAY FROM sale_date - purchase_date) END), 0) as avg_days_to_sell
-            FROM merchandise 
-            WHERE user_id = %s
-        """, (current_user.id,))
-        analytics_data['kpi'] = dict(cur.fetchone() or {})
+        try:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
+                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN sale_date::date - purchase_date::date END), 0) as avg_days_to_sell
+                FROM merchandise 
+                WHERE user_id = %s
+            """, (current_user.id,))
+            analytics_data['kpi'] = dict(cur.fetchone() or {})
+        except Exception as e:
+            print(f"KPI query error: {e}")
+            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
         
         # 月別キャッシュフロー
-        cur.execute("""
-            SELECT 
-                TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM') as month,
-                COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN purchase_price ELSE 0 END), 0) as purchase_out,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
-            FROM merchandise 
-            WHERE user_id = %s
-            GROUP BY TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM')
-            ORDER BY month DESC
-            LIMIT 12
-        """, (current_user.id,))
-        analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
+        try:
+            cur.execute("""
+                SELECT 
+                    TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM') as month,
+                    COALESCE(SUM(purchase_price), 0) as purchase_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
+                FROM merchandise 
+                WHERE user_id = %s AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
+                GROUP BY TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 12
+            """, (current_user.id,))
+            analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
+        except Exception as e:
+            print(f"Cashflow query error: {e}")
+            analytics_data['cashflow'] = []
         
     else:
         import sqlite3
@@ -1217,36 +1225,44 @@ def user_analytics():
         analytics_data['summary'] = dict(cur.fetchone() or {})
         
         # KPI用追加データ
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
-                SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
-            FROM merchandise 
-            WHERE user_id = ?
-        """, (current_user.id,))
-        analytics_data['kpi'] = dict(cur.fetchone() or {})
+        try:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
+                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
+                FROM merchandise 
+                WHERE user_id = ?
+            """, (current_user.id,))
+            analytics_data['kpi'] = dict(cur.fetchone() or {})
+        except Exception as e:
+            print(f"KPI query error: {e}")
+            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
         
         # 月別キャッシュフロー
-        cur.execute("""
-            SELECT 
-                strftime('%Y-%m', COALESCE(sale_date, purchase_date)) as month,
-                COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN purchase_price ELSE 0 END), 0) as purchase_out,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
-            FROM merchandise 
-            WHERE user_id = ?
-            GROUP BY strftime('%Y-%m', COALESCE(sale_date, purchase_date))
-            ORDER BY month DESC
-            LIMIT 12
-        """, (current_user.id,))
-        analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
+        try:
+            cur.execute("""
+                SELECT 
+                    strftime('%Y-%m', COALESCE(sale_date, purchase_date)) as month,
+                    COALESCE(SUM(purchase_price), 0) as purchase_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
+                FROM merchandise 
+                WHERE user_id = ? AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
+                GROUP BY strftime('%Y-%m', COALESCE(sale_date, purchase_date))
+                ORDER BY month DESC
+                LIMIT 12
+            """, (current_user.id,))
+            analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
+        except Exception as e:
+            print(f"Cashflow query error: {e}")
+            analytics_data['cashflow'] = []
     
     cur.close()
     conn.close()
