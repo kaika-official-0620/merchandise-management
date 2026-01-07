@@ -83,41 +83,105 @@
     opacity: 0.8;
 }
 
-/* コンパクト統計バー */
-.compact-stats {
+/* フィルタータブ */
+.filter-tabs {
     background: white;
-    border-radius: 10px;
-    padding: 12px 20px;
-    margin-bottom: 15px;
+    border: 1px solid #d1d5db;
+    margin-bottom: 1rem;
+}
+
+.filter-tabs-header {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-bottom: 1px solid #d1d5db;
+}
+
+.filter-tab-btn {
+    padding: 0.75rem 1.25rem;
+    background: #f8fafc;
+    border: none;
+    border-right: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.filter-tab-btn:last-child {
+    border-right: none;
+}
+
+.filter-tab-btn:hover {
+    background: #e2e8f0;
+}
+
+.filter-tab-btn.active {
+    background: white;
+    color: #1e293b;
+    border-bottom: 2px solid #2563eb;
+    margin-bottom: -1px;
+}
+
+.filter-tab-content {
+    display: none;
+    padding: 1rem;
+}
+
+.filter-tab-content.active {
+    display: block;
+}
+
+.filter-group {
+    display: flex;
     flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
 }
 
-.compact-stat {
+.filter-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
-.compact-stat-label {
+.filter-item label {
     font-size: 0.8rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.filter-item input,
+.filter-item select {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #d1d5db;
+    font-size: 0.85rem;
+    min-width: 100px;
+}
+
+.filter-item input[type="number"] {
+    width: 80px;
+}
+
+.filter-item input[type="date"] {
+    width: 140px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.filter-clear-btn {
+    padding: 0.4rem 0.75rem;
+    background: #f1f5f9;
+    border: 1px solid #d1d5db;
+    font-size: 0.8rem;
+    cursor: pointer;
     color: #64748b;
 }
 
-.compact-stat-value {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #1e293b;
-    font-family: 'Consolas', monospace;
-}
-
-.compact-stat-divider {
-    width: 1px;
-    height: 20px;
+.filter-clear-btn:hover {
     background: #e2e8f0;
 }
 
@@ -134,16 +198,28 @@
     .announcement-nav {
         margin-left: 0;
     }
-    .compact-stats {
-        gap: 10px;
-        padding: 10px 15px;
+    .filter-tabs-header {
+        flex-wrap: wrap;
     }
-    .compact-stat-divider {
-        display: none;
+    .filter-tab-btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
     }
-    .compact-stat {
+    .filter-group {
         flex-direction: column;
-        gap: 2px;
+        align-items: stretch;
+    }
+    .filter-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filter-item input,
+    .filter-item select {
+        width: 100%;
+    }
+    .filter-actions {
+        margin-left: 0;
+        margin-top: 0.5rem;
     }
 }
 
@@ -716,45 +792,109 @@
 </div>
 {% endif %}
 
-<!-- コンパクト統計バー -->
-<div class="compact-stats">
-    <div class="compact-stat">
-        <span class="compact-stat-label">登録</span>
-        <span class="compact-stat-value">{{ stats.total_items or 0 }}件</span>
+<!-- フィルタータブ -->
+<div class="filter-tabs">
+    <div class="filter-tabs-header">
+        <button class="filter-tab-btn active" onclick="showFilterTab('period')">期間</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('status')">状態</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('text')">テキスト検索</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('price')">金額</button>
     </div>
-    <div class="compact-stat-divider"></div>
-    <div class="compact-stat">
-        <span class="compact-stat-label">仕入</span>
-        <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+    
+    <!-- 期間フィルター -->
+    <div class="filter-tab-content active" id="filter-period">
+        <div class="filter-group">
+            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='today') }}" class="filter-btn {% if filter_type == 'today' %}active{% endif %}">今日</a>
+            <a href="{{ url_for('index', filter='yesterday') }}" class="filter-btn {% if filter_type == 'yesterday' %}active{% endif %}">昨日</a>
+            <a href="{{ url_for('index', filter='week') }}" class="filter-btn {% if filter_type == 'week' %}active{% endif %}">今週</a>
+            <a href="{{ url_for('index', filter='month') }}" class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
+            <div class="filter-item">
+                <label>日付指定</label>
+                <input type="date" id="tab-filter-date" onchange="filterTable()">
+            </div>
+        </div>
     </div>
-    <div class="compact-stat-divider"></div>
-    <div class="compact-stat">
-        <span class="compact-stat-label">売上</span>
-        <span class="compact-stat-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
+    
+    <!-- 状態フィルター -->
+    <div class="filter-tab-content" id="filter-status-tab">
+        <div class="filter-group">
+            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='sold') }}" class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
+            <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
+            <div class="filter-item">
+                <label>状態</label>
+                <select id="tab-filter-condition" onchange="filterTable()">
+                    <option value="">全て</option>
+                    <option value="N">N</option>
+                    <option value="S">S</option>
+                    <option value="A">A</option>
+                    <option value="AB">AB</option>
+                    <option value="B">B</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>販売状況</label>
+                <select id="tab-filter-status" onchange="filterTable()">
+                    <option value="">すべて</option>
+                    <option value="sold">売却済</option>
+                    <option value="listed">出品中</option>
+                    <option value="unlisted">未出品</option>
+                </select>
+            </div>
+        </div>
     </div>
-    <div class="compact-stat-divider"></div>
-    <div class="compact-stat">
-        <span class="compact-stat-label">利益</span>
-        <span class="compact-stat-value {% if stats.total_profit and stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
+    
+    <!-- テキスト検索 -->
+    <div class="filter-tab-content" id="filter-text">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>No</label>
+                <input type="text" id="tab-filter-id" placeholder="No" onkeyup="filterTable()">
+            </div>
+            <div class="filter-item">
+                <label>商品名</label>
+                <input type="text" id="tab-filter-name" placeholder="商品名" onkeyup="filterTable()">
+            </div>
+            <div class="filter-item">
+                <label>ブランド</label>
+                <input type="text" id="tab-filter-brand" placeholder="ブランド" onkeyup="filterTable()">
+            </div>
+            <div class="filter-item">
+                <label>店舗</label>
+                <input type="text" id="tab-filter-store" placeholder="店舗" onkeyup="filterTable()">
+            </div>
+            <div class="filter-actions">
+                <button class="filter-clear-btn" onclick="clearTextFilters()">クリア</button>
+            </div>
+        </div>
     </div>
-    <div class="compact-stat-divider"></div>
-    <div class="compact-stat">
-        <span class="compact-stat-label">利益率</span>
-        {% set profit_rate = ((stats.total_profit or 0) / (stats.total_sales or 1) * 100) if stats.total_sales and stats.total_sales > 0 else 0 %}
-        <span class="compact-stat-value {% if profit_rate > 0 %}profit-positive{% elif profit_rate < 0 %}profit-negative{% endif %}">{{ "%.1f"|format(profit_rate) }}%</span>
-    </div>
-</div>
-
-<!-- ツールバー -->
-<div class="filter-bar">
-    <div class="filter-buttons">
-        <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('index', filter='today') }}" class="filter-btn {% if filter_type == 'today' %}active{% endif %}">今日</a>
-        <a href="{{ url_for('index', filter='yesterday') }}" class="filter-btn {% if filter_type == 'yesterday' %}active{% endif %}">昨日</a>
-        <a href="{{ url_for('index', filter='week') }}" class="filter-btn {% if filter_type == 'week' %}active{% endif %}">今週</a>
-        <a href="{{ url_for('index', filter='month') }}" class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
-        <a href="{{ url_for('index', filter='sold') }}" class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
-        <a href="{{ url_for('index', filter='unsold') }}" class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
+    
+    <!-- 金額フィルター -->
+    <div class="filter-tab-content" id="filter-price">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>仕入額</label>
+                <input type="number" id="tab-filter-purchase-min" placeholder="以上" onchange="filterTable()">
+                <span>〜</span>
+                <input type="number" id="tab-filter-purchase-max" placeholder="以下" onchange="filterTable()">
+            </div>
+            <div class="filter-item">
+                <label>売上</label>
+                <input type="number" id="tab-filter-sale-min" placeholder="以上" onchange="filterTable()">
+                <span>〜</span>
+                <input type="number" id="tab-filter-sale-max" placeholder="以下" onchange="filterTable()">
+            </div>
+            <div class="filter-item">
+                <label>利益</label>
+                <input type="number" id="tab-filter-profit-min" placeholder="以上" onchange="filterTable()">
+                <span>〜</span>
+                <input type="number" id="tab-filter-profit-max" placeholder="以下" onchange="filterTable()">
+            </div>
+            <div class="filter-actions">
+                <button class="filter-clear-btn" onclick="clearPriceFilters()">クリア</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -777,58 +917,6 @@
                     <th class="sortable" data-sort="profit">利益</th>
                     <th>販売状況</th>
                     <th style="width: 130px;">操作</th>
-                </tr>
-                <!-- フィルター行 -->
-                <tr class="filter-row">
-                    <th></th>
-                    <th><input type="text" id="filter-id" placeholder="No" onkeyup="filterTable()"></th>
-                    <th><input type="text" id="filter-name" placeholder="商品名" onkeyup="filterTable()"></th>
-                    <th><input type="text" id="filter-brand" placeholder="ブランド" onkeyup="filterTable()"></th>
-                    <th>
-                        <select id="filter-condition" onchange="filterTable()">
-                            <option value="">全て</option>
-                            <option value="N">N</option>
-                            <option value="S">S</option>
-                            <option value="A">A</option>
-                            <option value="AB">AB</option>
-                            <option value="B">B</option>
-                        </select>
-                    </th>
-                    <th><input type="text" id="filter-store" placeholder="店舗" onkeyup="filterTable()"></th>
-                    <th><input type="date" id="filter-date" onchange="filterTable()"></th>
-                    <th>
-                        <div class="price-filter">
-                            <input type="number" id="filter-purchase-min" placeholder="▲以上" onchange="filterTable()">
-                            <input type="number" id="filter-purchase-max" placeholder="▼以下" onchange="filterTable()">
-                        </div>
-                    </th>
-                    <th>
-                        <div class="price-filter">
-                            <input type="number" id="filter-listing-min" placeholder="▲以上" onchange="filterTable()">
-                            <input type="number" id="filter-listing-max" placeholder="▼以下" onchange="filterTable()">
-                        </div>
-                    </th>
-                    <th>
-                        <div class="price-filter">
-                            <input type="number" id="filter-sale-min" placeholder="▲以上" onchange="filterTable()">
-                            <input type="number" id="filter-sale-max" placeholder="▼以下" onchange="filterTable()">
-                        </div>
-                    </th>
-                    <th>
-                        <div class="price-filter">
-                            <input type="number" id="filter-profit-min" placeholder="▲以上" onchange="filterTable()">
-                            <input type="number" id="filter-profit-max" placeholder="▼以下" onchange="filterTable()">
-                        </div>
-                    </th>
-                    <th>
-                        <select id="filter-status" onchange="filterTable()">
-                            <option value="">すべて</option>
-                            <option value="sold">売却済</option>
-                            <option value="listed">出品中</option>
-                            <option value="unlisted">未出品</option>
-                        </select>
-                    </th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -1047,25 +1135,69 @@
 </div>
 
 <script>
+// フィルタータブ切り替え
+function showFilterTab(tabName) {
+    // すべてのタブコンテンツを非表示
+    document.querySelectorAll('.filter-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    // すべてのタブボタンを非アクティブに
+    document.querySelectorAll('.filter-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // タブ名からコンテンツIDを取得
+    let contentId;
+    switch(tabName) {
+        case 'period': contentId = 'filter-period'; break;
+        case 'status': contentId = 'filter-status-tab'; break;
+        case 'text': contentId = 'filter-text'; break;
+        case 'price': contentId = 'filter-price'; break;
+    }
+    
+    // 選択したタブを表示
+    document.getElementById(contentId).classList.add('active');
+    event.target.classList.add('active');
+}
+
+// テキストフィルターをクリア
+function clearTextFilters() {
+    document.getElementById('tab-filter-id').value = '';
+    document.getElementById('tab-filter-name').value = '';
+    document.getElementById('tab-filter-brand').value = '';
+    document.getElementById('tab-filter-store').value = '';
+    filterTable();
+}
+
+// 金額フィルターをクリア
+function clearPriceFilters() {
+    document.getElementById('tab-filter-purchase-min').value = '';
+    document.getElementById('tab-filter-purchase-max').value = '';
+    document.getElementById('tab-filter-sale-min').value = '';
+    document.getElementById('tab-filter-sale-max').value = '';
+    document.getElementById('tab-filter-profit-min').value = '';
+    document.getElementById('tab-filter-profit-max').value = '';
+    filterTable();
+}
+
 // テーブルフィルター機能（PC・スマホ両対応）
 function filterTable() {
-    const filterId = document.getElementById('filter-id').value.toLowerCase();
-    const filterName = document.getElementById('filter-name').value.toLowerCase();
-    const filterBrand = document.getElementById('filter-brand').value.toLowerCase();
-    const filterCondition = document.getElementById('filter-condition').value;
-    const filterStore = document.getElementById('filter-store').value.toLowerCase();
-    const filterDate = document.getElementById('filter-date').value;
-    const filterStatus = document.getElementById('filter-status').value;
+    // タブからフィルター値を取得
+    const filterId = (document.getElementById('tab-filter-id')?.value || '').toLowerCase();
+    const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
+    const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
+    const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
+    const filterStore = (document.getElementById('tab-filter-store')?.value || '').toLowerCase();
+    const filterDate = document.getElementById('tab-filter-date')?.value || '';
+    const filterStatus = document.getElementById('tab-filter-status')?.value || '';
     
     // 料金フィルター
-    const filterPurchaseMin = document.getElementById('filter-purchase-min').value;
-    const filterPurchaseMax = document.getElementById('filter-purchase-max').value;
-    const filterListingMin = document.getElementById('filter-listing-min').value;
-    const filterListingMax = document.getElementById('filter-listing-max').value;
-    const filterSaleMin = document.getElementById('filter-sale-min').value;
-    const filterSaleMax = document.getElementById('filter-sale-max').value;
-    const filterProfitMin = document.getElementById('filter-profit-min').value;
-    const filterProfitMax = document.getElementById('filter-profit-max').value;
+    const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
+    const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
+    const filterSaleMin = document.getElementById('tab-filter-sale-min')?.value || '';
+    const filterSaleMax = document.getElementById('tab-filter-sale-max')?.value || '';
+    const filterProfitMin = document.getElementById('tab-filter-profit-min')?.value || '';
+    const filterProfitMax = document.getElementById('tab-filter-profit-max')?.value || '';
     
     let visibleCount = 0;
     
@@ -1089,7 +1221,6 @@ function filterTable() {
         const date = element.dataset.date || '';
         const status = element.dataset.status || '';
         const purchasePrice = element.dataset.purchasePrice || '0';
-        const listingPrice = element.dataset.listingPrice || '0';
         const salePrice = element.dataset.salePrice || '0';
         const profit = element.dataset.profit || '0';
         
@@ -1103,7 +1234,6 @@ function filterTable() {
         
         // 料金フィルター
         if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
-        if (!checkPriceRange(listingPrice, filterListingMin, filterListingMax)) return false;
         if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) return false;
         if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) return false;
         
