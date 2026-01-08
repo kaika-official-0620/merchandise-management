@@ -53,13 +53,13 @@
             <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
             <a href="{{ url_for('customers') }}" class="{% if request.endpoint in ['customers', 'add_customer', 'edit_customer'] %}active{% endif %}">顧客管理</a>
             <a href="{{ url_for('user_shikiriosho_list') }}" class="{% if 'shikiriosho' in request.endpoint and 'admin' not in request.endpoint %}active{% endif %}">
-                仕切書
+                見積書
                 {% if unread_shikiriosho_count > 0 %}
                 <span class="badge-count">{{ unread_shikiriosho_count }}</span>
                 {% endif %}
             </a>
             <a href="{{ url_for('user_invoice_list') }}" class="{% if 'invoice' in request.endpoint and 'admin' not in request.endpoint %}active{% endif %}">
-                請求書
+                精算書
             </a>
             {% if current_user.is_admin() %}
             <div class="sidebar-divider"></div>

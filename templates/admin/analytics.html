@@ -10,13 +10,43 @@
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
     <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
+    <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">見積書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">精算書</a>
     <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
     <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">分析</a>
     <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
+</div>
+
+<!-- 全体統計 -->
+<div class="admin-stats-grid">
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総商品数</div>
+        <div class="stat-content">
+            <span class="stat-value">{{ overall_stats.total_items or 0 }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総仕入額</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_purchase or 0) }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総売上</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_sales or 0) }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総利益</div>
+        <div class="stat-content">
+            <span class="stat-value {% if overall_stats.total_profit and overall_stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                ¥{{ "{:,}".format(overall_stats.total_profit or 0) }}
+            </span>
+        </div>
+    </div>
 </div>
 
 {% set enabled_keys = widgets|selectattr('is_enabled')|map(attribute='widget_key')|list %}

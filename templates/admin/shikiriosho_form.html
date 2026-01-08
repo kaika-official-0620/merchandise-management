@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{% if shikiriosho %}仕切書編集{% else %}仕切書作成{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if shikiriosho %}見積書編集{% else %}見積書作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>{% if shikiriosho %}仕切書編集{% else %}仕切書作成{% endif %}</h1>
+    <h1>{% if shikiriosho %}見積書編集{% else %}見積書作成{% endif %}</h1>
     <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
@@ -13,7 +13,7 @@
         <h3>基本情報</h3>
         <div class="form-grid">
             <div class="form-group">
-                <label>仕切書番号</label>
+                <label>見積書番号</label>
                 <input type="text" value="{{ shikiriosho.document_no if shikiriosho else document_no }}" readonly class="form-control readonly">
             </div>
             <div class="form-group">

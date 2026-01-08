@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}請求書一覧 - 株式会社 開花{% endblock %}
+{% block title %}精算書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-actions">
@@ -41,8 +41,8 @@
             <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
             {% if inv.status == 'draft' %}
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
-                <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この請求書を送信しますか？')">送信</a>
-                <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を削除しますか？')">削除</a>
+                <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+                <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>
             {% else %}
                 <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary btn-sm">CSV</a>
             {% endif %}
@@ -53,7 +53,7 @@
 {% else %}
 <div class="empty-state">
     <div class="empty-icon"></div>
-    <p>請求書がありません</p>
+    <p>精算書がありません</p>
     <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
 </div>
 {% endif %}

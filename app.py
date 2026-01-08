@@ -236,7 +236,7 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
-        # 仕切書テーブル
+        # 見積書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id SERIAL PRIMARY KEY,
@@ -258,7 +258,7 @@ if DATABASE_URL:
             )
         ''')
         
-        # 仕切書明細テーブル
+        # 見積書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id SERIAL PRIMARY KEY,
@@ -273,7 +273,7 @@ if DATABASE_URL:
             )
         ''')
         
-        # 請求書テーブル（ユーザー→管理者）
+        # 精算書テーブル（ユーザー→管理者）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoices (
                 id SERIAL PRIMARY KEY,
@@ -296,7 +296,7 @@ if DATABASE_URL:
             )
         ''')
         
-        # 請求書明細テーブル
+        # 精算書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id SERIAL PRIMARY KEY,
@@ -510,7 +510,7 @@ else:
                 VALUES (?, ?, ?, ?)
             ''', widget)
         
-        # 仕切書テーブル
+        # 見積書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -532,7 +532,7 @@ else:
             )
         ''')
         
-        # 仕切書明細テーブル
+        # 見積書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -547,7 +547,7 @@ else:
             )
         ''')
         
-        # 請求書テーブル（ユーザー→管理者）
+        # 精算書テーブル（ユーザー→管理者）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -570,7 +570,7 @@ else:
             )
         ''')
         
-        # 請求書明細テーブル
+        # 精算書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -602,8 +602,8 @@ class User(UserMixin):
     # 管理者が設定可能な権限一覧
     ADMIN_PERMISSION_OPTIONS = {
         'users': 'ユーザー管理',
-        'shikiriosho': '仕切書管理',
-        'invoices': '請求書管理',
+        'shikiriosho': '見積書管理',
+        'invoices': '精算書管理',
         'announcements': 'お知らせ管理',
         'analytics': '分析',
         'backup': 'バックアップ'
@@ -1857,145 +1857,8 @@ def delete_customer(id):
 @login_required
 @admin_required
 def admin_dashboard():
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # 全ユーザー取得
-        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
-        users = cur.fetchall()
-        
-        # ユーザーごとの統計
-        user_stats = []
-        for user in users:
-            cur.execute("""
-                SELECT 
-                    COUNT(*) as item_count,
-                    COALESCE(SUM(purchase_price), 0) as total_purchase,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
-                FROM merchandise WHERE user_id = %s
-            """, (user['id'],))
-            stats = cur.fetchone()
-            user_stats.append({
-                'user': dict(user),
-                'stats': dict(stats) if stats else {}
-            })
-        
-        # 全体統計
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
-            FROM merchandise
-        """)
-        overall_stats = cur.fetchone()
-        
-        # 人気ブランド（利益率）
-        cur.execute("""
-            SELECT brand_name, 
-                   COUNT(*) as count, 
-                   SUM(sale_price) as total_sales,
-                   SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                   CASE WHEN SUM(sale_price) > 0 
-                        THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
-                        ELSE 0 END as profit_rate
-            FROM merchandise 
-            WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-            GROUP BY brand_name
-            ORDER BY profit_rate DESC
-            LIMIT 10
-        """)
-        popular_brands = cur.fetchall()
-        
-        # 店舗別売上
-        cur.execute("""
-            SELECT store_name, COUNT(*) as count, 
-                   SUM(purchase_price) as total_purchase,
-                   SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END) as total_sales
-            FROM merchandise 
-            GROUP BY store_name
-            ORDER BY total_sales DESC
-            LIMIT 10
-        """)
-        store_stats = cur.fetchall()
-        
-    else:
-        cur = conn.cursor()
-        
-        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
-        users = cur.fetchall()
-        
-        user_stats = []
-        for user in users:
-            user_dict = dict(user)
-            cur.execute("""
-                SELECT 
-                    COUNT(*) as item_count,
-                    COALESCE(SUM(purchase_price), 0) as total_purchase,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
-                FROM merchandise WHERE user_id = ?
-            """, (user_dict['id'],))
-            stats = cur.fetchone()
-            user_stats.append({
-                'user': user_dict,
-                'stats': dict(stats) if stats else {}
-            })
-        
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
-            FROM merchandise
-        """)
-        overall_stats = cur.fetchone()
-        
-        cur.execute("""
-            SELECT brand_name, 
-                   COUNT(*) as count, 
-                   SUM(sale_price) as total_sales,
-                   SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                   CASE WHEN SUM(sale_price) > 0 
-                        THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
-                        ELSE 0 END as profit_rate
-            FROM merchandise 
-            WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-            GROUP BY brand_name
-            ORDER BY profit_rate DESC
-            LIMIT 10
-        """)
-        popular_brands = cur.fetchall()
-        
-        cur.execute("""
-            SELECT store_name, COUNT(*) as count, 
-                   SUM(purchase_price) as total_purchase,
-                   SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END) as total_sales
-            FROM merchandise 
-            GROUP BY store_name
-            ORDER BY total_sales DESC
-            LIMIT 10
-        """)
-        store_stats = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/dashboard.html', 
-                         user_stats=user_stats,
-                         overall_stats=dict(overall_stats) if overall_stats else {},
-                         popular_brands=[dict(p) for p in popular_brands],
-                         store_stats=[dict(s) for s in store_stats])
+    """管理者ダッシュボード - 分析ページにリダイレクト"""
+    return redirect(url_for('admin_analytics'))
 
 @app.route('/admin/users')
 @login_required
@@ -2336,11 +2199,24 @@ def admin_user_items(id):
 def admin_analytics():
     analytics_data = {}
     widgets = []
+    overall_stats = {}
     
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 全体統計
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+                FROM merchandise
+            """)
+            overall_stats = dict(cur.fetchone() or {})
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -2487,6 +2363,18 @@ def admin_analytics():
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
+            
+            # 全体統計
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+                FROM merchandise
+            """)
+            overall_stats = dict(cur.fetchone() or {})
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -2647,6 +2535,7 @@ def admin_analytics():
     
     return render_template('admin/analytics.html',
                          widgets=[dict(w) for w in widgets] if widgets else [],
+                         overall_stats=overall_stats,
                          **analytics_data)
 
 @app.route('/admin/analytics/settings', methods=['GET', 'POST'])
@@ -3391,6 +3280,311 @@ def import_user_backup():
     return redirect(url_for('index'))
 
 # ===================
+# 管理者商品管理ルート
+# ===================
+
+@app.route('/admin/items')
+@login_required
+@admin_required
+def admin_items():
+    """管理者商品一覧（転送可能な商品）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 管理者が登録した商品（user_id IS NULL または admin自身の商品）を取得
+        cur.execute("""
+            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.user_id IS NULL OR u.role IN ('admin', 'owner')
+            ORDER BY m.created_at DESC
+        """)
+        items = cur.fetchall()
+        
+        # 転送先ユーザー一覧（一般ユーザーのみ）
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY username")
+        users = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.user_id IS NULL OR u.role IN ('admin', 'owner')
+            ORDER BY m.created_at DESC
+        """)
+        items = cur.fetchall()
+        
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY username")
+        users = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    processed_items = []
+    for item in items:
+        item_dict = dict(item)
+        if item_dict.get('photo_path'):
+            item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+        if item_dict.get('sale_date'):
+            item_dict['profit'] = calculate_profit(
+                item_dict.get('sale_price', 0) or 0,
+                item_dict.get('purchase_price', 0) or 0,
+                item_dict.get('shipping_cost', 0) or 0,
+                item_dict.get('commission', 0) or 0
+            )
+        processed_items.append(item_dict)
+    
+    return render_template('admin/items.html', items=processed_items, users=[dict(u) for u in users])
+
+@app.route('/admin/items/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_add_item():
+    """管理者用商品登録（ユーザー指定可能）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY username")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY username")
+    users = [dict(u) for u in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    if request.method == 'POST':
+        target_user_id = request.form.get('target_user_id')
+        if target_user_id:
+            target_user_id = int(target_user_id)
+        else:
+            target_user_id = None  # 管理者商品として登録
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            placeholder = '%s'
+        else:
+            cur = conn.cursor()
+            placeholder = '?'
+        
+        # 画像処理
+        photo_path = None
+        if 'photo' in request.files:
+            photo = request.files['photo']
+            if photo and photo.filename:
+                filename = secure_filename(f"{int(time.time())}_{photo.filename}")
+                photo_path = os.path.join('uploads', filename).replace('\\', '/')
+                photo.save(os.path.join(app.static_folder, photo_path))
+        
+        # 追加写真処理
+        additional_photos = []
+        if 'additional_photos' in request.files:
+            files = request.files.getlist('additional_photos')
+            for idx, photo in enumerate(files[:19]):
+                if photo and photo.filename:
+                    filename = secure_filename(f"{int(time.time())}_{idx}_{photo.filename}")
+                    path = os.path.join('uploads', filename).replace('\\', '/')
+                    photo.save(os.path.join(app.static_folder, path))
+                    additional_photos.append(path)
+        
+        additional_photos_str = ','.join(additional_photos) if additional_photos else None
+        
+        # 身分証処理
+        id_document_path = None
+        if 'id_document' in request.files:
+            doc = request.files['id_document']
+            if doc and doc.filename:
+                filename = secure_filename(f"id_{int(time.time())}_{doc.filename}")
+                id_document_path = os.path.join('uploads', 'documents', filename).replace('\\', '/')
+                os.makedirs(os.path.join(app.static_folder, 'uploads', 'documents'), exist_ok=True)
+                doc.save(os.path.join(app.static_folder, id_document_path))
+        
+        # 同意書処理
+        consent_form_path = None
+        if 'consent_form' in request.files:
+            doc = request.files['consent_form']
+            if doc and doc.filename:
+                filename = secure_filename(f"consent_{int(time.time())}_{doc.filename}")
+                consent_form_path = os.path.join('uploads', 'documents', filename).replace('\\', '/')
+                os.makedirs(os.path.join(app.static_folder, 'uploads', 'documents'), exist_ok=True)
+                doc.save(os.path.join(app.static_folder, consent_form_path))
+        
+        # ステータス処理
+        item_status = request.form.get('item_status', 'unlisted')
+        is_listed = item_status in ['listed', 'sold']
+        sale_date = request.form.get('sale_date') if item_status == 'sold' else None
+        
+        try:
+            cur.execute(f'''
+                INSERT INTO merchandise (
+                    user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, 
+                    model_number, item_condition, store_name, supplier_detail, 
+                    id_document_path, consent_form_path,
+                    purchase_price, payment_method, listing_price, expected_shipping, 
+                    expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price, 
+                    shipping_cost, sales_destination, commission, is_shipped
+                ) VALUES ({', '.join([placeholder] * 26)})
+            ''', (
+                target_user_id,
+                request.form.get('purchase_date') or None,
+                photo_path,
+                additional_photos_str,
+                request.form.get('product_name'),
+                request.form.get('brand_name'),
+                request.form.get('model_number'),
+                request.form.get('item_condition'),
+                request.form.get('store_name'),
+                request.form.get('supplier_detail'),
+                id_document_path,
+                consent_form_path,
+                int(request.form.get('purchase_price') or 0),
+                request.form.get('payment_method'),
+                int(request.form.get('listing_price') or 0),
+                int(request.form.get('expected_shipping') or 0),
+                int(request.form.get('expected_commission') or 0),
+                is_listed,
+                request.form.get('listing_date') or None,
+                sale_date or None,
+                request.form.get('sale_type') or 'normal',
+                int(request.form.get('sale_price') or 0),
+                int(request.form.get('shipping_cost') or 0),
+                request.form.get('sales_destination'),
+                int(request.form.get('commission') or 0),
+                'is_shipped' in request.form
+            ))
+            conn.commit()
+            
+            if target_user_id:
+                flash('商品を登録し、指定ユーザーに割り当てました', 'success')
+            else:
+                flash('商品を管理者商品として登録しました', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'エラー: {str(e)}', 'error')
+        finally:
+            cur.close()
+            conn.close()
+        
+        return redirect(url_for('admin_items'))
+    
+    return render_template('admin/item_form.html', item=None, users=users)
+
+@app.route('/admin/items/<int:id>/transfer', methods=['POST'])
+@login_required
+@admin_required
+def admin_transfer_item(id):
+    """商品を指定ユーザーに転送"""
+    target_user_id = request.form.get('target_user_id')
+    
+    if not target_user_id:
+        flash('転送先ユーザーを選択してください', 'error')
+        return redirect(url_for('admin_items'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 商品の存在確認
+        cur.execute("SELECT * FROM merchandise WHERE id = %s", (id,))
+        item = cur.fetchone()
+        
+        if not item:
+            flash('商品が見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        # 転送先ユーザーの確認
+        cur.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
+        target_user = cur.fetchone()
+        
+        if not target_user:
+            flash('転送先ユーザーが見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        # 転送実行
+        cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE id = ?", (id,))
+        item = cur.fetchone()
+        
+        if not item:
+            flash('商品が見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        cur.execute("SELECT * FROM users WHERE id = ?", (target_user_id,))
+        target_user = cur.fetchone()
+        
+        if not target_user:
+            flash('転送先ユーザーが見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
+    flash(f'商品を「{target_name}」に転送しました', 'success')
+    return redirect(url_for('admin_items'))
+
+@app.route('/admin/items/<int:id>/transfer-bulk', methods=['POST'])
+@login_required
+@admin_required
+def admin_transfer_items_bulk():
+    """複数商品を一括転送"""
+    item_ids = request.form.getlist('item_ids')
+    target_user_id = request.form.get('target_user_id')
+    
+    if not item_ids or not target_user_id:
+        flash('商品と転送先ユーザーを選択してください', 'error')
+        return redirect(url_for('admin_items'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
+        target_user = cur.fetchone()
+        
+        if not target_user:
+            flash('転送先ユーザーが見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        for item_id in item_ids:
+            cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, item_id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (target_user_id,))
+        target_user = cur.fetchone()
+        
+        if not target_user:
+            flash('転送先ユーザーが見つかりません', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('admin_items'))
+        
+        for item_id in item_ids:
+            cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, item_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
+    flash(f'{len(item_ids)}件の商品を「{target_name}」に転送しました', 'success')
+    return redirect(url_for('admin_items'))
+
+# ===================
 # お知らせ管理ルート（管理者用）
 # ===================
 
@@ -3553,11 +3747,11 @@ def admin_toggle_announcement(id):
     return redirect(url_for('admin_announcements'))
 
 # ===================
-# 仕切書管理（管理者用）
+# 見積書管理（管理者用）
 # ===================
 
 def generate_document_no():
-    """仕切書番号を生成"""
+    """見積書番号を生成"""
     now = datetime.now()
     conn = get_db()
     if DATABASE_URL:
@@ -3580,7 +3774,7 @@ def generate_document_no():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_list():
-    """仕切書一覧（管理者用）"""
+    """見積書一覧（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3609,7 +3803,7 @@ def admin_shikiriosho_list():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_add():
-    """仕切書作成（管理者用）"""
+    """見積書作成（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -3692,9 +3886,9 @@ def admin_shikiriosho_add():
         conn.close()
         
         if status == 'sent':
-            flash(f'仕切書 {document_no} を作成・送信しました', 'success')
+            flash(f'見積書 {document_no} を作成・送信しました', 'success')
         else:
-            flash(f'仕切書 {document_no} を下書き保存しました', 'success')
+            flash(f'見積書 {document_no} を下書き保存しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
     # ユーザー一覧取得
@@ -3718,7 +3912,7 @@ def admin_shikiriosho_add():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_edit(id):
-    """仕切書編集（管理者用）"""
+    """見積書編集（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -3802,10 +3996,10 @@ def admin_shikiriosho_edit(id):
         cur.close()
         conn.close()
         
-        flash('仕切書を更新しました', 'success')
+        flash('見積書を更新しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
-    # 仕切書データ取得
+    # 見積書データ取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
@@ -3829,7 +4023,7 @@ def admin_shikiriosho_edit(id):
     conn.close()
     
     if not shikiriosho:
-        flash('仕切書が見つかりません', 'error')
+        flash('見積書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_form.html', 
@@ -3842,7 +4036,7 @@ def admin_shikiriosho_edit(id):
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_delete(id):
-    """仕切書削除（管理者用）"""
+    """見積書削除（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -3857,14 +4051,14 @@ def admin_shikiriosho_delete(id):
     cur.close()
     conn.close()
     
-    flash('仕切書を削除しました', 'success')
+    flash('見積書を削除しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/send/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_send(id):
-    """仕切書を送信（ステータスを'sent'に変更）"""
+    """見積書を送信（ステータスを'sent'に変更）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -3877,14 +4071,14 @@ def admin_shikiriosho_send(id):
     cur.close()
     conn.close()
     
-    flash('仕切書を送信しました', 'success')
+    flash('見積書を送信しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/view/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_view(id):
-    """仕切書詳細（管理者用）"""
+    """見積書詳細（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3917,19 +4111,19 @@ def admin_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('仕切書が見つかりません', 'error')
+        flash('見積書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
 
 # ===================
-# 仕切書（ユーザー用）
+# 見積書（ユーザー用）
 # ===================
 
 @app.route('/shikiriosho')
 @login_required
 def user_shikiriosho_list():
-    """受信した仕切書一覧（ユーザー用）"""
+    """受信した見積書一覧（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3959,7 +4153,7 @@ def user_shikiriosho_list():
 @app.route('/shikiriosho/view/<int:id>')
 @login_required
 def user_shikiriosho_view(id):
-    """仕切書詳細（ユーザー用）"""
+    """見積書詳細（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3997,7 +4191,7 @@ def user_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('仕切書が見つかりません', 'error')
+        flash('見積書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     return render_template('shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
@@ -4005,7 +4199,7 @@ def user_shikiriosho_view(id):
 @app.route('/shikiriosho/download/<int:id>')
 @login_required
 def user_shikiriosho_download(id):
-    """仕切書CSVダウンロード（ユーザー用）"""
+    """見積書CSVダウンロード（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4028,7 +4222,7 @@ def user_shikiriosho_download(id):
     conn.close()
     
     if not shikiriosho:
-        flash('仕切書が見つかりません', 'error')
+        flash('見積書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     # CSV作成
@@ -4038,7 +4232,7 @@ def user_shikiriosho_download(id):
     # ヘッダー情報
     writer.writerow(['株式会社開花'])
     writer.writerow([''])
-    writer.writerow(['仕切書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
+    writer.writerow(['見積書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
     writer.writerow([''])
     writer.writerow(['宛先', shikiriosho['recipient_name'] or ''])
     writer.writerow([''])
@@ -4076,12 +4270,12 @@ def user_shikiriosho_download(id):
         io.BytesIO(csv_content.encode('utf-8')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"仕切書_{shikiriosho['document_no']}.csv"
+        download_name=f"見積書_{shikiriosho['document_no']}.csv"
     )
 
-# 未読仕切書数を取得するヘルパー関数
+# 未読見積書数を取得するヘルパー関数
 def get_unread_shikiriosho_count(user_id):
-    """未読仕切書数を取得"""
+    """未読見積書数を取得"""
     try:
         conn = get_db()
         if DATABASE_URL:
@@ -4106,7 +4300,7 @@ def get_unread_shikiriosho_count(user_id):
     except Exception:
         return 0
 
-# テンプレートに未読仕切書数を渡す
+# テンプレートに未読見積書数を渡す
 @app.context_processor
 def inject_unread_shikiriosho():
     try:
@@ -4117,11 +4311,11 @@ def inject_unread_shikiriosho():
     return {'unread_shikiriosho_count': 0}
 
 # ===================
-# 請求書（ユーザー→管理者）
+# 精算書（ユーザー→管理者）
 # ===================
 
 def generate_invoice_no():
-    """請求書番号を生成"""
+    """精算書番号を生成"""
     now = datetime.now()
     conn = get_db()
     if DATABASE_URL:
@@ -4141,7 +4335,7 @@ def generate_invoice_no():
     return f"INV-{now.strftime('%Y%m')}-{count:04d}"
 
 def get_unread_invoice_count():
-    """未読請求書数を取得（管理者用）"""
+    """未読精算書数を取得（管理者用）"""
     try:
         conn = get_db()
         if DATABASE_URL:
@@ -4178,7 +4372,7 @@ def inject_unread_invoice():
 @app.route('/invoices')
 @login_required
 def user_invoice_list():
-    """請求書一覧（ユーザー用）"""
+    """精算書一覧（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4204,7 +4398,7 @@ def user_invoice_list():
 @app.route('/invoices/add', methods=['GET', 'POST'])
 @login_required
 def user_invoice_add():
-    """請求書作成（ユーザー用）"""
+    """精算書作成（ユーザー用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -4300,9 +4494,9 @@ def user_invoice_add():
         conn.close()
         
         if status == 'sent':
-            flash(f'請求書 {invoice_no} を作成・送信しました', 'success')
+            flash(f'精算書 {invoice_no} を作成・送信しました', 'success')
         else:
-            flash(f'請求書 {invoice_no} を下書き保存しました', 'success')
+            flash(f'精算書 {invoice_no} を下書き保存しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
     # GETリクエストの場合はconnを閉じる
@@ -4315,7 +4509,7 @@ def user_invoice_add():
 @app.route('/invoices/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_invoice_edit(id):
-    """請求書編集（ユーザー用）"""
+    """精算書編集（ユーザー用）"""
     conn = get_db()
     
     # 所有者確認
@@ -4329,14 +4523,14 @@ def user_invoice_edit(id):
         invoice = cur.fetchone()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     invoice = dict(invoice)
     
     # 送信済みは編集不可
     if invoice['status'] == 'sent':
-        flash('送信済みの請求書は編集できません', 'error')
+        flash('送信済みの精算書は編集できません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     if request.method == 'POST':
@@ -4431,7 +4625,7 @@ def user_invoice_edit(id):
         cur.close()
         conn.close()
         
-        flash('請求書を更新しました', 'success')
+        flash('精算書を更新しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
     # 明細データ取得
@@ -4452,7 +4646,7 @@ def user_invoice_edit(id):
 @app.route('/invoices/view/<int:id>')
 @login_required
 def user_invoice_view(id):
-    """請求書詳細（ユーザー用）"""
+    """精算書詳細（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4475,7 +4669,7 @@ def user_invoice_view(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     return render_template('invoice_view.html', invoice=invoice, items=items)
@@ -4483,7 +4677,7 @@ def user_invoice_view(id):
 @app.route('/invoices/delete/<int:id>')
 @login_required
 def user_invoice_delete(id):
-    """請求書削除（ユーザー用）"""
+    """精算書削除（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4493,9 +4687,9 @@ def user_invoice_delete(id):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
             cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
             conn.commit()
-            flash('請求書を削除しました', 'success')
+            flash('精算書を削除しました', 'success')
         else:
-            flash('送信済みの請求書は削除できません', 'error')
+            flash('送信済みの精算書は削除できません', 'error')
     else:
         cur = conn.cursor()
         cur.execute("SELECT status FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
@@ -4504,9 +4698,9 @@ def user_invoice_delete(id):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
             cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
             conn.commit()
-            flash('請求書を削除しました', 'success')
+            flash('精算書を削除しました', 'success')
         else:
-            flash('送信済みの請求書は削除できません', 'error')
+            flash('送信済みの精算書は削除できません', 'error')
     
     cur.close()
     conn.close()
@@ -4515,7 +4709,7 @@ def user_invoice_delete(id):
 @app.route('/invoices/send/<int:id>')
 @login_required
 def user_invoice_send(id):
-    """請求書送信（ユーザー用）"""
+    """精算書送信（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -4528,18 +4722,18 @@ def user_invoice_send(id):
     cur.close()
     conn.close()
     
-    flash('請求書を送信しました', 'success')
+    flash('精算書を送信しました', 'success')
     return redirect(url_for('user_invoice_list'))
 
 # ===================
-# 請求書（管理者用）
+# 精算書（管理者用）
 # ===================
 
 @app.route('/admin/invoices')
 @login_required
 @permission_required('invoices')
 def admin_invoice_list():
-    """請求書一覧（管理者用）"""
+    """精算書一覧（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4570,7 +4764,7 @@ def admin_invoice_list():
 @login_required
 @permission_required('invoices')
 def admin_invoice_view(id):
-    """請求書詳細（管理者用）"""
+    """精算書詳細（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4608,7 +4802,7 @@ def admin_invoice_view(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('admin_invoice_list'))
     
     return render_template('admin/invoice_view.html', invoice=invoice, items=items)
@@ -4617,7 +4811,7 @@ def admin_invoice_view(id):
 @login_required
 @permission_required('invoices')
 def admin_invoice_approve(id):
-    """請求書承認（管理者用）- 承認時に仕切書を自動作成"""
+    """精算書承認（管理者用）- 承認時に見積書を自動作成"""
     
     now = datetime.now()
     today = now.strftime('%Y-%m-%d')
@@ -4628,23 +4822,23 @@ def admin_invoice_approve(id):
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 請求書情報を取得
+            # 精算書情報を取得
             cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
             invoice = cur.fetchone()
             if not invoice:
-                flash('請求書が見つかりません', 'error')
+                flash('精算書が見つかりません', 'error')
                 cur.close()
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             
-            # 仕切書番号を生成（同じ接続内で）
+            # 見積書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
             count = (result['count'] if result else 0) + 1
             shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
-            # 請求書を承認
+            # 精算書を承認
             cur.execute("""
                 UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
                 approved_by = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s
@@ -4656,7 +4850,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 仕切書を作成（下書き状態）
+            # 見積書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -4672,15 +4866,15 @@ def admin_invoice_approve(id):
                 tax_8 + tax_10,
                 total,
                 10,
-                f"請求書 {invoice.get('invoice_no', '')} より自動作成"
+                f"精算書 {invoice.get('invoice_no', '')} より自動作成"
             ))
             result = cur.fetchone()
             shikiriosho_id = result['id'] if result else None
             
             if not shikiriosho_id:
-                raise Exception("仕切書の作成に失敗しました")
+                raise Exception("見積書の作成に失敗しました")
             
-            # 請求書明細を取得して仕切書明細を作成
+            # 精算書明細を取得して見積書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -4703,24 +4897,24 @@ def admin_invoice_approve(id):
         else:
             cur = conn.cursor()
             
-            # 請求書情報を取得
+            # 精算書情報を取得
             cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
             invoice_row = cur.fetchone()
             if not invoice_row:
-                flash('請求書が見つかりません', 'error')
+                flash('精算書が見つかりません', 'error')
                 cur.close()
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             invoice = dict(invoice_row)
             
-            # 仕切書番号を生成（同じ接続内で）
+            # 見積書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) FROM shikiriosho WHERE issue_date >= ?", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
             count = (result[0] if result else 0) + 1
             shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
-            # 請求書を承認
+            # 精算書を承認
             cur.execute("""
                 UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
                 approved_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -4732,7 +4926,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 仕切書を作成（下書き状態）
+            # 見積書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -4747,11 +4941,11 @@ def admin_invoice_approve(id):
                 tax_8 + tax_10,
                 total,
                 10,
-                f"請求書 {invoice.get('invoice_no', '')} より自動作成"
+                f"精算書 {invoice.get('invoice_no', '')} より自動作成"
             ))
             shikiriosho_id = cur.lastrowid
             
-            # 請求書明細を取得して仕切書明細を作成
+            # 精算書明細を取得して見積書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -4776,7 +4970,7 @@ def admin_invoice_approve(id):
         cur.close()
         conn.close()
         
-        flash(f'請求書を承認し、仕切書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
+        flash(f'精算書を承認し、見積書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
         
     except Exception as e:
@@ -4795,7 +4989,7 @@ def admin_invoice_approve(id):
 @login_required
 @permission_required('invoices')
 def admin_invoice_reject(id):
-    """請求書却下（管理者用）"""
+    """精算書却下（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -4812,13 +5006,13 @@ def admin_invoice_reject(id):
     cur.close()
     conn.close()
     
-    flash('請求書を却下しました', 'warning')
+    flash('精算書を却下しました', 'warning')
     return redirect(url_for('admin_invoice_list'))
 
 @app.route('/invoices/download/<int:id>')
 @login_required
 def invoice_download(id):
-    """請求書CSVダウンロード"""
+    """精算書CSVダウンロード"""
     conn = get_db()
     
     # 権限確認（送信者または管理者）
@@ -4849,18 +5043,18 @@ def invoice_download(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     # CSV作成
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     
-    writer.writerow(['請求書'])
+    writer.writerow(['精算書'])
     writer.writerow([''])
     writer.writerow(['', '', '', '発行日', '', invoice['issue_date']])
     writer.writerow([''])
-    writer.writerow(['請求書番号', invoice['invoice_no']])
+    writer.writerow(['精算書番号', invoice['invoice_no']])
     writer.writerow([''])
     writer.writerow(['', '', '', '支払期限', invoice['payment_due_date'] or ''])
     writer.writerow([''])
@@ -4902,7 +5096,7 @@ def invoice_download(id):
         io.BytesIO(csv_content.encode('utf-8')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"請求書_{invoice['invoice_no']}.csv"
+        download_name=f"精算書_{invoice['invoice_no']}.csv"
     )
 
 # ===================
@@ -4997,7 +5191,7 @@ def api_get_all_products():
 @app.route('/shikiriosho/pdf/<int:id>')
 @login_required
 def shikiriosho_pdf(id):
-    """仕切書PDF出力"""
+    """見積書PDF出力"""
     conn = get_db()
     
     # 権限確認（送信者または受信者または管理者）
@@ -5030,7 +5224,7 @@ def shikiriosho_pdf(id):
     conn.close()
     
     if not shikiriosho:
-        flash('仕切書が見つかりません', 'error')
+        flash('見積書が見つかりません', 'error')
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
@@ -5041,7 +5235,7 @@ def shikiriosho_pdf(id):
 @app.route('/invoices/pdf/<int:id>')
 @login_required
 def invoice_pdf(id):
-    """請求書PDF出力"""
+    """精算書PDF出力"""
     conn = get_db()
     
     # 権限確認（送信者または管理者）
@@ -5072,7 +5266,7 @@ def invoice_pdf(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング

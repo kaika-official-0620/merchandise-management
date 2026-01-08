@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}請求書管理 - 株式会社 開花{% endblock %}
+{% block title %}精算書管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>受信した請求書</h1>
+    <h1>受信した精算書</h1>
     <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← ダッシュボード</a>
 </div>
 
 <div class="admin-nav">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item">概要</a>
     <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item active">請求書</a>
+    <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">見積書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item active">精算書</a>
     <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
     <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
     <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
@@ -23,7 +23,7 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>請求書番号</th>
+                <th>精算書番号</th>
                 <th>送信者</th>
                 <th>発行日</th>
                 <th>支払期限</th>
@@ -56,8 +56,8 @@
                 <td class="actions">
                     <a href="{{ url_for('admin_invoice_view', id=inv.id) }}" class="btn btn-sm btn-info">詳細</a>
                     {% if inv.status == 'sent' %}
-                    <a href="{{ url_for('admin_invoice_approve', id=inv.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この請求書を承認しますか？')">承認</a>
-                    <a href="{{ url_for('admin_invoice_reject', id=inv.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この請求書を却下しますか？')">却下</a>
+                    <a href="{{ url_for('admin_invoice_approve', id=inv.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この精算書を承認しますか？')">承認</a>
+                    <a href="{{ url_for('admin_invoice_reject', id=inv.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この精算書を却下しますか？')">却下</a>
                     {% endif %}
                 </td>
             </tr>
@@ -68,7 +68,7 @@
 {% else %}
 <div class="empty-state">
     <div class="empty-icon">📭</div>
-    <p>受信した請求書はありません</p>
+    <p>受信した精算書はありません</p>
 </div>
 {% endif %}
 

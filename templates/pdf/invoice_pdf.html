@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>請求書 - {{ invoice.invoice_no }}</title>
+    <title>精算書 - {{ invoice.invoice_no }}</title>
     <style>
         @page {
             size: A4;
@@ -173,7 +173,7 @@
                     <td>{{ invoice.issue_date }}</td>
                 </tr>
                 <tr>
-                    <th>請求書番号</th>
+                    <th>精算書番号</th>
                     <td>{{ invoice.invoice_no }}</td>
                 </tr>
                 {% if invoice.payment_due_date %}
