@@ -3566,7 +3566,7 @@ def admin_transfer_item(id):
     flash(f'商品を「{target_name}」に転送しました', 'success')
     return redirect(url_for('admin_items'))
 
-@app.route('/admin/items/<int:id>/transfer-bulk', methods=['POST'])
+@app.route('/admin/items/transfer-bulk', methods=['POST'])
 @login_required
 @admin_required
 def admin_transfer_items_bulk():
