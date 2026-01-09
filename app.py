@@ -3288,37 +3288,59 @@ def import_user_backup():
 @admin_required
 def admin_items():
     """管理者商品一覧（全商品）"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 全商品を取得
-        cur.execute("""
-            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name, u.role as owner_role
-            FROM merchandise m
-            LEFT JOIN users u ON m.user_id = u.id
-            ORDER BY m.created_at DESC
-        """)
-        items = cur.fetchall()
-        
-        # 転送先ユーザー一覧（全ユーザー）
-        cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
-        users = cur.fetchall()
-    else:
-        cur = conn.cursor()
-        cur.row_factory = sqlite3.Row
-        cur.execute("""
-            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name, u.role as owner_role
-            FROM merchandise m
-            LEFT JOIN users u ON m.user_id = u.id
-            ORDER BY m.created_at DESC
-        """)
-        items = cur.fetchall()
-        
-        cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
-        users = cur.fetchall()
+    items = []
+    users = []
     
-    cur.close()
-    conn.close()
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 全商品を取得（カラムを明示的に指定）
+            cur.execute("""
+                SELECT m.id, m.user_id, m.purchase_date, m.photo_path, m.product_name, 
+                       m.brand_name, m.item_condition, m.store_name, m.purchase_price,
+                       m.payment_method, m.listing_price, m.is_listed, m.listing_date,
+                       m.sale_date, m.sale_price, m.shipping_cost, m.commission,
+                       m.created_at,
+                       u.username as owner_username, 
+                       u.display_name as owner_display_name, 
+                       u.role as owner_role
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            """)
+            items = cur.fetchall()
+            
+            # 転送先ユーザー一覧（全ユーザー）
+            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            users = cur.fetchall()
+        else:
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            cur.execute("""
+                SELECT m.id, m.user_id, m.purchase_date, m.photo_path, m.product_name, 
+                       m.brand_name, m.item_condition, m.store_name, m.purchase_price,
+                       m.payment_method, m.listing_price, m.is_listed, m.listing_date,
+                       m.sale_date, m.sale_price, m.shipping_cost, m.commission,
+                       m.created_at,
+                       u.username as owner_username, 
+                       u.display_name as owner_display_name, 
+                       u.role as owner_role
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            """)
+            items = cur.fetchall()
+            
+            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            users = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Admin items error: {e}")
+        import traceback
+        traceback.print_exc()
     
     processed_items = []
     for item in items:
