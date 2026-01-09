@@ -72,9 +72,13 @@
                 </td>
                 <td>
                     {% if item.owner_display_name or item.owner_username %}
-                    <span class="badge badge-user">{{ item.owner_display_name or item.owner_username }}</span>
+                        {% if item.owner_role in ['admin', 'owner'] %}
+                        <span class="badge badge-admin">{{ item.owner_display_name or item.owner_username }}</span>
+                        {% else %}
+                        <span class="badge badge-user">{{ item.owner_display_name or item.owner_username }}</span>
+                        {% endif %}
                     {% else %}
-                    <span class="badge badge-admin">管理者商品</span>
+                    <span class="badge badge-admin">未割当</span>
                     {% endif %}
                 </td>
                 <td>{{ item.purchase_date or '-' }}</td>

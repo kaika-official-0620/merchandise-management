@@ -3287,35 +3287,34 @@ def import_user_backup():
 @login_required
 @admin_required
 def admin_items():
-    """管理者商品一覧（転送可能な商品）"""
+    """管理者商品一覧（全商品）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 管理者が登録した商品（user_id IS NULL または admin自身の商品）を取得
+        # 全商品を取得
         cur.execute("""
-            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name
+            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name, u.role as owner_role
             FROM merchandise m
             LEFT JOIN users u ON m.user_id = u.id
-            WHERE m.user_id IS NULL OR u.role IN ('admin', 'owner')
             ORDER BY m.created_at DESC
         """)
         items = cur.fetchall()
         
-        # 転送先ユーザー一覧（一般ユーザーのみ）
-        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY username")
+        # 転送先ユーザー一覧（全ユーザー）
+        cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
         users = cur.fetchall()
     else:
         cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
         cur.execute("""
-            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name
+            SELECT m.*, u.username as owner_username, u.display_name as owner_display_name, u.role as owner_role
             FROM merchandise m
             LEFT JOIN users u ON m.user_id = u.id
-            WHERE m.user_id IS NULL OR u.role IN ('admin', 'owner')
             ORDER BY m.created_at DESC
         """)
         items = cur.fetchall()
         
-        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY username")
+        cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
         users = cur.fetchall()
     
     cur.close()
