@@ -2200,14 +2200,32 @@ def admin_analytics():
     analytics_data = {}
     widgets = []
     overall_stats = {}
+    kaika_fee_data = {}
+    
+    # 日付フィルター取得
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
     
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
+            # 日付条件を構築
+            date_condition = ""
+            date_params = []
+            if date_from and date_to:
+                date_condition = " AND sale_date BETWEEN %s AND %s"
+                date_params = [date_from, date_to]
+            elif date_from:
+                date_condition = " AND sale_date >= %s"
+                date_params = [date_from]
+            elif date_to:
+                date_condition = " AND sale_date <= %s"
+                date_params = [date_to]
+            
             # 全体統計
-            cur.execute("""
+            query = """
                 SELECT 
                     COUNT(*) as total_items,
                     COALESCE(SUM(purchase_price), 0) as total_purchase,
@@ -2215,8 +2233,38 @@ def admin_analytics():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
                 FROM merchandise
-            """)
+                WHERE 1=1 """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
+            cur.execute(query, date_params if date_params else None)
             overall_stats = dict(cur.fetchone() or {})
+            
+            # 開花手数料（sale_typeがnormal以外の手数料合計）
+            kaika_query = """
+                SELECT 
+                    COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    COUNT(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 END) as kaika_count
+                FROM merchandise
+                WHERE sale_date IS NOT NULL""" + date_condition
+            cur.execute(kaika_query, date_params if date_params else None)
+            kaika_fee_data['summary'] = dict(cur.fetchone() or {})
+            
+            # 開花手数料の月別推移
+            kaika_monthly_query = """
+                SELECT 
+                    TO_CHAR(sale_date, 'YYYY-MM') as month,
+                    COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as fee,
+                    COUNT(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN 1 END) as count
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL""" + date_condition + """
+                GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 12
+            """
+            cur.execute(kaika_monthly_query, date_params if date_params else None)
+            kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -2364,6 +2412,19 @@ def admin_analytics():
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
             
+            # 日付条件を構築（SQLite）
+            date_condition_sqlite = ""
+            date_params_sqlite = []
+            if date_from and date_to:
+                date_condition_sqlite = " AND sale_date BETWEEN ? AND ?"
+                date_params_sqlite = [date_from, date_to]
+            elif date_from:
+                date_condition_sqlite = " AND sale_date >= ?"
+                date_params_sqlite = [date_from]
+            elif date_to:
+                date_condition_sqlite = " AND sale_date <= ?"
+                date_params_sqlite = [date_to]
+            
             # 全体統計
             cur.execute("""
                 SELECT 
@@ -2375,6 +2436,33 @@ def admin_analytics():
                 FROM merchandise
             """)
             overall_stats = dict(cur.fetchone() or {})
+            
+            # 開花手数料（sale_typeがnormal以外の手数料合計）
+            cur.execute("""
+                SELECT 
+                    COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 ELSE 0 END) as kaika_count
+                FROM merchandise
+                WHERE sale_date IS NOT NULL""" + date_condition_sqlite, date_params_sqlite if date_params_sqlite else [])
+            kaika_fee_data['summary'] = dict(cur.fetchone() or {})
+            
+            # 開花手数料の月別推移
+            cur.execute("""
+                SELECT 
+                    strftime('%Y-%m', sale_date) as month,
+                    COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as fee,
+                    SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN 1 ELSE 0 END) as count
+                FROM merchandise 
+                WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                GROUP BY strftime('%Y-%m', sale_date)
+                ORDER BY month DESC
+                LIMIT 12
+            """, date_params_sqlite if date_params_sqlite else [])
+            kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -2536,6 +2624,9 @@ def admin_analytics():
     return render_template('admin/analytics.html',
                          widgets=[dict(w) for w in widgets] if widgets else [],
                          overall_stats=overall_stats,
+                         kaika_fee=kaika_fee_data,
+                         date_from=date_from,
+                         date_to=date_to,
                          **analytics_data)
 
 @app.route('/admin/analytics/settings', methods=['GET', 'POST'])
