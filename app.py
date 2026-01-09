@@ -3295,45 +3295,53 @@ def admin_items():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 全商品を取得（カラムを明示的に指定）
-            cur.execute("""
-                SELECT m.id, m.user_id, m.purchase_date, m.photo_path, m.product_name, 
-                       m.brand_name, m.item_condition, m.store_name, m.purchase_price,
-                       m.payment_method, m.listing_price, m.is_listed, m.listing_date,
-                       m.sale_date, m.sale_price, m.shipping_cost, m.commission,
-                       m.created_at,
-                       u.username as owner_username, 
-                       u.display_name as owner_display_name, 
-                       u.role as owner_role
-                FROM merchandise m
-                LEFT JOIN users u ON m.user_id = u.id
-                ORDER BY m.created_at DESC
-            """)
-            items = cur.fetchall()
+            # 全商品を取得（シンプルなクエリ）
+            cur.execute("SELECT * FROM merchandise ORDER BY created_at DESC")
+            items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
             users = cur.fetchall()
+            
+            # ユーザー情報をマッピング
+            user_map = {u['id']: u for u in users}
+            items = []
+            for item in items_raw:
+                item_dict = dict(item)
+                user_info = user_map.get(item_dict.get('user_id'))
+                if user_info:
+                    item_dict['owner_username'] = user_info.get('username')
+                    item_dict['owner_display_name'] = user_info.get('display_name')
+                    item_dict['owner_role'] = user_info.get('role')
+                else:
+                    item_dict['owner_username'] = None
+                    item_dict['owner_display_name'] = None
+                    item_dict['owner_role'] = None
+                items.append(item_dict)
         else:
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.row_factory = sqlite3.Row
-            cur.execute("""
-                SELECT m.id, m.user_id, m.purchase_date, m.photo_path, m.product_name, 
-                       m.brand_name, m.item_condition, m.store_name, m.purchase_price,
-                       m.payment_method, m.listing_price, m.is_listed, m.listing_date,
-                       m.sale_date, m.sale_price, m.shipping_cost, m.commission,
-                       m.created_at,
-                       u.username as owner_username, 
-                       u.display_name as owner_display_name, 
-                       u.role as owner_role
-                FROM merchandise m
-                LEFT JOIN users u ON m.user_id = u.id
-                ORDER BY m.created_at DESC
-            """)
-            items = cur.fetchall()
+            cur.execute("SELECT * FROM merchandise ORDER BY created_at DESC")
+            items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
             users = cur.fetchall()
+            
+            # ユーザー情報をマッピング
+            user_map = {u['id']: dict(u) for u in users}
+            items = []
+            for item in items_raw:
+                item_dict = dict(item)
+                user_info = user_map.get(item_dict.get('user_id'))
+                if user_info:
+                    item_dict['owner_username'] = user_info.get('username')
+                    item_dict['owner_display_name'] = user_info.get('display_name')
+                    item_dict['owner_role'] = user_info.get('role')
+                else:
+                    item_dict['owner_username'] = None
+                    item_dict['owner_display_name'] = None
+                    item_dict['owner_role'] = None
+                items.append(item_dict)
         
         cur.close()
         conn.close()
@@ -3341,20 +3349,21 @@ def admin_items():
         print(f"Admin items error: {e}")
         import traceback
         traceback.print_exc()
+        # エラー時は空のリストでテンプレートを表示
+        return render_template('admin/items.html', items=[], users=[])
     
     processed_items = []
     for item in items:
-        item_dict = dict(item)
-        if item_dict.get('photo_path'):
-            item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
-        if item_dict.get('sale_date'):
-            item_dict['profit'] = calculate_profit(
-                item_dict.get('sale_price', 0) or 0,
-                item_dict.get('purchase_price', 0) or 0,
-                item_dict.get('shipping_cost', 0) or 0,
-                item_dict.get('commission', 0) or 0
+        if item.get('photo_path'):
+            item['photo_path'] = item['photo_path'].replace('\\', '/')
+        if item.get('sale_date'):
+            item['profit'] = calculate_profit(
+                item.get('sale_price', 0) or 0,
+                item.get('purchase_price', 0) or 0,
+                item.get('shipping_cost', 0) or 0,
+                item.get('commission', 0) or 0
             )
-        processed_items.append(item_dict)
+        processed_items.append(item)
     
     return render_template('admin/items.html', items=processed_items, users=[dict(u) for u in users])
 
