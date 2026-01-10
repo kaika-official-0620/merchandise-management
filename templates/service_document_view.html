@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}サービス書類詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類一覧へ戻る</a>
+    <a href="{{ url_for('service_document_pdf', id=doc.id) }}" class="btn btn-primary" target="_blank">PDF表示</a>
+</div>
+
+<div class="service-doc-container">
+    <div class="doc-header">
+        <div class="doc-type-badge service-{{ doc.service_type }}">
+            {% if doc.service_type == 'photo_packing' %}📸 撮影梱包等代行サービス
+            {% elif doc.service_type == 'wholesale' %}🏭 業者卸販売
+            {% elif doc.service_type == 'multi_listing' %}📋 同時出品サービス
+            {% elif doc.service_type == 'auction' %}🔨 オークション流し
+            {% endif %}
+        </div>
+        <div class="doc-no">{{ doc.document_no }}</div>
+    </div>
+    
+    <div class="doc-info-grid">
+        <div class="info-section">
+            <h3>基本情報</h3>
+            <dl>
+                <dt>作成日</dt>
+                <dd>{{ doc.created_at[:10] if doc.created_at else '-' }}</dd>
+                <dt>顧客名</dt>
+                <dd>{{ doc.customer_name }}</dd>
+                <dt>連絡先</dt>
+                <dd>{{ doc.contact or '-' }}</dd>
+            </dl>
+        </div>
+        
+        <div class="info-section">
+            <h3>商品情報</h3>
+            <dl>
+                <dt>商品名</dt>
+                <dd>{{ doc.product_name }}</dd>
+                <dt>商品説明</dt>
+                <dd>{{ doc.product_description or '-' }}</dd>
+            </dl>
+        </div>
+        
+        {% if doc.service_data %}
+        <div class="info-section">
+            <h3>サービス詳細</h3>
+            <dl>
+                {% if doc.service_type == 'photo_packing' %}
+                    <dt>撮影枚数</dt>
+                    <dd>{{ doc.service_data.photo_count or '-' }}枚</dd>
+                    <dt>梱包サイズ</dt>
+                    <dd>
+                        {% if doc.service_data.packing_size == 'small' %}小（60サイズ以下）
+                        {% elif doc.service_data.packing_size == 'medium' %}中（80サイズ）
+                        {% elif doc.service_data.packing_size == 'large' %}大（100サイズ以上）
+                        {% else %}{{ doc.service_data.packing_size or '-' }}
+                        {% endif %}
+                    </dd>
+                {% elif doc.service_type == 'wholesale' %}
+                    <dt>数量</dt>
+                    <dd>{{ doc.service_data.quantity or 1 }}個</dd>
+                    <dt>卸単価</dt>
+                    <dd>¥{{ "{:,}".format((doc.service_data.wholesale_price or 0)|int) }}</dd>
+                {% elif doc.service_type == 'multi_listing' %}
+                    <dt>出品サイト</dt>
+                    <dd>
+                        {% if doc.service_data.listing_sites %}
+                            {% for site in doc.service_data.listing_sites %}
+                                <span class="site-badge">
+                                    {% if site == 'mercari' %}メルカリ
+                                    {% elif site == 'yahoo' %}ヤフオク
+                                    {% elif site == 'rakuma' %}ラクマ
+                                    {% elif site == 'paypay' %}PayPayフリマ
+                                    {% else %}{{ site }}{% endif %}
+                                </span>
+                            {% endfor %}
+                        {% else %}-{% endif %}
+                    </dd>
+                    <dt>希望販売価格</dt>
+                    <dd>¥{{ "{:,}".format((doc.service_data.listing_price or 0)|int) }}</dd>
+                {% elif doc.service_type == 'auction' %}
+                    <dt>最低落札価格</dt>
+                    <dd>¥{{ "{:,}".format((doc.service_data.min_bid or 0)|int) }}</dd>
+                    <dt>即決価格</dt>
+                    <dd>¥{{ "{:,}".format((doc.service_data.buy_now_price or 0)|int) }}</dd>
+                    <dt>出品期間</dt>
+                    <dd>{{ doc.service_data.auction_duration or 5 }}日間</dd>
+                {% endif %}
+            </dl>
+        </div>
+        {% endif %}
+        
+        <div class="info-section highlight">
+            <h3>手数料</h3>
+            <div class="commission-amount">¥{{ "{:,}".format(doc.commission or 0) }}</div>
+        </div>
+    </div>
+    
+    {% if doc.notes %}
+    <div class="notes-section">
+        <h3>備考</h3>
+        <p>{{ doc.notes }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.service-doc-container {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.doc-header {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    padding: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.doc-type-badge {
+    font-size: 1.2rem;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 30px;
+}
+
+.doc-type-badge.service-photo_packing { background: #fef3c7; color: #b45309; }
+.doc-type-badge.service-wholesale { background: #dbeafe; color: #1d4ed8; }
+.doc-type-badge.service-multi_listing { background: #d1fae5; color: #059669; }
+.doc-type-badge.service-auction { background: #fce7f3; color: #be185d; }
+
+.doc-no {
+    font-family: 'Consolas', monospace;
+    font-size: 0.9rem;
+    color: #64748b;
+    background: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.doc-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 24px;
+}
+
+.info-section {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.info-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 1rem;
+    color: #334155;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.info-section dl {
+    margin: 0;
+}
+
+.info-section dt {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 12px;
+}
+
+.info-section dt:first-of-type {
+    margin-top: 0;
+}
+
+.info-section dd {
+    margin: 4px 0 0 0;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.info-section.highlight {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+}
+
+.info-section.highlight h3 {
+    color: rgba(255,255,255,0.9);
+    border-bottom-color: rgba(255,255,255,0.3);
+}
+
+.commission-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.site-badge {
+    display: inline-block;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-right: 6px;
+    margin-bottom: 4px;
+}
+
+.notes-section {
+    padding: 0 24px 24px 24px;
+}
+
+.notes-section h3 {
+    font-size: 1rem;
+    color: #334155;
+    margin: 0 0 12px 0;
+}
+
+.notes-section p {
+    background: #fefce8;
+    padding: 16px;
+    border-radius: 8px;
+    border-left: 4px solid #eab308;
+    margin: 0;
+    color: #713f12;
+}
+
+.page-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .doc-info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}

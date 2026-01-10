@@ -312,6 +312,29 @@ if DATABASE_URL:
             )
         ''')
         
+        # サービス書類テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS service_documents (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                service_type VARCHAR(50) NOT NULL,
+                customer_name VARCHAR(100) NOT NULL,
+                contact VARCHAR(200),
+                product_name VARCHAR(200) NOT NULL,
+                product_description TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                commission INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                service_data TEXT,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -583,6 +606,29 @@ else:
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # サービス書類テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS service_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                service_type TEXT NOT NULL,
+                customer_name TEXT NOT NULL,
+                contact TEXT,
+                product_name TEXT NOT NULL,
+                product_description TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                commission INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                service_data TEXT,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -4240,6 +4286,212 @@ def admin_shikiriosho_view(id):
 # ===================
 # 見積書（ユーザー用）
 # ===================
+
+# ===================
+# 統合書類管理
+# ===================
+
+@app.route('/documents')
+@login_required
+def documents():
+    """統合書類管理ページ"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 見積書
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = %s AND s.status = 'sent'
+            ORDER BY s.created_at DESC
+        """, (current_user.id,))
+        shikiriosho_list = [dict(row) for row in cur.fetchall()]
+        
+        # 精算書
+        cur.execute("""
+            SELECT * FROM invoices WHERE sender_id = %s ORDER BY created_at DESC
+        """, (current_user.id,))
+        invoices = [dict(row) for row in cur.fetchall()]
+        
+        # サービス書類
+        cur.execute("""
+            SELECT * FROM service_documents WHERE user_id = %s ORDER BY created_at DESC
+        """, (current_user.id,))
+        service_documents = [dict(row) for row in cur.fetchall()]
+        
+        # 未読見積書カウント
+        cur.execute("""
+            SELECT COUNT(*) as count FROM shikiriosho 
+            WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
+        """, (current_user.id,))
+        unread_count = cur.fetchone()['count']
+    else:
+        cur = conn.cursor()
+        
+        # 見積書
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = ? AND s.status = 'sent'
+            ORDER BY s.created_at DESC
+        """, (current_user.id,))
+        shikiriosho_list = [dict(row) for row in cur.fetchall()]
+        
+        # 精算書
+        cur.execute("""
+            SELECT * FROM invoices WHERE sender_id = ? ORDER BY created_at DESC
+        """, (current_user.id,))
+        invoices = [dict(row) for row in cur.fetchall()]
+        
+        # サービス書類
+        cur.execute("""
+            SELECT * FROM service_documents WHERE user_id = ? ORDER BY created_at DESC
+        """, (current_user.id,))
+        service_documents = [dict(row) for row in cur.fetchall()]
+        
+        # 未読見積書カウント
+        cur.execute("""
+            SELECT COUNT(*) as count FROM shikiriosho 
+            WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
+        """, (current_user.id,))
+        unread_count = dict(cur.fetchone())['count']
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('documents.html',
+                          shikiriosho_list=shikiriosho_list,
+                          invoices=invoices,
+                          service_documents=service_documents,
+                          unread_shikiriosho_count=unread_count)
+
+@app.route('/service-document/create', methods=['POST'])
+@login_required
+def create_service_document():
+    """サービス書類作成"""
+    service_type = request.form.get('service_type')
+    customer_name = request.form.get('customer_name')
+    contact = request.form.get('contact', '')
+    product_name = request.form.get('product_name')
+    product_description = request.form.get('product_description', '')
+    notes = request.form.get('notes', '')
+    commission = int(request.form.get('commission') or 0)
+    
+    # サービス固有データをJSON化
+    service_data = {}
+    if service_type == 'photo_packing':
+        service_data = {
+            'photo_count': request.form.get('photo_count', '10'),
+            'packing_size': request.form.get('packing_size', 'medium')
+        }
+    elif service_type == 'wholesale':
+        service_data = {
+            'quantity': request.form.get('quantity', '1'),
+            'wholesale_price': request.form.get('wholesale_price', '0')
+        }
+    elif service_type == 'multi_listing':
+        service_data = {
+            'listing_sites': request.form.getlist('listing_sites'),
+            'listing_price': request.form.get('listing_price', '0')
+        }
+    elif service_type == 'auction':
+        service_data = {
+            'min_bid': request.form.get('min_bid', '0'),
+            'buy_now_price': request.form.get('buy_now_price', '0'),
+            'auction_duration': request.form.get('auction_duration', '5')
+        }
+    
+    # 書類番号生成
+    doc_no = f"SD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{current_user.id}"
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO service_documents 
+            (document_no, user_id, service_type, customer_name, contact, product_name, 
+             product_description, commission, total_amount, service_data, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (doc_no, current_user.id, service_type, customer_name, contact, product_name,
+              product_description, commission, commission, json.dumps(service_data), notes))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO service_documents 
+            (document_no, user_id, service_type, customer_name, contact, product_name, 
+             product_description, commission, total_amount, service_data, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (doc_no, current_user.id, service_type, customer_name, contact, product_name,
+              product_description, commission, commission, json.dumps(service_data), notes))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('サービス書類を作成しました', 'success')
+    return redirect(url_for('documents'))
+
+@app.route('/service-document/<int:id>')
+@login_required
+def service_document_view(id):
+    """サービス書類詳細"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM service_documents WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM service_documents WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    doc = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not doc:
+        flash('書類が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    doc = dict(doc)
+    if doc.get('service_data'):
+        try:
+            doc['service_data'] = json.loads(doc['service_data'])
+        except:
+            doc['service_data'] = {}
+    
+    return render_template('service_document_view.html', doc=doc)
+
+@app.route('/service-document/<int:id>/pdf')
+@login_required
+def service_document_pdf(id):
+    """サービス書類PDF出力"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM service_documents WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM service_documents WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    doc = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not doc:
+        flash('書類が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    doc = dict(doc)
+    if doc.get('service_data'):
+        try:
+            doc['service_data'] = json.loads(doc['service_data'])
+        except:
+            doc['service_data'] = {}
+    
+    return render_template('pdf/service_document_pdf.html', doc=doc)
 
 @app.route('/shikiriosho')
 @login_required
