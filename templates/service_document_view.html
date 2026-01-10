@@ -25,7 +25,7 @@
             <h3>基本情報</h3>
             <dl>
                 <dt>作成日</dt>
-                <dd>{{ doc.created_at[:10] if doc.created_at else '-' }}</dd>
+                <dd>{{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else '-' }}</dd>
                 <dt>顧客名</dt>
                 <dd>{{ doc.customer_name }}</dd>
                 <dt>連絡先</dt>

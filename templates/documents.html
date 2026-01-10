@@ -166,10 +166,10 @@
                     </span>
                 </div>
                 <div class="card-body">
-                    <div class="info-row">
-                        <span class="label">作成日</span>
-                        <span class="value">{{ doc.created_at[:10] if doc.created_at else '-' }}</span>
-                    </div>
+                <div class="info-row">
+                    <span class="label">作成日</span>
+                    <span class="value">{{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else '-' }}</span>
+                </div>
                     <div class="info-row">
                         <span class="label">顧客名</span>
                         <span class="value">{{ doc.customer_name or '-' }}</span>
