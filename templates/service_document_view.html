@@ -11,10 +11,10 @@
 <div class="service-doc-container">
     <div class="doc-header">
         <div class="doc-type-badge service-{{ doc.service_type }}">
-            {% if doc.service_type == 'photo_packing' %}📸 撮影梱包等代行サービス
-            {% elif doc.service_type == 'wholesale' %}🏭 業者卸販売
-            {% elif doc.service_type == 'multi_listing' %}📋 同時出品サービス
-            {% elif doc.service_type == 'auction' %}🔨 オークション流し
+            {% if doc.service_type == 'photo_packing' %}撮影梱包等代行サービス
+            {% elif doc.service_type == 'wholesale' %}業者卸販売
+            {% elif doc.service_type == 'multi_listing' %}同時出品サービス
+            {% elif doc.service_type == 'auction' %}オークション流し
             {% endif %}
         </div>
         <div class="doc-no">{{ doc.document_no }}</div>

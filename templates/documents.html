@@ -5,9 +5,9 @@
 {% block content %}
 <!-- タブナビゲーション -->
 <div class="doc-tabs">
-    <button class="doc-tab active" data-tab="estimates">📋 見積書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
-    <button class="doc-tab" data-tab="settlements">📑 精算書</button>
-    <button class="doc-tab" data-tab="service-docs">📦 サービス書類</button>
+    <button class="doc-tab active" data-tab="estimates">見積書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
+    <button class="doc-tab" data-tab="settlements">精算書</button>
+    <button class="doc-tab" data-tab="service-docs">サービス書類</button>
 </div>
 
 <!-- 見積書タブ -->
@@ -726,22 +726,22 @@ document.querySelectorAll('.doc-tab').forEach(tab => {
 // 手数料率設定
 const commissionRates = {
     'photo_packing': {
-        title: '撮影梱包等代行サービス 書類作成',
+        title: '撮影梱包等代行サービス',
         hint: '25,000円以上: 売上の2%、未満: 500円',
         calculate: (amount) => amount >= 25000 ? Math.floor(amount * 0.02) : 500
     },
     'wholesale': {
-        title: '業者卸販売 書類作成',
+        title: '業者卸販売',
         hint: '売上の10%',
         calculate: (amount) => Math.floor(amount * 0.10)
     },
     'multi_listing': {
-        title: '同時出品サービス 書類作成',
+        title: '同時出品サービス',
         hint: '売上の3%',
         calculate: (amount) => Math.floor(amount * 0.03)
     },
     'auction': {
-        title: 'オークション流し 書類作成',
+        title: 'オークション流し',
         hint: '売上の5%',
         calculate: (amount) => Math.floor(amount * 0.05)
     }
