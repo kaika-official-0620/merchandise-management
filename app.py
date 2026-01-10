@@ -1921,7 +1921,7 @@ def admin_users():
     users = [dict(u) for u in cur.fetchall()]
     
     # 各ユーザーの当月商品数を取得
-        for user in users:
+    for user in users:
         if DATABASE_URL:
             cur.execute("""
                 SELECT COUNT(*) as count FROM merchandise 
@@ -1931,7 +1931,7 @@ def admin_users():
             result = cur.fetchone()
             user['monthly_item_count'] = result['count'] if result else 0
         else:
-        cur.execute("""
+            cur.execute("""
                 SELECT COUNT(*) as count FROM merchandise 
                 WHERE user_id = ? 
                 AND strftime('%Y-%m', COALESCE(purchase_date, date('now'))) = strftime('%Y-%m', 'now')
@@ -1951,7 +1951,7 @@ def admin_users():
             user['monthly_fee'] = 20000
         elif count <= 300:
             user['monthly_fee'] = 30000
-    else:
+        else:
             user['monthly_fee'] = 30000  # 300以上は30000円
     
     cur.close()
