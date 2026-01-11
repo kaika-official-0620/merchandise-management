@@ -16,6 +16,16 @@
                 <input type="text" value="{{ invoice.invoice_no if invoice else invoice_no }}" readonly class="form-control readonly">
             </div>
             <div class="form-group">
+                <label for="service_type">サービス種別 *</label>
+                <select id="service_type" name="service_type" class="form-control" required>
+                    <option value="normal" {% if not invoice or invoice.service_type == 'normal' %}selected{% endif %}>通常精算（手数料10%）</option>
+                    <option value="photo_packing" {% if invoice and invoice.service_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行（25,000円以上:2%, 未満:500円）</option>
+                    <option value="wholesale" {% if invoice and invoice.service_type == 'wholesale' %}selected{% endif %}>業者卸販売（手数料10%）</option>
+                    <option value="multi_listing" {% if invoice and invoice.service_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
+                    <option value="auction" {% if invoice and invoice.service_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="issue_date">発行日 *</label>
                 <input type="date" id="issue_date" name="issue_date" value="{{ invoice.issue_date if invoice else today }}" required class="form-control">
             </div>
@@ -113,9 +123,17 @@
                         <td id="tax-10">¥0</td>
                         <td></td>
                     </tr>
+                    <tr class="totals-row commission-row">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>手数料 <span id="commission-rate-label">(10%)</span></strong></td>
+                        <td id="commission-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                    <input type="hidden" name="commission_amount" id="commission-input" value="0">
+                    <input type="hidden" name="commission_rate" id="commission-rate-input" value="10">
                     <tr class="totals-row total-final">
                         <td colspan="5"></td>
-                        <td class="text-right"><strong>請求金額</strong></td>
+                        <td class="text-right"><strong>請求金額（税込・手数料込）</strong></td>
                         <td id="total-amount">¥0</td>
                         <td></td>
                     </tr>
@@ -251,6 +269,15 @@
     color: #007bff;
 }
 
+.commission-row td {
+    background: #fff3cd;
+}
+
+.commission-row #commission-amount {
+    color: #856404;
+    font-weight: 600;
+}
+
 .form-actions {
     display: flex;
     gap: 10px;
@@ -331,8 +358,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const addRowBtn = document.getElementById('add-row');
     const productSelect = document.getElementById('product-select');
     const addProductBtn = document.getElementById('add-product-btn');
+    const serviceTypeSelect = document.getElementById('service_type');
     
     let products = [];
+    
+    // 手数料計算関数
+    function calculateCommission(subtotal, serviceType) {
+        let rate = 10;
+        let commission = 0;
+        let rateLabel = '10%';
+        
+        switch(serviceType) {
+            case 'normal':
+                rate = 10;
+                commission = Math.floor(subtotal * 0.10);
+                rateLabel = '10%';
+                break;
+            case 'photo_packing':
+                if (subtotal >= 25000) {
+                    rate = 2;
+                    commission = Math.floor(subtotal * 0.02);
+                    rateLabel = '2%';
+                } else {
+                    rate = 0;
+                    commission = 500;
+                    rateLabel = '500円固定';
+                }
+                break;
+            case 'wholesale':
+                rate = 10;
+                commission = Math.floor(subtotal * 0.10);
+                rateLabel = '10%';
+                break;
+            case 'multi_listing':
+                rate = 3;
+                commission = Math.floor(subtotal * 0.03);
+                rateLabel = '3%';
+                break;
+            case 'auction':
+                rate = 5;
+                commission = Math.floor(subtotal * 0.05);
+                rateLabel = '5%';
+                break;
+        }
+        
+        return { rate, commission, rateLabel };
+    }
+    
+    // サービスタイプ変更時
+    serviceTypeSelect.addEventListener('change', function() {
+        calculateTotals();
+    });
     
     // 商品一覧を取得
     async function loadProducts() {
@@ -458,11 +534,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const tax8 = Math.floor(subtotal8 * 0.08);
         const tax10 = Math.floor(subtotal10 * 0.10);
-        const totalAmount = subtotal + tax8 + tax10;
+        const subtotalWithTax = subtotal + tax8 + tax10;
+        
+        // 手数料計算
+        const serviceType = serviceTypeSelect.value;
+        const { rate, commission, rateLabel } = calculateCommission(subtotalWithTax, serviceType);
+        
+        const totalAmount = subtotalWithTax + commission;
         
         document.getElementById('subtotal').textContent = '¥' + subtotal.toLocaleString();
         document.getElementById('tax-8').textContent = '¥' + tax8.toLocaleString();
         document.getElementById('tax-10').textContent = '¥' + tax10.toLocaleString();
+        document.getElementById('commission-rate-label').textContent = '(' + rateLabel + ')';
+        document.getElementById('commission-amount').textContent = '¥' + commission.toLocaleString();
+        document.getElementById('commission-input').value = commission;
+        document.getElementById('commission-rate-input').value = rate;
         document.getElementById('total-amount').textContent = '¥' + totalAmount.toLocaleString();
     }
     

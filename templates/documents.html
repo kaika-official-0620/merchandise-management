@@ -114,182 +114,76 @@
 <!-- サービス書類タブ -->
 <div class="tab-content" id="tab-service-docs">
     <div class="tab-header">
-        <h2>サービス書類作成</h2>
+        <h2>サービス別精算書作成</h2>
     </div>
     
-    <!-- サービス選択カード（簡潔版） -->
-    <div class="service-select-card">
-        <div class="service-select-grid">
-            <button class="service-btn" onclick="openServiceForm('photo_packing')">撮影梱包等代行</button>
-            <button class="service-btn" onclick="openServiceForm('wholesale')">業者卸販売</button>
-            <button class="service-btn" onclick="openServiceForm('multi_listing')">同時出品</button>
-            <button class="service-btn" onclick="openServiceForm('auction')">オークション流し</button>
+    <div class="service-info-card">
+        <p>各サービスの精算書は「精算書」タブの「+ 新規作成」から作成できます。</p>
+        <p>作成画面でサービス種別を選択すると、手数料が自動計算されます。</p>
+        
+        <div class="service-rates">
+            <h3>手数料率一覧</h3>
+            <ul>
+                <li><strong>通常精算：</strong>10%</li>
+                <li><strong>撮影梱包等代行：</strong>25,000円以上は2%、未満は500円固定</li>
+                <li><strong>業者卸販売：</strong>10%</li>
+                <li><strong>同時出品サービス：</strong>3%</li>
+                <li><strong>オークション流し：</strong>5%</li>
+            </ul>
         </div>
-    </div>
-    
-    <!-- 作成済みサービス書類一覧 -->
-    {% if service_documents %}
-    <div class="service-docs-list">
-        <h3>作成済み書類</h3>
-        <div class="doc-cards">
-            {% for doc in service_documents %}
-            <div class="doc-card service-doc-card service-{{ doc.service_type }}">
-                <div class="card-header">
-                    <span class="doc-no">{{ doc.document_no }}</span>
-                    <span class="service-type-badge service-{{ doc.service_type }}">
-                        {% if doc.service_type == 'photo_packing' %}撮影梱包
-                        {% elif doc.service_type == 'wholesale' %}業者卸
-                        {% elif doc.service_type == 'multi_listing' %}同時出品
-                        {% elif doc.service_type == 'auction' %}オークション
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="card-body">
-                <div class="info-row">
-                    <span class="label">作成日</span>
-                    <span class="value">{{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else '-' }}</span>
-                </div>
-                    <div class="info-row">
-                        <span class="label">顧客名</span>
-                        <span class="value">{{ doc.customer_name or '-' }}</span>
-                    </div>
-                    <div class="info-row total">
-                        <span class="label">金額</span>
-                        <span class="value">¥{{ "{:,}".format(doc.total_amount or 0) }}</span>
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <a href="{{ url_for('service_document_view', id=doc.id) }}" class="btn btn-info">詳細</a>
-                    <a href="{{ url_for('service_document_pdf', id=doc.id) }}" class="btn btn-secondary">PDF</a>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-</div>
-
-<!-- サービス書類作成モーダル -->
-<div id="serviceFormModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3 id="modalTitle">書類作成</h3>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
-        </div>
-        <form id="serviceDocForm" action="{{ url_for('create_service_document') }}" method="POST">
-            <input type="hidden" name="service_type" id="serviceType">
-            
-            <div class="form-group">
-                <label>顧客名 <span class="required">*</span></label>
-                <input type="text" name="customer_name" required class="form-control">
-            </div>
-            
-            <div class="form-group">
-                <label>連絡先</label>
-                <input type="text" name="contact" class="form-control" placeholder="電話番号またはメールアドレス">
-            </div>
-            
-            <div class="form-group">
-                <label>商品名 <span class="required">*</span></label>
-                <input type="text" name="product_name" required class="form-control">
-            </div>
-            
-            <div class="form-group">
-                <label>商品説明</label>
-                <textarea name="product_description" class="form-control" rows="3"></textarea>
-            </div>
-            
-            <!-- 撮影梱包等代行サービス固有 -->
-            <div class="service-specific photo_packing" style="display: none;">
-                <div class="form-group">
-                    <label>撮影枚数</label>
-                    <input type="number" name="photo_count" class="form-control" min="1" value="10">
-                </div>
-                <div class="form-group">
-                    <label>梱包サイズ</label>
-                    <select name="packing_size" class="form-control">
-                        <option value="small">小（60サイズ以下）</option>
-                        <option value="medium">中（80サイズ）</option>
-                        <option value="large">大（100サイズ以上）</option>
-                    </select>
-                </div>
-            </div>
-            
-            <!-- 業者卸販売固有 -->
-            <div class="service-specific wholesale" style="display: none;">
-                <div class="form-group">
-                    <label>数量</label>
-                    <input type="number" name="quantity" class="form-control" min="1" value="1">
-                </div>
-                <div class="form-group">
-                    <label>卸単価</label>
-                    <input type="number" name="wholesale_price" class="form-control" min="0">
-                </div>
-            </div>
-            
-            <!-- 同時出品サービス固有 -->
-            <div class="service-specific multi_listing" style="display: none;">
-                <div class="form-group">
-                    <label>出品サイト（複数選択可）</label>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" name="listing_sites" value="mercari"> メルカリ</label>
-                        <label><input type="checkbox" name="listing_sites" value="yahoo"> ヤフオク</label>
-                        <label><input type="checkbox" name="listing_sites" value="rakuma"> ラクマ</label>
-                        <label><input type="checkbox" name="listing_sites" value="paypay"> PayPayフリマ</label>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>希望販売価格</label>
-                    <input type="number" name="listing_price" class="form-control" min="0">
-                </div>
-            </div>
-            
-            <!-- オークション流し固有 -->
-            <div class="service-specific auction" style="display: none;">
-                <div class="form-group">
-                    <label>最低落札価格</label>
-                    <input type="number" name="min_bid" class="form-control" min="0">
-                </div>
-                <div class="form-group">
-                    <label>即決価格</label>
-                    <input type="number" name="buy_now_price" class="form-control" min="0">
-                </div>
-                <div class="form-group">
-                    <label>出品期間</label>
-                    <select name="auction_duration" class="form-control">
-                        <option value="1">1日</option>
-                        <option value="3">3日</option>
-                        <option value="5" selected>5日</option>
-                        <option value="7">7日</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label>売上金額 <span class="required">*</span></label>
-                <input type="number" name="sales_amount" class="form-control" min="0" id="salesAmountInput" required oninput="calculateCommission()">
-            </div>
-            
-            <div class="form-group">
-                <label>手数料（自動計算）</label>
-                <input type="number" name="commission" class="form-control" min="0" id="commissionInput" readonly>
-                <small class="form-hint" id="commissionHint"></small>
-            </div>
-            
-            <div class="form-group">
-                <label>備考</label>
-                <textarea name="notes" class="form-control" rows="3"></textarea>
-            </div>
-            
-            <div class="form-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-                <button type="submit" class="btn btn-primary">書類を作成</button>
-            </div>
-        </form>
+        
+        <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary btn-large">精算書を作成する</a>
     </div>
 </div>
 
 <style>
+/* サービス情報カード */
+.service-info-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+}
+
+.service-info-card p {
+    color: #64748b;
+    margin-bottom: 16px;
+}
+
+.service-rates {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.service-rates h3 {
+    font-size: 1rem;
+    color: #334155;
+    margin: 0 0 12px 0;
+}
+
+.service-rates ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.service-rates li {
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+.service-rates li:last-child {
+    border-bottom: none;
+}
+
+.btn-large {
+    padding: 16px 32px;
+    font-size: 1.1rem;
+}
 /* タブナビゲーション */
 .doc-tabs {
     display: flex;
@@ -721,87 +615,6 @@ document.querySelectorAll('.doc-tab').forEach(tab => {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById('tab-' + this.dataset.tab).classList.add('active');
     });
-});
-
-// 手数料率設定
-const commissionRates = {
-    'photo_packing': {
-        title: '撮影梱包等代行サービス',
-        hint: '25,000円以上: 売上の2%、未満: 500円',
-        calculate: (amount) => amount >= 25000 ? Math.floor(amount * 0.02) : 500
-    },
-    'wholesale': {
-        title: '業者卸販売',
-        hint: '売上の10%',
-        calculate: (amount) => Math.floor(amount * 0.10)
-    },
-    'multi_listing': {
-        title: '同時出品サービス',
-        hint: '売上の3%',
-        calculate: (amount) => Math.floor(amount * 0.03)
-    },
-    'auction': {
-        title: 'オークション流し',
-        hint: '売上の5%',
-        calculate: (amount) => Math.floor(amount * 0.05)
-    }
-};
-
-// 手数料の自動計算
-function calculateCommission() {
-    const serviceType = document.getElementById('serviceType').value;
-    const salesAmount = parseInt(document.getElementById('salesAmountInput').value) || 0;
-    const commissionInput = document.getElementById('commissionInput');
-    
-    if (serviceType && commissionRates[serviceType]) {
-        const commission = commissionRates[serviceType].calculate(salesAmount);
-        commissionInput.value = commission;
-    }
-}
-
-// サービス別のモーダル表示
-function openServiceForm(serviceType) {
-    const modal = document.getElementById('serviceFormModal');
-    const title = document.getElementById('modalTitle');
-    const serviceInput = document.getElementById('serviceType');
-    const commissionHint = document.getElementById('commissionHint');
-    
-    // サービスタイプを設定
-    serviceInput.value = serviceType;
-    
-    // フォームをリセット
-    document.getElementById('serviceDocForm').reset();
-    serviceInput.value = serviceType;
-    
-    // タイトルと手数料ヒントを更新
-    title.textContent = commissionRates[serviceType].title;
-    commissionHint.textContent = commissionRates[serviceType].hint;
-    
-    // 手数料初期化
-    document.getElementById('commissionInput').value = '';
-    document.getElementById('salesAmountInput').value = '';
-    
-    // サービス固有フィールドの表示切り替え
-    document.querySelectorAll('.service-specific').forEach(el => {
-        el.style.display = 'none';
-    });
-    const specificFields = document.querySelector('.service-specific.' + serviceType);
-    if (specificFields) {
-        specificFields.style.display = 'block';
-    }
-    
-    modal.style.display = 'flex';
-}
-
-function closeModal() {
-    document.getElementById('serviceFormModal').style.display = 'none';
-}
-
-// モーダル外クリックで閉じる
-document.getElementById('serviceFormModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeModal();
-    }
 });
 </script>
 {% endblock %}

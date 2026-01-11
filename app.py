@@ -285,6 +285,9 @@ if DATABASE_URL:
                 tax_amount_8 INTEGER DEFAULT 0,
                 tax_amount_10 INTEGER DEFAULT 0,
                 total_amount INTEGER DEFAULT 0,
+                service_type VARCHAR(50) DEFAULT 'normal',
+                commission_rate DECIMAL(5,2) DEFAULT 10.00,
+                commission_amount INTEGER DEFAULT 0,
                 bank_info TEXT,
                 notes TEXT,
                 status VARCHAR(20) DEFAULT 'draft',
@@ -295,6 +298,14 @@ if DATABASE_URL:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # service_type, commission_rate, commission_amountカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS service_type VARCHAR(50) DEFAULT 'normal'")
+            cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 10.00")
+            cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_amount INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 精算書明細テーブル
         cur.execute('''
@@ -582,6 +593,9 @@ else:
                 tax_amount_8 INTEGER DEFAULT 0,
                 tax_amount_10 INTEGER DEFAULT 0,
                 total_amount INTEGER DEFAULT 0,
+                service_type TEXT DEFAULT 'normal',
+                commission_rate REAL DEFAULT 10.00,
+                commission_amount INTEGER DEFAULT 0,
                 bank_info TEXT,
                 notes TEXT,
                 status TEXT DEFAULT 'draft',
@@ -592,6 +606,20 @@ else:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # service_type, commission_rate, commission_amountカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN service_type TEXT DEFAULT 'normal'")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN commission_rate REAL DEFAULT 10.00")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN commission_amount INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 精算書明細テーブル
         cur.execute('''
@@ -4783,6 +4811,9 @@ def user_invoice_add():
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
+        service_type = request.form.get('service_type', 'normal')
+        commission_amount = int(request.form.get('commission_amount', 0) or 0)
+        commission_rate = float(request.form.get('commission_rate', 10) or 10)
         
         # 明細データ取得
         tax_categories = request.form.getlist('tax_category[]')
@@ -4824,7 +4855,7 @@ def user_invoice_add():
         
         tax_amount_8 = int(subtotal_8 * 0.08)
         tax_amount_10 = int(subtotal_10 * 0.10)
-        total_amount = subtotal + tax_amount_8 + tax_amount_10
+        total_amount = subtotal + tax_amount_8 + tax_amount_10 + commission_amount
         invoice_no = generate_invoice_no()
         
         if DATABASE_URL:
@@ -4832,11 +4863,13 @@ def user_invoice_add():
             cur.execute("""
                 INSERT INTO invoices 
                 (invoice_no, sender_id, issue_date, payment_due_date,
-                 subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 subtotal, tax_amount_8, tax_amount_10, total_amount, 
+                 service_type, commission_rate, commission_amount, bank_info, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (invoice_no, current_user.id, issue_date, payment_due_date,
-                  subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status))
+                  subtotal, tax_amount_8, tax_amount_10, total_amount,
+                  service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.fetchone()[0]
             
             for item in items:
@@ -4851,10 +4884,12 @@ def user_invoice_add():
             cur.execute("""
                 INSERT INTO invoices 
                 (invoice_no, sender_id, issue_date, payment_due_date,
-                 subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 subtotal, tax_amount_8, tax_amount_10, total_amount,
+                 service_type, commission_rate, commission_amount, bank_info, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (invoice_no, current_user.id, issue_date, payment_due_date,
-                  subtotal, tax_amount_8, tax_amount_10, total_amount, bank_info, notes, status))
+                  subtotal, tax_amount_8, tax_amount_10, total_amount,
+                  service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.lastrowid
             
             for item in items:
