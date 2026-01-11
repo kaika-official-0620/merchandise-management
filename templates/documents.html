@@ -7,7 +7,6 @@
 <div class="doc-tabs">
     <button class="doc-tab active" data-tab="estimates">見積書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
     <button class="doc-tab" data-tab="settlements">精算書</button>
-    <button class="doc-tab" data-tab="service-docs">サービス書類</button>
 </div>
 
 <!-- 見積書タブ -->
@@ -111,79 +110,7 @@
     {% endif %}
 </div>
 
-<!-- サービス書類タブ -->
-<div class="tab-content" id="tab-service-docs">
-    <div class="tab-header">
-        <h2>サービス別精算書作成</h2>
-    </div>
-    
-    <div class="service-info-card">
-        <p>各サービスの精算書は「精算書」タブの「+ 新規作成」から作成できます。</p>
-        <p>作成画面でサービス種別を選択すると、手数料が自動計算されます。</p>
-        
-        <div class="service-rates">
-            <h3>手数料率一覧</h3>
-            <ul>
-                <li><strong>通常精算：</strong>10%</li>
-                <li><strong>撮影梱包等代行：</strong>25,000円以上は2%、未満は500円固定</li>
-                <li><strong>業者卸販売：</strong>10%</li>
-                <li><strong>同時出品サービス：</strong>3%</li>
-                <li><strong>オークション流し：</strong>5%</li>
-            </ul>
-        </div>
-        
-        <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary btn-large">精算書を作成する</a>
-    </div>
-</div>
-
 <style>
-/* サービス情報カード */
-.service-info-card {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-    border-radius: 12px;
-    padding: 24px;
-    text-align: center;
-}
-
-.service-info-card p {
-    color: #64748b;
-    margin-bottom: 16px;
-}
-
-.service-rates {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    margin: 20px 0;
-    text-align: left;
-}
-
-.service-rates h3 {
-    font-size: 1rem;
-    color: #334155;
-    margin: 0 0 12px 0;
-}
-
-.service-rates ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.service-rates li {
-    padding: 8px 0;
-    border-bottom: 1px solid #e2e8f0;
-    color: #475569;
-}
-
-.service-rates li:last-child {
-    border-bottom: none;
-}
-
-.btn-large {
-    padding: 16px 32px;
-    font-size: 1.1rem;
-}
 /* タブナビゲーション */
 .doc-tabs {
     display: flex;
