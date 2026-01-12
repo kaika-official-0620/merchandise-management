@@ -12,8 +12,12 @@
         <h3>基本情報</h3>
         <div class="form-grid">
             <div class="form-group">
-                <label>精算書番号</label>
+                <label>請求書番号</label>
                 <input type="text" value="{{ invoice.invoice_no if invoice else invoice_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="recipient_name">宛名</label>
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ invoice.recipient_name if invoice else '' }}" class="form-control" placeholder="株式会社○○　様">
             </div>
             <div class="form-group">
                 <label for="service_type">サービス種別 *</label>
@@ -51,13 +55,14 @@
                 <thead>
                     <tr>
                         <th width="8%">税区分</th>
-                        <th width="12%">日付</th>
-                        <th width="28%">品名・品番 *</th>
-                        <th width="8%">数量</th>
-                        <th width="10%">単位</th>
-                        <th width="14%">単価</th>
-                        <th width="14%">合計</th>
-                        <th width="6%"></th>
+                        <th width="11%">仕入れ日</th>
+                        <th width="24%">商品名／品名 *</th>
+                        <th width="12%">商品番号</th>
+                        <th width="6%">数量</th>
+                        <th width="8%">単位</th>
+                        <th width="12%">単価</th>
+                        <th width="12%">金額</th>
+                        <th width="5%"></th>
                     </tr>
                 </thead>
                 <tbody id="items-body">
@@ -72,6 +77,7 @@
                             </td>
                             <td><input type="date" name="product_date[]" value="{{ item.product_date }}" class="form-control"></td>
                             <td><input type="text" name="product_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="text" name="product_code[]" value="{{ item.product_code or '' }}" class="form-control" placeholder="ABC-123"></td>
                             <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control item-qty" min="1"></td>
                             <td><input type="text" name="unit[]" value="{{ item.unit }}" class="form-control" placeholder="個"></td>
                             <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control item-price" min="0"></td>
@@ -90,6 +96,7 @@
                             </td>
                             <td><input type="date" name="product_date[]" class="form-control"></td>
                             <td><input type="text" name="product_name[]" class="form-control item-name"></td>
+                            <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
                             <td><input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1"></td>
                             <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
                             <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
@@ -444,12 +451,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const price = product.sale_price || product.listing_price || product.purchase_price || 0;
         const today = new Date().toISOString().split('T')[0];
         
-        addRow('10', today, product.product_name, 1, '個', price);
+        addRow('10', today, product.product_name, '', 1, '個', price);
         productSelect.value = '';
     });
     
     // 行を追加
-    function addRow(taxCat = '10', date = '', name = '', qty = 1, unit = '個', price = 0) {
+    function addRow(taxCat = '10', date = '', name = '', code = '', qty = 1, unit = '個', price = 0) {
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
@@ -461,6 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </td>
             <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
             <td><input type="text" name="product_name[]" value="${name}" class="form-control item-name"></td>
+            <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
             <td><input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1"></td>
             <td><input type="text" name="unit[]" value="${unit}" class="form-control" placeholder="個"></td>
             <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>

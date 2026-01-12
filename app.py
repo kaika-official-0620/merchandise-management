@@ -304,6 +304,13 @@ if DATABASE_URL:
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS service_type VARCHAR(50) DEFAULT 'normal'")
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 10.00")
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_amount INTEGER DEFAULT 0")
+            cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(100)")
+        except:
+            pass
+        
+        # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
         except:
             pass
         
@@ -620,6 +627,10 @@ else:
             cur.execute("ALTER TABLE invoices ADD COLUMN commission_amount INTEGER DEFAULT 0")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN recipient_name TEXT")
+        except:
+            pass
         
         # 精算書明細テーブル
         cur.execute('''
@@ -636,6 +647,12 @@ else:
                 amount INTEGER DEFAULT 0
             )
         ''')
+        
+        # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN product_code TEXT")
+        except:
+            pass
         
         # サービス書類テーブル
         cur.execute('''
@@ -4808,6 +4825,7 @@ def user_invoice_add():
     if request.method == 'POST':
         issue_date = request.form.get('issue_date')
         payment_due_date = request.form.get('payment_due_date') or None
+        recipient_name = request.form.get('recipient_name', '')
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -4819,6 +4837,7 @@ def user_invoice_add():
         tax_categories = request.form.getlist('tax_category[]')
         product_dates = request.form.getlist('product_date[]')
         product_names = request.form.getlist('product_name[]')
+        product_codes = request.form.getlist('product_code[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -4847,6 +4866,7 @@ def user_invoice_add():
                     'tax_category': tax_cat,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
+                    'product_code': product_codes[i] if i < len(product_codes) else '',
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -4862,12 +4882,12 @@ def user_invoice_add():
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO invoices 
-                (invoice_no, sender_id, issue_date, payment_due_date,
+                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name,
                  subtotal, tax_amount_8, tax_amount_10, total_amount, 
                  service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (invoice_no, current_user.id, issue_date, payment_due_date,
+            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
                   service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.fetchone()[0]
@@ -4875,19 +4895,19 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO invoices 
-                (invoice_no, sender_id, issue_date, payment_due_date,
+                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name,
                  subtotal, tax_amount_8, tax_amount_10, total_amount,
                  service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (invoice_no, current_user.id, issue_date, payment_due_date,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
                   service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.lastrowid
@@ -4895,10 +4915,10 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -4947,6 +4967,7 @@ def user_invoice_edit(id):
     if request.method == 'POST':
         issue_date = request.form.get('issue_date')
         payment_due_date = request.form.get('payment_due_date') or None
+        recipient_name = request.form.get('recipient_name', '')
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -4955,6 +4976,7 @@ def user_invoice_edit(id):
         tax_categories = request.form.getlist('tax_category[]')
         product_dates = request.form.getlist('product_date[]')
         product_names = request.form.getlist('product_name[]')
+        product_codes = request.form.getlist('product_code[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -4983,6 +5005,7 @@ def user_invoice_edit(id):
                     'tax_category': tax_cat,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
+                    'product_code': product_codes[i] if i < len(product_codes) else '',
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -4996,11 +5019,11 @@ def user_invoice_edit(id):
         if DATABASE_URL:
             cur.execute("""
                 UPDATE invoices SET
-                issue_date = %s, payment_due_date = %s,
+                issue_date = %s, payment_due_date = %s, recipient_name = %s,
                 subtotal = %s, tax_amount_8 = %s, tax_amount_10 = %s, total_amount = %s,
                 bank_info = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
-            """, (issue_date, payment_due_date, subtotal, tax_amount_8, tax_amount_10,
+            """, (issue_date, payment_due_date, recipient_name, subtotal, tax_amount_8, tax_amount_10,
                   total_amount, bank_info, notes, status, id))
             
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
@@ -5008,18 +5031,18 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur.execute("""
                 UPDATE invoices SET
-                issue_date = ?, payment_due_date = ?,
+                issue_date = ?, payment_due_date = ?, recipient_name = ?,
                 subtotal = ?, tax_amount_8 = ?, tax_amount_10 = ?, total_amount = ?,
                 bank_info = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (issue_date, payment_due_date, subtotal, tax_amount_8, tax_amount_10,
+            """, (issue_date, payment_due_date, recipient_name, subtotal, tax_amount_8, tax_amount_10,
                   total_amount, bank_info, notes, status, id))
             
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
@@ -5027,10 +5050,10 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
