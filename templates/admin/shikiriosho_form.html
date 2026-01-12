@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{% if shikiriosho %}見積書編集{% else %}見積書作成{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if shikiriosho %}買取明細書編集{% else %}買取明細書作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>{% if shikiriosho %}見積書編集{% else %}見積書作成{% endif %}</h1>
+    <h1>{% if shikiriosho %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
     <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
@@ -13,11 +13,11 @@
         <h3>基本情報</h3>
         <div class="form-grid">
             <div class="form-group">
-                <label>見積書番号</label>
+                <label>No.</label>
                 <input type="text" value="{{ shikiriosho.document_no if shikiriosho else document_no }}" readonly class="form-control readonly">
             </div>
             <div class="form-group">
-                <label for="issue_date">発行日 *</label>
+                <label for="issue_date">請求日 *</label>
                 <input type="date" id="issue_date" name="issue_date" value="{{ shikiriosho.issue_date if shikiriosho else today }}" required class="form-control">
             </div>
             <div class="form-group">
@@ -27,7 +27,7 @@
             <div class="form-group">
                 <label for="tax_rate">消費税率（%）</label>
                 <select id="tax_rate" name="tax_rate" class="form-control">
-                    <option value="10" {% if not shikiriosho or shikiriosho.tax_rate == 10 %}selected{% endif %}>10%</option>
+                    <option value="10" {% if not shikiriosho or shikiriosho.tax_rate == 10 %}selected{% endif %}>10%（内税）</option>
                     <option value="8" {% if shikiriosho and shikiriosho.tax_rate == 8 %}selected{% endif %}>8%（軽減税率）</option>
                     <option value="0" {% if shikiriosho and shikiriosho.tax_rate == 0 %}selected{% endif %}>0%（非課税）</option>
                 </select>
@@ -50,8 +50,16 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="recipient_name">または直接入力</label>
-                <input type="text" id="recipient_name" name="recipient_name" value="{{ shikiriosho.recipient_name if shikiriosho else '' }}" placeholder="宛先名（ユーザー未選択時）" class="form-control">
+                <label for="recipient_name">または直接入力（御中）</label>
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ shikiriosho.recipient_name if shikiriosho else '' }}" placeholder="会社名・団体名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="contact_name">お名前</label>
+                <input type="text" id="contact_name" name="contact_name" value="{{ shikiriosho.contact_name if shikiriosho else '' }}" placeholder="担当者名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="personal_number">個人番号</label>
+                <input type="text" id="personal_number" name="personal_number" value="{{ shikiriosho.personal_number if shikiriosho else '' }}" placeholder="管理用番号" class="form-control">
             </div>
         </div>
     </div>
@@ -65,71 +73,76 @@
             </select>
             <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
         </div>
-        <table class="items-table" id="items-table">
-            <thead>
-                <tr>
-                    <th width="5%">No</th>
-                    <th width="30%">品名 *</th>
-                    <th width="20%">規格</th>
-                    <th width="10%">数量</th>
-                    <th width="15%">単価</th>
-                    <th width="15%">金額</th>
-                    <th width="5%"></th>
-                </tr>
-            </thead>
-            <tbody id="items-body">
-                {% if items %}
-                    {% for item in items %}
-                    <tr class="item-row">
-                        <td class="item-no">{{ item.item_no }}</td>
-                        <td><input type="text" name="item_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
-                        <td><input type="text" name="specification[]" value="{{ item.specification }}" class="form-control"></td>
-                        <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control item-qty" min="1"></td>
-                        <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control item-price" min="0"></td>
-                        <td class="item-amount">¥{{ "{:,}".format(item.amount) }}</td>
-                        <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="6%">No.</th>
+                        <th width="30%">商品名／品名 *</th>
+                        <th width="14%">仕入れ日</th>
+                        <th width="16%">商品番号</th>
+                        <th width="16%">金額(税込)</th>
+                        <th width="5%"></th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    {% for i in range(5) %}
-                    <tr class="item-row">
-                        <td class="item-no">{{ i + 1 }}</td>
-                        <td><input type="text" name="item_name[]" class="form-control item-name"></td>
-                        <td><input type="text" name="specification[]" class="form-control"></td>
-                        <td><input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1"></td>
-                        <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
-                        <td class="item-amount">¥0</td>
-                        <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no }}</td>
+                            <td><input type="text" name="item_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="date" name="product_date[]" value="{{ item.product_date or '' }}" class="form-control"></td>
+                            <td><input type="text" name="product_code[]" value="{{ item.product_code or '' }}" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="amount[]" value="{{ item.amount }}" class="form-control item-amount-input" min="0"></td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(5) %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ i + 1 }}</td>
+                            <td><input type="text" name="item_name[]" class="form-control item-name"></td>
+                            <td><input type="date" name="product_date[]" class="form-control"></td>
+                            <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="amount[]" class="form-control item-amount-input" min="0"></td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
                     </tr>
-                    {% endfor %}
-                {% endif %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="7">
-                        <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
-                    </td>
-                </tr>
-                <tr class="totals-row">
-                    <td colspan="4"></td>
-                    <td class="text-right"><strong>小計</strong></td>
-                    <td id="subtotal">¥0</td>
-                    <td></td>
-                </tr>
-                <tr class="totals-row">
-                    <td colspan="4"></td>
-                    <td class="text-right"><strong>消費税</strong></td>
-                    <td id="tax-amount">¥0</td>
-                    <td></td>
-                </tr>
-                <tr class="totals-row total-final">
-                    <td colspan="4"></td>
-                    <td class="text-right"><strong>合計</strong></td>
-                    <td id="total-amount">¥0</td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>合計点数</strong></td>
+                        <td id="item-count">0 点</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>小計</strong></td>
+                        <td id="subtotal">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>内税(10%)</strong></td>
+                        <td id="tax-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row total-final">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>合計（税込）</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
     </div>
 
     <div class="form-section">
@@ -354,24 +367,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!productSelect.value) return;
         
         const product = JSON.parse(productSelect.value);
-        const price = product.listing_price || product.purchase_price || 0;
+        const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+        const today = new Date().toISOString().split('T')[0];
         
-        addRow(product.product_name, product.brand_name || '', 1, price);
+        addRow(product.product_name, today, '', price);
         productSelect.value = '';
     });
     
     // 行を追加
-    function addRow(name = '', spec = '', qty = 1, price = 0) {
+    function addRow(name = '', date = '', code = '', amount = 0) {
         const rowCount = itemsBody.querySelectorAll('.item-row').length;
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
             <td class="item-no">${rowCount + 1}</td>
             <td><input type="text" name="item_name[]" value="${name}" class="form-control item-name"></td>
-            <td><input type="text" name="specification[]" value="${spec}" class="form-control"></td>
-            <td><input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1"></td>
-            <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
-            <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
+            <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
+            <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
+            <td><input type="number" name="amount[]" value="${amount}" class="form-control item-amount-input" min="0"></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
         `;
         itemsBody.appendChild(newRow);
@@ -387,8 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 行を削除
     function attachRowEvents(row) {
         const removeBtn = row.querySelector('.remove-row');
-        const qtyInput = row.querySelector('.item-qty');
-        const priceInput = row.querySelector('.item-price');
+        const amountInput = row.querySelector('.item-amount-input');
         
         removeBtn.addEventListener('click', function() {
             row.remove();
@@ -396,15 +408,11 @@ document.addEventListener('DOMContentLoaded', function() {
             calculateTotals();
         });
         
-        qtyInput.addEventListener('input', function() {
-            calculateRowAmount(row);
-            calculateTotals();
-        });
-        
-        priceInput.addEventListener('input', function() {
-            calculateRowAmount(row);
-            calculateTotals();
-        });
+        if (amountInput) {
+            amountInput.addEventListener('input', function() {
+                calculateTotals();
+            });
+        }
     }
     
     // 行番号を振り直す
@@ -415,31 +423,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 行の金額を計算
-    function calculateRowAmount(row) {
-        const qty = parseInt(row.querySelector('.item-qty').value) || 0;
-        const price = parseInt(row.querySelector('.item-price').value) || 0;
-        const amount = qty * price;
-        row.querySelector('.item-amount').textContent = '¥' + amount.toLocaleString();
-    }
-    
-    // 合計を計算
+    // 合計を計算（内税方式）
     function calculateTotals() {
-        let subtotal = 0;
+        let total = 0;
+        let itemCount = 0;
         const rows = itemsBody.querySelectorAll('.item-row');
         rows.forEach(row => {
-            const qty = parseInt(row.querySelector('.item-qty').value) || 0;
-            const price = parseInt(row.querySelector('.item-price').value) || 0;
-            subtotal += qty * price;
+            const amountInput = row.querySelector('.item-amount-input');
+            const nameInput = row.querySelector('.item-name');
+            if (amountInput) {
+                const amount = parseInt(amountInput.value) || 0;
+                total += amount;
+                if (nameInput && nameInput.value.trim()) {
+                    itemCount++;
+                }
+            }
         });
         
+        // 内税計算（税込金額から税額を逆算）
         const taxRate = parseFloat(taxRateSelect.value) || 10;
-        const taxAmount = Math.floor(subtotal * taxRate / 100);
-        const totalAmount = subtotal + taxAmount;
+        const taxAmount = Math.floor(total * taxRate / (100 + taxRate));
+        const subtotal = total; // 税込金額をそのまま小計として表示
         
+        document.getElementById('item-count').textContent = itemCount + ' 点';
         document.getElementById('subtotal').textContent = '¥' + subtotal.toLocaleString();
-        document.getElementById('tax-amount').textContent = '¥' + taxAmount.toLocaleString();
-        document.getElementById('total-amount').textContent = '¥' + totalAmount.toLocaleString();
+        document.getElementById('tax-amount').textContent = taxAmount.toLocaleString();
+        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
     }
     
     // 既存の行にイベントを付与

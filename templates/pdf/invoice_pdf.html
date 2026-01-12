@@ -117,23 +117,6 @@
             margin-bottom: 5px;
         }
         
-        /* 郵送番号 */
-        .postal-number {
-            text-align: right;
-            margin-top: 8px;
-            font-size: 9pt;
-        }
-        
-        .postal-label {
-            display: inline-block;
-        }
-        
-        .postal-value {
-            display: inline-block;
-            border-bottom: 1px solid #000;
-            min-width: 80px;
-            margin-left: 5px;
-        }
         
         /* 請求文言 */
         .request-text {
@@ -347,10 +330,6 @@
                     <div>〒140-0015</div>
                     <div>東京都品川区西大井2-4-8</div>
                     <div>オーキッドレジデンス西大井602</div>
-                </div>
-                <div class="postal-number">
-                    <span class="postal-label">郵送番号：</span>
-                    <span class="postal-value">{{ invoice.postal_number or '' }}</span>
                 </div>
             </div>
         </div>

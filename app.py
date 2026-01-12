@@ -273,6 +273,20 @@ if DATABASE_URL:
             )
         ''')
         
+        # shikirioshoにcontact_name, personal_numberカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE shikiriosho ADD COLUMN IF NOT EXISTS contact_name VARCHAR(100)")
+            cur.execute("ALTER TABLE shikiriosho ADD COLUMN IF NOT EXISTS personal_number VARCHAR(50)")
+        except:
+            pass
+        
+        # shikiriosho_itemsにproduct_date, product_codeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_date DATE")
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+        except:
+            pass
+        
         # 精算書テーブル（ユーザー→管理者）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoices (
@@ -588,6 +602,26 @@ else:
                 notes TEXT
             )
         ''')
+        
+        # shikirioshoにcontact_name, personal_numberカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE shikiriosho ADD COLUMN contact_name TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE shikiriosho ADD COLUMN personal_number TEXT")
+        except:
+            pass
+        
+        # shikiriosho_itemsにproduct_date, product_codeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN product_date TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN product_code TEXT")
+        except:
+            pass
         
         # 精算書テーブル（ユーザー→管理者）
         cur.execute('''
@@ -4020,83 +4054,85 @@ def admin_shikiriosho_list():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_add():
-    """見積書作成（管理者用）"""
+    """買取明細書作成（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
         recipient_id = request.form.get('recipient_id')
         recipient_name = request.form.get('recipient_name', '')
+        contact_name = request.form.get('contact_name', '')
+        personal_number = request.form.get('personal_number', '')
         issue_date = request.form.get('issue_date')
         due_date = request.form.get('due_date') or None
         tax_rate = float(request.form.get('tax_rate', 10))
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得
+        # 明細データ取得（買取明細書形式）
         item_names = request.form.getlist('item_name[]')
-        specifications = request.form.getlist('specification[]')
-        quantities = request.form.getlist('quantity[]')
-        unit_prices = request.form.getlist('unit_price[]')
+        product_dates = request.form.getlist('product_date[]')
+        product_codes = request.form.getlist('product_code[]')
+        amounts = request.form.getlist('amount[]')
         
-        # 合計計算
-        subtotal = 0
+        # 合計計算（税込金額を直接入力）
+        total_amount = 0
         items = []
         for i, name in enumerate(item_names):
             if name.strip():
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
-                amount = qty * price
-                subtotal += amount
+                amount = int(amounts[i]) if i < len(amounts) and amounts[i] else 0
+                total_amount += amount
                 items.append({
                     'item_no': i + 1,
                     'product_name': name,
-                    'specification': specifications[i] if i < len(specifications) else '',
-                    'quantity': qty,
-                    'unit_price': price,
+                    'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
+                    'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'quantity': 1,
+                    'unit_price': amount,
                     'amount': amount
                 })
         
-        tax_amount = int(subtotal * tax_rate / 100)
-        total_amount = subtotal + tax_amount
+        # 内税方式（税込金額から税額を逆算）
+        tax_amount = int(total_amount * tax_rate / (100 + tax_rate))
+        subtotal = total_amount  # 税込金額をそのまま使用
         document_no = generate_document_no()
         
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO shikiriosho 
-                (document_no, sender_id, recipient_id, recipient_name, issue_date, due_date,
-                 subtotal, tax_amount, total_amount, tax_rate, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
+                 issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (document_no, current_user.id, recipient_id or None, recipient_name,
+            """, (document_no, current_user.id, recipient_id or None, recipient_name, contact_name, personal_number,
                   issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status))
             shikiriosho_id = cur.fetchone()[0]
             
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (shikiriosho_id, item['item_no'], item['product_name'], item['specification'],
-                      item['quantity'], item['unit_price'], item['amount']))
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
+                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO shikiriosho 
-                (document_no, sender_id, recipient_id, recipient_name, issue_date, due_date,
-                 subtotal, tax_amount, total_amount, tax_rate, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (document_no, current_user.id, recipient_id or None, recipient_name,
+                (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
+                 issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (document_no, current_user.id, recipient_id or None, recipient_name, contact_name, personal_number,
                   issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status))
             shikiriosho_id = cur.lastrowid
             
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (shikiriosho_id, item['item_no'], item['product_name'], item['specification'],
-                      item['quantity'], item['unit_price'], item['amount']))
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
+                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -4129,91 +4165,93 @@ def admin_shikiriosho_add():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_edit(id):
-    """見積書編集（管理者用）"""
+    """買取明細書編集（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
         recipient_id = request.form.get('recipient_id')
         recipient_name = request.form.get('recipient_name', '')
+        contact_name = request.form.get('contact_name', '')
+        personal_number = request.form.get('personal_number', '')
         issue_date = request.form.get('issue_date')
         due_date = request.form.get('due_date') or None
         tax_rate = float(request.form.get('tax_rate', 10))
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得
+        # 明細データ取得（買取明細書形式）
         item_names = request.form.getlist('item_name[]')
-        specifications = request.form.getlist('specification[]')
-        quantities = request.form.getlist('quantity[]')
-        unit_prices = request.form.getlist('unit_price[]')
+        product_dates = request.form.getlist('product_date[]')
+        product_codes = request.form.getlist('product_code[]')
+        amounts = request.form.getlist('amount[]')
         
-        # 合計計算
-        subtotal = 0
+        # 合計計算（税込金額を直接入力）
+        total_amount = 0
         items = []
         for i, name in enumerate(item_names):
             if name.strip():
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
-                amount = qty * price
-                subtotal += amount
+                amount = int(amounts[i]) if i < len(amounts) and amounts[i] else 0
+                total_amount += amount
                 items.append({
                     'item_no': i + 1,
                     'product_name': name,
-                    'specification': specifications[i] if i < len(specifications) else '',
-                    'quantity': qty,
-                    'unit_price': price,
+                    'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
+                    'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'quantity': 1,
+                    'unit_price': amount,
                     'amount': amount
                 })
         
-        tax_amount = int(subtotal * tax_rate / 100)
-        total_amount = subtotal + tax_amount
+        # 内税方式（税込金額から税額を逆算）
+        tax_amount = int(total_amount * tax_rate / (100 + tax_rate))
+        subtotal = total_amount
         
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute("""
                 UPDATE shikiriosho SET
-                recipient_id = %s, recipient_name = %s, issue_date = %s, due_date = %s,
-                subtotal = %s, tax_amount = %s, total_amount = %s, tax_rate = %s, 
-                notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                recipient_id = %s, recipient_name = %s, contact_name = %s, personal_number = %s,
+                issue_date = %s, due_date = %s, subtotal = %s, tax_amount = %s, total_amount = %s, 
+                tax_rate = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
-            """, (recipient_id or None, recipient_name, issue_date, due_date,
-                  subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
+            """, (recipient_id or None, recipient_name, contact_name, personal_number,
+                  issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
             
             cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = %s", (id,))
             
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (id, item['item_no'], item['product_name'], item['specification'],
-                      item['quantity'], item['unit_price'], item['amount']))
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['product_name'], item['product_date'],
+                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
                 UPDATE shikiriosho SET
-                recipient_id = ?, recipient_name = ?, issue_date = ?, due_date = ?,
-                subtotal = ?, tax_amount = ?, total_amount = ?, tax_rate = ?, 
-                notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                recipient_id = ?, recipient_name = ?, contact_name = ?, personal_number = ?,
+                issue_date = ?, due_date = ?, subtotal = ?, tax_amount = ?, total_amount = ?, 
+                tax_rate = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (recipient_id or None, recipient_name, issue_date, due_date,
-                  subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
+            """, (recipient_id or None, recipient_name, contact_name, personal_number,
+                  issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status, id))
             
             cur.execute("DELETE FROM shikiriosho_items WHERE shikiriosho_id = ?", (id,))
             
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, specification, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id, item['item_no'], item['product_name'], item['specification'],
-                      item['quantity'], item['unit_price'], item['amount']))
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['product_name'], item['product_date'],
+                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
         conn.close()
         
-        flash('見積書を更新しました', 'success')
+        flash('買取明細書を更新しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
     # 見積書データ取得
