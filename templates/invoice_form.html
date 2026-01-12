@@ -17,7 +17,11 @@
             </div>
             <div class="form-group">
                 <label for="recipient_name">宛名</label>
-                <input type="text" id="recipient_name" name="recipient_name" value="{{ invoice.recipient_name if invoice else '' }}" class="form-control" placeholder="株式会社○○　様">
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ invoice.recipient_name if invoice else '' }}" class="form-control" placeholder="株式会社○○">
+            </div>
+            <div class="form-group">
+                <label for="postal_number">郵送番号</label>
+                <input type="text" id="postal_number" name="postal_number" value="{{ invoice.postal_number if invoice else '' }}" class="form-control" placeholder="001">
             </div>
             <div class="form-group">
                 <label for="service_type">サービス種別 *</label>

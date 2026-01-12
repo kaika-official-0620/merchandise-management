@@ -305,6 +305,7 @@ if DATABASE_URL:
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 10.00")
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_amount INTEGER DEFAULT 0")
             cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(100)")
+            cur.execute("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS postal_number VARCHAR(20)")
         except:
             pass
         
@@ -629,6 +630,10 @@ else:
             pass
         try:
             cur.execute("ALTER TABLE invoices ADD COLUMN recipient_name TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE invoices ADD COLUMN postal_number TEXT")
         except:
             pass
         
@@ -4826,6 +4831,7 @@ def user_invoice_add():
         issue_date = request.form.get('issue_date')
         payment_due_date = request.form.get('payment_due_date') or None
         recipient_name = request.form.get('recipient_name', '')
+        postal_number = request.form.get('postal_number', '')
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -4882,12 +4888,12 @@ def user_invoice_add():
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO invoices 
-                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name,
+                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name, postal_number,
                  subtotal, tax_amount_8, tax_amount_10, total_amount, 
                  service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name,
+            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name, postal_number,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
                   service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.fetchone()[0]
@@ -4903,11 +4909,11 @@ def user_invoice_add():
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO invoices 
-                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name,
+                (invoice_no, sender_id, issue_date, payment_due_date, recipient_name, postal_number,
                  subtotal, tax_amount_8, tax_amount_10, total_amount,
                  service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name, postal_number,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
                   service_type, commission_rate, commission_amount, bank_info, notes, status))
             invoice_id = cur.lastrowid
@@ -4968,6 +4974,7 @@ def user_invoice_edit(id):
         issue_date = request.form.get('issue_date')
         payment_due_date = request.form.get('payment_due_date') or None
         recipient_name = request.form.get('recipient_name', '')
+        postal_number = request.form.get('postal_number', '')
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -5019,11 +5026,11 @@ def user_invoice_edit(id):
         if DATABASE_URL:
             cur.execute("""
                 UPDATE invoices SET
-                issue_date = %s, payment_due_date = %s, recipient_name = %s,
+                issue_date = %s, payment_due_date = %s, recipient_name = %s, postal_number = %s,
                 subtotal = %s, tax_amount_8 = %s, tax_amount_10 = %s, total_amount = %s,
                 bank_info = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
-            """, (issue_date, payment_due_date, recipient_name, subtotal, tax_amount_8, tax_amount_10,
+            """, (issue_date, payment_due_date, recipient_name, postal_number, subtotal, tax_amount_8, tax_amount_10,
                   total_amount, bank_info, notes, status, id))
             
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
@@ -5038,11 +5045,11 @@ def user_invoice_edit(id):
         else:
             cur.execute("""
                 UPDATE invoices SET
-                issue_date = ?, payment_due_date = ?, recipient_name = ?,
+                issue_date = ?, payment_due_date = ?, recipient_name = ?, postal_number = ?,
                 subtotal = ?, tax_amount_8 = ?, tax_amount_10 = ?, total_amount = ?,
                 bank_info = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (issue_date, payment_due_date, recipient_name, subtotal, tax_amount_8, tax_amount_10,
+            """, (issue_date, payment_due_date, recipient_name, postal_number, subtotal, tax_amount_8, tax_amount_10,
                   total_amount, bank_info, notes, status, id))
             
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
