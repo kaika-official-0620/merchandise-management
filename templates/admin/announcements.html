@@ -56,10 +56,10 @@
                         <strong>{{ ann.title }}</strong>
                         <br><small class="text-muted">{{ ann.content[:50] }}{% if ann.content|length > 50 %}...{% endif %}</small>
                     </td>
-                    <td>{{ ann.publish_at[:16] if ann.publish_at else '即時' }}</td>
-                    <td>{{ ann.expire_at[:16] if ann.expire_at else '無期限' }}</td>
+                    <td>{{ (ann.publish_at|string)[:16] if ann.publish_at else '即時' }}</td>
+                    <td>{{ (ann.expire_at|string)[:16] if ann.expire_at else '無期限' }}</td>
                     <td>{{ ann.author_name or '-' }}</td>
-                    <td>{{ ann.created_at[:10] if ann.created_at else '-' }}</td>
+                    <td>{{ (ann.created_at|string)[:10] if ann.created_at else '-' }}</td>
                     <td class="action-cell">
                         <a href="{{ url_for('admin_toggle_announcement', id=ann.id) }}" 
                            class="btn btn-sm {% if ann.is_active %}btn-secondary{% else %}btn-primary{% endif %}">

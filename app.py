@@ -4001,7 +4001,7 @@ def admin_delete_announcement(id):
 
 @app.route('/admin/announcements/toggle/<int:id>')
 @login_required
-@admin_required
+@permission_required('announcements')
 def admin_toggle_announcement(id):
     """お知らせの有効/無効を切り替え"""
     conn = get_db()

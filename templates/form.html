@@ -343,14 +343,35 @@
             <!-- 売却済み時のみ表示するフィールド -->
             <div id="sold-fields" style="display: none;">
                 <div class="form-group">
-                    <label for="sale_type">販売タイプ</label>
-                    <select id="sale_type" name="sale_type">
-                        <option value="normal" {% if not item or not item.sale_type or item.sale_type == 'normal' %}selected{% endif %}>通常（手数料10%）</option>
-                        <option value="photo_packing" {% if item and item.sale_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行サービス（25,000円以上:2%、未満:500円）</option>
-                        <option value="wholesale" {% if item and item.sale_type == 'wholesale' %}selected{% endif %}>業者卸販売（10%、30,000円以上で送料無料）</option>
-                        <option value="multi_listing" {% if item and item.sale_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
-                        <option value="auction" {% if item and item.sale_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
-                    </select>
+                    <label>販売タイプ（複数選択可）</label>
+                    <div class="sale-type-checkboxes">
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="normal" 
+                                   {% if not item or not item.sale_type or 'normal' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">通常（手数料10%）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="photo_packing"
+                                   {% if item and 'photo_packing' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="wholesale"
+                                   {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="multi_listing"
+                                   {% if item and 'multi_listing' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">同時出品サービス（手数料3%）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="auction"
+                                   {% if item and 'auction' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">オークション流し（手数料5%）</span>
+                        </label>
+                    </div>
+                    <input type="hidden" id="sale_type" name="sale_type" value="{{ item.sale_type if item else 'normal' }}">
                 </div>
                 
                 <div class="form-group">
@@ -406,6 +427,61 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+/* 販売タイプチェックボックス */
+.sale-type-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.sale-type-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.sale-type-option:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.sale-type-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
+}
+
+.sale-type-option input[type="checkbox"]:checked + .sale-type-label {
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.sale-type-label {
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.selected-types-summary {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #dbeafe;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #1e40af;
+}
+</style>
+
 <script>
 // 手数料の自動計算フラグ（手動変更されたらfalseに）
 let autoCalculateCommission = true;
@@ -415,35 +491,47 @@ const saleTypeRules = {
     'normal': {
         name: '通常',
         calculate: (price) => Math.floor(price * 0.10),
-        hint: '手数料: 売上金の10%',
+        hint: '通常: 売上金の10%',
         shippingHint: ''
     },
     'photo_packing': {
-        name: '撮影梱包等代行サービス',
+        name: '撮影梱包等代行',
         calculate: (price) => price >= 25000 ? Math.floor(price * 0.02) : 500,
-        hint: (price) => price >= 25000 ? '手数料: 売上金の2%（25,000円以上）' : '手数料: 500円（税込）（25,000円未満）',
+        hint: (price) => price >= 25000 ? '撮影梱包: 売上金の2%（25,000円以上）' : '撮影梱包: 500円（25,000円未満）',
         shippingHint: ''
     },
     'wholesale': {
         name: '業者卸販売',
         calculate: (price) => Math.floor(price * 0.10),
-        hint: '手数料: 売上金の10%',
+        hint: '業者卸: 売上金の10%',
         shippingHint: (price) => price >= 30000 ? '💡 30,000円以上のため送料無料' : '※30,000円以上で送料無料',
         freeShipping: (price) => price >= 30000
     },
     'multi_listing': {
-        name: '同時出品サービス',
+        name: '同時出品',
         calculate: (price) => Math.floor(price * 0.03),
-        hint: '手数料: 売上金の3%',
+        hint: '同時出品: 売上金の3%',
         shippingHint: ''
     },
     'auction': {
         name: 'オークション流し',
         calculate: (price) => Math.floor(price * 0.05),
-        hint: '手数料: 売上金の5%',
+        hint: 'オークション: 売上金の5%',
         shippingHint: ''
     }
 };
+
+// チェックボックスの選択状況をhiddenフィールドに反映
+function updateSaleTypeValue() {
+    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked');
+    const values = Array.from(checkboxes).map(cb => cb.value);
+    document.getElementById('sale_type').value = values.join(',') || 'normal';
+    
+    // 自動計算が有効なら手数料を再計算
+    if (autoCalculateCommission) {
+        calculateCommission();
+    }
+}
 
 function calculateProfit() {
     const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
@@ -458,56 +546,66 @@ function calculateProfit() {
     actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
 }
 
-// 販売タイプと売上金に基づいて手数料を計算
+// 販売タイプと売上金に基づいて手数料を計算（複数選択対応）
 function calculateCommission() {
     if (!autoCalculateCommission) return;
     
-    const saleType = document.getElementById('sale_type').value;
+    const saleTypeValue = document.getElementById('sale_type').value;
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['normal'];
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const rule = saleTypeRules[saleType];
     
-    if (rule) {
-        // 手数料計算
-        const commission = rule.calculate(salePrice);
-        document.getElementById('commission').value = commission;
-        
-        // ヒント更新
-        const hintEl = document.getElementById('commission_hint');
-        if (typeof rule.hint === 'function') {
-            hintEl.textContent = rule.hint(salePrice);
-        } else {
-            hintEl.textContent = rule.hint;
-        }
-        
-        // 送料ヒント更新
-        const shippingHintEl = document.getElementById('shipping_hint');
-        if (rule.shippingHint) {
-            if (typeof rule.shippingHint === 'function') {
-                shippingHintEl.textContent = rule.shippingHint(salePrice);
-                shippingHintEl.style.color = rule.freeShipping && rule.freeShipping(salePrice) ? '#10b981' : '#64748b';
+    // 複数タイプが選択されている場合、手数料を合計
+    let totalCommission = 0;
+    let hints = [];
+    let shippingHints = [];
+    
+    selectedTypes.forEach(saleType => {
+        const rule = saleTypeRules[saleType];
+        if (rule) {
+            totalCommission += rule.calculate(salePrice);
+            
+            // ヒント収集
+            if (typeof rule.hint === 'function') {
+                hints.push(rule.hint(salePrice));
             } else {
-                shippingHintEl.textContent = rule.shippingHint;
+                hints.push(rule.hint);
             }
-        } else {
-            shippingHintEl.textContent = '';
-        }
-        
-        // 業者卸販売で30,000円以上の場合、送料を0にする提案
-        if (saleType === 'wholesale' && salePrice >= 30000) {
-            const shippingInput = document.getElementById('shipping_cost');
-            if (shippingInput.value === '0' || shippingInput.value === '') {
-                // 既に0の場合はそのまま
+            
+            // 送料ヒント収集
+            if (rule.shippingHint) {
+                if (typeof rule.shippingHint === 'function') {
+                    shippingHints.push(rule.shippingHint(salePrice));
+                } else {
+                    shippingHints.push(rule.shippingHint);
+                }
             }
         }
+    });
+    
+    document.getElementById('commission').value = totalCommission;
+    
+    // ヒント更新
+    const hintEl = document.getElementById('commission_hint');
+    hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
+    
+    // 送料ヒント更新
+    const shippingHintEl = document.getElementById('shipping_hint');
+    if (shippingHints.length > 0) {
+        shippingHintEl.textContent = shippingHints.join(' / ');
+        shippingHintEl.style.color = selectedTypes.includes('wholesale') && salePrice >= 30000 ? '#10b981' : '#64748b';
+    } else {
+        shippingHintEl.textContent = '';
     }
     
     calculateProfit();
 }
 
-// イベントリスナー設定
-document.getElementById('sale_type').addEventListener('change', function() {
-    autoCalculateCommission = true; // タイプ変更時は自動計算を有効化
-    calculateCommission();
+// チェックボックスにイベントリスナー設定
+document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
 });
 
 document.getElementById('sale_price').addEventListener('input', function() {
@@ -579,17 +677,31 @@ document.addEventListener('DOMContentLoaded', function() {
         autoCalculateCommission = false;
     }
     
-    // 初期ヒント表示
-    const saleType = document.getElementById('sale_type').value;
-    const rule = saleTypeRules[saleType];
-    if (rule) {
-        const hintEl = document.getElementById('commission_hint');
-        if (typeof rule.hint === 'function') {
-            hintEl.textContent = rule.hint(existingSalePrice);
-        } else {
-            hintEl.textContent = rule.hint;
-        }
+    // 複数選択のチェックボックスの初期化
+    const saleTypeValue = document.getElementById('sale_type').value;
+    if (saleTypeValue) {
+        const selectedTypes = saleTypeValue.split(',');
+        document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+            checkbox.checked = selectedTypes.includes(checkbox.value);
+        });
     }
+    
+    // 初期ヒント表示（複数選択対応）
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['normal'];
+    let hints = [];
+    selectedTypes.forEach(type => {
+        const rule = saleTypeRules[type];
+        if (rule) {
+            if (typeof rule.hint === 'function') {
+                hints.push(rule.hint(existingSalePrice));
+            } else {
+                hints.push(rule.hint);
+            }
+        }
+    });
+    
+    const hintEl = document.getElementById('commission_hint');
+    hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
     
     calculateProfit();
     

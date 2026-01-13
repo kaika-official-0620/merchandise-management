@@ -414,12 +414,17 @@
                 <dd>{{ item.sale_date }}</dd>
                 <dt>販売タイプ</dt>
                 <dd>
-                    {% if item.sale_type == 'photo_packing' %}撮影梱包等代行サービス
-                    {% elif item.sale_type == 'wholesale' %}業者卸販売
-                    {% elif item.sale_type == 'multi_listing' %}同時出品サービス
-                    {% elif item.sale_type == 'auction' %}オークション流し
-                    {% else %}通常
-                    {% endif %}
+                    {% set sale_types = (item.sale_type or 'normal').split(',') %}
+                    {% set type_names = [] %}
+                    {% for st in sale_types %}
+                        {% if st == 'photo_packing' %}{% set _ = type_names.append('撮影梱包等代行') %}
+                        {% elif st == 'wholesale' %}{% set _ = type_names.append('業者卸販売') %}
+                        {% elif st == 'multi_listing' %}{% set _ = type_names.append('同時出品') %}
+                        {% elif st == 'auction' %}{% set _ = type_names.append('オークション流し') %}
+                        {% elif st == 'normal' %}{% set _ = type_names.append('通常') %}
+                        {% endif %}
+                    {% endfor %}
+                    {{ type_names|join(' + ') }}
                 </dd>
                 <dt>売上金</dt>
                 <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
