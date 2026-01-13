@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}買取明細書管理 - 株式会社 開花{% endblock %}
+{% block title %}請求書管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>買取明細書管理</h1>
+    <h1>請求書管理</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← ダッシュボード</a>
         <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -15,7 +15,7 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>買取明細書番号</th>
+                <th>請求書番号</th>
                 <th>宛先</th>
                 <th>発行日</th>
                 <th>税込合計</th>
@@ -61,14 +61,14 @@
                     <a href="{{ url_for('admin_shikiriosho_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     {% if doc.status == 'draft' %}
                         <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
-                        <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
+                        <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この請求書を送信しますか？')">送信</a>
                     {% endif %}
-                    <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この買取明細書を削除しますか？')">削除</a>
+                    <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この請求書を削除しますか？')">削除</a>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="text-center text-muted">買取明細書がありません</td>
+                <td colspan="7" class="text-center text-muted">請求書がありません</td>
             </tr>
             {% endfor %}
         </tbody>

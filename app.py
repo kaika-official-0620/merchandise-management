@@ -236,7 +236,7 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
-        # 買取明細書テーブル
+        # 請求書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id SERIAL PRIMARY KEY,
@@ -258,7 +258,7 @@ if DATABASE_URL:
             )
         ''')
         
-        # 買取明細書明細テーブル
+        # 請求書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id SERIAL PRIMARY KEY,
@@ -287,7 +287,7 @@ if DATABASE_URL:
         except:
             pass
         
-        # 請求書テーブル（ユーザー→管理者）
+        # 買取明細書テーブル（ユーザー→管理者）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoices (
                 id SERIAL PRIMARY KEY,
@@ -329,7 +329,7 @@ if DATABASE_URL:
         except:
             pass
         
-        # 請求書明細テーブル
+        # 買取明細書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id SERIAL PRIMARY KEY,
@@ -566,7 +566,7 @@ else:
                 VALUES (?, ?, ?, ?)
             ''', widget)
         
-        # 買取明細書テーブル
+        # 請求書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -588,7 +588,7 @@ else:
             )
         ''')
         
-        # 買取明細書明細テーブル
+        # 請求書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -623,7 +623,7 @@ else:
         except:
             pass
         
-        # 請求書テーブル（ユーザー→管理者）
+        # 買取明細書テーブル（ユーザー→管理者）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -671,7 +671,7 @@ else:
         except:
             pass
         
-        # 請求書明細テーブル
+        # 買取明細書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoice_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -732,8 +732,8 @@ class User(UserMixin):
     # 管理者が設定可能な権限一覧
     ADMIN_PERMISSION_OPTIONS = {
         'users': 'ユーザー管理',
-        'shikiriosho': '買取明細書管理',
-        'invoices': '請求書管理',
+        'shikiriosho': '請求書管理',
+        'invoices': '買取明細書管理',
         'announcements': 'お知らせ管理',
         'analytics': '分析',
         'backup': 'バックアップ'
@@ -4020,11 +4020,11 @@ def admin_toggle_announcement(id):
     return redirect(url_for('admin_announcements'))
 
 # ===================
-# 買取明細書管理（管理者用）
+# 請求書管理（管理者用）
 # ===================
 
 def generate_document_no():
-    """買取明細書番号を生成"""
+    """請求書番号を生成"""
     now = datetime.now()
     conn = get_db()
     if DATABASE_URL:
@@ -4047,7 +4047,7 @@ def generate_document_no():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_list():
-    """買取明細書一覧（管理者用）"""
+    """請求書一覧（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4076,7 +4076,7 @@ def admin_shikiriosho_list():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_add():
-    """買取明細書作成（管理者用）"""
+    """請求書作成（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -4090,7 +4090,7 @@ def admin_shikiriosho_add():
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得（買取明細書形式）
+        # 明細データ取得（請求書形式）
         item_names = request.form.getlist('item_name[]')
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
@@ -4161,9 +4161,9 @@ def admin_shikiriosho_add():
         conn.close()
         
         if status == 'sent':
-            flash(f'買取明細書 {document_no} を作成・送信しました', 'success')
+            flash(f'請求書 {document_no} を作成・送信しました', 'success')
         else:
-            flash(f'買取明細書 {document_no} を下書き保存しました', 'success')
+            flash(f'請求書 {document_no} を下書き保存しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
     # ユーザー一覧取得
@@ -4187,7 +4187,7 @@ def admin_shikiriosho_add():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_edit(id):
-    """買取明細書編集（管理者用）"""
+    """請求書編集（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -4201,7 +4201,7 @@ def admin_shikiriosho_edit(id):
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得（買取明細書形式）
+        # 明細データ取得（請求書形式）
         item_names = request.form.getlist('item_name[]')
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
@@ -4273,10 +4273,10 @@ def admin_shikiriosho_edit(id):
         cur.close()
         conn.close()
         
-        flash('買取明細書を更新しました', 'success')
+        flash('請求書を更新しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
-    # 買取明細書データ取得
+    # 請求書データ取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
@@ -4300,7 +4300,7 @@ def admin_shikiriosho_edit(id):
     conn.close()
     
     if not shikiriosho:
-        flash('買取明細書が見つかりません', 'error')
+        flash('請求書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_form.html', 
@@ -4313,7 +4313,7 @@ def admin_shikiriosho_edit(id):
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_delete(id):
-    """買取明細書削除（管理者用）"""
+    """請求書削除（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -4328,14 +4328,14 @@ def admin_shikiriosho_delete(id):
     cur.close()
     conn.close()
     
-    flash('買取明細書を削除しました', 'success')
+    flash('請求書を削除しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/send/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_send(id):
-    """買取明細書を送信（ステータスを'sent'に変更）"""
+    """請求書を送信（ステータスを'sent'に変更）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -4348,14 +4348,14 @@ def admin_shikiriosho_send(id):
     cur.close()
     conn.close()
     
-    flash('買取明細書を送信しました', 'success')
+    flash('請求書を送信しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/view/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_view(id):
-    """買取明細書詳細（管理者用）"""
+    """請求書詳細（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4388,13 +4388,13 @@ def admin_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('買取明細書が見つかりません', 'error')
+        flash('請求書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
 
 # ===================
-# 買取明細書（ユーザー用）
+# 請求書（ユーザー用）
 # ===================
 
 # ===================
@@ -4410,7 +4410,7 @@ def documents():
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 買取明細書
+        # 請求書
         cur.execute("""
             SELECT s.*, u.display_name as sender_display_name
             FROM shikiriosho s
@@ -4420,7 +4420,7 @@ def documents():
         """, (current_user.id,))
         shikiriosho_list = [dict(row) for row in cur.fetchall()]
         
-        # 請求書
+        # 買取明細書
         cur.execute("""
             SELECT * FROM invoices WHERE sender_id = %s ORDER BY created_at DESC
         """, (current_user.id,))
@@ -4432,7 +4432,7 @@ def documents():
         """, (current_user.id,))
         service_documents = [dict(row) for row in cur.fetchall()]
         
-        # 未読買取明細書カウント
+        # 未読請求書カウント
         cur.execute("""
             SELECT COUNT(*) as count FROM shikiriosho 
             WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
@@ -4441,7 +4441,7 @@ def documents():
     else:
         cur = conn.cursor()
         
-        # 買取明細書
+        # 請求書
         cur.execute("""
             SELECT s.*, u.display_name as sender_display_name
             FROM shikiriosho s
@@ -4451,7 +4451,7 @@ def documents():
         """, (current_user.id,))
         shikiriosho_list = [dict(row) for row in cur.fetchall()]
         
-        # 請求書
+        # 買取明細書
         cur.execute("""
             SELECT * FROM invoices WHERE sender_id = ? ORDER BY created_at DESC
         """, (current_user.id,))
@@ -4463,7 +4463,7 @@ def documents():
         """, (current_user.id,))
         service_documents = [dict(row) for row in cur.fetchall()]
         
-        # 未読買取明細書カウント
+        # 未読請求書カウント
         cur.execute("""
             SELECT COUNT(*) as count FROM shikiriosho 
             WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
@@ -4609,7 +4609,7 @@ def service_document_pdf(id):
 @app.route('/shikiriosho')
 @login_required
 def user_shikiriosho_list():
-    """受信した買取明細書一覧（ユーザー用）"""
+    """受信した請求書一覧（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4639,7 +4639,7 @@ def user_shikiriosho_list():
 @app.route('/shikiriosho/view/<int:id>')
 @login_required
 def user_shikiriosho_view(id):
-    """買取明細書詳細（ユーザー用）"""
+    """請求書詳細（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4677,7 +4677,7 @@ def user_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('買取明細書が見つかりません', 'error')
+        flash('請求書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     return render_template('shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
@@ -4685,7 +4685,7 @@ def user_shikiriosho_view(id):
 @app.route('/shikiriosho/download/<int:id>')
 @login_required
 def user_shikiriosho_download(id):
-    """買取明細書CSVダウンロード（ユーザー用）"""
+    """請求書CSVダウンロード（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4708,7 +4708,7 @@ def user_shikiriosho_download(id):
     conn.close()
     
     if not shikiriosho:
-        flash('買取明細書が見つかりません', 'error')
+        flash('請求書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     # CSV作成
@@ -4718,7 +4718,7 @@ def user_shikiriosho_download(id):
     # ヘッダー情報
     writer.writerow(['株式会社開花'])
     writer.writerow([''])
-    writer.writerow(['買取明細書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
+    writer.writerow(['請求書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
     writer.writerow([''])
     writer.writerow(['宛先', shikiriosho['recipient_name'] or ''])
     writer.writerow([''])
@@ -4756,12 +4756,12 @@ def user_shikiriosho_download(id):
         io.BytesIO(csv_content.encode('utf-8')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"買取明細書_{shikiriosho['document_no']}.csv"
+        download_name=f"請求書_{shikiriosho['document_no']}.csv"
     )
 
-# 未読買取明細書数を取得するヘルパー関数
+# 未読請求書数を取得するヘルパー関数
 def get_unread_shikiriosho_count(user_id):
-    """未読買取明細書数を取得"""
+    """未読請求書数を取得"""
     try:
         conn = get_db()
         if DATABASE_URL:
@@ -4786,7 +4786,7 @@ def get_unread_shikiriosho_count(user_id):
     except Exception:
         return 0
 
-# テンプレートに未読買取明細書数を渡す
+# テンプレートに未読請求書数を渡す
 @app.context_processor
 def inject_unread_shikiriosho():
     try:
@@ -4797,11 +4797,11 @@ def inject_unread_shikiriosho():
     return {'unread_shikiriosho_count': 0}
 
 # ===================
-# 請求書（ユーザー→管理者）
+# 買取明細書（ユーザー→管理者）
 # ===================
 
 def generate_invoice_no():
-    """請求書番号を生成"""
+    """買取明細書番号を生成"""
     now = datetime.now()
     conn = get_db()
     if DATABASE_URL:
@@ -4821,7 +4821,7 @@ def generate_invoice_no():
     return f"INV-{now.strftime('%Y%m')}-{count:04d}"
 
 def get_unread_invoice_count():
-    """未読請求書数を取得（管理者用）"""
+    """未読買取明細書数を取得（管理者用）"""
     try:
         conn = get_db()
         if DATABASE_URL:
@@ -4858,7 +4858,7 @@ def inject_unread_invoice():
 @app.route('/invoices')
 @login_required
 def user_invoice_list():
-    """請求書一覧（ユーザー用）"""
+    """買取明細書一覧（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -4884,7 +4884,7 @@ def user_invoice_list():
 @app.route('/invoices/add', methods=['GET', 'POST'])
 @login_required
 def user_invoice_add():
-    """請求書作成（ユーザー用）"""
+    """買取明細書作成（ユーザー用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -4991,9 +4991,9 @@ def user_invoice_add():
         conn.close()
         
         if status == 'sent':
-            flash(f'請求書 {invoice_no} を作成・送信しました', 'success')
+            flash(f'買取明細書 {invoice_no} を作成・送信しました', 'success')
         else:
-            flash(f'請求書 {invoice_no} を下書き保存しました', 'success')
+            flash(f'買取明細書 {invoice_no} を下書き保存しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
     # GETリクエストの場合はconnを閉じる
@@ -5006,7 +5006,7 @@ def user_invoice_add():
 @app.route('/invoices/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_invoice_edit(id):
-    """請求書編集（ユーザー用）"""
+    """買取明細書編集（ユーザー用）"""
     conn = get_db()
     
     # 所有者確認
@@ -5020,14 +5020,14 @@ def user_invoice_edit(id):
         invoice = cur.fetchone()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     invoice = dict(invoice)
     
     # 送信済みは編集不可
     if invoice['status'] == 'sent':
-        flash('送信済みの請求書は編集できません', 'error')
+        flash('送信済みの買取明細書は編集できません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     if request.method == 'POST':
@@ -5126,7 +5126,7 @@ def user_invoice_edit(id):
         cur.close()
         conn.close()
         
-        flash('請求書を更新しました', 'success')
+        flash('買取明細書を更新しました', 'success')
         return redirect(url_for('user_invoice_list'))
     
     # 明細データ取得
@@ -5147,7 +5147,7 @@ def user_invoice_edit(id):
 @app.route('/invoices/view/<int:id>')
 @login_required
 def user_invoice_view(id):
-    """請求書詳細（ユーザー用）"""
+    """買取明細書詳細（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -5170,7 +5170,7 @@ def user_invoice_view(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     return render_template('invoice_view.html', invoice=invoice, items=items)
@@ -5178,7 +5178,7 @@ def user_invoice_view(id):
 @app.route('/invoices/delete/<int:id>')
 @login_required
 def user_invoice_delete(id):
-    """請求書削除（ユーザー用）"""
+    """買取明細書削除（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -5188,9 +5188,9 @@ def user_invoice_delete(id):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
             cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
             conn.commit()
-            flash('請求書を削除しました', 'success')
+            flash('買取明細書を削除しました', 'success')
         else:
-            flash('送信済みの請求書は削除できません', 'error')
+            flash('送信済みの買取明細書は削除できません', 'error')
     else:
         cur = conn.cursor()
         cur.execute("SELECT status FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
@@ -5199,9 +5199,9 @@ def user_invoice_delete(id):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
             cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
             conn.commit()
-            flash('請求書を削除しました', 'success')
+            flash('買取明細書を削除しました', 'success')
         else:
-            flash('送信済みの請求書は削除できません', 'error')
+            flash('送信済みの買取明細書は削除できません', 'error')
     
     cur.close()
     conn.close()
@@ -5210,7 +5210,7 @@ def user_invoice_delete(id):
 @app.route('/invoices/send/<int:id>')
 @login_required
 def user_invoice_send(id):
-    """請求書送信（ユーザー用）"""
+    """買取明細書送信（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -5223,18 +5223,18 @@ def user_invoice_send(id):
     cur.close()
     conn.close()
     
-    flash('請求書を送信しました', 'success')
+    flash('買取明細書を送信しました', 'success')
     return redirect(url_for('user_invoice_list'))
 
 # ===================
-# 請求書（管理者用）
+# 買取明細書（管理者用）
 # ===================
 
 @app.route('/admin/invoices')
 @login_required
 @permission_required('invoices')
 def admin_invoice_list():
-    """請求書一覧（管理者用）"""
+    """買取明細書一覧（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -5265,7 +5265,7 @@ def admin_invoice_list():
 @login_required
 @permission_required('invoices')
 def admin_invoice_view(id):
-    """請求書詳細（管理者用）"""
+    """買取明細書詳細（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -5303,7 +5303,7 @@ def admin_invoice_view(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('admin_invoice_list'))
     
     return render_template('admin/invoice_view.html', invoice=invoice, items=items)
@@ -5312,7 +5312,7 @@ def admin_invoice_view(id):
 @login_required
 @permission_required('invoices')
 def admin_invoice_approve(id):
-    """請求書承認（管理者用）- 承認時に買取明細書を自動作成"""
+    """買取明細書承認（管理者用）- 承認時に請求書を自動作成"""
     
     now = datetime.now()
     today = now.strftime('%Y-%m-%d')
@@ -5323,23 +5323,23 @@ def admin_invoice_approve(id):
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 請求書情報を取得
+            # 買取明細書情報を取得
             cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
             invoice = cur.fetchone()
             if not invoice:
-                flash('請求書が見つかりません', 'error')
+                flash('買取明細書が見つかりません', 'error')
                 cur.close()
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             
-            # 買取明細書番号を生成（同じ接続内で）
+            # 請求書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
             count = (result['count'] if result else 0) + 1
             shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
-            # 請求書を承認
+            # 買取明細書を承認
             cur.execute("""
                 UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
                 approved_by = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s
@@ -5351,7 +5351,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 買取明細書を作成（下書き状態）
+            # 請求書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -5367,15 +5367,15 @@ def admin_invoice_approve(id):
                 tax_8 + tax_10,
                 total,
                 10,
-                f"請求書 {invoice.get('invoice_no', '')} より自動作成"
+                f"買取明細書 {invoice.get('invoice_no', '')} より自動作成"
             ))
             result = cur.fetchone()
             shikiriosho_id = result['id'] if result else None
             
             if not shikiriosho_id:
-                raise Exception("買取明細書の作成に失敗しました")
+                raise Exception("請求書の作成に失敗しました")
             
-            # 請求書明細を取得して買取明細書明細を作成
+            # 買取明細書明細を取得して請求書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -5398,24 +5398,24 @@ def admin_invoice_approve(id):
         else:
             cur = conn.cursor()
             
-            # 請求書情報を取得
+            # 買取明細書情報を取得
             cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
             invoice_row = cur.fetchone()
             if not invoice_row:
-                flash('請求書が見つかりません', 'error')
+                flash('買取明細書が見つかりません', 'error')
                 cur.close()
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             invoice = dict(invoice_row)
             
-            # 買取明細書番号を生成（同じ接続内で）
+            # 請求書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) FROM shikiriosho WHERE issue_date >= ?", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
             count = (result[0] if result else 0) + 1
             shikiriosho_no = f"SK-{now.strftime('%Y%m')}-{count:04d}"
             
-            # 請求書を承認
+            # 買取明細書を承認
             cur.execute("""
                 UPDATE invoices SET status = 'approved', approved_at = CURRENT_TIMESTAMP, 
                 approved_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -5427,7 +5427,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 買取明細書を作成（下書き状態）
+            # 請求書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -5442,11 +5442,11 @@ def admin_invoice_approve(id):
                 tax_8 + tax_10,
                 total,
                 10,
-                f"請求書 {invoice.get('invoice_no', '')} より自動作成"
+                f"買取明細書 {invoice.get('invoice_no', '')} より自動作成"
             ))
             shikiriosho_id = cur.lastrowid
             
-            # 請求書明細を取得して買取明細書明細を作成
+            # 買取明細書明細を取得して請求書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -5471,7 +5471,7 @@ def admin_invoice_approve(id):
         cur.close()
         conn.close()
         
-        flash(f'請求書を承認し、買取明細書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
+        flash(f'買取明細書を承認し、請求書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
         
     except Exception as e:
@@ -5490,7 +5490,7 @@ def admin_invoice_approve(id):
 @login_required
 @permission_required('invoices')
 def admin_invoice_reject(id):
-    """請求書却下（管理者用）"""
+    """買取明細書却下（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -5507,13 +5507,13 @@ def admin_invoice_reject(id):
     cur.close()
     conn.close()
     
-    flash('請求書を却下しました', 'warning')
+    flash('買取明細書を却下しました', 'warning')
     return redirect(url_for('admin_invoice_list'))
 
 @app.route('/invoices/download/<int:id>')
 @login_required
 def invoice_download(id):
-    """請求書CSVダウンロード"""
+    """買取明細書CSVダウンロード"""
     conn = get_db()
     
     # 権限確認（送信者または管理者）
@@ -5544,18 +5544,18 @@ def invoice_download(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
     # CSV作成
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     
-    writer.writerow(['請求書'])
+    writer.writerow(['買取明細書'])
     writer.writerow([''])
     writer.writerow(['', '', '', '発行日', '', invoice['issue_date']])
     writer.writerow([''])
-    writer.writerow(['請求書番号', invoice['invoice_no']])
+    writer.writerow(['買取明細書番号', invoice['invoice_no']])
     writer.writerow([''])
     writer.writerow(['', '', '', '支払期限', invoice['payment_due_date'] or ''])
     writer.writerow([''])
@@ -5597,7 +5597,7 @@ def invoice_download(id):
         io.BytesIO(csv_content.encode('utf-8')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"請求書_{invoice['invoice_no']}.csv"
+        download_name=f"買取明細書_{invoice['invoice_no']}.csv"
     )
 
 # ===================
@@ -5692,7 +5692,7 @@ def api_get_all_products():
 @app.route('/shikiriosho/pdf/<int:id>')
 @login_required
 def shikiriosho_pdf(id):
-    """買取明細書PDF出力"""
+    """請求書PDF出力"""
     conn = get_db()
     
     # 権限確認（送信者または受信者または管理者）
@@ -5725,7 +5725,7 @@ def shikiriosho_pdf(id):
     conn.close()
     
     if not shikiriosho:
-        flash('買取明細書が見つかりません', 'error')
+        flash('請求書が見つかりません', 'error')
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
@@ -5736,7 +5736,7 @@ def shikiriosho_pdf(id):
 @app.route('/invoices/pdf/<int:id>')
 @login_required
 def invoice_pdf(id):
-    """請求書PDF出力"""
+    """買取明細書PDF出力"""
     conn = get_db()
     
     # 権限確認（送信者または管理者）
@@ -5767,13 +5767,273 @@ def invoice_pdf(id):
     conn.close()
     
     if not invoice:
-        flash('請求書が見つかりません', 'error')
+        flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
     html_content = render_template('pdf/invoice_pdf.html', invoice=invoice, items=items)
     
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+# ===================
+# 書類管理ダッシュボード
+# ===================
+@app.route('/admin/documents')
+@login_required
+@admin_required
+def admin_documents_dashboard():
+    """書類管理ダッシュボード"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 各書類のカウント
+        cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
+        shikiriosho_count = cur.fetchone()['count']
+        
+        # 承認待ち買取明細書
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_name 
+            FROM invoices i 
+            LEFT JOIN users u ON i.sender_id = u.id 
+            WHERE i.status = 'pending' 
+            ORDER BY i.created_at DESC LIMIT 10
+        """)
+        pending_invoices = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
+        result = cur.fetchone()
+        shikiriosho_count = result[0] if result else 0
+        
+        cur.execute("""
+            SELECT i.*, u.display_name as sender_name 
+            FROM invoices i 
+            LEFT JOIN users u ON i.sender_id = u.id 
+            WHERE i.status = 'pending' 
+            ORDER BY i.created_at DESC LIMIT 10
+        """)
+        pending_invoices = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/documents_dashboard.html',
+        kaitori_count=0,  # 今後実装
+        seisan_count=0,   # 今後実装
+        mitsumori_count=0, # 今後実装
+        shikiriosho_count=shikiriosho_count,
+        pending_invoices=pending_invoices
+    )
+
+# ===================
+# 買取明細書（管理者用）
+# ===================
+@app.route('/admin/kaitori')
+@login_required
+@admin_required
+def admin_kaitori_list():
+    """買取明細書一覧"""
+    # 一時的に空のリストを返す（テーブル作成後に実装）
+    return render_template('admin/kaitori_list.html', kaitori_list=[])
+
+@app.route('/admin/kaitori/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_kaitori_add():
+    """買取明細書作成"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+    document_no = f"KT-{datetime.now().strftime('%Y%m%d')}-001"
+    
+    return render_template('admin/kaitori_form.html', 
+        kaitori=None, 
+        users=users, 
+        today=today,
+        document_no=document_no,
+        items=None
+    )
+
+@app.route('/admin/kaitori/<int:id>')
+@login_required
+@admin_required
+def admin_kaitori_view(id):
+    """買取明細書詳細"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_kaitori_list'))
+
+@app.route('/admin/kaitori/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_kaitori_edit(id):
+    """買取明細書編集"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_kaitori_list'))
+
+@app.route('/admin/kaitori/<int:id>/delete')
+@login_required
+@admin_required
+def admin_kaitori_delete(id):
+    """買取明細書削除"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_kaitori_list'))
+
+@app.route('/admin/kaitori/<int:id>/pdf')
+@login_required
+@admin_required
+def admin_kaitori_pdf(id):
+    """買取明細書PDF"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_kaitori_list'))
+
+# ===================
+# 精算書（管理者用）
+# ===================
+@app.route('/admin/seisan')
+@login_required
+@admin_required
+def admin_seisan_list():
+    """精算書一覧"""
+    return render_template('admin/seisan_list.html', seisan_list=[])
+
+@app.route('/admin/seisan/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_seisan_add():
+    """精算書作成"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, display_name FROM users ORDER BY display_name")
+        users = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+    document_no = f"SS-{datetime.now().strftime('%Y%m%d')}-001"
+    
+    return render_template('admin/seisan_form.html', 
+        seisan=None, 
+        users=users, 
+        today=today,
+        document_no=document_no,
+        items=None
+    )
+
+@app.route('/admin/seisan/<int:id>')
+@login_required
+@admin_required
+def admin_seisan_view(id):
+    """精算書詳細"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_seisan_list'))
+
+@app.route('/admin/seisan/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_seisan_edit(id):
+    """精算書編集"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_seisan_list'))
+
+@app.route('/admin/seisan/<int:id>/delete')
+@login_required
+@admin_required
+def admin_seisan_delete(id):
+    """精算書削除"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_seisan_list'))
+
+@app.route('/admin/seisan/<int:id>/send')
+@login_required
+@admin_required
+def admin_seisan_send(id):
+    """精算書送信"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_seisan_list'))
+
+@app.route('/admin/seisan/<int:id>/pdf')
+@login_required
+@admin_required
+def admin_seisan_pdf(id):
+    """精算書PDF"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_seisan_list'))
+
+# ===================
+# 見積依頼書（管理者用）
+# ===================
+@app.route('/admin/mitsumori')
+@login_required
+@admin_required
+def admin_mitsumori_list():
+    """見積依頼書一覧"""
+    return render_template('admin/mitsumori_list.html', mitsumori_list=[])
+
+@app.route('/admin/mitsumori/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_mitsumori_add():
+    """見積依頼書作成"""
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+    document_no = f"MT-{datetime.now().strftime('%Y%m%d')}-001"
+    
+    return render_template('admin/mitsumori_form.html', 
+        mitsumori=None, 
+        today=today,
+        document_no=document_no,
+        items=None
+    )
+
+@app.route('/admin/mitsumori/<int:id>')
+@login_required
+@admin_required
+def admin_mitsumori_view(id):
+    """見積依頼書詳細"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_mitsumori_list'))
+
+@app.route('/admin/mitsumori/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_mitsumori_edit(id):
+    """見積依頼書編集"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_mitsumori_list'))
+
+@app.route('/admin/mitsumori/<int:id>/delete')
+@login_required
+@admin_required
+def admin_mitsumori_delete(id):
+    """見積依頼書削除"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_mitsumori_list'))
+
+@app.route('/admin/mitsumori/<int:id>/pdf')
+@login_required
+@admin_required
+def admin_mitsumori_pdf(id):
+    """見積依頼書PDF"""
+    flash('この機能は準備中です', 'info')
+    return redirect(url_for('admin_mitsumori_list'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

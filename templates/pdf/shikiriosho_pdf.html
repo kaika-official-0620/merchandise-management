@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>買取明細書 - {{ shikiriosho.document_no }}</title>
+    <title>請求書 - {{ shikiriosho.document_no }}</title>
     <style>
         @page {
             size: A4;
@@ -308,7 +308,7 @@
     <div class="document">
         <!-- タイトル -->
         <div class="title">
-            <h1>買取明細書</h1>
+            <h1>請求書</h1>
         </div>
         
         <!-- ヘッダー情報 -->
@@ -418,7 +418,7 @@
         
         <!-- 備考欄 -->
         <div class="notes-section">
-            <span class="notes-label">備考欄：</span>本請求書は消費税を含む内税表記となっております。
+            <span class="notes-label">備考欄：</span>本買取明細書は消費税を含む内税表記となっております。
             {% if shikiriosho.notes %}
             <br>{{ shikiriosho.notes|replace('\n', '<br>')|safe }}
             {% endif %}

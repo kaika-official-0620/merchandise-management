@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>📝 {% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %}</h1>
+    <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+</div>
+
+<div class="form-info-box">
+    <p>💡 <strong>見積依頼書とは：</strong>開花から法人向けに送付する見積依頼書です。</p>
+</div>
+
+<form method="POST" class="mitsumori-form">
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>No.</label>
+                <input type="text" value="{{ mitsumori.document_no if mitsumori else document_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="issue_date">発行日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ mitsumori.issue_date if mitsumori else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="valid_until">有効期限</label>
+                <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if mitsumori else '' }}" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>宛先（法人）</h3>
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label for="company_name">会社名 *</label>
+                <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if mitsumori else '' }}" required placeholder="株式会社〇〇" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="department">部署名</label>
+                <input type="text" id="department" name="department" value="{{ mitsumori.department if mitsumori else '' }}" placeholder="営業部" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="contact_person">担当者名</label>
+                <input type="text" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person if mitsumori else '' }}" placeholder="山田 太郎" class="form-control">
+            </div>
+            <div class="form-group full-width">
+                <label for="address">住所</label>
+                <input type="text" id="address" name="address" value="{{ mitsumori.address if mitsumori else '' }}" placeholder="東京都〇〇区〇〇1-2-3" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>依頼内容</h3>
+        <div class="form-group">
+            <label for="subject">件名 *</label>
+            <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if mitsumori else '' }}" required placeholder="〇〇に関する見積依頼" class="form-control">
+        </div>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="5%">No.</th>
+                        <th width="35%">品名・内容 *</th>
+                        <th width="10%">数量</th>
+                        <th width="10%">単位</th>
+                        <th width="15%">希望単価</th>
+                        <th width="15%">金額</th>
+                        <th width="5%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no }}</td>
+                            <td><input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required></td>
+                            <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control calc-input" min="1" value="1"></td>
+                            <td><input type="text" name="unit[]" value="{{ item.unit or '個' }}" class="form-control" placeholder="個"></td>
+                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control calc-input" min="0"></td>
+                            <td class="row-amount">¥0</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(3) %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ i + 1 }}</td>
+                            <td><input type="text" name="item_name[]" class="form-control"></td>
+                            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
+                            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
+                            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" value="0"></td>
+                            <td class="row-amount">¥0</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="7">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="4"></td>
+                        <td class="text-right"><strong>合計金額</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考・条件</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="4" class="form-control" placeholder="納期、支払条件、その他備考">{{ mitsumori.notes if mitsumori else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="completed" class="btn btn-primary">完了として保存</button>
+    </div>
+</form>
+
+<style>
+.mitsumori-form {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.form-info-box {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.form-info-box p {
+    margin: 0;
+    color: #1e40af;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #3b82f6;
+    color: #333;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control.readonly {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8f9fa;
+    font-weight: 500;
+}
+
+.items-table .form-control {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+}
+
+.row-amount {
+    font-weight: 600;
+    text-align: right;
+}
+
+.totals-row td {
+    border-top: 2px solid #ddd;
+    font-weight: 600;
+}
+
+.totals-row .text-right {
+    text-align: right;
+}
+
+#total-amount {
+    color: #3b82f6;
+    font-size: 1.1rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary { background: #3b82f6; color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-danger { background: #dc3545; color: white; }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsBody = document.getElementById('items-body');
+    const addRowBtn = document.getElementById('add-row');
+    
+    // 行を追加
+    function addRow() {
+        const rowCount = itemsBody.querySelectorAll('.item-row').length;
+        const newRow = document.createElement('tr');
+        newRow.className = 'item-row';
+        newRow.innerHTML = `
+            <td class="item-no">${rowCount + 1}</td>
+            <td><input type="text" name="item_name[]" class="form-control"></td>
+            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
+            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
+            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" value="0"></td>
+            <td class="row-amount">¥0</td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+        `;
+        itemsBody.appendChild(newRow);
+        attachRowEvents(newRow);
+        renumberRows();
+    }
+    
+    addRowBtn.addEventListener('click', addRow);
+    
+    // 行を削除・計算イベント
+    function attachRowEvents(row) {
+        const removeBtn = row.querySelector('.remove-row');
+        const calcInputs = row.querySelectorAll('.calc-input');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            renumberRows();
+            calculateTotals();
+        });
+        
+        calcInputs.forEach(input => {
+            input.addEventListener('input', calculateTotals);
+        });
+    }
+    
+    // 行番号を振り直す
+    function renumberRows() {
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach((row, index) => {
+            row.querySelector('.item-no').textContent = index + 1;
+        });
+    }
+    
+    // 合計を計算
+    function calculateTotals() {
+        let total = 0;
+        
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach(row => {
+            const quantity = parseInt(row.querySelector('[name="quantity[]"]').value) || 0;
+            const unitPrice = parseInt(row.querySelector('[name="unit_price[]"]').value) || 0;
+            const amount = quantity * unitPrice;
+            
+            row.querySelector('.row-amount').textContent = '¥' + amount.toLocaleString();
+            total += amount;
+        });
+        
+        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
+    }
+    
+    // 既存の行にイベントを付与
+    document.querySelectorAll('.item-row').forEach(row => {
+        attachRowEvents(row);
+    });
+    
+    // 初期計算
+    calculateTotals();
+});
+</script>
+{% endblock %}

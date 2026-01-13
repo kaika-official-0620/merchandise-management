@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}請求書 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
+{% block title %}買取明細書 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-actions">
@@ -15,7 +15,7 @@
 <div class="document-container">
     <div class="document-header">
         <div class="document-title">
-            <h2>請求書</h2>
+            <h2>買取明細書</h2>
         </div>
         <div class="document-info">
             <table>
@@ -24,7 +24,7 @@
                     <td>{{ invoice.issue_date }}</td>
                 </tr>
                 <tr>
-                    <th>請求書番号</th>
+                    <th>買取明細書番号</th>
                     <td>{{ invoice.invoice_no }}</td>
                 </tr>
                 {% if invoice.payment_due_date %}

@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+
+{% block title %}{% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>📋 {% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
+    <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+</div>
+
+<form method="POST" class="kaitori-form" enctype="multipart/form-data">
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>No.</label>
+                <input type="text" value="{{ kaitori.document_no if kaitori else document_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="issue_date">発行日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ kaitori.issue_date if kaitori else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="tax_rate">消費税率</label>
+                <select id="tax_rate" name="tax_rate" class="form-control">
+                    <option value="10" {% if not kaitori or kaitori.tax_rate == 10 %}selected{% endif %}>10%（内税）</option>
+                    <option value="0" {% if kaitori and kaitori.tax_rate == 0 %}selected{% endif %}>0%（非課税）</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>買取先（売主）情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="seller_id">登録ユーザーから選択</label>
+                <select id="seller_id" name="seller_id" class="form-control" onchange="loadUserProducts()">
+                    <option value="">-- ユーザーを選択 --</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if kaitori and kaitori.seller_id == user.id %}selected{% endif %}>
+                        {{ user.display_name or user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="seller_name">または直接入力</label>
+                <input type="text" id="seller_name" name="seller_name" value="{{ kaitori.seller_name if kaitori else '' }}" placeholder="氏名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="seller_address">住所</label>
+                <input type="text" id="seller_address" name="seller_address" value="{{ kaitori.seller_address if kaitori else '' }}" placeholder="住所" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="seller_phone">電話番号</label>
+                <input type="text" id="seller_phone" name="seller_phone" value="{{ kaitori.seller_phone if kaitori else '' }}" placeholder="電話番号" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>添付書類</h3>
+        <div class="attachment-info">
+            <p>💡 商品を選択すると、商品登録時に添付された身分証・同意書が自動で引き継がれます。</p>
+        </div>
+        <div class="form-grid attachment-grid">
+            <div class="form-group">
+                <label>身分証明書</label>
+                {% if kaitori and kaitori.id_document_path %}
+                <div class="current-file">
+                    <a href="{{ url_for('static', filename=kaitori.id_document_path) }}" target="_blank">📄 添付済み（クリックで表示）</a>
+                </div>
+                {% else %}
+                <div class="no-file" id="id-doc-status">未添付（商品選択で自動取得）</div>
+                {% endif %}
+                <input type="file" id="id_document" name="id_document" class="form-control" accept="image/*,.pdf">
+                <small>または新しいファイルをアップロード</small>
+            </div>
+            <div class="form-group">
+                <label>同意書</label>
+                {% if kaitori and kaitori.consent_form_path %}
+                <div class="current-file">
+                    <a href="{{ url_for('static', filename=kaitori.consent_form_path) }}" target="_blank">📄 添付済み（クリックで表示）</a>
+                </div>
+                {% else %}
+                <div class="no-file" id="consent-doc-status">未添付（商品選択で自動取得）</div>
+                {% endif %}
+                <input type="file" id="consent_form" name="consent_form" class="form-control" accept="image/*,.pdf">
+                <small>または新しいファイルをアップロード</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>買取商品</h3>
+        <div class="product-selector">
+            <label>登録商品から追加：</label>
+            <select id="product-select" class="form-control">
+                <option value="">-- ユーザーを選択してください --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="5%">No.</th>
+                        <th width="25%">商品名 *</th>
+                        <th width="12%">ブランド</th>
+                        <th width="12%">仕入れ日</th>
+                        <th width="12%">状態</th>
+                        <th width="14%">買取金額</th>
+                        <th width="14%">身分証/同意書</th>
+                        <th width="6%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no }}</td>
+                            <td><input type="text" name="item_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="text" name="brand_name[]" value="{{ item.brand_name or '' }}" class="form-control"></td>
+                            <td><input type="date" name="purchase_date[]" value="{{ item.purchase_date or '' }}" class="form-control"></td>
+                            <td>
+                                <select name="item_condition[]" class="form-control">
+                                    <option value="">-</option>
+                                    <option value="N" {% if item.item_condition == 'N' %}selected{% endif %}>N</option>
+                                    <option value="S" {% if item.item_condition == 'S' %}selected{% endif %}>S</option>
+                                    <option value="A" {% if item.item_condition == 'A' %}selected{% endif %}>A</option>
+                                    <option value="AB" {% if item.item_condition == 'AB' %}selected{% endif %}>AB</option>
+                                    <option value="B" {% if item.item_condition == 'B' %}selected{% endif %}>B</option>
+                                </select>
+                            </td>
+                            <td><input type="number" name="amount[]" value="{{ item.amount }}" class="form-control item-amount-input" min="0"></td>
+                            <td class="doc-status">
+                                {% if item.has_id_doc %}✅{% else %}❌{% endif %}身分証 
+                                {% if item.has_consent %}✅{% else %}❌{% endif %}同意書
+                            </td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr class="item-row">
+                            <td class="item-no">1</td>
+                            <td><input type="text" name="item_name[]" class="form-control item-name"></td>
+                            <td><input type="text" name="brand_name[]" class="form-control"></td>
+                            <td><input type="date" name="purchase_date[]" class="form-control"></td>
+                            <td>
+                                <select name="item_condition[]" class="form-control">
+                                    <option value="">-</option>
+                                    <option value="N">N</option>
+                                    <option value="S">S</option>
+                                    <option value="A">A</option>
+                                    <option value="AB">AB</option>
+                                    <option value="B">B</option>
+                                </select>
+                            </td>
+                            <td><input type="number" name="amount[]" class="form-control item-amount-input" min="0"></td>
+                            <td class="doc-status">-</td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="8">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="4"></td>
+                        <td class="text-right"><strong>合計点数</strong></td>
+                        <td id="item-count">0 点</td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr class="totals-row total-final">
+                        <td colspan="4"></td>
+                        <td class="text-right"><strong>買取合計</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ kaitori.notes if kaitori else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="completed" class="btn btn-primary">完了として保存</button>
+    </div>
+</form>
+
+<style>
+.kaitori-form {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    color: #333;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.attachment-grid {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control.readonly {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.attachment-info {
+    background: #e8f4f8;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+}
+
+.attachment-info p {
+    margin: 0;
+    color: #0c5460;
+    font-size: 0.9rem;
+}
+
+.current-file {
+    background: #d4edda;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.current-file a {
+    color: #155724;
+    text-decoration: none;
+}
+
+.no-file {
+    background: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.items-table th {
+    background: #f8f9fa;
+    font-weight: 500;
+}
+
+.items-table .form-control {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+}
+
+.doc-status {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.totals-row td {
+    border: none;
+    padding: 8px 10px;
+}
+
+.totals-row .text-right {
+    text-align: right;
+}
+
+.total-final td {
+    font-size: 18px;
+    color: #28a745;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary { background: #007bff; color: white; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-danger { background: #dc3545; color: white; }
+.btn-info { background: #17a2b8; color: white; }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsBody = document.getElementById('items-body');
+    const addRowBtn = document.getElementById('add-row');
+    const productSelect = document.getElementById('product-select');
+    const addProductBtn = document.getElementById('add-product-btn');
+    const sellerSelect = document.getElementById('seller_id');
+    
+    let products = [];
+    
+    // 商品一覧を取得
+    window.loadUserProducts = async function() {
+        const userId = sellerSelect.value;
+        if (!userId) {
+            productSelect.innerHTML = '<option value="">-- ユーザーを選択してください --</option>';
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/admin/products?user_id=' + userId);
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    };
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            const hasIdDoc = product.id_document_path ? '✅身分証' : '';
+            const hasConsent = product.consent_form_path ? '✅同意書' : '';
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${(product.purchase_price || 0).toLocaleString()} ${hasIdDoc} ${hasConsent}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // 初期ロード
+    if (sellerSelect.value) {
+        loadUserProducts();
+    }
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        addRow(product);
+        productSelect.value = '';
+        
+        // 身分証・同意書のステータスを更新
+        if (product.id_document_path) {
+            document.getElementById('id-doc-status').innerHTML = '✅ 商品から取得済み';
+            document.getElementById('id-doc-status').className = 'current-file';
+        }
+        if (product.consent_form_path) {
+            document.getElementById('consent-doc-status').innerHTML = '✅ 商品から取得済み';
+            document.getElementById('consent-doc-status').className = 'current-file';
+        }
+    });
+    
+    // 行を追加
+    function addRow(product = null) {
+        const rowCount = itemsBody.querySelectorAll('.item-row').length;
+        const newRow = document.createElement('tr');
+        newRow.className = 'item-row';
+        
+        const hasIdDoc = product && product.id_document_path;
+        const hasConsent = product && product.consent_form_path;
+        
+        newRow.innerHTML = `
+            <td class="item-no">${rowCount + 1}</td>
+            <td><input type="text" name="item_name[]" value="${product ? product.product_name : ''}" class="form-control item-name"></td>
+            <td><input type="text" name="brand_name[]" value="${product ? (product.brand_name || '') : ''}" class="form-control"></td>
+            <td><input type="date" name="purchase_date[]" value="${product ? (product.purchase_date || '') : ''}" class="form-control"></td>
+            <td>
+                <select name="item_condition[]" class="form-control">
+                    <option value="">-</option>
+                    <option value="N" ${product && product.item_condition === 'N' ? 'selected' : ''}>N</option>
+                    <option value="S" ${product && product.item_condition === 'S' ? 'selected' : ''}>S</option>
+                    <option value="A" ${product && product.item_condition === 'A' ? 'selected' : ''}>A</option>
+                    <option value="AB" ${product && product.item_condition === 'AB' ? 'selected' : ''}>AB</option>
+                    <option value="B" ${product && product.item_condition === 'B' ? 'selected' : ''}>B</option>
+                </select>
+            </td>
+            <td><input type="number" name="amount[]" value="${product ? (product.purchase_price || 0) : ''}" class="form-control item-amount-input" min="0"></td>
+            <td class="doc-status">${hasIdDoc ? '✅' : '❌'}身分証 ${hasConsent ? '✅' : '❌'}同意書</td>
+            <td>
+                <input type="hidden" name="merchandise_id[]" value="${product ? product.id : ''}">
+                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+            </td>
+        `;
+        itemsBody.appendChild(newRow);
+        attachRowEvents(newRow);
+        renumberRows();
+        calculateTotals();
+    }
+    
+    addRowBtn.addEventListener('click', function() {
+        addRow();
+    });
+    
+    // 行を削除
+    function attachRowEvents(row) {
+        const removeBtn = row.querySelector('.remove-row');
+        const amountInput = row.querySelector('.item-amount-input');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            renumberRows();
+            calculateTotals();
+        });
+        
+        if (amountInput) {
+            amountInput.addEventListener('input', calculateTotals);
+        }
+    }
+    
+    // 行番号を振り直す
+    function renumberRows() {
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach((row, index) => {
+            row.querySelector('.item-no').textContent = index + 1;
+        });
+    }
+    
+    // 合計を計算
+    function calculateTotals() {
+        let total = 0;
+        let itemCount = 0;
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach(row => {
+            const amountInput = row.querySelector('.item-amount-input');
+            const nameInput = row.querySelector('.item-name');
+            if (amountInput) {
+                const amount = parseInt(amountInput.value) || 0;
+                total += amount;
+                if (nameInput && nameInput.value.trim()) {
+                    itemCount++;
+                }
+            }
+        });
+        
+        document.getElementById('item-count').textContent = itemCount + ' 点';
+        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
+    }
+    
+    // 既存の行にイベントを付与
+    document.querySelectorAll('.item-row').forEach(row => {
+        attachRowEvents(row);
+    });
+    
+    // 初期計算
+    calculateTotals();
+});
+</script>
+{% endblock %}

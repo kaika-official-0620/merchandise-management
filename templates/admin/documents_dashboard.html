@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}書類管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📄 書類管理</h1>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
+    <a href="{{ url_for('admin_documents_dashboard') }}" class="admin-nav-item active">書類管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
+</div>
+
+<div class="doc-types-grid">
+    <!-- 買取明細書 -->
+    <div class="doc-type-card">
+        <div class="doc-type-icon">📋</div>
+        <h3>買取明細書</h3>
+        <p class="doc-type-desc">商品の買取内容を記載した明細書。<br>身分証・同意書を添付可能。</p>
+        <div class="doc-type-actions">
+            <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
+        <div class="doc-type-count">
+            <span class="count-number">{{ kaitori_count }}</span> 件
+        </div>
+    </div>
+
+    <!-- 精算書 -->
+    <div class="doc-type-card">
+        <div class="doc-type-icon">💰</div>
+        <h3>精算書</h3>
+        <p class="doc-type-desc">開花の名前を借りる場合の精算書。<br>管理者からユーザーへ送付。</p>
+        <div class="doc-type-actions">
+            <a href="{{ url_for('admin_seisan_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_seisan_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
+        <div class="doc-type-count">
+            <span class="count-number">{{ seisan_count }}</span> 件
+        </div>
+    </div>
+
+    <!-- 見積依頼書 -->
+    <div class="doc-type-card">
+        <div class="doc-type-icon">📝</div>
+        <h3>見積依頼書</h3>
+        <p class="doc-type-desc">開花から法人向けの見積依頼書。</p>
+        <div class="doc-type-actions">
+            <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
+        <div class="doc-type-count">
+            <span class="count-number">{{ mitsumori_count }}</span> 件
+        </div>
+    </div>
+
+    <!-- 請求書（フリー） -->
+    <div class="doc-type-card">
+        <div class="doc-type-icon">🧾</div>
+        <h3>請求書（フリー）</h3>
+        <p class="doc-type-desc">自由に記載できる請求書。</p>
+        <div class="doc-type-actions">
+            <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
+        <div class="doc-type-count">
+            <span class="count-number">{{ shikiriosho_count }}</span> 件
+        </div>
+    </div>
+</div>
+
+<!-- ユーザーからの買取明細書（受信） -->
+<div class="doc-section">
+    <h2>📥 ユーザーからの買取明細書（承認待ち）</h2>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>送信者</th>
+                    <th>サービス種別</th>
+                    <th>発行日</th>
+                    <th>合計金額</th>
+                    <th>ステータス</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in pending_invoices %}
+                <tr>
+                    <td class="doc-no">{{ inv.invoice_no }}</td>
+                    <td>{{ inv.sender_name }}</td>
+                    <td>{{ inv.service_type }}</td>
+                    <td>{{ inv.issue_date }}</td>
+                    <td class="amount">¥{{ "{:,}".format(inv.total_amount) }}</td>
+                    <td>
+                        <span class="status-badge status-pending">承認待ち</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin_invoice_view', id=inv.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">承認待ちの書類はありません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.doc-types-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.doc-type-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid #e2e8f0;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+}
+
+.doc-type-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+.doc-type-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+}
+
+.doc-type-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.25rem;
+    color: #1e293b;
+}
+
+.doc-type-desc {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.doc-type-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.doc-type-count {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: #f1f5f9;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.doc-type-count .count-number {
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.doc-section {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.doc-section h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.btn-sm {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.btn-info {
+    background: #0ea5e9;
+    color: white;
+}
+</style>
+{% endblock %}

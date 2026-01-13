@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}請求書詳細 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
+{% block title %}買取明細書詳細 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>請求書詳細</h1>
+    <h1>買取明細書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if invoice.status == 'sent' %}
-        <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="btn btn-success" onclick="return confirm('この請求書を承認しますか？')">✔ 承認</a>
-        <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="btn btn-danger" onclick="return confirm('この請求書を却下しますか？')">✖ 却下</a>
+        <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を承認しますか？')">✔ 承認</a>
+        <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="btn btn-danger" onclick="return confirm('この買取明細書を却下しますか？')">✖ 却下</a>
         {% endif %}
         <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download btn-sm">CSV</a>
         <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
@@ -19,7 +19,7 @@
 <div class="document-container">
     <div class="document-header">
         <div class="document-title">
-            <h2>請求書</h2>
+            <h2>買取明細書</h2>
         </div>
         <div class="document-info">
             <table>
@@ -28,7 +28,7 @@
                     <td>{{ invoice.issue_date }}</td>
                 </tr>
                 <tr>
-                    <th>請求書番号</th>
+                    <th>買取明細書番号</th>
                     <td>{{ invoice.invoice_no }}</td>
                 </tr>
                 {% if invoice.payment_due_date %}
