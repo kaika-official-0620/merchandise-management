@@ -21,6 +21,7 @@
             <div class="nav-right">
                 <a href="{{ url_for('export_csv') }}" class="btn btn-export btn-sm">CSV</a>
                 <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ 新規登録</a>
+                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm">📊 利益計算式</button>
             </div>
             <div class="nav-user">
                 <div class="user-menu-trigger">
@@ -86,6 +87,323 @@
         {% block content %}{% endblock %}
     </main>
     
+    <!-- 利益計算式モーダル -->
+    <div class="profit-calc-modal" id="profitCalcModal">
+        <div class="profit-calc-overlay" onclick="closeProfitCalculator()"></div>
+        <div class="profit-calc-content">
+            <div class="profit-calc-header">
+                <h2>📊 利益計算式</h2>
+                <button class="profit-calc-close" onclick="closeProfitCalculator()">×</button>
+            </div>
+            <div class="profit-calc-body">
+                <!-- 計算式の説明 -->
+                <div class="calc-formula-section">
+                    <h3>🔢 計算式</h3>
+                    <div class="formula-box">
+                        <div class="formula-item">
+                            <span class="formula-label">利益</span>
+                            <span class="formula-eq">=</span>
+                            <span class="formula-value">売上 − 仕入額 − 手数料 − 送料</span>
+                        </div>
+                        <div class="formula-item">
+                            <span class="formula-label">利益率</span>
+                            <span class="formula-eq">=</span>
+                            <span class="formula-value">利益 ÷ 売上 × 100</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 計算機 -->
+                <div class="calc-input-section">
+                    <h3>🧮 利益計算機</h3>
+                    <div class="calc-input-grid">
+                        <div class="calc-input-row">
+                            <label>売上（税込）</label>
+                            <input type="number" id="calcSalePrice" placeholder="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>仕入額</label>
+                            <input type="number" id="calcPurchasePrice" placeholder="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>販売手数料（%）</label>
+                            <input type="number" id="calcFeeRate" placeholder="10" value="10" step="0.1" oninput="calculateProfit()">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>送料</label>
+                            <input type="number" id="calcShipping" placeholder="0" value="0" oninput="calculateProfit()">
+                            <span class="input-unit">円</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 計算結果 -->
+                <div class="calc-result-section">
+                    <h3>📈 計算結果</h3>
+                    <div class="calc-result-grid">
+                        <div class="calc-result-row">
+                            <span class="result-label">手数料</span>
+                            <span class="result-value" id="resultFee">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight">
+                            <span class="result-label">利益</span>
+                            <span class="result-value" id="resultProfit">¥0</span>
+                        </div>
+                        <div class="calc-result-row highlight">
+                            <span class="result-label">利益率</span>
+                            <span class="result-value" id="resultProfitRate">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 逆算機能 -->
+                <div class="calc-reverse-section">
+                    <h3>🎯 目標利益から売上を逆算</h3>
+                    <div class="calc-input-grid">
+                        <div class="calc-input-row">
+                            <label>目標利益</label>
+                            <input type="number" id="calcTargetProfit" placeholder="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>仕入額</label>
+                            <input type="number" id="calcReversePurchase" placeholder="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>手数料率</label>
+                            <input type="number" id="calcReverseFeeRate" placeholder="10" value="10" step="0.1" oninput="calculateReversePrice()">
+                            <span class="input-unit">%</span>
+                        </div>
+                        <div class="calc-input-row">
+                            <label>送料</label>
+                            <input type="number" id="calcReverseShipping" placeholder="0" value="0" oninput="calculateReversePrice()">
+                            <span class="input-unit">円</span>
+                        </div>
+                    </div>
+                    <div class="calc-result-grid">
+                        <div class="calc-result-row highlight-blue">
+                            <span class="result-label">必要な売上額</span>
+                            <span class="result-value" id="resultRequiredPrice">¥0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+    /* 利益計算ボタン */
+    .btn-calculator {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+    }
+    .btn-calculator:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+    
+    /* 利益計算モーダル */
+    .profit-calc-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+    }
+    .profit-calc-modal.open {
+        display: block;
+    }
+    .profit-calc-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+    }
+    .profit-calc-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .profit-calc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border-radius: 16px 16px 0 0;
+    }
+    .profit-calc-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+    }
+    .profit-calc-close {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+    }
+    .profit-calc-close:hover {
+        background: rgba(255,255,255,0.3);
+    }
+    .profit-calc-body {
+        padding: 24px;
+    }
+    .profit-calc-body h3 {
+        margin: 0 0 12px 0;
+        font-size: 1rem;
+        color: #1e293b;
+        border-bottom: 2px solid #10b981;
+        padding-bottom: 8px;
+    }
+    
+    /* 計算式セクション */
+    .calc-formula-section {
+        margin-bottom: 24px;
+    }
+    .formula-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+    }
+    .formula-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        font-size: 0.95rem;
+    }
+    .formula-item:not(:last-child) {
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .formula-label {
+        font-weight: 700;
+        color: #10b981;
+        min-width: 60px;
+    }
+    .formula-eq {
+        color: #64748b;
+    }
+    .formula-value {
+        color: #1e293b;
+    }
+    
+    /* 計算入力セクション */
+    .calc-input-section,
+    .calc-reverse-section {
+        margin-bottom: 24px;
+    }
+    .calc-input-grid {
+        display: grid;
+        gap: 12px;
+    }
+    .calc-input-row {
+        display: grid;
+        grid-template-columns: 140px 1fr 40px;
+        align-items: center;
+        gap: 12px;
+    }
+    .calc-input-row label {
+        font-size: 0.9rem;
+        color: #475569;
+    }
+    .calc-input-row input {
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 1rem;
+        text-align: right;
+    }
+    .calc-input-row input:focus {
+        outline: none;
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+    .input-unit {
+        color: #64748b;
+        font-size: 0.9rem;
+    }
+    
+    /* 計算結果セクション */
+    .calc-result-section {
+        margin-bottom: 24px;
+    }
+    .calc-result-grid {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+    }
+    .calc-result-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+    }
+    .calc-result-row.highlight {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    }
+    .calc-result-row.highlight-blue {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    }
+    .result-label {
+        font-weight: 600;
+        color: #475569;
+    }
+    .result-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e293b;
+        font-family: 'Consolas', monospace;
+    }
+    .calc-result-row.highlight .result-value {
+        color: #047857;
+    }
+    .calc-result-row.highlight-blue .result-value {
+        color: #1d4ed8;
+    }
+    .result-value.negative {
+        color: #dc2626 !important;
+    }
+    
+    @media (max-width: 600px) {
+        .profit-calc-content {
+            width: 95%;
+            max-height: 95vh;
+        }
+        .calc-input-row {
+            grid-template-columns: 100px 1fr 30px;
+            gap: 8px;
+        }
+        .calc-input-row label {
+            font-size: 0.8rem;
+        }
+    }
+    </style>
+    
     <script>
         // アラート自動非表示
         document.querySelectorAll('.alert').forEach(alert => {
@@ -97,6 +415,67 @@
             document.getElementById('sidebar').classList.toggle('open');
             document.querySelector('.sidebar-overlay').classList.toggle('open');
             document.body.classList.toggle('sidebar-open');
+        }
+        
+        // 利益計算モーダル開閉
+        function openProfitCalculator() {
+            document.getElementById('profitCalcModal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeProfitCalculator() {
+            document.getElementById('profitCalcModal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+        
+        // ESCキーでモーダルを閉じる
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeProfitCalculator();
+            }
+        });
+        
+        // 利益計算
+        function calculateProfit() {
+            const salePrice = parseFloat(document.getElementById('calcSalePrice').value) || 0;
+            const purchasePrice = parseFloat(document.getElementById('calcPurchasePrice').value) || 0;
+            const feeRate = parseFloat(document.getElementById('calcFeeRate').value) || 0;
+            const shipping = parseFloat(document.getElementById('calcShipping').value) || 0;
+            
+            // 手数料計算
+            const fee = Math.floor(salePrice * (feeRate / 100));
+            
+            // 利益計算
+            const profit = salePrice - purchasePrice - fee - shipping;
+            
+            // 利益率計算
+            const profitRate = salePrice > 0 ? (profit / salePrice * 100) : 0;
+            
+            // 結果表示
+            document.getElementById('resultFee').textContent = '¥' + fee.toLocaleString();
+            
+            const profitEl = document.getElementById('resultProfit');
+            profitEl.textContent = '¥' + profit.toLocaleString();
+            profitEl.classList.toggle('negative', profit < 0);
+            
+            const profitRateEl = document.getElementById('resultProfitRate');
+            profitRateEl.textContent = profitRate.toFixed(1) + '%';
+            profitRateEl.classList.toggle('negative', profitRate < 0);
+        }
+        
+        // 逆算計算（目標利益から必要な売上を計算）
+        function calculateReversePrice() {
+            const targetProfit = parseFloat(document.getElementById('calcTargetProfit').value) || 0;
+            const purchasePrice = parseFloat(document.getElementById('calcReversePurchase').value) || 0;
+            const feeRate = parseFloat(document.getElementById('calcReverseFeeRate').value) || 0;
+            const shipping = parseFloat(document.getElementById('calcReverseShipping').value) || 0;
+            
+            // 必要売上 = (仕入額 + 目標利益 + 送料) / (1 - 手数料率/100)
+            const requiredPrice = feeRate < 100 
+                ? Math.ceil((purchasePrice + targetProfit + shipping) / (1 - feeRate / 100))
+                : 0;
+            
+            document.getElementById('resultRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
         }
     </script>
     {% block scripts %}{% endblock %}
