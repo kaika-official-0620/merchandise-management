@@ -5,14 +5,14 @@
 {% block content %}
 <!-- タブナビゲーション -->
 <div class="doc-tabs">
-    <button class="doc-tab active" data-tab="estimates">見積書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
-    <button class="doc-tab" data-tab="settlements">精算書</button>
+    <button class="doc-tab active" data-tab="estimates">買取明細書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
+    <button class="doc-tab" data-tab="settlements">請求書</button>
 </div>
 
-<!-- 見積書タブ -->
+<!-- 買取明細書タブ -->
 <div class="tab-content active" id="tab-estimates">
     <div class="tab-header">
-        <h2>受信した見積書</h2>
+        <h2>受信した買取明細書</h2>
     </div>
     {% if shikiriosho_list %}
     <div class="doc-cards">
@@ -48,15 +48,15 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📭</div>
-        <p>受信した見積書はありません</p>
+        <p>受信した買取明細書はありません</p>
     </div>
     {% endif %}
 </div>
 
-<!-- 精算書タブ -->
+<!-- 請求書タブ -->
 <div class="tab-content" id="tab-settlements">
     <div class="tab-header">
-        <h2>精算書</h2>
+        <h2>請求書</h2>
         <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
     </div>
     {% if invoices %}
@@ -93,7 +93,7 @@
                 <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
                 {% if inv.status == 'draft' %}
                     <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
-                    <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+                    <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この請求書を送信しますか？')">送信</a>
                 {% else %}
                     <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary btn-sm">CSV</a>
                 {% endif %}
@@ -104,7 +104,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📄</div>
-        <p>精算書がありません</p>
+        <p>請求書がありません</p>
         <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
     </div>
     {% endif %}

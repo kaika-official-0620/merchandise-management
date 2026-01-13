@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}見積書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
+{% block title %}買取明細書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>見積書詳細</h1>
+    <h1>買取明細書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if shikiriosho.status == 'draft' %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
-        <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この見積書を送信しますか？')">送信</a>
+        <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
         {% endif %}
         <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
     </div>
@@ -23,7 +23,7 @@
         <div class="document-info">
             <table>
                 <tr>
-                    <th>見積書番号</th>
+                    <th>買取明細書番号</th>
                     <td>{{ shikiriosho.document_no }}</td>
                 </tr>
                 <tr>

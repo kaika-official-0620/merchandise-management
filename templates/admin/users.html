@@ -10,8 +10,8 @@
 <div class="admin-nav">
     <a href="{{ url_for('admin_users') }}" class="admin-nav-item active">ユーザー管理</a>
     <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">見積書</a>
-    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">精算書</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">買取明細書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書</a>
     <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
     <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
     <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
@@ -29,6 +29,7 @@
                     <th>権限</th>
                     <th>当月商品数<br><small style="font-weight:normal;color:#64748b;">月末締め</small></th>
                     <th>月額利用料</th>
+                    <th>開花手数料<br><small style="font-weight:normal;color:#64748b;">累計</small></th>
                     <th>登録日</th>
                     <th>最終ログイン</th>
                     <th>操作</th>
@@ -59,6 +60,11 @@
                     <td class="text-center">
                         <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
                             ¥{{ "{:,}".format(user.monthly_fee) }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <span class="kaika-fee-badge">
+                            ¥{{ "{:,}".format(user.kaika_fee|int) }}
                         </span>
                     </td>
                     <td>{{ (user.created_at|string)[:10] if user.created_at else '-' }}</td>
@@ -96,7 +102,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="10" class="empty-cell">ユーザーがいません</td>
+                    <td colspan="11" class="empty-cell">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -162,7 +168,7 @@
             <div>
                 <strong>ユーザー</strong>
                 <span class="badge badge-user" style="margin-left: 8px;">一般権限</span>
-                <p>自身の商品管理、顧客管理、精算書・見積書の操作が可能。</p>
+                <p>自身の商品管理、顧客管理、請求書・買取明細書の操作が可能。</p>
             </div>
         </div>
     </div>
@@ -203,6 +209,16 @@
 .fee-max {
     background: #fee2e2;
     color: #b91c1c;
+}
+
+.kaika-fee-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    font-weight: bold;
+    font-size: 0.875rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #b45309;
+    border-radius: 4px;
 }
 
 .permission-hint {

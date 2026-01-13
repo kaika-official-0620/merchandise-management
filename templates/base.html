@@ -20,8 +20,8 @@
             </button>
             <div class="nav-right">
                 <a href="{{ url_for('export_csv') }}" class="btn btn-export btn-sm">CSV</a>
-                <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ 新規登録</a>
-                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm">📊 利益計算式</button>
+                <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ 登録</a>
+                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm"> 計算式</button>
             </div>
             <div class="nav-user">
                 <div class="user-menu-trigger">
@@ -92,13 +92,13 @@
         <div class="profit-calc-overlay" onclick="closeProfitCalculator()"></div>
         <div class="profit-calc-content">
             <div class="profit-calc-header">
-                <h2>📊 利益計算式</h2>
+                <h2>利益計算式</h2>
                 <button class="profit-calc-close" onclick="closeProfitCalculator()">×</button>
             </div>
             <div class="profit-calc-body">
                 <!-- 計算式の説明 -->
                 <div class="calc-formula-section">
-                    <h3>🔢 計算式</h3>
+                    <h3>計算式</h3>
                     <div class="formula-box">
                         <div class="formula-item">
                             <span class="formula-label">利益</span>
@@ -115,7 +115,7 @@
                 
                 <!-- 計算機 -->
                 <div class="calc-input-section">
-                    <h3>🧮 利益計算機</h3>
+                    <h3>利益計算機</h3>
                     <div class="calc-input-grid">
                         <div class="calc-input-row">
                             <label>売上（税込）</label>
@@ -142,7 +142,7 @@
                 
                 <!-- 計算結果 -->
                 <div class="calc-result-section">
-                    <h3>📈 計算結果</h3>
+                    <h3>計算結果</h3>
                     <div class="calc-result-grid">
                         <div class="calc-result-row">
                             <span class="result-label">手数料</span>
@@ -161,7 +161,7 @@
                 
                 <!-- 逆算機能 -->
                 <div class="calc-reverse-section">
-                    <h3>🎯 目標利益から売上を逆算</h3>
+                    <h3>目標利益から売上を逆算</h3>
                     <div class="calc-input-grid">
                         <div class="calc-input-row">
                             <label>目標利益</label>
