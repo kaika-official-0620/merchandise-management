@@ -333,6 +333,13 @@
                        value="{{ item.listing_date if item else '' }}">
             </div>
             
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-price-group" class="form-group" style="display: none;">
+                <label for="listing_price">出品価格</label>
+                <input type="number" id="listing_price" name="listing_price" 
+                       value="{{ item.listing_price if item else 0 }}" min="0">
+            </div>
+            
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
@@ -629,14 +636,17 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
 function updateStatusFields() {
     const status = document.getElementById('item_status').value;
     const listingDateGroup = document.getElementById('listing-date-group');
+    const listingPriceGroup = document.getElementById('listing-price-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
     
-    // 出品日フィールド：出品中・売却済みで表示
+    // 出品日・出品価格フィールド：出品中・売却済みで表示
     if (status === 'listed' || status === 'sold') {
         listingDateGroup.style.display = 'block';
+        listingPriceGroup.style.display = 'block';
     } else {
         listingDateGroup.style.display = 'none';
+        listingPriceGroup.style.display = 'none';
     }
     
     // 売却日・売却関連フィールド：売却済みで表示
