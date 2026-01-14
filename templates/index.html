@@ -876,9 +876,9 @@
         {% for ann in announcements %}
         <div class="announcement-item announcement-{{ ann.announcement_type }}" {% if not loop.first %}style="display: none;"{% endif %}>
             <span class="announcement-badge">
-                {% if ann.announcement_type == 'important' %}🔴 重要
-                {% elif ann.announcement_type == 'warning' %}⚠️ 注意
-                {% elif ann.announcement_type == 'success' %}✅ 完了
+                {% if ann.announcement_type == 'important' %}重要
+                {% elif ann.announcement_type == 'warning' %}注意
+                {% elif ann.announcement_type == 'success' %}完了
                 {% else %}お知らせ
                 {% endif %}
             </span>
@@ -889,9 +889,9 @@
     </div>
     {% if announcements|length > 1 %}
     <div class="announcement-nav">
-        <button onclick="prevAnnouncement()" class="ann-nav-btn">◀</button>
+        <button onclick="prevAnnouncement()" class="ann-nav-btn">&lt;</button>
         <span id="annCounter">1/{{ announcements|length }}</span>
-        <button onclick="nextAnnouncement()" class="ann-nav-btn">▶</button>
+        <button onclick="nextAnnouncement()" class="ann-nav-btn">&gt;</button>
     </div>
     {% endif %}
 </div>
@@ -900,7 +900,7 @@
 <!-- 検索ボタン -->
 <div class="search-toggle-container">
     <button class="search-toggle-btn" id="searchToggleBtn" onclick="toggleFilterPanel()">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"></span>
         <span>検索・フィルター</span>
         <span class="filter-count" id="filterCount" style="display: none;">0</span>
     </button>
@@ -1062,7 +1062,7 @@
                         {% if item.photo_path %}
                         <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
                         {% else %}
-                        <div class="no-thumb">📷</div>
+                        <div class="no-thumb">-</div>
                         {% endif %}
                     </td>
                     <td>{{ item.id }}</td>
@@ -1108,7 +1108,7 @@
                         <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                         <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                         <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
-                           onclick="return confirm('削除しますか？')">✕</a>
+                           onclick="return confirm('削除しますか？')">×</a>
                     </td>
                 </tr>
                 {% else %}
@@ -1155,7 +1155,7 @@
                 {% if item.photo_path %}
                 <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
                 {% else %}
-                <div class="no-photo">📷</div>
+                <div class="no-photo">-</div>
                 {% endif %}
             </div>
             <div class="card-title">

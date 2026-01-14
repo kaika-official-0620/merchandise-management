@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="admin-header">
-    <h1>📋 買取明細書管理</h1>
+    <h1>買取明細書管理</h1>
     <div class="admin-nav-buttons">
         <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">← 書類管理</a>
         <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -44,16 +44,16 @@
                 <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
                 <td class="text-center">
                     {% if doc.id_document_path %}
-                        <span class="doc-attached">✅</span>
+                        <span class="doc-attached">○</span>
                     {% else %}
-                        <span class="doc-missing">❌</span>
+                        <span class="doc-missing">×</span>
                     {% endif %}
                 </td>
                 <td class="text-center">
                     {% if doc.consent_form_path %}
-                        <span class="doc-attached">✅</span>
+                        <span class="doc-attached">○</span>
                     {% else %}
-                        <span class="doc-missing">❌</span>
+                        <span class="doc-missing">×</span>
                     {% endif %}
                 </td>
                 <td>

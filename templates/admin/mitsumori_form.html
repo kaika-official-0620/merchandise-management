@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="admin-header">
-    <h1>📝 {% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %}</h1>
+    <h1>{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %}</h1>
     <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
 <div class="form-info-box">
-    <p>💡 <strong>見積依頼書とは：</strong>開花から法人向けに送付する見積依頼書です。</p>
+    <p><strong>見積依頼書とは：</strong>開花から法人向けに送付する見積依頼書です。</p>
 </div>
 
 <form method="POST" class="mitsumori-form">

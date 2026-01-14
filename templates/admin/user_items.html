@@ -40,7 +40,7 @@
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumbnail" alt="">
                     {% else %}
-                    <span class="no-thumb">📷</span>
+                    <span class="no-thumb">-</span>
                     {% endif %}
                 </td>
                 <td><strong>{{ item.product_name or '-' }}</strong></td>

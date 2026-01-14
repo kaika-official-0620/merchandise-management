@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="admin-header">
-    <h1>📋 {% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
+    <h1>{% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
     <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
@@ -62,14 +62,14 @@
     <div class="form-section">
         <h3>添付書類</h3>
         <div class="attachment-info">
-            <p>💡 商品を選択すると、商品登録時に添付された身分証・同意書が自動で引き継がれます。</p>
+            <p>商品を選択すると、商品登録時に添付された身分証・同意書が自動で引き継がれます。</p>
         </div>
         <div class="form-grid attachment-grid">
             <div class="form-group">
                 <label>身分証明書</label>
                 {% if kaitori and kaitori.id_document_path %}
                 <div class="current-file">
-                    <a href="{{ url_for('static', filename=kaitori.id_document_path) }}" target="_blank">📄 添付済み（クリックで表示）</a>
+                    <a href="{{ url_for('static', filename=kaitori.id_document_path) }}" target="_blank">添付済み（クリックで表示）</a>
                 </div>
                 {% else %}
                 <div class="no-file" id="id-doc-status">未添付（商品選択で自動取得）</div>
@@ -81,7 +81,7 @@
                 <label>同意書</label>
                 {% if kaitori and kaitori.consent_form_path %}
                 <div class="current-file">
-                    <a href="{{ url_for('static', filename=kaitori.consent_form_path) }}" target="_blank">📄 添付済み（クリックで表示）</a>
+                    <a href="{{ url_for('static', filename=kaitori.consent_form_path) }}" target="_blank">添付済み（クリックで表示）</a>
                 </div>
                 {% else %}
                 <div class="no-file" id="consent-doc-status">未添付（商品選択で自動取得）</div>
@@ -135,8 +135,8 @@
                             </td>
                             <td><input type="number" name="amount[]" value="{{ item.amount }}" class="form-control item-amount-input" min="0"></td>
                             <td class="doc-status">
-                                {% if item.has_id_doc %}✅{% else %}❌{% endif %}身分証 
-                                {% if item.has_consent %}✅{% else %}❌{% endif %}同意書
+                                {% if item.has_id_doc %}○{% else %}×{% endif %}身分証 
+                                {% if item.has_consent %}○{% else %}×{% endif %}同意書
                             </td>
                             <td>
                                 <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
@@ -414,8 +414,8 @@ document.addEventListener('DOMContentLoaded', function() {
         products.forEach(product => {
             const option = document.createElement('option');
             option.value = JSON.stringify(product);
-            const hasIdDoc = product.id_document_path ? '✅身分証' : '';
-            const hasConsent = product.consent_form_path ? '✅同意書' : '';
+            const hasIdDoc = product.id_document_path ? '○身分証' : '';
+            const hasConsent = product.consent_form_path ? '○同意書' : '';
             option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${(product.purchase_price || 0).toLocaleString()} ${hasIdDoc} ${hasConsent}`;
             productSelect.appendChild(option);
         });
@@ -436,11 +436,11 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 身分証・同意書のステータスを更新
         if (product.id_document_path) {
-            document.getElementById('id-doc-status').innerHTML = '✅ 商品から取得済み';
+            document.getElementById('id-doc-status').innerHTML = '○ 商品から取得済み';
             document.getElementById('id-doc-status').className = 'current-file';
         }
         if (product.consent_form_path) {
-            document.getElementById('consent-doc-status').innerHTML = '✅ 商品から取得済み';
+            document.getElementById('consent-doc-status').innerHTML = '○ 商品から取得済み';
             document.getElementById('consent-doc-status').className = 'current-file';
         }
     });
@@ -470,7 +470,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </select>
             </td>
             <td><input type="number" name="amount[]" value="${product ? (product.purchase_price || 0) : ''}" class="form-control item-amount-input" min="0"></td>
-            <td class="doc-status">${hasIdDoc ? '✅' : '❌'}身分証 ${hasConsent ? '✅' : '❌'}同意書</td>
+            <td class="doc-status">${hasIdDoc ? '○' : '×'}身分証 ${hasConsent ? '○' : '×'}同意書</td>
             <td>
                 <input type="hidden" name="merchandise_id[]" value="${product ? product.id : ''}">
                 <button type="button" class="btn btn-danger btn-sm remove-row">×</button>

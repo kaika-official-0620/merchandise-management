@@ -43,11 +43,11 @@
                     </td>
                     <td>
                         {% if ann.announcement_type == 'important' %}
-                        <span class="ann-type ann-type-important">🔴 重要</span>
+                        <span class="ann-type ann-type-important">重要</span>
                         {% elif ann.announcement_type == 'warning' %}
-                        <span class="ann-type ann-type-warning">⚠️ 注意</span>
+                        <span class="ann-type ann-type-warning">注意</span>
                         {% elif ann.announcement_type == 'success' %}
-                        <span class="ann-type ann-type-success">✅ 完了</span>
+                        <span class="ann-type ann-type-success">完了</span>
                         {% else %}
                         <span class="ann-type ann-type-info">通常</span>
                         {% endif %}

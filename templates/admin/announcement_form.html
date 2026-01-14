@@ -40,13 +40,13 @@
                         通常のお知らせ
                     </option>
                     <option value="important" {% if announcement and announcement.announcement_type == 'important' %}selected{% endif %}>
-                        🔴 重要なお知らせ
+                        重要なお知らせ
                     </option>
                     <option value="warning" {% if announcement and announcement.announcement_type == 'warning' %}selected{% endif %}>
-                        ⚠️ 注意喚起
+                        注意喚起
                     </option>
                     <option value="success" {% if announcement and announcement.announcement_type == 'success' %}selected{% endif %}>
-                        ✅ 完了・達成報告
+                        完了・達成報告
                     </option>
                 </select>
             </div>
@@ -251,15 +251,15 @@ function updatePreview() {
     
     switch(type) {
         case 'important':
-            previewBadge.textContent = '🔴 重要';
+            previewBadge.textContent = '重要';
             previewBadge.classList.add('important');
             break;
         case 'warning':
-            previewBadge.textContent = '⚠️ 注意';
+            previewBadge.textContent = '注意';
             previewBadge.classList.add('warning');
             break;
         case 'success':
-            previewBadge.textContent = '✅ 完了';
+            previewBadge.textContent = '完了';
             previewBadge.classList.add('success');
             break;
         default:

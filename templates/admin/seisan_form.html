@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="admin-header">
-    <h1>💰 {% if seisan %}精算書編集{% else %}精算書作成{% endif %}</h1>
+    <h1>{% if seisan %}精算書編集{% else %}精算書作成{% endif %}</h1>
     <a href="{{ url_for('admin_seisan_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
 <div class="form-info-box">
-    <p>💡 <strong>精算書とは：</strong>開花の名前を借りて販売した場合に、ユーザーへ送付する精算書です。</p>
+    <p><strong>精算書とは：</strong>開花の名前を借りて販売した場合に、ユーザーへ送付する精算書です。</p>
 </div>
 
 <form method="POST" class="seisan-form">

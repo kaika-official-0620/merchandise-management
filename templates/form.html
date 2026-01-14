@@ -279,7 +279,7 @@
             </div>
             
             <div class="form-group">
-                <label for="photo">📷 メイン写真（1枚目）</label>
+                <label for="photo">メイン写真（1枚目）</label>
                 <input type="file" id="photo" name="photo" accept="image/*">
                 {% if item and item.photo_path %}
                 <div class="current-photo">
@@ -290,7 +290,7 @@
             </div>
             
             <div class="form-group">
-                <label for="additional_photos">📸 追加写真（最大19枚）</label>
+                <label for="additional_photos">追加写真（最大19枚）</label>
                 <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
                 
@@ -511,7 +511,7 @@ const saleTypeRules = {
         name: '業者卸販売',
         calculate: (price) => Math.floor(price * 0.10),
         hint: '業者卸: 売上金の10%',
-        shippingHint: (price) => price >= 30000 ? '💡 30,000円以上のため送料無料' : '※30,000円以上で送料無料',
+        shippingHint: (price) => price >= 30000 ? '30,000円以上のため送料無料' : '※30,000円以上で送料無料',
         freeShipping: (price) => price >= 30000
     },
     'multi_listing': {

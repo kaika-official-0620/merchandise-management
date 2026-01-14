@@ -54,7 +54,7 @@
         {% set profit = (analytics.summary.total_profit or 0)|int %}
         
         <div class="kpi-card">
-            <div class="kpi-icon">📊</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">{{ "%.1f"|format(sold / total_safe * 100) }}%</div>
                 <div class="kpi-label">販売率</div>
@@ -63,7 +63,7 @@
         </div>
         
         <div class="kpi-card">
-            <div class="kpi-icon">💰</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / sales_safe * 100) }}%</div>
                 <div class="kpi-label">利益率</div>
@@ -72,7 +72,7 @@
         </div>
         
         <div class="kpi-card">
-            <div class="kpi-icon">📈</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / purchase_safe * 100) }}%</div>
                 <div class="kpi-label">ROI（投資利益率）</div>
@@ -101,7 +101,7 @@
         </div>
         
         <div class="kpi-card">
-            <div class="kpi-icon">💵</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">¥{{ "{:,}".format((analytics.summary.avg_profit or 0)|int) }}</div>
                 <div class="kpi-label">平均利益/件</div>
