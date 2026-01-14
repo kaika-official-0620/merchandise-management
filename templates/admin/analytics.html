@@ -38,7 +38,7 @@
         </div>
         {% if date_from or date_to %}
         <div class="filter-active-notice">
-            <span class="filter-badge">📅 フィルター適用中: {{ date_from or '指定なし' }} 〜 {{ date_to or '指定なし' }}</span>
+            <span class="filter-badge">フィルター適用中: {{ date_from or '指定なし' }} 〜 {{ date_to or '指定なし' }}</span>
         </div>
         {% endif %}
     </form>
@@ -73,7 +73,7 @@
         </div>
     </div>
     <div class="admin-stat-card kaika-fee-card">
-        <div class="stat-label-top">💴 開花手数料</div>
+        <div class="stat-label-top">開花手数料</div>
         <div class="stat-content">
             <span class="stat-value kaika-fee-value">¥{{ "{:,}".format((kaika_fee.summary.total_kaika_fee or 0)|int) }}</span>
         </div>
@@ -84,7 +84,7 @@
 <!-- 開花手数料 詳細と推移 -->
 {% if kaika_fee and kaika_fee.summary %}
 <div class="admin-section kaika-fee-section">
-    <h2>💴 開花手数料</h2>
+    <h2>開花手数料</h2>
     <div class="kaika-grid">
         <div class="kaika-breakdown">
             <h3>サービス別内訳</h3>
@@ -94,7 +94,7 @@
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
-                    <span class="kaika-service">🏭 業者卸販売</span>
+                    <span class="kaika-service">業者卸販売</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
@@ -102,7 +102,7 @@
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
-                    <span class="kaika-service">🔨 オークション流し</span>
+                    <span class="kaika-service">オークション流し</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
                 </div>
             </div>
@@ -162,7 +162,7 @@
 <!-- 売れた商品（Top10） -->
 {% if 'top_products' in enabled_keys and top_products %}
 <div class="admin-section widget-section">
-    <h2>🏆 売れた商品（売上Top10）</h2>
+    <h2>売れた商品（売上Top10）</h2>
     <div class="admin-table-container">
         <table class="admin-table">
             <thead>
@@ -255,7 +255,7 @@
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">⏱️</div>
+                <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats.avg_days_to_sell else '-' }}日</span>
                     <span class="stat-label">平均販売日数</span>
@@ -325,7 +325,7 @@
     <!-- リピート率（販売先別） -->
     {% if 'repeat_rate' in enabled_keys and repeat_stats %}
     <div class="admin-section widget-section">
-        <h2>🔁 リピート率（販売先別）</h2>
+        <h2>リピート率（販売先別）</h2>
         <div class="repeat-list">
             {% for item in repeat_stats[:5] %}
             <div class="repeat-item">
@@ -347,7 +347,7 @@
 <!-- 時間帯・曜日別売上 -->
 {% if 'time_sales' in enabled_keys and day_sales %}
 <div class="admin-section widget-section">
-    <h2>🕐 曜日別売上</h2>
+    <h2>曜日別売上</h2>
     <div class="day-sales-chart">
         {% set max_day_sales = day_sales|map(attribute='sales')|max if day_sales else 1 %}
         {% for day in day_sales %}
@@ -372,8 +372,8 @@
             {% for dest in destination_stats %}
             <div class="analytics-card">
                 <div class="analytics-icon">
-                    {% if dest.sales_destination == 'メルカリ' %}🛍️
-                    {% elif dest.sales_destination == 'ヤフオク' %}🔨
+                    {% if dest.sales_destination == 'メルカリ' %}
+                    {% elif dest.sales_destination == 'ヤフオク' %}
                     {% elif dest.sales_destination == 'ラクマ' %}
                     {% elif dest.sales_destination == 'Amazon' %}
                     {% else %}{% endif %}
