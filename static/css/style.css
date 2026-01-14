@@ -307,7 +307,8 @@ body.sidebar-open {
     transition: transform 0.2s;
 }
 
-.nav-user:hover .menu-arrow {
+.nav-user:hover .menu-arrow,
+.nav-user.open .menu-arrow {
     transform: rotate(180deg);
 }
 
@@ -328,7 +329,8 @@ body.sidebar-open {
     z-index: 200;
 }
 
-.nav-user:hover .user-dropdown {
+.nav-user:hover .user-dropdown,
+.nav-user.open .user-dropdown {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);

@@ -23,8 +23,8 @@
                 <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ 登録</a>
                 <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm"> 計算式</button>
             </div>
-            <div class="nav-user">
-                <div class="user-menu-trigger">
+            <div class="nav-user" id="navUser">
+                <div class="user-menu-trigger" onclick="toggleUserMenu(event)">
                     <span class="user-name">{{ current_user.display_name }}</span>
                     {% if current_user.is_owner() %}
                     <span class="user-badge owner">オーナー</span>
@@ -416,6 +416,20 @@
             document.querySelector('.sidebar-overlay').classList.toggle('open');
             document.body.classList.toggle('sidebar-open');
         }
+        
+        // ユーザーメニュートグル（スマホ対応）
+        function toggleUserMenu(e) {
+            e.stopPropagation();
+            document.getElementById('navUser').classList.toggle('open');
+        }
+        
+        // メニュー外をタップしたら閉じる
+        document.addEventListener('click', function(e) {
+            const navUser = document.getElementById('navUser');
+            if (navUser && !navUser.contains(e.target)) {
+                navUser.classList.remove('open');
+            }
+        });
         
         // 利益計算モーダル開閉
         function openProfitCalculator() {
