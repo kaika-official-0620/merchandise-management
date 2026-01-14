@@ -1132,32 +1132,6 @@
     <div class="mobile-search">
         <input type="text" id="mobile-search" placeholder="商品名・ブランドで検索" onkeyup="mobileFilter()">
     </div>
-    <div class="mobile-filter-buttons">
-        <select id="mobile-status-filter" onchange="mobileFilter()">
-            <option value="">すべて</option>
-            <option value="sold">売却済</option>
-            <option value="listed">出品中</option>
-            <option value="unlisted">未出品</option>
-        </select>
-    </div>
-    <div class="mobile-price-filters">
-        <div class="mobile-price-filter">
-            <label>仕入額</label>
-            <div class="mobile-price-range">
-                <input type="number" id="mobile-purchase-min" placeholder="最小" onchange="mobileFilter()">
-                <span>〜</span>
-                <input type="number" id="mobile-purchase-max" placeholder="最大" onchange="mobileFilter()">
-            </div>
-        </div>
-        <div class="mobile-price-filter">
-            <label>利益</label>
-            <div class="mobile-price-range">
-                <input type="number" id="mobile-profit-min" placeholder="最小" onchange="mobileFilter()">
-                <span>〜</span>
-                <input type="number" id="mobile-profit-max" placeholder="最大" onchange="mobileFilter()">
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- スマホ用カード表示 -->
@@ -1452,21 +1426,6 @@ function filterTable() {
 // スマホ用フィルター機能
 function mobileFilter() {
     const searchText = (document.getElementById('mobile-search').value || '').toLowerCase();
-    const statusFilter = document.getElementById('mobile-status-filter').value;
-    
-    // スマホ用料金フィルター
-    const mobilePurchaseMin = document.getElementById('mobile-purchase-min').value;
-    const mobilePurchaseMax = document.getElementById('mobile-purchase-max').value;
-    const mobileProfitMin = document.getElementById('mobile-profit-min').value;
-    const mobileProfitMax = document.getElementById('mobile-profit-max').value;
-    
-    // 料金範囲チェック関数
-    function checkPriceRange(value, min, max) {
-        const numValue = parseInt(value) || 0;
-        if (min !== '' && numValue < parseInt(min)) return false;
-        if (max !== '' && numValue > parseInt(max)) return false;
-        return true;
-    }
     
     const cards = document.querySelectorAll('.item-card');
     let visibleCount = 0;
@@ -1474,27 +1433,11 @@ function mobileFilter() {
     cards.forEach(card => {
         const name = (card.dataset.name || '').toLowerCase();
         const brand = (card.dataset.brand || '').toLowerCase();
-        const status = card.dataset.status || '';
-        const purchasePrice = card.dataset.purchasePrice || '0';
-        const profit = card.dataset.profit || '0';
         
         let show = true;
         
         // テキスト検索（商品名とブランド名）
         if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
-            show = false;
-        }
-        
-        // ステータスフィルター
-        if (statusFilter && status !== statusFilter) {
-            show = false;
-        }
-        
-        // 料金フィルター
-        if (!checkPriceRange(purchasePrice, mobilePurchaseMin, mobilePurchaseMax)) {
-            show = false;
-        }
-        if (!checkPriceRange(profit, mobileProfitMin, mobileProfitMax)) {
             show = false;
         }
         
