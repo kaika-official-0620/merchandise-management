@@ -53,12 +53,6 @@
             <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
             <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
             <a href="{{ url_for('customers') }}" class="{% if request.endpoint in ['customers', 'add_customer', 'edit_customer'] %}active{% endif %}">顧客管理</a>
-            <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] or ('shikiriosho' in request.endpoint and 'admin' not in request.endpoint) or ('invoice' in request.endpoint and 'admin' not in request.endpoint) %}active{% endif %}">
-                書類管理
-                {% if unread_shikiriosho_count > 0 %}
-                <span class="badge-count">{{ unread_shikiriosho_count }}</span>
-                {% endif %}
-            </a>
             {% if current_user.is_admin() %}
             <div class="sidebar-divider"></div>
             <a href="{{ url_for('admin_dashboard') }}" class="nav-admin {% if 'admin' in request.endpoint %}active{% endif %}">
