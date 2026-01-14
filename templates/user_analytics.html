@@ -81,7 +81,7 @@
         </div>
         
         <div class="kpi-card">
-            <div class="kpi-icon">⏱️</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">{{ (kpi.avg_days_to_sell or 0)|int }}日</div>
                 <div class="kpi-label">平均販売日数</div>
@@ -90,7 +90,7 @@
         </div>
         
         <div class="kpi-card">
-            <div class="kpi-icon">🔄</div>
+            <div class="kpi-icon"></div>
             <div class="kpi-content">
                 {% set unsold = total - sold %}
                 {% set unsold_safe = unsold if unsold > 0 else 1 %}
