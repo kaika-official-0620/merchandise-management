@@ -35,7 +35,40 @@
         <li><strong>サブスク開始</strong>：ユーザーがクレジットカードを登録し、毎月自動引き落としが開始されます</li>
         <li><strong>プラン変更</strong>：商品数の変動により月額が変わった場合、プランを変更して次回から新料金で引き落とし</li>
         <li><strong>自動更新</strong>：毎月の支払いはStripeが自動処理します（管理者の操作不要）</li>
+        <li><strong>月末一括更新</strong>：月末時点の商品数で翌月の料金を自動決定します</li>
     </ul>
+</div>
+
+<!-- 月末バッチ処理 -->
+<div class="batch-section">
+    <div class="batch-header">
+        <div>
+            <h3>月末一括料金更新</h3>
+            <p class="batch-desc">全ユーザーの現在の商品数に基づいて、サブスクリプション料金を一括更新します。<br>
+            月末23:59に自動実行されますが、手動で実行することもできます。</p>
+        </div>
+        {% if stripe_enabled %}
+        <button class="btn btn-primary btn-batch" onclick="runBatchUpdate()" id="batchBtn">
+            一括料金更新を実行
+        </button>
+        {% endif %}
+    </div>
+    
+    <!-- スケジューラー状態 -->
+    <div class="scheduler-status">
+        {% if scheduler_info.running %}
+        <span class="scheduler-badge scheduler-active">自動実行: 有効</span>
+        {% if scheduler_info.next_run %}
+        <span class="scheduler-next">次回実行予定: {{ scheduler_info.next_run }}</span>
+        {% endif %}
+        {% elif scheduler_info.enabled %}
+        <span class="scheduler-badge scheduler-stopped">自動実行: 停止中</span>
+        {% else %}
+        <span class="scheduler-badge scheduler-disabled">自動実行: 未設定</span>
+        {% endif %}
+    </div>
+    
+    <div id="batchResult" class="batch-result" style="display: none;"></div>
 </div>
 
 <!-- 月額利用料概要 -->
@@ -261,6 +294,153 @@
     margin: 0.25rem 0;
 }
 
+.batch-section {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.batch-header h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.batch-desc {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.btn-batch {
+    white-space: nowrap;
+    padding: 0.75rem 1.5rem;
+}
+
+.batch-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.batch-result.success {
+    background: #d1fae5;
+    border: 1px solid #10b981;
+    color: #065f46;
+}
+
+.batch-result.error {
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #991b1b;
+}
+
+.batch-result.loading {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+}
+
+.batch-details {
+    margin-top: 0.75rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.batch-details table {
+    width: 100%;
+    font-size: 0.8rem;
+    border-collapse: collapse;
+}
+
+.batch-details th,
+.batch-details td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.batch-details th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+.batch-status-updated {
+    color: #059669;
+    font-weight: 600;
+}
+
+.batch-status-unchanged {
+    color: #64748b;
+}
+
+.batch-status-error {
+    color: #dc2626;
+}
+
+.scheduler-status {
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.scheduler-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.scheduler-active {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.scheduler-active::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.scheduler-stopped {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.scheduler-disabled {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.scheduler-next {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -464,6 +644,16 @@
     .action-buttons {
         flex-direction: column;
     }
+    
+    .batch-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .btn-batch {
+        width: 100%;
+        margin-top: 0.75rem;
+    }
 }
 </style>
 
@@ -544,6 +734,95 @@ function copyUrl() {
     urlInput.select();
     document.execCommand('copy');
     alert('URLをコピーしました');
+}
+
+// 月末バッチ処理
+function runBatchUpdate() {
+    if (!confirm('全ユーザーの料金プランを現在の商品数に基づいて一括更新しますか？\n\n※通常は月末に自動実行されます。')) {
+        return;
+    }
+    
+    const btn = document.getElementById('batchBtn');
+    const resultDiv = document.getElementById('batchResult');
+    
+    btn.disabled = true;
+    btn.textContent = '処理中...';
+    resultDiv.style.display = 'block';
+    resultDiv.className = 'batch-result loading';
+    resultDiv.innerHTML = '処理を実行中です。しばらくお待ちください...';
+    
+    fetch('/admin/stripe/batch-update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = '一括料金更新を実行';
+        
+        if (data.success) {
+            resultDiv.className = 'batch-result success';
+            let html = `<strong>${data.message}</strong>`;
+            
+            if (data.results && data.results.details && data.results.details.length > 0) {
+                html += `
+                    <div class="batch-details">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ユーザー</th>
+                                    <th>商品数</th>
+                                    <th>結果</th>
+                                    <th>詳細</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                
+                data.results.details.forEach(d => {
+                    let statusClass = '';
+                    let statusText = '';
+                    let detail = '';
+                    
+                    if (d.status === 'updated') {
+                        statusClass = 'batch-status-updated';
+                        statusText = '更新';
+                        detail = `¥${d.previous_fee.toLocaleString()} → ¥${d.new_fee.toLocaleString()}`;
+                    } else if (d.status === 'unchanged') {
+                        statusClass = 'batch-status-unchanged';
+                        statusText = '変更なし';
+                        detail = `¥${d.fee.toLocaleString()}`;
+                    } else {
+                        statusClass = 'batch-status-error';
+                        statusText = 'エラー';
+                        detail = d.error || '';
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td>${d.user}</td>
+                            <td>${d.item_count !== undefined ? d.item_count + '件' : '-'}</td>
+                            <td class="${statusClass}">${statusText}</td>
+                            <td>${detail}</td>
+                        </tr>`;
+                });
+                
+                html += `</tbody></table></div>`;
+            }
+            
+            resultDiv.innerHTML = html;
+        } else {
+            resultDiv.className = 'batch-result error';
+            resultDiv.innerHTML = `<strong>エラー:</strong> ${data.error}`;
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.textContent = '一括料金更新を実行';
+        resultDiv.className = 'batch-result error';
+        resultDiv.innerHTML = `<strong>エラー:</strong> ${error}`;
+    });
 }
 
 // ESCキーでモーダルを閉じる

@@ -39,6 +39,14 @@ STRIPE_PRICE_IDS = {
 if STRIPE_ENABLED and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
+# APScheduler（月末自動処理用）
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    SCHEDULER_ENABLED = True
+except ImportError:
+    SCHEDULER_ENABLED = False
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
 
@@ -6151,10 +6159,26 @@ def admin_stripe_dashboard():
     cur.close()
     conn.close()
     
+    # スケジューラー情報を取得
+    scheduler_info = {
+        'enabled': SCHEDULER_ENABLED,
+        'running': scheduler is not None and scheduler.running if SCHEDULER_ENABLED else False,
+        'next_run': None
+    }
+    
+    if SCHEDULER_ENABLED and scheduler is not None and scheduler.running:
+        try:
+            job = scheduler.get_job('monthly_subscription_update')
+            if job and job.next_run_time:
+                scheduler_info['next_run'] = job.next_run_time.strftime('%Y-%m-%d %H:%M')
+        except:
+            pass
+    
     return render_template('admin/stripe_dashboard.html', 
                            users=users,
                            stripe_enabled=STRIPE_ENABLED and bool(STRIPE_SECRET_KEY),
-                           stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+                           stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
+                           scheduler_info=scheduler_info)
 
 def get_monthly_fee(item_count):
     """商品数から月額利用料を計算"""
@@ -6735,6 +6759,380 @@ def stripe_webhook():
         conn.close()
     
     return jsonify({'received': True})
+
+# ===================
+# 月末バッチ処理（料金自動更新）
+# ===================
+
+@app.route('/admin/stripe/batch-update', methods=['POST'])
+@login_required
+@admin_required
+def admin_stripe_batch_update():
+    """月末バッチ処理：全ユーザーの料金プランを商品数に基づいて自動更新"""
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        return jsonify({'success': False, 'error': 'Stripe連携が設定されていません'})
+    
+    conn = get_db()
+    results = {
+        'processed': 0,
+        'updated': 0,
+        'unchanged': 0,
+        'errors': 0,
+        'details': []
+    }
+    
+    try:
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # サブスク登録済みユーザーを取得
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.email,
+                       u.stripe_customer_id, u.stripe_subscription_id,
+                       COUNT(m.id) as item_count
+                FROM users u
+                LEFT JOIN merchandise m ON u.id = m.user_id
+                WHERE u.stripe_subscription_id IS NOT NULL
+                  AND u.subscription_status = 'active'
+                GROUP BY u.id
+            """)
+            users = cur.fetchall()
+            users = [dict(row) for row in users]
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.email,
+                       u.stripe_customer_id, u.stripe_subscription_id,
+                       COUNT(m.id) as item_count
+                FROM users u
+                LEFT JOIN merchandise m ON u.id = m.user_id
+                WHERE u.stripe_subscription_id IS NOT NULL
+                  AND u.subscription_status = 'active'
+                GROUP BY u.id
+            """)
+            users = [dict(row) for row in cur.fetchall()]
+        
+        for user in users:
+            results['processed'] += 1
+            user_name = user.get('display_name') or user.get('username')
+            subscription_id = user.get('stripe_subscription_id')
+            
+            try:
+                # 現在の商品数から新しい月額を計算
+                item_count = user.get('item_count', 0) or 0
+                new_monthly_fee = get_monthly_fee(item_count)
+                
+                # 現在のサブスクリプション情報を取得
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                current_price_id = subscription['items']['data'][0]['price']['id']
+                current_price = stripe.Price.retrieve(current_price_id)
+                current_fee = current_price.unit_amount
+                
+                if current_fee == new_monthly_fee:
+                    # 料金変更なし
+                    results['unchanged'] += 1
+                    results['details'].append({
+                        'user': user_name,
+                        'status': 'unchanged',
+                        'fee': current_fee,
+                        'item_count': item_count
+                    })
+                else:
+                    # 料金変更あり → プラン更新
+                    new_price_id = get_or_create_stripe_price(new_monthly_fee)
+                    if new_price_id:
+                        stripe.Subscription.modify(
+                            subscription_id,
+                            items=[{
+                                'id': subscription['items']['data'][0]['id'],
+                                'price': new_price_id,
+                            }],
+                            proration_behavior='none',  # 日割り計算なし（月末締めなので）
+                            metadata={
+                                'previous_fee': str(current_fee),
+                                'new_fee': str(new_monthly_fee),
+                                'updated_at': datetime.now().isoformat(),
+                                'batch_update': 'true'
+                            }
+                        )
+                        
+                        results['updated'] += 1
+                        results['details'].append({
+                            'user': user_name,
+                            'status': 'updated',
+                            'previous_fee': current_fee,
+                            'new_fee': new_monthly_fee,
+                            'item_count': item_count
+                        })
+                    else:
+                        results['errors'] += 1
+                        results['details'].append({
+                            'user': user_name,
+                            'status': 'error',
+                            'error': '料金プランの作成に失敗'
+                        })
+                        
+            except Exception as e:
+                results['errors'] += 1
+                results['details'].append({
+                    'user': user_name,
+                    'status': 'error',
+                    'error': str(e)
+                })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f"処理完了: {results['processed']}件処理, {results['updated']}件更新, {results['unchanged']}件変更なし, {results['errors']}件エラー",
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/stripe/batch-update', methods=['POST'])
+def api_stripe_batch_update():
+    """外部からのバッチ実行用API（cronやスケジューラー用）
+    
+    セキュリティのため、環境変数BATCH_API_KEYを設定し、
+    リクエストヘッダーにX-API-Key: <key>を含める必要があります。
+    """
+    api_key = os.environ.get('BATCH_API_KEY', '')
+    request_key = request.headers.get('X-API-Key', '')
+    
+    if not api_key or api_key != request_key:
+        return jsonify({'success': False, 'error': 'Invalid API key'}), 401
+    
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        return jsonify({'success': False, 'error': 'Stripe not configured'}), 400
+    
+    conn = get_db()
+    results = {
+        'processed': 0,
+        'updated': 0,
+        'unchanged': 0,
+        'errors': 0,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name,
+                       u.stripe_subscription_id,
+                       COUNT(m.id) as item_count
+                FROM users u
+                LEFT JOIN merchandise m ON u.id = m.user_id
+                WHERE u.stripe_subscription_id IS NOT NULL
+                  AND u.subscription_status = 'active'
+                GROUP BY u.id
+            """)
+            users = cur.fetchall()
+            users = [dict(row) for row in users]
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name,
+                       u.stripe_subscription_id,
+                       COUNT(m.id) as item_count
+                FROM users u
+                LEFT JOIN merchandise m ON u.id = m.user_id
+                WHERE u.stripe_subscription_id IS NOT NULL
+                  AND u.subscription_status = 'active'
+                GROUP BY u.id
+            """)
+            users = [dict(row) for row in cur.fetchall()]
+        
+        for user in users:
+            results['processed'] += 1
+            subscription_id = user.get('stripe_subscription_id')
+            
+            try:
+                item_count = user.get('item_count', 0) or 0
+                new_monthly_fee = get_monthly_fee(item_count)
+                
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                current_price_id = subscription['items']['data'][0]['price']['id']
+                current_price = stripe.Price.retrieve(current_price_id)
+                current_fee = current_price.unit_amount
+                
+                if current_fee == new_monthly_fee:
+                    results['unchanged'] += 1
+                else:
+                    new_price_id = get_or_create_stripe_price(new_monthly_fee)
+                    if new_price_id:
+                        stripe.Subscription.modify(
+                            subscription_id,
+                            items=[{
+                                'id': subscription['items']['data'][0]['id'],
+                                'price': new_price_id,
+                            }],
+                            proration_behavior='none'
+                        )
+                        results['updated'] += 1
+                    else:
+                        results['errors'] += 1
+                        
+            except Exception as e:
+                results['errors'] += 1
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ===================
+# 月末自動スケジューラー
+# ===================
+
+def run_monthly_batch_update():
+    """月末バッチ処理（スケジューラーから呼び出し）"""
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        print(f"[{datetime.now()}] Monthly batch skipped: Stripe not configured")
+        return
+    
+    print(f"[{datetime.now()}] Starting monthly batch update...")
+    
+    with app.app_context():
+        conn = get_db()
+        results = {'processed': 0, 'updated': 0, 'unchanged': 0, 'errors': 0}
+        
+        try:
+            if DATABASE_URL:
+                from psycopg2.extras import RealDictCursor
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("""
+                    SELECT u.id, u.username, u.display_name,
+                           u.stripe_subscription_id,
+                           COUNT(m.id) as item_count
+                    FROM users u
+                    LEFT JOIN merchandise m ON u.id = m.user_id
+                    WHERE u.stripe_subscription_id IS NOT NULL
+                      AND u.subscription_status = 'active'
+                    GROUP BY u.id
+                """)
+                users = cur.fetchall()
+                users = [dict(row) for row in users]
+            else:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT u.id, u.username, u.display_name,
+                           u.stripe_subscription_id,
+                           COUNT(m.id) as item_count
+                    FROM users u
+                    LEFT JOIN merchandise m ON u.id = m.user_id
+                    WHERE u.stripe_subscription_id IS NOT NULL
+                      AND u.subscription_status = 'active'
+                    GROUP BY u.id
+                """)
+                users = [dict(row) for row in cur.fetchall()]
+            
+            for user in users:
+                results['processed'] += 1
+                subscription_id = user.get('stripe_subscription_id')
+                user_name = user.get('display_name') or user.get('username')
+                
+                try:
+                    item_count = user.get('item_count', 0) or 0
+                    new_monthly_fee = get_monthly_fee(item_count)
+                    
+                    subscription = stripe.Subscription.retrieve(subscription_id)
+                    current_price_id = subscription['items']['data'][0]['price']['id']
+                    current_price = stripe.Price.retrieve(current_price_id)
+                    current_fee = current_price.unit_amount
+                    
+                    if current_fee == new_monthly_fee:
+                        results['unchanged'] += 1
+                    else:
+                        new_price_id = get_or_create_stripe_price(new_monthly_fee)
+                        if new_price_id:
+                            stripe.Subscription.modify(
+                                subscription_id,
+                                items=[{
+                                    'id': subscription['items']['data'][0]['id'],
+                                    'price': new_price_id,
+                                }],
+                                proration_behavior='none'
+                            )
+                            results['updated'] += 1
+                            print(f"  Updated {user_name}: ¥{current_fee:,} → ¥{new_monthly_fee:,}")
+                        else:
+                            results['errors'] += 1
+                            
+                except Exception as e:
+                    results['errors'] += 1
+                    print(f"  Error for {user_name}: {e}")
+            
+            cur.close()
+            conn.close()
+            
+            print(f"[{datetime.now()}] Monthly batch completed: "
+                  f"{results['processed']} processed, {results['updated']} updated, "
+                  f"{results['unchanged']} unchanged, {results['errors']} errors")
+            
+        except Exception as e:
+            print(f"[{datetime.now()}] Monthly batch failed: {e}")
+
+# スケジューラー初期化
+scheduler = None
+
+def init_scheduler():
+    """スケジューラーを初期化"""
+    global scheduler
+    
+    if not SCHEDULER_ENABLED:
+        print("APScheduler not installed, skipping scheduler initialization")
+        return
+    
+    # 既にスケジューラーが動作中の場合はスキップ
+    if scheduler is not None and scheduler.running:
+        return
+    
+    scheduler = BackgroundScheduler(timezone='Asia/Tokyo')
+    
+    # 月末23:59に実行（毎月最終日）
+    # day='last' は月の最終日を意味する
+    scheduler.add_job(
+        run_monthly_batch_update,
+        CronTrigger(day='last', hour=23, minute=59, timezone='Asia/Tokyo'),
+        id='monthly_subscription_update',
+        name='月末サブスクリプション料金更新',
+        replace_existing=True
+    )
+    
+    scheduler.start()
+    print(f"[{datetime.now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
+
+# アプリ起動時にスケジューラーを初期化
+# Gunicorn等で複数ワーカーの場合、重複起動を防ぐ
+import atexit
+
+if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+    init_scheduler()
+
+# アプリ終了時にスケジューラーを停止
+@atexit.register
+def shutdown_scheduler():
+    global scheduler
+    if scheduler is not None and scheduler.running:
+        scheduler.shutdown(wait=False)
+        print(f"[{datetime.now()}] Scheduler stopped")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
