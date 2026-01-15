@@ -3,6 +3,59 @@
 
 {% block content %}
 <div class="profile-container">
+    <!-- 月額利用料情報 -->
+    <div class="billing-section">
+        <h2>月額利用料</h2>
+        <div class="billing-card">
+            <div class="billing-main">
+                <div class="billing-fee">
+                    <span class="fee-label">現在の月額</span>
+                    <span class="fee-amount">¥{{ "{:,}".format(billing_info.monthly_fee) }}</span>
+                </div>
+                <div class="billing-detail">
+                    <span class="detail-item">商品登録数: <strong>{{ billing_info.item_count }}件</strong></span>
+                </div>
+            </div>
+            <div class="billing-status">
+                {% if billing_info.has_subscription %}
+                    {% if billing_info.subscription_status == 'active' %}
+                    <span class="status-badge status-active">自動引落し有効</span>
+                    {% elif billing_info.subscription_status == 'past_due' %}
+                    <span class="status-badge status-past-due">支払い遅延</span>
+                    {% elif billing_info.subscription_status == 'canceling' %}
+                    <span class="status-badge status-canceling">解約予定</span>
+                    {% else %}
+                    <span class="status-badge status-inactive">{{ billing_info.subscription_status or '確認中' }}</span>
+                    {% endif %}
+                {% else %}
+                <span class="status-badge status-none">未登録</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if billing_info.has_subscription and billing_info.subscription_status == 'active' %}
+        <div class="billing-dates">
+            {% if billing_info.last_payment_date %}
+            <span>最終支払日: {{ billing_info.last_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+            {% if billing_info.next_payment_date %}
+            <span>次回引落日: {{ billing_info.next_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="billing-note">
+            <p>月額利用料は、月末時点の商品登録数に基づいて決定されます。</p>
+            <table class="fee-table-mini">
+                <tr><td>0〜49件</td><td>¥2,500</td></tr>
+                <tr><td>50〜99件</td><td>¥5,000</td></tr>
+                <tr><td>100〜149件</td><td>¥10,000</td></tr>
+                <tr><td>150〜199件</td><td>¥20,000</td></tr>
+                <tr><td>200件以上</td><td>¥30,000</td></tr>
+            </table>
+        </div>
+    </div>
+
     <form method="POST" class="profile-form">
         <div class="form-section">
             <h2>基本情報</h2>
@@ -41,6 +94,157 @@
         </div>
     </form>
 </div>
+
+<style>
+.billing-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.billing-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.billing-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #0ea5e9;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.billing-main {
+    flex: 1;
+}
+
+.billing-fee {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.fee-label {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.fee-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0369a1;
+    font-family: 'Consolas', monospace;
+}
+
+.billing-detail {
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.detail-item strong {
+    color: #1e293b;
+}
+
+.billing-status {
+    margin-left: 1rem;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-active {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-past-due {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-canceling {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.status-none {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.billing-dates {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+}
+
+.billing-note {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.billing-note p {
+    margin: 0 0 0.75rem 0;
+}
+
+.fee-table-mini {
+    width: 100%;
+    max-width: 280px;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.fee-table-mini td {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fee-table-mini td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+@media (max-width: 768px) {
+    .billing-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .billing-status {
+        margin-left: 0;
+    }
+    
+    .billing-dates {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
+</style>
 {% endblock %}
 
 

@@ -1073,7 +1073,61 @@ def profile():
         flash('プロフィールを更新しました', 'success')
         return redirect(url_for('profile'))
     
-    return render_template('profile.html')
+    # ユーザーの商品数と月額利用料を取得
+    conn = get_db()
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT u.subscription_status, u.stripe_subscription_id, 
+                   u.last_payment_date, u.next_payment_date,
+                   COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = %s
+            GROUP BY u.id
+        """, (current_user.id,))
+        user_info = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.subscription_status, u.stripe_subscription_id, 
+                   u.last_payment_date, u.next_payment_date,
+                   COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = ?
+            GROUP BY u.id
+        """, (current_user.id,))
+        user_info = cur.fetchone()
+        user_info = dict(user_info) if user_info else {}
+    
+    cur.close()
+    conn.close()
+    
+    # 月額利用料を計算
+    item_count = user_info.get('item_count', 0) if user_info else 0
+    if item_count < 50:
+        monthly_fee = 2500
+    elif item_count < 100:
+        monthly_fee = 5000
+    elif item_count < 150:
+        monthly_fee = 10000
+    elif item_count < 200:
+        monthly_fee = 20000
+    else:
+        monthly_fee = 30000
+    
+    billing_info = {
+        'item_count': item_count,
+        'monthly_fee': monthly_fee,
+        'subscription_status': user_info.get('subscription_status') if user_info else None,
+        'has_subscription': bool(user_info.get('stripe_subscription_id')) if user_info else False,
+        'last_payment_date': user_info.get('last_payment_date') if user_info else None,
+        'next_payment_date': user_info.get('next_payment_date') if user_info else None
+    }
+    
+    return render_template('profile.html', billing_info=billing_info)
 
 # ===================
 # 商品管理ルート
