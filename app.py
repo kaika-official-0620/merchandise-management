@@ -26,6 +26,16 @@ STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 
+# Stripe料金プラン（Price ID）- 各月額料金に対応
+# Stripeダッシュボードで作成したPriceのIDを設定
+STRIPE_PRICE_IDS = {
+    2500: os.environ.get('STRIPE_PRICE_2500', ''),    # ¥2,500/月 (0-49件)
+    5000: os.environ.get('STRIPE_PRICE_5000', ''),    # ¥5,000/月 (50-99件)
+    10000: os.environ.get('STRIPE_PRICE_10000', ''),  # ¥10,000/月 (100-149件)
+    20000: os.environ.get('STRIPE_PRICE_20000', ''),  # ¥20,000/月 (150-199件)
+    30000: os.environ.get('STRIPE_PRICE_30000', ''),  # ¥30,000/月 (200件以上)
+}
+
 if STRIPE_ENABLED and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -6146,14 +6156,72 @@ def admin_stripe_dashboard():
                            stripe_enabled=STRIPE_ENABLED and bool(STRIPE_SECRET_KEY),
                            stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
 
-@app.route('/admin/stripe/create-checkout/<int:user_id>')
+def get_monthly_fee(item_count):
+    """商品数から月額利用料を計算"""
+    if item_count < 50:
+        return 2500
+    elif item_count < 100:
+        return 5000
+    elif item_count < 150:
+        return 10000
+    elif item_count < 200:
+        return 20000
+    else:
+        return 30000
+
+def get_or_create_stripe_price(monthly_fee):
+    """Stripeの料金プラン（Price）を取得または動的に作成"""
+    # 環境変数に設定されたPrice IDを使用
+    price_id = STRIPE_PRICE_IDS.get(monthly_fee)
+    if price_id:
+        return price_id
+    
+    # Price IDが設定されていない場合は動的に作成
+    try:
+        # 既存のProductを検索または作成
+        products = stripe.Product.list(limit=1, active=True)
+        product_id = None
+        
+        for product in products.data:
+            if product.metadata.get('type') == 'monthly_subscription':
+                product_id = product.id
+                break
+        
+        if not product_id:
+            product = stripe.Product.create(
+                name='月額利用料',
+                description='商品管理システム月額利用料',
+                metadata={'type': 'monthly_subscription'}
+            )
+            product_id = product.id
+        
+        # 該当金額のPriceを検索
+        prices = stripe.Price.list(product=product_id, active=True)
+        for price in prices.data:
+            if price.unit_amount == monthly_fee and price.recurring and price.recurring.interval == 'month':
+                return price.id
+        
+        # 見つからない場合は新規作成
+        price = stripe.Price.create(
+            product=product_id,
+            unit_amount=monthly_fee,
+            currency='jpy',
+            recurring={'interval': 'month'},
+            metadata={'monthly_fee': str(monthly_fee)}
+        )
+        return price.id
+        
+    except Exception as e:
+        print(f"Price creation error: {e}")
+        return None
+
+@app.route('/admin/stripe/subscribe/<int:user_id>')
 @login_required
 @admin_required
-def admin_stripe_create_checkout(user_id):
-    """Stripe Checkoutセッション作成（管理者がユーザーの支払いリンクを生成）"""
+def admin_stripe_subscribe(user_id):
+    """サブスクリプション開始（自動引き落とし設定）"""
     if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
-        flash('Stripe連携が設定されていません', 'error')
-        return redirect(url_for('admin_stripe_dashboard'))
+        return jsonify({'success': False, 'error': 'Stripe連携が設定されていません'})
     
     conn = get_db()
     
@@ -6181,21 +6249,19 @@ def admin_stripe_create_checkout(user_id):
         user = dict(user) if user else None
     
     if not user:
-        flash('ユーザーが見つかりません', 'error')
-        return redirect(url_for('admin_stripe_dashboard'))
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません'})
+    
+    # 既にサブスクリプションがある場合
+    if user.get('stripe_subscription_id'):
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': '既にサブスクリプションが登録されています'})
     
     # 月額利用料を計算
     item_count = user.get('item_count', 0) or 0
-    if item_count < 50:
-        monthly_fee = 2500
-    elif item_count < 100:
-        monthly_fee = 5000
-    elif item_count < 150:
-        monthly_fee = 10000
-    elif item_count < 200:
-        monthly_fee = 20000
-    else:
-        monthly_fee = 30000
+    monthly_fee = get_monthly_fee(item_count)
     
     try:
         # Stripe顧客を作成または取得
@@ -6204,11 +6270,10 @@ def admin_stripe_create_checkout(user_id):
             customer = stripe.Customer.create(
                 email=user['email'],
                 name=user.get('display_name') or user['username'],
-                metadata={'user_id': user_id}
+                metadata={'user_id': str(user_id)}
             )
             stripe_customer_id = customer.id
             
-            # DBに保存
             if DATABASE_URL:
                 cur.execute("UPDATE users SET stripe_customer_id = %s WHERE id = %s", 
                            (stripe_customer_id, user_id))
@@ -6217,36 +6282,34 @@ def admin_stripe_create_checkout(user_id):
                            (stripe_customer_id, user_id))
             conn.commit()
         
-        # Checkoutセッション作成（単発支払い）
+        # 料金プランを取得
+        price_id = get_or_create_stripe_price(monthly_fee)
+        if not price_id:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '料金プランの作成に失敗しました'})
+        
+        # Checkout Session作成（サブスクリプションモード）
         base_url = request.host_url.rstrip('/')
         session = stripe.checkout.Session.create(
             customer=stripe_customer_id,
             payment_method_types=['card'],
             line_items=[{
-                'price_data': {
-                    'currency': 'jpy',
-                    'product_data': {
-                        'name': f'月額利用料（{datetime.now().strftime("%Y年%m月")}分）',
-                        'description': f'商品登録数: {item_count}件',
-                    },
-                    'unit_amount': monthly_fee,
-                },
+                'price': price_id,
                 'quantity': 1,
             }],
-            mode='payment',
+            mode='subscription',
             success_url=f'{base_url}/admin/stripe/success?session_id={{CHECKOUT_SESSION_ID}}&user_id={user_id}',
             cancel_url=f'{base_url}/admin/stripe/cancel',
             metadata={
                 'user_id': str(user_id),
-                'monthly_fee': str(monthly_fee),
-                'item_count': str(item_count)
+                'monthly_fee': str(monthly_fee)
             }
         )
         
         cur.close()
         conn.close()
         
-        # 決済ページURLを返す
         return jsonify({
             'success': True,
             'checkout_url': session.url,
@@ -6256,51 +6319,221 @@ def admin_stripe_create_checkout(user_id):
     except Exception as e:
         cur.close()
         conn.close()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/admin/stripe/change-plan/<int:user_id>')
+@login_required
+@admin_required
+def admin_stripe_change_plan(user_id):
+    """サブスクリプションのプラン変更（料金変更時）"""
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        return jsonify({'success': False, 'error': 'Stripe連携が設定されていません'})
+    
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT u.*, COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = %s
+            GROUP BY u.id
+        """, (user_id,))
+        user = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.*, COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = ?
+            GROUP BY u.id
+        """, (user_id,))
+        user = cur.fetchone()
+        user = dict(user) if user else None
+    
+    if not user:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません'})
+    
+    subscription_id = user.get('stripe_subscription_id')
+    if not subscription_id:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': 'サブスクリプションが登録されていません。先にサブスクリプションを開始してください。'})
+    
+    # 新しい月額利用料を計算
+    item_count = user.get('item_count', 0) or 0
+    new_monthly_fee = get_monthly_fee(item_count)
+    
+    try:
+        # 現在のサブスクリプションを取得
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        current_price_id = subscription['items']['data'][0]['price']['id']
+        current_price = stripe.Price.retrieve(current_price_id)
+        current_fee = current_price.unit_amount
+        
+        # 料金が同じ場合は変更不要
+        if current_fee == new_monthly_fee:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '料金に変更はありません'})
+        
+        # 新しい料金プランを取得
+        new_price_id = get_or_create_stripe_price(new_monthly_fee)
+        if not new_price_id:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '新しい料金プランの作成に失敗しました'})
+        
+        # サブスクリプションを更新
+        stripe.Subscription.modify(
+            subscription_id,
+            items=[{
+                'id': subscription['items']['data'][0]['id'],
+                'price': new_price_id,
+            }],
+            proration_behavior='create_prorations',  # 日割り計算を有効化
+            metadata={
+                'previous_fee': str(current_fee),
+                'new_fee': str(new_monthly_fee),
+                'changed_at': datetime.now().isoformat()
+            }
+        )
+        
+        cur.close()
+        conn.close()
+        
         return jsonify({
-            'success': False,
-            'error': str(e)
+            'success': True,
+            'message': f'プランを ¥{current_fee:,} → ¥{new_monthly_fee:,} に変更しました',
+            'previous_fee': current_fee,
+            'new_fee': new_monthly_fee
         })
+        
+    except stripe.error.InvalidRequestError as e:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': f'Stripeエラー: {str(e)}'})
+    except Exception as e:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/admin/stripe/cancel-subscription/<int:user_id>')
+@login_required
+@admin_required
+def admin_stripe_cancel_subscription(user_id):
+    """サブスクリプションをキャンセル"""
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        return jsonify({'success': False, 'error': 'Stripe連携が設定されていません'})
+    
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        user = dict(user) if user else None
+    
+    if not user:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': 'ユーザーが見つかりません'})
+    
+    subscription_id = user.get('stripe_subscription_id')
+    if not subscription_id:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': 'サブスクリプションが登録されていません'})
+    
+    try:
+        # サブスクリプションをキャンセル（期間終了時に停止）
+        stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=True
+        )
+        
+        # DBを更新
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE users SET subscription_status = 'canceling' WHERE id = %s
+            """, (user_id,))
+        else:
+            cur.execute("""
+                UPDATE users SET subscription_status = 'canceling' WHERE id = ?
+            """, (user_id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'サブスクリプションは現在の期間終了時にキャンセルされます'
+        })
+        
+    except Exception as e:
+        cur.close()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/admin/stripe/success')
 @login_required
 @admin_required
 def admin_stripe_success():
-    """支払い成功"""
+    """サブスクリプション登録成功"""
     session_id = request.args.get('session_id')
     user_id = request.args.get('user_id')
     
     if session_id and user_id and STRIPE_ENABLED:
         try:
             session = stripe.checkout.Session.retrieve(session_id)
-            if session.payment_status == 'paid':
+            subscription_id = session.get('subscription')
+            
+            if subscription_id:
                 conn = get_db()
                 cur = conn.cursor()
+                
+                # サブスクリプション情報を取得
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                current_period_end = datetime.fromtimestamp(subscription.current_period_end)
                 
                 now = datetime.now()
                 if DATABASE_URL:
                     cur.execute("""
                         UPDATE users 
-                        SET subscription_status = 'active',
+                        SET stripe_subscription_id = %s,
+                            subscription_status = 'active',
                             last_payment_date = %s,
                             next_payment_date = %s
                         WHERE id = %s
-                    """, (now, now + timedelta(days=30), user_id))
+                    """, (subscription_id, now, current_period_end, user_id))
                 else:
                     cur.execute("""
                         UPDATE users 
-                        SET subscription_status = 'active',
+                        SET stripe_subscription_id = ?,
+                            subscription_status = 'active',
                             last_payment_date = ?,
                             next_payment_date = ?
                         WHERE id = ?
-                    """, (now, now + timedelta(days=30), user_id))
+                    """, (subscription_id, now, current_period_end, user_id))
                 
                 conn.commit()
                 cur.close()
                 conn.close()
                 
-                flash('支払いが完了しました', 'success')
+                flash('サブスクリプション登録が完了しました。毎月自動で引き落としされます。', 'success')
         except Exception as e:
-            flash(f'支払い確認エラー: {str(e)}', 'error')
+            flash(f'登録確認エラー: {str(e)}', 'error')
     
     return redirect(url_for('admin_stripe_dashboard'))
 
@@ -6309,7 +6542,7 @@ def admin_stripe_success():
 @admin_required
 def admin_stripe_cancel():
     """支払いキャンセル"""
-    flash('支払いがキャンセルされました', 'info')
+    flash('登録がキャンセルされました', 'info')
     return redirect(url_for('admin_stripe_dashboard'))
 
 @app.route('/stripe/webhook', methods=['POST'])
@@ -6334,40 +6567,172 @@ def stripe_webhook():
         return jsonify({'error': 'Invalid signature'}), 400
     
     # イベント処理
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        user_id = session.get('metadata', {}).get('user_id')
+    event_type = event['type']
+    
+    # サブスクリプション作成完了
+    if event_type == 'customer.subscription.created':
+        subscription = event['data']['object']
+        customer_id = subscription['customer']
+        subscription_id = subscription['id']
         
-        if user_id and session.get('payment_status') == 'paid':
+        conn = get_db()
+        cur = conn.cursor()
+        
+        current_period_end = datetime.fromtimestamp(subscription['current_period_end'])
+        now = datetime.now()
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE users 
+                SET stripe_subscription_id = %s,
+                    subscription_status = 'active',
+                    last_payment_date = %s,
+                    next_payment_date = %s
+                WHERE stripe_customer_id = %s
+            """, (subscription_id, now, current_period_end, customer_id))
+        else:
+            cur.execute("""
+                UPDATE users 
+                SET stripe_subscription_id = ?,
+                    subscription_status = 'active',
+                    last_payment_date = ?,
+                    next_payment_date = ?
+                WHERE stripe_customer_id = ?
+            """, (subscription_id, now, current_period_end, customer_id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+    
+    # サブスクリプション更新（毎月の支払い成功）
+    elif event_type == 'invoice.payment_succeeded':
+        invoice = event['data']['object']
+        subscription_id = invoice.get('subscription')
+        
+        if subscription_id:
             conn = get_db()
             cur = conn.cursor()
             
-            now = datetime.now()
+            # サブスクリプション情報を取得して次回支払日を更新
+            try:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                current_period_end = datetime.fromtimestamp(subscription['current_period_end'])
+                now = datetime.now()
+                
+                if DATABASE_URL:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'active',
+                            last_payment_date = %s,
+                            next_payment_date = %s
+                        WHERE stripe_subscription_id = %s
+                    """, (now, current_period_end, subscription_id))
+                else:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'active',
+                            last_payment_date = ?,
+                            next_payment_date = ?
+                        WHERE stripe_subscription_id = ?
+                    """, (now, current_period_end, subscription_id))
+                
+                conn.commit()
+            except Exception as e:
+                print(f"Webhook invoice.payment_succeeded error: {e}")
+            finally:
+                cur.close()
+                conn.close()
+    
+    # 支払い失敗
+    elif event_type == 'invoice.payment_failed':
+        invoice = event['data']['object']
+        subscription_id = invoice.get('subscription')
+        
+        if subscription_id:
+            conn = get_db()
+            cur = conn.cursor()
+            
             if DATABASE_URL:
                 cur.execute("""
-                    UPDATE users 
-                    SET subscription_status = 'active',
-                        last_payment_date = %s,
-                        next_payment_date = %s
-                    WHERE id = %s
-                """, (now, now + timedelta(days=30), user_id))
+                    UPDATE users SET subscription_status = 'past_due'
+                    WHERE stripe_subscription_id = %s
+                """, (subscription_id,))
             else:
                 cur.execute("""
-                    UPDATE users 
-                    SET subscription_status = 'active',
-                        last_payment_date = ?,
-                        next_payment_date = ?
-                    WHERE id = ?
-                """, (now, now + timedelta(days=30), user_id))
+                    UPDATE users SET subscription_status = 'past_due'
+                    WHERE stripe_subscription_id = ?
+                """, (subscription_id,))
             
             conn.commit()
             cur.close()
             conn.close()
     
-    elif event['type'] == 'payment_intent.payment_failed':
-        payment_intent = event['data']['object']
-        # 支払い失敗時の処理（必要に応じて通知など）
-        pass
+    # サブスクリプションキャンセル
+    elif event_type == 'customer.subscription.deleted':
+        subscription = event['data']['object']
+        subscription_id = subscription['id']
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE users 
+                SET stripe_subscription_id = NULL,
+                    subscription_status = 'canceled'
+                WHERE stripe_subscription_id = %s
+            """, (subscription_id,))
+        else:
+            cur.execute("""
+                UPDATE users 
+                SET stripe_subscription_id = NULL,
+                    subscription_status = 'canceled'
+                WHERE stripe_subscription_id = ?
+            """, (subscription_id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+    
+    # サブスクリプション更新（プラン変更など）
+    elif event_type == 'customer.subscription.updated':
+        subscription = event['data']['object']
+        subscription_id = subscription['id']
+        status = subscription['status']
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        current_period_end = datetime.fromtimestamp(subscription['current_period_end'])
+        
+        # Stripeのステータスをマッピング
+        status_map = {
+            'active': 'active',
+            'past_due': 'past_due',
+            'canceled': 'canceled',
+            'unpaid': 'unpaid',
+            'trialing': 'active'
+        }
+        mapped_status = status_map.get(status, status)
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE users 
+                SET subscription_status = %s,
+                    next_payment_date = %s
+                WHERE stripe_subscription_id = %s
+            """, (mapped_status, current_period_end, subscription_id))
+        else:
+            cur.execute("""
+                UPDATE users 
+                SET subscription_status = ?,
+                    next_payment_date = ?
+                WHERE stripe_subscription_id = ?
+            """, (mapped_status, current_period_end, subscription_id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
     
     return jsonify({'received': True})
 

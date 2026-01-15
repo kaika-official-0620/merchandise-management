@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Stripe決済管理</h1>
+    <h1>月額利用料管理（自動引き落とし）</h1>
 </div>
 
 <div class="admin-nav">
@@ -28,6 +28,16 @@
 </div>
 {% endif %}
 
+<!-- 運用説明 -->
+<div class="info-box">
+    <h3>自動引き落としについて</h3>
+    <ul>
+        <li><strong>サブスク開始</strong>：ユーザーがクレジットカードを登録し、毎月自動引き落としが開始されます</li>
+        <li><strong>プラン変更</strong>：商品数の変動により月額が変わった場合、プランを変更して次回から新料金で引き落とし</li>
+        <li><strong>自動更新</strong>：毎月の支払いはStripeが自動処理します（管理者の操作不要）</li>
+    </ul>
+</div>
+
 <!-- 月額利用料概要 -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -39,13 +49,13 @@
     <div class="stat-card">
         <div class="stat-content">
             <span class="stat-value">{{ users|selectattr('subscription_status', 'equalto', 'active')|list|length }}</span>
-            <span class="stat-label">支払い済</span>
+            <span class="stat-label">サブスク有効</span>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-content">
-            <span class="stat-value">{{ users|rejectattr('subscription_status', 'equalto', 'active')|list|length }}</span>
-            <span class="stat-label">未払い</span>
+            <span class="stat-value">{{ users|rejectattr('stripe_subscription_id')|list|length }}</span>
+            <span class="stat-label">未登録</span>
         </div>
     </div>
     <div class="stat-card highlight">
@@ -58,7 +68,7 @@
 
 <!-- ユーザー別支払い状況 -->
 <div class="admin-section">
-    <h2>ユーザー別支払い状況</h2>
+    <h2>ユーザー別サブスクリプション状況</h2>
     <div class="admin-table-container">
         <table class="admin-table">
             <thead>
@@ -67,15 +77,15 @@
                     <th>メール</th>
                     <th>商品数</th>
                     <th>月額利用料</th>
-                    <th>支払い状況</th>
+                    <th>サブスク状況</th>
                     <th>最終支払日</th>
-                    <th>次回期限</th>
+                    <th>次回引落日</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody>
                 {% for user in users %}
-                <tr class="{% if user.subscription_status != 'active' %}row-unpaid{% endif %}">
+                <tr class="{% if not user.stripe_subscription_id %}row-no-sub{% elif user.subscription_status != 'active' %}row-unpaid{% endif %}" data-user-id="{{ user.id }}">
                     <td>
                         <strong>{{ user.display_name or user.username }}</strong>
                         {% if user.role == 'admin' %}
@@ -90,10 +100,18 @@
                         </span>
                     </td>
                     <td>
-                        {% if user.subscription_status == 'active' %}
-                        <span class="status-badge status-paid">支払い済</span>
+                        {% if not user.stripe_subscription_id %}
+                        <span class="status-badge status-none">未登録</span>
+                        {% elif user.subscription_status == 'active' %}
+                        <span class="status-badge status-active">有効</span>
+                        {% elif user.subscription_status == 'canceling' %}
+                        <span class="status-badge status-canceling">解約予定</span>
+                        {% elif user.subscription_status == 'past_due' %}
+                        <span class="status-badge status-past-due">支払い遅延</span>
+                        {% elif user.subscription_status == 'canceled' %}
+                        <span class="status-badge status-canceled">解約済み</span>
                         {% else %}
-                        <span class="status-badge status-unpaid">未払い</span>
+                        <span class="status-badge status-inactive">{{ user.subscription_status or '不明' }}</span>
                         {% endif %}
                     </td>
                     <td>{{ user.last_payment_date.strftime('%Y-%m-%d') if user.last_payment_date else '-' }}</td>
@@ -108,11 +126,22 @@
                             -
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="action-buttons">
                         {% if stripe_enabled %}
-                        <button class="btn btn-sm btn-primary" onclick="createCheckout({{ user.id }})">
-                            決済リンク生成
-                        </button>
+                            {% if not user.stripe_subscription_id %}
+                            <button class="btn btn-sm btn-primary" onclick="startSubscription({{ user.id }})">
+                                サブスク開始
+                            </button>
+                            {% else %}
+                            <button class="btn btn-sm btn-secondary" onclick="changePlan({{ user.id }})">
+                                プラン変更
+                            </button>
+                            {% if user.subscription_status != 'canceling' %}
+                            <button class="btn btn-sm btn-danger" onclick="cancelSubscription({{ user.id }})">
+                                解約
+                            </button>
+                            {% endif %}
+                            {% endif %}
                         {% else %}
                         <span class="text-muted">Stripe未設定</span>
                         {% endif %}
@@ -130,7 +159,7 @@
 
 <!-- 料金体系 -->
 <div class="admin-section">
-    <h2>月額利用料体系</h2>
+    <h2>月額利用料体系（ユーザー管理の商品数に基づく）</h2>
     <div class="fee-table">
         <table class="admin-table">
             <thead>
@@ -165,16 +194,17 @@
     </div>
 </div>
 
-<!-- 決済リンクモーダル -->
-<div class="modal" id="checkoutModal" style="display: none;">
+<!-- サブスク登録モーダル -->
+<div class="modal" id="subscribeModal" style="display: none;">
     <div class="modal-overlay" onclick="closeModal()"></div>
     <div class="modal-content">
         <div class="modal-header">
-            <h3>決済リンク</h3>
+            <h3>サブスクリプション登録</h3>
             <button class="modal-close" onclick="closeModal()">×</button>
         </div>
         <div class="modal-body">
-            <p>以下のリンクをユーザーに送信してください：</p>
+            <p>以下のリンクをユーザーに送信してください。</p>
+            <p>ユーザーがリンクからクレジットカードを登録すると、<strong>毎月自動引き落とし</strong>が開始されます。</p>
             <div class="checkout-url-box">
                 <input type="text" id="checkoutUrl" readonly>
                 <button onclick="copyUrl()" class="btn btn-secondary btn-sm">コピー</button>
@@ -182,13 +212,55 @@
             <p class="modal-note">※リンクの有効期限は24時間です</p>
         </div>
         <div class="modal-footer">
-            <a href="#" id="checkoutLink" target="_blank" class="btn btn-primary">決済ページを開く</a>
+            <a href="#" id="checkoutLink" target="_blank" class="btn btn-primary">登録ページを開く</a>
             <button onclick="closeModal()" class="btn btn-secondary">閉じる</button>
         </div>
     </div>
 </div>
 
+<!-- 結果モーダル -->
+<div class="modal" id="resultModal" style="display: none;">
+    <div class="modal-overlay" onclick="closeResultModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="resultTitle">結果</h3>
+            <button class="modal-close" onclick="closeResultModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p id="resultMessage"></p>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeResultModal()" class="btn btn-primary">OK</button>
+        </div>
+    </div>
+</div>
+
 <style>
+.info-box {
+    background: #f0f9ff;
+    border: 1px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.info-box h3 {
+    margin: 0 0 0.5rem 0;
+    color: #0369a1;
+    font-size: 1rem;
+}
+
+.info-box ul {
+    margin: 0;
+    padding-left: 1.5rem;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.info-box li {
+    margin: 0.25rem 0;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -221,6 +293,10 @@
     color: #64748b;
 }
 
+.row-no-sub {
+    background: #f8fafc !important;
+}
+
 .row-unpaid {
     background: #fef2f2 !important;
 }
@@ -230,16 +306,37 @@
     border-radius: 20px;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
-.status-paid {
+.status-active {
     background: #d1fae5;
     color: #059669;
 }
 
-.status-unpaid {
+.status-none {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.status-canceling {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-past-due {
     background: #fee2e2;
     color: #dc2626;
+}
+
+.status-canceled {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
 }
 
 .fee-badge {
@@ -257,6 +354,21 @@
 
 .text-danger { color: #dc2626; }
 .text-warning { color: #d97706; }
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
 
 .modal {
     position: fixed;
@@ -348,29 +460,83 @@
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
 }
 </style>
 
 <script>
-function createCheckout(userId) {
-    fetch(`/admin/stripe/create-checkout/${userId}`)
+function startSubscription(userId) {
+    fetch(`/admin/stripe/subscribe/${userId}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 document.getElementById('checkoutUrl').value = data.checkout_url;
                 document.getElementById('checkoutLink').href = data.checkout_url;
-                document.getElementById('checkoutModal').style.display = 'flex';
+                document.getElementById('subscribeModal').style.display = 'flex';
             } else {
-                alert('エラー: ' + data.error);
+                showResult('エラー', data.error);
             }
         })
         .catch(error => {
-            alert('エラーが発生しました: ' + error);
+            showResult('エラー', 'エラーが発生しました: ' + error);
         });
 }
 
+function changePlan(userId) {
+    if (!confirm('商品数に基づいて料金プランを更新しますか？\n（料金が変わっていない場合は更新されません）')) {
+        return;
+    }
+    
+    fetch(`/admin/stripe/change-plan/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showResult('プラン変更完了', data.message);
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showResult('エラー', data.error);
+            }
+        })
+        .catch(error => {
+            showResult('エラー', 'エラーが発生しました: ' + error);
+        });
+}
+
+function cancelSubscription(userId) {
+    if (!confirm('サブスクリプションを解約しますか？\n現在の期間終了後に自動引き落としが停止されます。')) {
+        return;
+    }
+    
+    fetch(`/admin/stripe/cancel-subscription/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showResult('解約予約完了', data.message);
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showResult('エラー', data.error);
+            }
+        })
+        .catch(error => {
+            showResult('エラー', 'エラーが発生しました: ' + error);
+        });
+}
+
+function showResult(title, message) {
+    document.getElementById('resultTitle').textContent = title;
+    document.getElementById('resultMessage').textContent = message;
+    document.getElementById('resultModal').style.display = 'flex';
+}
+
 function closeModal() {
-    document.getElementById('checkoutModal').style.display = 'none';
+    document.getElementById('subscribeModal').style.display = 'none';
+}
+
+function closeResultModal() {
+    document.getElementById('resultModal').style.display = 'none';
 }
 
 function copyUrl() {
@@ -384,6 +550,7 @@ function copyUrl() {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModal();
+        closeResultModal();
     }
 });
 </script>
