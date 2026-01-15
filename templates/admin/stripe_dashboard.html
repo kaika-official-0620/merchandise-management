@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+{% block title %}Stripe決済管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Stripe決済管理</h1>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
+    <a href="{{ url_for('admin_documents_dashboard') }}" class="admin-nav-item">書類管理</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_stripe_dashboard') }}" class="admin-nav-item active">決済管理</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
+</div>
+
+{% if not stripe_enabled %}
+<div class="alert alert-error">
+    <strong>Stripe未設定</strong><br>
+    Stripe連携を有効にするには、環境変数に以下を設定してください：
+    <ul style="margin: 10px 0 0 20px;">
+        <li><code>STRIPE_SECRET_KEY</code> - Stripeシークレットキー</li>
+        <li><code>STRIPE_PUBLISHABLE_KEY</code> - Stripe公開キー</li>
+        <li><code>STRIPE_WEBHOOK_SECRET</code> - Webhookシークレット（任意）</li>
+    </ul>
+</div>
+{% endif %}
+
+<!-- 月額利用料概要 -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-content">
+            <span class="stat-value">{{ users|length }}</span>
+            <span class="stat-label">ユーザー数</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-content">
+            <span class="stat-value">{{ users|selectattr('subscription_status', 'equalto', 'active')|list|length }}</span>
+            <span class="stat-label">支払い済</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-content">
+            <span class="stat-value">{{ users|rejectattr('subscription_status', 'equalto', 'active')|list|length }}</span>
+            <span class="stat-label">未払い</span>
+        </div>
+    </div>
+    <div class="stat-card highlight">
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(users|sum(attribute='monthly_fee')) }}</span>
+            <span class="stat-label">月額合計</span>
+        </div>
+    </div>
+</div>
+
+<!-- ユーザー別支払い状況 -->
+<div class="admin-section">
+    <h2>ユーザー別支払い状況</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ユーザー</th>
+                    <th>メール</th>
+                    <th>商品数</th>
+                    <th>月額利用料</th>
+                    <th>支払い状況</th>
+                    <th>最終支払日</th>
+                    <th>次回期限</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr class="{% if user.subscription_status != 'active' %}row-unpaid{% endif %}">
+                    <td>
+                        <strong>{{ user.display_name or user.username }}</strong>
+                        {% if user.role == 'admin' %}
+                        <span class="badge badge-admin">管理者</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.email }}</td>
+                    <td class="text-center">{{ user.item_count or 0 }}件</td>
+                    <td class="amount">
+                        <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
+                            ¥{{ "{:,}".format(user.monthly_fee) }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if user.subscription_status == 'active' %}
+                        <span class="status-badge status-paid">支払い済</span>
+                        {% else %}
+                        <span class="status-badge status-unpaid">未払い</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.last_payment_date.strftime('%Y-%m-%d') if user.last_payment_date else '-' }}</td>
+                    <td>
+                        {% if user.next_payment_date %}
+                            {% set days_left = (user.next_payment_date - now()).days %}
+                            <span class="{% if days_left < 0 %}text-danger{% elif days_left < 7 %}text-warning{% endif %}">
+                                {{ user.next_payment_date.strftime('%Y-%m-%d') }}
+                                {% if days_left < 0 %}（期限切れ）{% endif %}
+                            </span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if stripe_enabled %}
+                        <button class="btn btn-sm btn-primary" onclick="createCheckout({{ user.id }})">
+                            決済リンク生成
+                        </button>
+                        {% else %}
+                        <span class="text-muted">Stripe未設定</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">ユーザーがいません</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 料金体系 -->
+<div class="admin-section">
+    <h2>月額利用料体系</h2>
+    <div class="fee-table">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>商品登録数</th>
+                    <th>月額利用料</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0〜49件</td>
+                    <td class="amount"><span class="fee-badge fee-low">¥2,500</span></td>
+                </tr>
+                <tr>
+                    <td>50〜99件</td>
+                    <td class="amount"><span class="fee-badge fee-mid">¥5,000</span></td>
+                </tr>
+                <tr>
+                    <td>100〜149件</td>
+                    <td class="amount"><span class="fee-badge fee-high">¥10,000</span></td>
+                </tr>
+                <tr>
+                    <td>150〜199件</td>
+                    <td class="amount"><span class="fee-badge fee-max">¥20,000</span></td>
+                </tr>
+                <tr>
+                    <td>200件以上</td>
+                    <td class="amount"><span class="fee-badge fee-max">¥30,000</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 決済リンクモーダル -->
+<div class="modal" id="checkoutModal" style="display: none;">
+    <div class="modal-overlay" onclick="closeModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>決済リンク</h3>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>以下のリンクをユーザーに送信してください：</p>
+            <div class="checkout-url-box">
+                <input type="text" id="checkoutUrl" readonly>
+                <button onclick="copyUrl()" class="btn btn-secondary btn-sm">コピー</button>
+            </div>
+            <p class="modal-note">※リンクの有効期限は24時間です</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#" id="checkoutLink" target="_blank" class="btn btn-primary">決済ページを開く</a>
+            <button onclick="closeModal()" class="btn btn-secondary">閉じる</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.stat-card.highlight {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-color: #3b82f6;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.row-unpaid {
+    background: #fef2f2 !important;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-paid {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-unpaid {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.fee-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+}
+
+.fee-low { background: #d1fae5; color: #059669; }
+.fee-mid { background: #dbeafe; color: #2563eb; }
+.fee-high { background: #fef3c7; color: #d97706; }
+.fee-max { background: #fee2e2; color: #dc2626; }
+
+.text-danger { color: #dc2626; }
+.text-warning { color: #d97706; }
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.checkout-url-box {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.checkout-url-box input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.modal-note {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 1rem;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.fee-table {
+    max-width: 400px;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
+<script>
+function createCheckout(userId) {
+    fetch(`/admin/stripe/create-checkout/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('checkoutUrl').value = data.checkout_url;
+                document.getElementById('checkoutLink').href = data.checkout_url;
+                document.getElementById('checkoutModal').style.display = 'flex';
+            } else {
+                alert('エラー: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('エラーが発生しました: ' + error);
+        });
+}
+
+function closeModal() {
+    document.getElementById('checkoutModal').style.display = 'none';
+}
+
+function copyUrl() {
+    const urlInput = document.getElementById('checkoutUrl');
+    urlInput.select();
+    document.execCommand('copy');
+    alert('URLをコピーしました');
+}
+
+// ESCキーでモーダルを閉じる
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

@@ -15,6 +15,7 @@
     <a href="{{ url_for('admin_documents_dashboard') }}" class="admin-nav-item">書類管理</a>
     <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
     <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item active">分析</a>
+    <a href="{{ url_for('admin_stripe_dashboard') }}" class="admin-nav-item">決済管理</a>
     <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
 </div>
 
@@ -90,19 +91,19 @@
             <h3>サービス別内訳</h3>
             <div class="kaika-items">
                 <div class="kaika-item">
-                    <span class="kaika-service">撮影梱包等代行サービス</span>
+                    <span class="kaika-service">📸 撮影梱包等代行サービス</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
-                    <span class="kaika-service">業者卸販売</span>
+                    <span class="kaika-service">🏭 業者卸販売</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
-                    <span class="kaika-service">同時出品サービス</span>
+                    <span class="kaika-service">📋 同時出品サービス</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
                 </div>
                 <div class="kaika-item">
-                    <span class="kaika-service">オークション流し</span>
+                    <span class="kaika-service">🔨 オークション流し</span>
                     <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
                 </div>
             </div>

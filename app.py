@@ -14,6 +14,21 @@ import tempfile
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
+# Stripe連携
+try:
+    import stripe
+    STRIPE_ENABLED = True
+except ImportError:
+    STRIPE_ENABLED = False
+
+# Stripe設定
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+
+if STRIPE_ENABLED and STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
 
@@ -81,6 +96,16 @@ if DATABASE_URL:
         # admin_permissionsカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_permissions TEXT")
+        except:
+            pass
+        
+        # Stripe関連カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(100)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(100)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT 'inactive'")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_date TIMESTAMP")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS next_payment_date TIMESTAMP")
         except:
             pass
         
@@ -412,6 +437,28 @@ else:
         # admin_permissionsカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN admin_permissions TEXT")
+        except:
+            pass
+        
+        # Stripe関連カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'inactive'")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN last_payment_date TIMESTAMP")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN next_payment_date TIMESTAMP")
         except:
             pass
         
@@ -6034,6 +6081,295 @@ def admin_mitsumori_pdf(id):
     """見積依頼書PDF"""
     flash('この機能は準備中です', 'info')
     return redirect(url_for('admin_mitsumori_list'))
+
+# ===================
+# Stripe決済連携
+# ===================
+
+@app.route('/admin/stripe')
+@login_required
+@admin_required
+def admin_stripe_dashboard():
+    """Stripe決済管理ダッシュボード"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT u.id, u.username, u.display_name, u.email, u.role,
+                   u.stripe_customer_id, u.stripe_subscription_id, 
+                   u.subscription_status, u.last_payment_date, u.next_payment_date,
+                   COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.role != 'owner'
+            GROUP BY u.id
+            ORDER BY u.display_name
+        """)
+        users = cur.fetchall()
+        users = [dict(row) for row in users]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.id, u.username, u.display_name, u.email, u.role,
+                   u.stripe_customer_id, u.stripe_subscription_id, 
+                   u.subscription_status, u.last_payment_date, u.next_payment_date,
+                   COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.role != 'owner'
+            GROUP BY u.id
+            ORDER BY u.display_name
+        """)
+        users = [dict(row) for row in cur.fetchall()]
+    
+    # 月額利用料を計算
+    for user in users:
+        item_count = user.get('item_count', 0) or 0
+        if item_count < 50:
+            user['monthly_fee'] = 2500
+        elif item_count < 100:
+            user['monthly_fee'] = 5000
+        elif item_count < 150:
+            user['monthly_fee'] = 10000
+        elif item_count < 200:
+            user['monthly_fee'] = 20000
+        else:
+            user['monthly_fee'] = 30000
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/stripe_dashboard.html', 
+                           users=users,
+                           stripe_enabled=STRIPE_ENABLED and bool(STRIPE_SECRET_KEY),
+                           stripe_publishable_key=STRIPE_PUBLISHABLE_KEY)
+
+@app.route('/admin/stripe/create-checkout/<int:user_id>')
+@login_required
+@admin_required
+def admin_stripe_create_checkout(user_id):
+    """Stripe Checkoutセッション作成（管理者がユーザーの支払いリンクを生成）"""
+    if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
+        flash('Stripe連携が設定されていません', 'error')
+        return redirect(url_for('admin_stripe_dashboard'))
+    
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT u.*, COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = %s
+            GROUP BY u.id
+        """, (user_id,))
+        user = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.*, COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON u.id = m.user_id
+            WHERE u.id = ?
+            GROUP BY u.id
+        """, (user_id,))
+        user = cur.fetchone()
+        user = dict(user) if user else None
+    
+    if not user:
+        flash('ユーザーが見つかりません', 'error')
+        return redirect(url_for('admin_stripe_dashboard'))
+    
+    # 月額利用料を計算
+    item_count = user.get('item_count', 0) or 0
+    if item_count < 50:
+        monthly_fee = 2500
+    elif item_count < 100:
+        monthly_fee = 5000
+    elif item_count < 150:
+        monthly_fee = 10000
+    elif item_count < 200:
+        monthly_fee = 20000
+    else:
+        monthly_fee = 30000
+    
+    try:
+        # Stripe顧客を作成または取得
+        stripe_customer_id = user.get('stripe_customer_id')
+        if not stripe_customer_id:
+            customer = stripe.Customer.create(
+                email=user['email'],
+                name=user.get('display_name') or user['username'],
+                metadata={'user_id': user_id}
+            )
+            stripe_customer_id = customer.id
+            
+            # DBに保存
+            if DATABASE_URL:
+                cur.execute("UPDATE users SET stripe_customer_id = %s WHERE id = %s", 
+                           (stripe_customer_id, user_id))
+            else:
+                cur.execute("UPDATE users SET stripe_customer_id = ? WHERE id = ?", 
+                           (stripe_customer_id, user_id))
+            conn.commit()
+        
+        # Checkoutセッション作成（単発支払い）
+        base_url = request.host_url.rstrip('/')
+        session = stripe.checkout.Session.create(
+            customer=stripe_customer_id,
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'jpy',
+                    'product_data': {
+                        'name': f'月額利用料（{datetime.now().strftime("%Y年%m月")}分）',
+                        'description': f'商品登録数: {item_count}件',
+                    },
+                    'unit_amount': monthly_fee,
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f'{base_url}/admin/stripe/success?session_id={{CHECKOUT_SESSION_ID}}&user_id={user_id}',
+            cancel_url=f'{base_url}/admin/stripe/cancel',
+            metadata={
+                'user_id': str(user_id),
+                'monthly_fee': str(monthly_fee),
+                'item_count': str(item_count)
+            }
+        )
+        
+        cur.close()
+        conn.close()
+        
+        # 決済ページURLを返す
+        return jsonify({
+            'success': True,
+            'checkout_url': session.url,
+            'session_id': session.id
+        })
+        
+    except Exception as e:
+        cur.close()
+        conn.close()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/admin/stripe/success')
+@login_required
+@admin_required
+def admin_stripe_success():
+    """支払い成功"""
+    session_id = request.args.get('session_id')
+    user_id = request.args.get('user_id')
+    
+    if session_id and user_id and STRIPE_ENABLED:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            if session.payment_status == 'paid':
+                conn = get_db()
+                cur = conn.cursor()
+                
+                now = datetime.now()
+                if DATABASE_URL:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'active',
+                            last_payment_date = %s,
+                            next_payment_date = %s
+                        WHERE id = %s
+                    """, (now, now + timedelta(days=30), user_id))
+                else:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'active',
+                            last_payment_date = ?,
+                            next_payment_date = ?
+                        WHERE id = ?
+                    """, (now, now + timedelta(days=30), user_id))
+                
+                conn.commit()
+                cur.close()
+                conn.close()
+                
+                flash('支払いが完了しました', 'success')
+        except Exception as e:
+            flash(f'支払い確認エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_stripe_dashboard'))
+
+@app.route('/admin/stripe/cancel')
+@login_required
+@admin_required
+def admin_stripe_cancel():
+    """支払いキャンセル"""
+    flash('支払いがキャンセルされました', 'info')
+    return redirect(url_for('admin_stripe_dashboard'))
+
+@app.route('/stripe/webhook', methods=['POST'])
+def stripe_webhook():
+    """Stripe Webhookエンドポイント"""
+    if not STRIPE_ENABLED:
+        return jsonify({'error': 'Stripe not enabled'}), 400
+    
+    payload = request.get_data()
+    sig_header = request.headers.get('Stripe-Signature')
+    
+    try:
+        if STRIPE_WEBHOOK_SECRET:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, STRIPE_WEBHOOK_SECRET
+            )
+        else:
+            event = json.loads(payload)
+    except ValueError as e:
+        return jsonify({'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError as e:
+        return jsonify({'error': 'Invalid signature'}), 400
+    
+    # イベント処理
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        user_id = session.get('metadata', {}).get('user_id')
+        
+        if user_id and session.get('payment_status') == 'paid':
+            conn = get_db()
+            cur = conn.cursor()
+            
+            now = datetime.now()
+            if DATABASE_URL:
+                cur.execute("""
+                    UPDATE users 
+                    SET subscription_status = 'active',
+                        last_payment_date = %s,
+                        next_payment_date = %s
+                    WHERE id = %s
+                """, (now, now + timedelta(days=30), user_id))
+            else:
+                cur.execute("""
+                    UPDATE users 
+                    SET subscription_status = 'active',
+                        last_payment_date = ?,
+                        next_payment_date = ?
+                    WHERE id = ?
+                """, (now, now + timedelta(days=30), user_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+    
+    elif event['type'] == 'payment_intent.payment_failed':
+        payment_intent = event['data']['object']
+        # 支払い失敗時の処理（必要に応じて通知など）
+        pass
+    
+    return jsonify({'received': True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
