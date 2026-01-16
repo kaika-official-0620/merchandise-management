@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -1731,6 +1731,786 @@ def index():
                          filter_type=filter_type, search=search, announcements=announcements,
                          is_shared_view=is_shared_view)
 
+# ===================
+# レポート機能
+# ===================
+
+@app.route('/reports')
+@login_required
+def reports():
+    """レポートページ"""
+    from datetime import datetime
+    
+    conn = get_db()
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    years = list(range(current_year - 5, current_year + 1))
+    
+    # 在庫数と在庫総額を取得
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NULL
+        """, (current_user.id,))
+        result = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NULL
+        """, (current_user.id,))
+        result = dict(cur.fetchone())
+    
+    inventory_count = result['count'] if result else 0
+    inventory_total = result['total'] if result else 0
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('reports.html',
+                          years=years,
+                          current_year=current_year,
+                          current_month=current_month,
+                          inventory_count=inventory_count,
+                          inventory_total=inventory_total)
+
+@app.route('/api/report/<report_type>')
+@login_required
+def api_report(report_type):
+    """レポートデータAPI"""
+    from datetime import datetime
+    import json
+    
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', datetime.now().month, type=int)
+    
+    conn = get_db()
+    data = {'items': [], 'summary': {}}
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        if report_type == 'monthly':
+            # 月次売上報告書
+            cur.execute("""
+                SELECT id, sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission, sale_type
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                  AND EXTRACT(MONTH FROM sale_date) = %s
+                ORDER BY sale_date
+            """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            # 日付をシリアライズ可能に
+            for item in items:
+                if item.get('sale_date'):
+                    item['sale_date'] = str(item['sale_date'])
+            
+            total_sales = sum(i['sale_price'] or 0 for i in items)
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
+            total_commission = sum(i['commission'] or 0 for i in items)
+            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_sales': total_sales,
+                    'total_purchase': total_purchase,
+                    'total_shipping': total_shipping,
+                    'total_commission': total_commission,
+                    'total_profit': total_profit
+                }
+            }
+            
+        elif report_type == 'inventory':
+            # 在庫一覧表
+            cur.execute("""
+                SELECT id, purchase_date, product_name, brand_name, item_condition,
+                       purchase_price, listing_price, is_listed
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NULL
+                ORDER BY purchase_date DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            for item in items:
+                if item.get('purchase_date'):
+                    item['purchase_date'] = str(item['purchase_date'])
+            
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_listing = sum(i['listing_price'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_purchase': total_purchase,
+                    'total_listing': total_listing
+                }
+            }
+            
+        elif report_type == 'expenses':
+            # 月次経費精算書
+            cur.execute("""
+                SELECT id, sale_date, product_name, sale_type, sale_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                  AND EXTRACT(MONTH FROM sale_date) = %s
+                ORDER BY sale_date
+            """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            for item in items:
+                if item.get('sale_date'):
+                    item['sale_date'] = str(item['sale_date'])
+            
+            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
+            total_commission = sum(i['commission'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_shipping': total_shipping,
+                    'total_commission': total_commission,
+                    'total_expenses': total_shipping + total_commission
+                }
+            }
+            
+        elif report_type == 'annual':
+            # 年間収支報告書
+            cur.execute("""
+                SELECT EXTRACT(MONTH FROM sale_date) as month,
+                       COUNT(*) as count,
+                       COALESCE(SUM(sale_price), 0) as sales,
+                       COALESCE(SUM(purchase_price), 0) as purchase,
+                       COALESCE(SUM(shipping_cost), 0) as shipping,
+                       COALESCE(SUM(commission), 0) as commission,
+                       COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                GROUP BY EXTRACT(MONTH FROM sale_date)
+                ORDER BY month
+            """, (current_user.id, year))
+            monthly = [dict(row) for row in cur.fetchall()]
+            
+            # 各月のデータを整数に変換
+            for m in monthly:
+                m['month'] = int(m['month'])
+                m['count'] = int(m['count'])
+                m['sales'] = int(m['sales'])
+                m['purchase'] = int(m['purchase'])
+                m['shipping'] = int(m['shipping'])
+                m['commission'] = int(m['commission'])
+                m['profit'] = int(m['profit'])
+            
+            total_count = sum(m['count'] for m in monthly)
+            total_sales = sum(m['sales'] for m in monthly)
+            total_purchase = sum(m['purchase'] for m in monthly)
+            total_shipping = sum(m['shipping'] for m in monthly)
+            total_commission = sum(m['commission'] for m in monthly)
+            total_profit = sum(m['profit'] for m in monthly)
+            
+            data = {
+                'monthly': monthly,
+                'summary': {
+                    'count': total_count,
+                    'total_sales': total_sales,
+                    'total_purchase': total_purchase,
+                    'total_expenses': total_shipping + total_commission,
+                    'total_profit': total_profit
+                }
+            }
+            
+        elif report_type == 'kaitori':
+            # 買取台帳（個人から仕入れた商品）
+            if month == 0:
+                cur.execute("""
+                    SELECT id, purchase_date, product_name, brand_name, store_name,
+                           purchase_price, id_document_path
+                    FROM merchandise 
+                    WHERE user_id = %s AND store_name = '個人'
+                      AND EXTRACT(YEAR FROM purchase_date) = %s
+                    ORDER BY purchase_date
+                """, (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT id, purchase_date, product_name, brand_name, store_name,
+                           purchase_price, id_document_path
+                    FROM merchandise 
+                    WHERE user_id = %s AND store_name = '個人'
+                      AND EXTRACT(YEAR FROM purchase_date) = %s
+                      AND EXTRACT(MONTH FROM purchase_date) = %s
+                    ORDER BY purchase_date
+                """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            for item in items:
+                if item.get('purchase_date'):
+                    item['purchase_date'] = str(item['purchase_date'])
+            
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_purchase': total_purchase
+                }
+            }
+            
+        elif report_type == 'sales':
+            # 売却一覧
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = %s AND sale_date IS NOT NULL
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """, (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = %s AND sale_date IS NOT NULL
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            for item in items:
+                if item.get('sale_date'):
+                    item['sale_date'] = str(item['sale_date'])
+            
+            total_sales = sum(i['sale_price'] or 0 for i in items)
+            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_sales': total_sales,
+                    'total_profit': total_profit
+                }
+            }
+    else:
+        # SQLite版
+        cur = conn.cursor()
+        
+        if report_type == 'monthly':
+            cur.execute("""
+                SELECT id, sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission, sale_type
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                  AND strftime('%m', sale_date) = ?
+                ORDER BY sale_date
+            """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            total_sales = sum(i['sale_price'] or 0 for i in items)
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
+            total_commission = sum(i['commission'] or 0 for i in items)
+            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_sales': total_sales,
+                    'total_purchase': total_purchase,
+                    'total_shipping': total_shipping,
+                    'total_commission': total_commission,
+                    'total_profit': total_profit
+                }
+            }
+            
+        elif report_type == 'inventory':
+            cur.execute("""
+                SELECT id, purchase_date, product_name, brand_name, item_condition,
+                       purchase_price, listing_price, is_listed
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NULL
+                ORDER BY purchase_date DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_listing = sum(i['listing_price'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_purchase': total_purchase,
+                    'total_listing': total_listing
+                }
+            }
+            
+        elif report_type == 'expenses':
+            cur.execute("""
+                SELECT id, sale_date, product_name, sale_type, sale_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                  AND strftime('%m', sale_date) = ?
+                ORDER BY sale_date
+            """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
+            total_commission = sum(i['commission'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_shipping': total_shipping,
+                    'total_commission': total_commission,
+                    'total_expenses': total_shipping + total_commission
+                }
+            }
+            
+        elif report_type == 'annual':
+            cur.execute("""
+                SELECT CAST(strftime('%m', sale_date) AS INTEGER) as month,
+                       COUNT(*) as count,
+                       COALESCE(SUM(sale_price), 0) as sales,
+                       COALESCE(SUM(purchase_price), 0) as purchase,
+                       COALESCE(SUM(shipping_cost), 0) as shipping,
+                       COALESCE(SUM(commission), 0) as commission,
+                       COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                GROUP BY strftime('%m', sale_date)
+                ORDER BY month
+            """, (current_user.id, str(year)))
+            monthly = [dict(row) for row in cur.fetchall()]
+            
+            total_count = sum(m['count'] for m in monthly)
+            total_sales = sum(m['sales'] for m in monthly)
+            total_purchase = sum(m['purchase'] for m in monthly)
+            total_shipping = sum(m['shipping'] for m in monthly)
+            total_commission = sum(m['commission'] for m in monthly)
+            total_profit = sum(m['profit'] for m in monthly)
+            
+            data = {
+                'monthly': monthly,
+                'summary': {
+                    'count': total_count,
+                    'total_sales': total_sales,
+                    'total_purchase': total_purchase,
+                    'total_expenses': total_shipping + total_commission,
+                    'total_profit': total_profit
+                }
+            }
+            
+        elif report_type == 'kaitori':
+            if month == 0:
+                cur.execute("""
+                    SELECT id, purchase_date, product_name, brand_name, store_name,
+                           purchase_price, id_document_path
+                    FROM merchandise 
+                    WHERE user_id = ? AND store_name = '個人'
+                      AND strftime('%Y', purchase_date) = ?
+                    ORDER BY purchase_date
+                """, (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT id, purchase_date, product_name, brand_name, store_name,
+                           purchase_price, id_document_path
+                    FROM merchandise 
+                    WHERE user_id = ? AND store_name = '個人'
+                      AND strftime('%Y', purchase_date) = ?
+                      AND strftime('%m', purchase_date) = ?
+                    ORDER BY purchase_date
+                """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_purchase': total_purchase
+                }
+            }
+            
+        elif report_type == 'sales':
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = ? AND sale_date IS NOT NULL
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """, (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = ? AND sale_date IS NOT NULL
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            
+            total_sales = sum(i['sale_price'] or 0 for i in items)
+            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            
+            data = {
+                'items': items,
+                'summary': {
+                    'count': len(items),
+                    'total_sales': total_sales,
+                    'total_profit': total_profit
+                }
+            }
+    
+    cur.close()
+    conn.close()
+    
+    return jsonify(data)
+
+@app.route('/api/report/<report_type>/download')
+@login_required
+def api_report_download(report_type):
+    """レポートダウンロード"""
+    from datetime import datetime
+    import csv
+    import io
+    
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', datetime.now().month, type=int)
+    format_type = request.args.get('format', 'csv')
+    
+    # データ取得（api_reportと同様のロジック）
+    conn = get_db()
+    items = []
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        if report_type == 'monthly':
+            cur.execute("""
+                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission, sale_type
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                  AND EXTRACT(MONTH FROM sale_date) = %s
+                ORDER BY sale_date
+            """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"monthly_report_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            
+        elif report_type == 'inventory':
+            cur.execute("""
+                SELECT purchase_date, product_name, brand_name, item_condition,
+                       purchase_price, listing_price, is_listed
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NULL
+                ORDER BY purchase_date DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
+            headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
+            
+        elif report_type == 'expenses':
+            cur.execute("""
+                SELECT sale_date, product_name, sale_type, sale_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                  AND EXTRACT(MONTH FROM sale_date) = %s
+                ORDER BY sale_date
+            """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"expenses_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+            
+        elif report_type == 'annual':
+            cur.execute("""
+                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NOT NULL
+                  AND EXTRACT(YEAR FROM sale_date) = %s
+                ORDER BY sale_date
+            """, (current_user.id, year))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"annual_report_{year}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            
+        elif report_type == 'kaitori':
+            if month == 0:
+                cur.execute("""
+                    SELECT purchase_date, product_name, brand_name, store_name,
+                           purchase_price
+                    FROM merchandise 
+                    WHERE user_id = %s AND store_name = '個人'
+                      AND EXTRACT(YEAR FROM purchase_date) = %s
+                    ORDER BY purchase_date
+                """, (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT purchase_date, product_name, brand_name, store_name,
+                           purchase_price
+                    FROM merchandise 
+                    WHERE user_id = %s AND store_name = '個人'
+                      AND EXTRACT(YEAR FROM purchase_date) = %s
+                      AND EXTRACT(MONTH FROM purchase_date) = %s
+                    ORDER BY purchase_date
+                """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
+            headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
+            
+        elif report_type == 'sales':
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = %s AND sale_date IS NOT NULL
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """, (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = %s AND sale_date IS NOT NULL
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """, (current_user.id, year, month))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
+    else:
+        # SQLite版
+        cur = conn.cursor()
+        
+        if report_type == 'monthly':
+            cur.execute("""
+                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission, sale_type
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                  AND strftime('%m', sale_date) = ?
+                ORDER BY sale_date
+            """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"monthly_report_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            
+        elif report_type == 'inventory':
+            cur.execute("""
+                SELECT purchase_date, product_name, brand_name, item_condition,
+                       purchase_price, listing_price, is_listed
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NULL
+                ORDER BY purchase_date DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
+            headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
+            
+        elif report_type == 'expenses':
+            cur.execute("""
+                SELECT sale_date, product_name, sale_type, sale_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                  AND strftime('%m', sale_date) = ?
+                ORDER BY sale_date
+            """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"expenses_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+            
+        elif report_type == 'annual':
+            cur.execute("""
+                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                       shipping_cost, commission
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NOT NULL
+                  AND strftime('%Y', sale_date) = ?
+                ORDER BY sale_date
+            """, (current_user.id, str(year)))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"annual_report_{year}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            
+        elif report_type == 'kaitori':
+            if month == 0:
+                cur.execute("""
+                    SELECT purchase_date, product_name, brand_name, store_name,
+                           purchase_price
+                    FROM merchandise 
+                    WHERE user_id = ? AND store_name = '個人'
+                      AND strftime('%Y', purchase_date) = ?
+                    ORDER BY purchase_date
+                """, (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT purchase_date, product_name, brand_name, store_name,
+                           purchase_price
+                    FROM merchandise 
+                    WHERE user_id = ? AND store_name = '個人'
+                      AND strftime('%Y', purchase_date) = ?
+                      AND strftime('%m', purchase_date) = ?
+                    ORDER BY purchase_date
+                """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
+            headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
+            
+        elif report_type == 'sales':
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = ? AND sale_date IS NOT NULL
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """, (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, brand_name, sales_destination,
+                           sale_price, purchase_price, shipping_cost, commission
+                    FROM merchandise 
+                    WHERE user_id = ? AND sale_date IS NOT NULL
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """, (current_user.id, str(year), str(month).zfill(2)))
+            items = [dict(row) for row in cur.fetchall()]
+            filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
+            headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
+    
+    cur.close()
+    conn.close()
+    
+    # CSV生成
+    if format_type == 'csv':
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        
+        for item in items:
+            if report_type == 'monthly':
+                profit = (item.get('sale_price') or 0) - (item.get('purchase_price') or 0) - (item.get('shipping_cost') or 0) - (item.get('commission') or 0)
+                writer.writerow([
+                    item.get('sale_date'),
+                    item.get('product_name'),
+                    item.get('brand_name') or '',
+                    item.get('sale_price') or 0,
+                    item.get('purchase_price') or 0,
+                    item.get('shipping_cost') or 0,
+                    item.get('commission') or 0,
+                    profit
+                ])
+            elif report_type == 'inventory':
+                status = '出品中' if item.get('is_listed') else '未出品'
+                writer.writerow([
+                    item.get('purchase_date'),
+                    item.get('product_name'),
+                    item.get('brand_name') or '',
+                    item.get('item_condition') or '',
+                    item.get('purchase_price') or 0,
+                    item.get('listing_price') or 0,
+                    status
+                ])
+            elif report_type == 'expenses':
+                expenses = (item.get('shipping_cost') or 0) + (item.get('commission') or 0)
+                writer.writerow([
+                    item.get('sale_date'),
+                    item.get('product_name'),
+                    item.get('sale_type') or '',
+                    item.get('sale_price') or 0,
+                    item.get('shipping_cost') or 0,
+                    item.get('commission') or 0,
+                    expenses
+                ])
+            elif report_type == 'annual':
+                profit = (item.get('sale_price') or 0) - (item.get('purchase_price') or 0) - (item.get('shipping_cost') or 0) - (item.get('commission') or 0)
+                writer.writerow([
+                    item.get('sale_date'),
+                    item.get('product_name'),
+                    item.get('brand_name') or '',
+                    item.get('sale_price') or 0,
+                    item.get('purchase_price') or 0,
+                    item.get('shipping_cost') or 0,
+                    item.get('commission') or 0,
+                    profit
+                ])
+            elif report_type == 'kaitori':
+                writer.writerow([
+                    item.get('purchase_date'),
+                    item.get('product_name'),
+                    item.get('brand_name') or '',
+                    item.get('store_name') or '',
+                    item.get('purchase_price') or 0
+                ])
+            elif report_type == 'sales':
+                profit = (item.get('sale_price') or 0) - (item.get('purchase_price') or 0) - (item.get('shipping_cost') or 0) - (item.get('commission') or 0)
+                writer.writerow([
+                    item.get('sale_date'),
+                    item.get('product_name'),
+                    item.get('brand_name') or '',
+                    item.get('sales_destination') or '',
+                    item.get('sale_price') or 0,
+                    item.get('purchase_price') or 0,
+                    item.get('shipping_cost') or 0,
+                    item.get('commission') or 0,
+                    profit
+                ])
+        
+        output.seek(0)
+        
+        # BOM付きUTF-8でエンコード（Excel対応）
+        response = make_response('\ufeff' + output.getvalue())
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        return response
+    
+    # PDF生成（簡易HTML版）
+    elif format_type == 'pdf':
+        flash('PDF機能は準備中です。CSVでダウンロードしてください。', 'info')
+        return redirect(url_for('reports'))
+    
+    return redirect(url_for('reports'))
+
 @app.route('/my-analytics')
 @login_required
 def user_analytics():
@@ -1850,6 +2630,8 @@ def user_analytics():
                     TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM') as month,
                     COALESCE(SUM(purchase_price), 0) as purchase_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as shipping_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as commission_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
                 FROM merchandise 
@@ -1977,6 +2759,8 @@ def user_analytics():
                     strftime('%Y-%m', COALESCE(sale_date, purchase_date)) as month,
                     COALESCE(SUM(purchase_price), 0) as purchase_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as sales_in,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as shipping_out,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as commission_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
                 FROM merchandise 
@@ -4730,7 +5514,10 @@ def admin_items():
         # エラー時は空のリストでテンプレートを表示
         return render_template('admin/items.html', items=[], users=[])
     
-    processed_items = []
+    # 管理者商品とユーザー商品を分類
+    admin_items = []
+    user_items = []
+    
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
@@ -4741,9 +5528,18 @@ def admin_items():
                 item.get('shipping_cost', 0) or 0,
                 item.get('commission', 0) or 0
             )
-        processed_items.append(item)
+        
+        # 所有者のロールで分類
+        owner_role = item.get('owner_role')
+        if owner_role in ['admin', 'owner'] or not owner_role:
+            admin_items.append(item)
+        else:
+            user_items.append(item)
     
-    return render_template('admin/items.html', items=processed_items, users=[dict(u) for u in users])
+    return render_template('admin/items.html', 
+                          admin_items=admin_items, 
+                          user_items=user_items, 
+                          users=[dict(u) for u in users])
 
 @app.route('/admin/items/add', methods=['GET', 'POST'])
 @login_required

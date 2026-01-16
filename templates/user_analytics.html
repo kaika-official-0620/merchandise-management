@@ -29,6 +29,31 @@
     </div>
 </div>
 
+<!-- 経費内訳サマリー -->
+<div class="expense-summary">
+    <div class="expense-card">
+        <div class="expense-icon">📦</div>
+        <div class="expense-content">
+            <div class="expense-label">総送料</div>
+            <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_shipping or 0)|int) }}</div>
+        </div>
+    </div>
+    <div class="expense-card">
+        <div class="expense-icon">💳</div>
+        <div class="expense-content">
+            <div class="expense-label">総手数料</div>
+            <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_commission or 0)|int) }}</div>
+        </div>
+    </div>
+    <div class="expense-card total">
+        <div class="expense-icon">📊</div>
+        <div class="expense-content">
+            <div class="expense-label">経費合計</div>
+            <div class="expense-value">¥{{ "{:,}".format(((analytics.kpi.total_shipping or 0) + (analytics.kpi.total_commission or 0))|int) }}</div>
+        </div>
+    </div>
+</div>
+
 <!-- KPIダッシュボード -->
 <div class="kpi-dashboard">
     <h2>KPIダッシュボード</h2>
@@ -112,7 +137,8 @@
                     <th>月</th>
                     <th>仕入支出</th>
                     <th>売上収入</th>
-                    <th>経費（送料・手数料）</th>
+                    <th>送料</th>
+                    <th>手数料</th>
                     <th>純利益</th>
                     <th>累計</th>
                 </tr>
@@ -125,7 +151,8 @@
                     <td>{{ cf.month }}</td>
                     <td class="amount negative">-¥{{ "{:,}".format((cf.purchase_out or 0)|int) }}</td>
                     <td class="amount positive">+¥{{ "{:,}".format((cf.sales_in or 0)|int) }}</td>
-                    <td class="amount negative">-¥{{ "{:,}".format((cf.expenses_out or 0)|int) }}</td>
+                    <td class="amount negative">-¥{{ "{:,}".format((cf.shipping_out or 0)|int) }}</td>
+                    <td class="amount negative">-¥{{ "{:,}".format((cf.commission_out or 0)|int) }}</td>
                     <td class="amount {% if cf.net_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                         {% if cf.net_profit >= 0 %}+{% endif %}¥{{ "{:,}".format((cf.net_profit or 0)|int) }}
                     </td>
@@ -140,7 +167,8 @@
                     <th>合計</th>
                     <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='purchase_out')|int) }}</th>
                     <th class="amount positive">+¥{{ "{:,}".format(analytics.cashflow|sum(attribute='sales_in')|int) }}</th>
-                    <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='expenses_out')|int) }}</th>
+                    <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='shipping_out')|int) }}</th>
+                    <th class="amount negative">-¥{{ "{:,}".format(analytics.cashflow|sum(attribute='commission_out')|int) }}</th>
                     <th class="amount {% if analytics.cashflow|sum(attribute='net_profit') > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                         {% if analytics.cashflow|sum(attribute='net_profit') >= 0 %}+{% endif %}¥{{ "{:,}".format(analytics.cashflow|sum(attribute='net_profit')|int) }}
                     </th>
@@ -297,6 +325,60 @@
 </div>
 
 <style>
+/* 経費内訳サマリー */
+.expense-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.expense-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 4px solid #ef4444;
+}
+
+.expense-card.total {
+    border-left-color: #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.expense-icon {
+    font-size: 1.75rem;
+}
+
+.expense-content {
+    flex: 1;
+}
+
+.expense-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.expense-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #dc2626;
+}
+
+.expense-card.total .expense-value {
+    color: #d97706;
+}
+
+@media (max-width: 768px) {
+    .expense-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* KPIダッシュボード */
 .kpi-dashboard {
     background: white;

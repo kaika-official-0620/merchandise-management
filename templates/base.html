@@ -56,6 +56,7 @@
                 <span class="badge-count">{{ unread_shikiriosho_count }}</span>
                 {% endif %}
             </a>
+            <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}active{% endif %}">レポート</a>
             {% if current_user.is_admin() %}
             <div class="sidebar-divider"></div>
             <div class="sidebar-submenu">
