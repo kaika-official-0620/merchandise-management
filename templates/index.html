@@ -392,6 +392,32 @@
     font-weight: 500;
 }
 
+/* 代行サービスボタン */
+.btn-proxy {
+    background: #f0f9ff;
+    border: 1px solid #0ea5e9;
+    color: #0284c7;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+}
+
+.btn-proxy:hover {
+    background: #e0f2fe;
+}
+
+.btn-proxy.active {
+    background: #0ea5e9;
+    color: white;
+}
+
+.status-badge.proxy {
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.65rem;
+    padding: 2px 5px;
+    margin-left: 3px;
+}
+
 @media (max-width: 768px) {
     .search-action-bar {
         flex-direction: row;
@@ -1287,10 +1313,19 @@
                         {% else %}
                         <span class="status-badge unlisted">未出品</span>
                         {% endif %}
+                        {% if item.show_in_proxy_service %}
+                        <span class="status-badge proxy">代行</span>
+                        {% endif %}
                     </td>
                     <td class="action-cell">
                         <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                         <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        {% if is_shared_view and not item.sale_date %}
+                        <button class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}" 
+                                onclick="toggleProxyService({{ item.id }}, this)" title="代行サービスに掲載">
+                            {% if item.show_in_proxy_service %}掲載中{% else %}代行{% endif %}
+                        </button>
+                        {% endif %}
                         <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
                            onclick="return confirm('削除しますか？')">×</a>
                     </td>
@@ -1728,6 +1763,46 @@ function prevAnnouncement() {
 // 自動スライド（5秒ごと）
 if (totalAnnouncements > 1) {
     setInterval(nextAnnouncement, 5000);
+}
+
+// 代行サービス掲載切り替え
+function toggleProxyService(itemId, btn) {
+    fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (data.new_value) {
+                btn.classList.add('active');
+                btn.textContent = '掲載中';
+                // 販売状況セルに代行バッジを追加
+                const row = btn.closest('tr');
+                const statusCell = row.querySelector('td:nth-last-child(2)');
+                if (!statusCell.querySelector('.status-badge.proxy')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'status-badge proxy';
+                    badge.textContent = '代行';
+                    statusCell.appendChild(badge);
+                }
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '代行';
+                // 代行バッジを削除
+                const row = btn.closest('tr');
+                const proxyBadge = row.querySelector('.status-badge.proxy');
+                if (proxyBadge) proxyBadge.remove();
+            }
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
 }
 </script>
 {% endblock %}

@@ -411,6 +411,60 @@ if DATABASE_URL:
             )
         ''')
         
+        # 代行仕入れサービス設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_settings (
+                id SERIAL PRIMARY KEY,
+                is_public BOOLEAN DEFAULT FALSE,
+                page_title VARCHAR(200) DEFAULT '代行仕入れサービス',
+                page_description TEXT,
+                start_datetime TIMESTAMP,
+                end_datetime TIMESTAMP,
+                updated_by INTEGER REFERENCES users(id),
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 公開日時カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS start_datetime TIMESTAMP")
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS end_datetime TIMESTAMP")
+        except:
+            pass
+        
+        # 代行サービス公開ユーザーテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_users (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id)
+            )
+        ''')
+        
+        # 入札テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_bids (
+                id SERIAL PRIMARY KEY,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                bidder_name VARCHAR(100) NOT NULL,
+                bid_amount INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 商品に代行サービス表示フラグを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS show_in_proxy_service BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+        
+        # デフォルト設定を挿入
+        cur.execute("SELECT COUNT(*) FROM proxy_service_settings")
+        if cur.fetchone()[0] == 0:
+            cur.execute("INSERT INTO proxy_service_settings (is_public) VALUES (FALSE)")
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -780,6 +834,63 @@ else:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # 代行仕入れサービス設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                is_public INTEGER DEFAULT 0,
+                page_title TEXT DEFAULT '代行仕入れサービス',
+                page_description TEXT,
+                start_datetime TIMESTAMP,
+                end_datetime TIMESTAMP,
+                updated_by INTEGER REFERENCES users(id),
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 公開日時カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN start_datetime TIMESTAMP")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN end_datetime TIMESTAMP")
+        except:
+            pass
+        
+        # 代行サービス公開ユーザーテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                is_enabled INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id)
+            )
+        ''')
+        
+        # 入札テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS proxy_service_bids (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                bidder_name TEXT NOT NULL,
+                bid_amount INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 商品に代行サービス表示フラグを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN show_in_proxy_service INTEGER DEFAULT 0")
+        except:
+            pass
+        
+        # デフォルト設定を挿入
+        cur.execute("SELECT COUNT(*) FROM proxy_service_settings")
+        if cur.fetchone()[0] == 0:
+            cur.execute("INSERT INTO proxy_service_settings (is_public) VALUES (0)")
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -3067,6 +3178,383 @@ def admin_analytics_settings():
     conn.close()
     
     return render_template('admin/analytics_settings.html', widgets=[dict(w) for w in widgets])
+
+# ===================
+# 代行仕入れサービス管理（オーナー専用）
+# ===================
+
+@app.route('/admin/proxy-service')
+@login_required
+def admin_proxy_service():
+    """代行仕入れサービス管理画面（オーナー専用）"""
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用可能です', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 設定取得
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        # 全オーナー/管理者を取得
+        cur.execute("""
+            SELECT u.id, u.username, u.display_name, u.role,
+                   CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
+            FROM users u
+            LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+            WHERE u.role IN ('owner', 'admin')
+            ORDER BY u.id
+        """)
+        users = cur.fetchall()
+        
+        # 公開対象ユーザーの商品を取得（代行サービス表示フラグが立っているもの）
+        cur.execute("""
+            SELECT m.*, u.display_name as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
+            WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+        """)
+        items = cur.fetchall()
+        
+        # 全入札履歴を取得
+        cur.execute("""
+            SELECT b.*, m.product_name
+            FROM proxy_service_bids b
+            JOIN merchandise m ON b.merchandise_id = m.id
+            ORDER BY b.created_at DESC
+            LIMIT 50
+        """)
+        bids = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        # 設定取得
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        # 全オーナー/管理者を取得
+        cur.execute("""
+            SELECT u.id, u.username, u.display_name, u.role,
+                   CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
+            FROM users u
+            LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+            WHERE u.role IN ('owner', 'admin')
+            ORDER BY u.id
+        """)
+        users = cur.fetchall()
+        
+        # 公開対象ユーザーの商品を取得
+        cur.execute("""
+            SELECT m.*, u.display_name as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
+            WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+        """)
+        items = cur.fetchall()
+        
+        # 全入札履歴を取得
+        cur.execute("""
+            SELECT b.*, m.product_name
+            FROM proxy_service_bids b
+            JOIN merchandise m ON b.merchandise_id = m.id
+            ORDER BY b.created_at DESC
+            LIMIT 50
+        """)
+        bids = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/proxy_service.html',
+                         settings=dict(settings) if settings else {},
+                         users=[dict(u) for u in users],
+                         items=[dict(i) for i in items],
+                         bids=[dict(b) for b in bids])
+
+@app.route('/admin/proxy-service/settings', methods=['POST'])
+@login_required
+def admin_proxy_service_settings():
+    """代行サービス設定を更新"""
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用可能です', 'error')
+        return redirect(url_for('index'))
+    
+    is_public = request.form.get('is_public') == 'on'
+    page_title = request.form.get('page_title', '代行仕入れサービス')
+    page_description = request.form.get('page_description', '')
+    start_datetime = request.form.get('start_datetime', '') or None
+    end_datetime = request.form.get('end_datetime', '') or None
+    selected_users = request.form.getlist('selected_users')
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        # 設定更新
+        cur.execute("""
+            UPDATE proxy_service_settings 
+            SET is_public = %s, page_title = %s, page_description = %s,
+                start_datetime = %s, end_datetime = %s,
+                updated_by = %s, updated_at = CURRENT_TIMESTAMP
+        """, (is_public, page_title, page_description, start_datetime, end_datetime, current_user.id))
+        
+        # ユーザー選択を更新
+        cur.execute("DELETE FROM proxy_service_users")
+        for user_id in selected_users:
+            cur.execute("INSERT INTO proxy_service_users (user_id) VALUES (%s)", (int(user_id),))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE proxy_service_settings 
+            SET is_public = ?, page_title = ?, page_description = ?,
+                start_datetime = ?, end_datetime = ?,
+                updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        """, (1 if is_public else 0, page_title, page_description, start_datetime, end_datetime, current_user.id))
+        
+        cur.execute("DELETE FROM proxy_service_users")
+        for user_id in selected_users:
+            cur.execute("INSERT INTO proxy_service_users (user_id) VALUES (?)", (int(user_id),))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('代行サービス設定を更新しました', 'success')
+    return redirect(url_for('admin_proxy_service'))
+
+@app.route('/admin/proxy-service/toggle-item/<int:item_id>', methods=['POST'])
+@login_required
+def admin_proxy_service_toggle_item(item_id):
+    """商品の代行サービス表示フラグを切り替え"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 自分の商品かチェック（オーナーは全商品可）
+        if current_user.is_owner():
+            cur.execute("SELECT show_in_proxy_service FROM merchandise WHERE id = %s", (item_id,))
+        else:
+            cur.execute("SELECT show_in_proxy_service FROM merchandise WHERE id = %s AND user_id = %s", 
+                       (item_id, current_user.id))
+        item = cur.fetchone()
+        
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        new_value = not item['show_in_proxy_service']
+        cur.execute("UPDATE merchandise SET show_in_proxy_service = %s WHERE id = %s", (new_value, item_id))
+    else:
+        cur = conn.cursor()
+        if current_user.is_owner():
+            cur.execute("SELECT show_in_proxy_service FROM merchandise WHERE id = ?", (item_id,))
+        else:
+            cur.execute("SELECT show_in_proxy_service FROM merchandise WHERE id = ? AND user_id = ?", 
+                       (item_id, current_user.id))
+        item = cur.fetchone()
+        
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        new_value = 0 if item[0] else 1
+        cur.execute("UPDATE merchandise SET show_in_proxy_service = ? WHERE id = ?", (new_value, item_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({'success': True, 'new_value': bool(new_value) if DATABASE_URL else bool(new_value)})
+
+@app.route('/proxy-service')
+def public_proxy_service():
+    """代行仕入れサービス公開ページ（オークション）"""
+    conn = get_db()
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        if not settings or not settings['is_public']:
+            return render_template('proxy_service_closed.html', reason='disabled')
+        
+        settings_dict = dict(settings)
+        
+        # 日時チェック
+        start_dt = settings_dict.get('start_datetime')
+        end_dt = settings_dict.get('end_datetime')
+        
+        if start_dt and now < start_dt:
+            return render_template('proxy_service_closed.html', reason='not_started', start_datetime=start_dt)
+        
+        if end_dt and now > end_dt:
+            return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
+        
+        # 公開対象ユーザーの商品を取得（最高入札情報付き）
+        cur.execute("""
+            SELECT m.id, m.photo_path, m.product_name, m.brand_name, m.item_condition,
+                   m.listing_price, m.model_number, u.display_name as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
+            WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+        """)
+        items = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        row = cur.fetchone()
+        
+        if not row or not row[1]:  # is_public
+            return render_template('proxy_service_closed.html', reason='disabled')
+        
+        # SQLiteの場合、カラム名でアクセスできるようにする
+        columns = ['id', 'is_public', 'page_title', 'page_description', 'start_datetime', 'end_datetime', 'updated_by', 'updated_at']
+        settings_dict = dict(zip(columns, row))
+        
+        # 日時チェック
+        start_dt = settings_dict.get('start_datetime')
+        end_dt = settings_dict.get('end_datetime')
+        
+        if start_dt:
+            start_dt = datetime.fromisoformat(start_dt) if isinstance(start_dt, str) else start_dt
+            if now < start_dt:
+                return render_template('proxy_service_closed.html', reason='not_started', start_datetime=start_dt)
+        
+        if end_dt:
+            end_dt = datetime.fromisoformat(end_dt) if isinstance(end_dt, str) else end_dt
+            if now > end_dt:
+                return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
+        
+        # 公開対象ユーザーの商品を取得
+        cur.execute("""
+            SELECT m.id, m.photo_path, m.product_name, m.brand_name, m.item_condition,
+                   m.listing_price, m.model_number, u.display_name as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
+            WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+        """)
+        items = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('proxy_service_public.html',
+                         settings=settings_dict,
+                         items=[dict(i) for i in items],
+                         end_datetime=end_dt if 'end_dt' in dir() else settings_dict.get('end_datetime'))
+
+@app.route('/proxy-service/bid', methods=['POST'])
+def proxy_service_bid():
+    """入札API"""
+    data = request.get_json() or request.form
+    
+    merchandise_id = data.get('merchandise_id')
+    bidder_name = data.get('bidder_name', '').strip()
+    bid_amount = data.get('bid_amount')
+    
+    if not merchandise_id or not bidder_name or not bid_amount:
+        return jsonify({'success': False, 'error': '必須項目が入力されていません'}), 400
+    
+    try:
+        bid_amount = int(bid_amount)
+        if bid_amount <= 0:
+            return jsonify({'success': False, 'error': '有効な金額を入力してください'}), 400
+    except ValueError:
+        return jsonify({'success': False, 'error': '有効な金額を入力してください'}), 400
+    
+    conn = get_db()
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 設定確認
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        if not settings or not settings['is_public']:
+            return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
+        
+        start_dt = settings.get('start_datetime')
+        end_dt = settings.get('end_datetime')
+        
+        if start_dt and now < start_dt:
+            return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
+        if end_dt and now > end_dt:
+            return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
+        
+        # 商品確認
+        cur.execute("SELECT id, listing_price FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 現在の最高入札を確認
+        cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = %s ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
+        highest = cur.fetchone()
+        min_bid = highest['bid_amount'] + 1 if highest else (item['listing_price'] or 0)
+        
+        if bid_amount < min_bid:
+            return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+        
+        # 入札を保存
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, bidder_name, bid_amount) VALUES (%s, %s, %s)",
+                   (merchandise_id, bidder_name, bid_amount))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        row = cur.fetchone()
+        
+        if not row or not row[1]:
+            return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
+        
+        # 商品確認
+        cur.execute("SELECT id, listing_price FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 現在の最高入札を確認
+        cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = ? ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
+        highest = cur.fetchone()
+        min_bid = highest[0] + 1 if highest else (item[1] or 0)
+        
+        if bid_amount < min_bid:
+            return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+        
+        # 入札を保存
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, bidder_name, bid_amount) VALUES (?, ?, ?)",
+                   (merchandise_id, bidder_name, bid_amount))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'success': True, 
+        'message': '入札が完了しました',
+        'bid_amount': bid_amount,
+        'bidder_name': bidder_name
+    })
 
 # ===================
 # バックアップ・リストア

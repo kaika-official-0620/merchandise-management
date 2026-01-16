@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オークション - 株式会社 開花</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 450px;
+        }
+        
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.7;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #1e293b;
+        }
+        
+        p {
+            color: #64748b;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+        
+        .datetime-info {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-top: 1rem;
+        }
+        
+        .datetime-info .label {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+        
+        .datetime-info .datetime {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #2563eb;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 2rem;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if reason == 'not_started' %}
+        <div class="icon">⏳</div>
+        <h1>まもなく開始します</h1>
+        <p>オークションはまだ開始されていません。<br>開始時刻までお待ちください。</p>
+        {% if start_datetime %}
+        <div class="datetime-info">
+            <div class="label">開始日時</div>
+            <div class="datetime">{{ start_datetime.strftime('%Y年%m月%d日 %H:%M') }}</div>
+        </div>
+        {% endif %}
+        {% elif reason == 'ended' %}
+        <div class="icon">🏁</div>
+        <h1>終了しました</h1>
+        <p>このオークションは終了しました。<br>ご参加ありがとうございました。</p>
+        {% if end_datetime %}
+        <div class="datetime-info">
+            <div class="label">終了日時</div>
+            <div class="datetime">{{ end_datetime.strftime('%Y年%m月%d日 %H:%M') }}</div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="icon">🔒</div>
+        <h1>現在非公開です</h1>
+        <p>オークションは現在準備中です。<br>公開までしばらくお待ちください。</p>
+        {% endif %}
+    </div>
+    
+    <footer class="footer">
+        <p>&copy; 株式会社 開花</p>
+    </footer>
+</body>
+</html>

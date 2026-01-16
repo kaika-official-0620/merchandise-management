@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+{% block title %}代行仕入れサービス管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>代行仕入れサービス管理</h1>
+    <a href="{{ url_for('public_proxy_service') }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+</div>
+
+<div class="proxy-admin-container">
+    <!-- 設定フォーム -->
+    <div class="settings-card">
+        <h2>基本設定</h2>
+        <form method="POST" action="{{ url_for('admin_proxy_service_settings') }}">
+            <div class="form-group">
+                <label class="toggle-label">
+                    <input type="checkbox" name="is_public" {% if settings.is_public %}checked{% endif %}>
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">ページを公開する</span>
+                </label>
+                <p class="form-hint">オフにするとページは非公開になります</p>
+            </div>
+            
+            <div class="form-group">
+                <label>ページタイトル</label>
+                <input type="text" name="page_title" value="{{ settings.page_title or '代行仕入れサービス' }}" class="form-control">
+            </div>
+            
+            <div class="form-group">
+                <label>ページ説明文</label>
+                <textarea name="page_description" class="form-control" rows="3">{{ settings.page_description or '' }}</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>開始日時</label>
+                <input type="datetime-local" name="start_datetime" class="form-control" 
+                       value="{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') if settings.start_datetime else '' }}">
+                <p class="form-hint">この日時以降に公開されます（空欄で即時公開）</p>
+            </div>
+            
+            <div class="form-group">
+                <label>終了日時</label>
+                <input type="datetime-local" name="end_datetime" class="form-control"
+                       value="{{ settings.end_datetime.strftime('%Y-%m-%dT%H:%M') if settings.end_datetime else '' }}">
+                <p class="form-hint">この日時に終了します（空欄で無期限）</p>
+            </div>
+            
+            <div class="form-group">
+                <label>公開対象ユーザー</label>
+                <p class="form-hint">チェックしたユーザーの商品が公開対象になります</p>
+                <div class="user-checkboxes">
+                    {% for user in users %}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="selected_users" value="{{ user.id }}" 
+                               {% if user.is_selected %}checked{% endif %}>
+                        <span class="checkbox-name">{{ user.display_name or user.username }}</span>
+                        <span class="checkbox-role {% if user.role == 'owner' %}owner{% endif %}">
+                            {{ 'オーナー' if user.role == 'owner' else '管理者' }}
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">設定を保存</button>
+        </form>
+    </div>
+    
+    <!-- 公開中の商品一覧 -->
+    <div class="items-card">
+        <h2>公開中の商品 <span class="item-count">{{ items|length }}件</span></h2>
+        
+        {% if items %}
+        <div class="proxy-items-grid">
+            {% for item in items %}
+            <div class="proxy-item-card">
+                <div class="item-photo">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                    {% else %}
+                    <div class="no-photo">No Image</div>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    <div class="item-name">{{ item.product_name or '-' }}</div>
+                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    {% if item.highest_bid %}
+                    <div class="item-bid-info">
+                        <span class="bid-amount">最高入札: ¥{{ "{:,}".format(item.highest_bid) }}</span>
+                        <span class="bid-count">({{ item.bid_count }}件)</span>
+                    </div>
+                    <div class="item-bidder">入札者: {{ item.highest_bidder }}</div>
+                    {% else %}
+                    <div class="item-no-bid">入札なし</div>
+                    {% endif %}
+                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
+                        公開解除
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            公開中の商品はありません。<br>
+            商品一覧から「代行サービスに掲載」をクリックして商品を追加してください。
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 入札履歴 -->
+    <div class="bids-card">
+        <h2>入札履歴 <span class="item-count">直近50件</span></h2>
+        {% if bids %}
+        <div class="bids-table-container">
+            <table class="bids-table">
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th>入札者</th>
+                        <th>入札額</th>
+                        <th>日時</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bid in bids %}
+                    <tr>
+                        <td>{{ bid.product_name }}</td>
+                        <td>{{ bid.bidder_name }}</td>
+                        <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
+                        <td class="bid-time">{{ bid.created_at.strftime('%m/%d %H:%M') if bid.created_at else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-message">まだ入札がありません</div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.proxy-admin-container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+}
+
+.bids-card {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.bids-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bids-table-container {
+    overflow-x: auto;
+}
+
+.bids-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.bids-table th,
+.bids-table td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bids-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.bids-table .bid-amount {
+    font-weight: 700;
+    color: #16a34a;
+}
+
+.bids-table .bid-time {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.settings-card, .items-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.settings-card h2, .items-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.item-count {
+    font-size: 0.85rem;
+    font-weight: normal;
+    color: #64748b;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #1e293b;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+/* トグルスイッチ */
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+}
+
+.toggle-label input {
+    display: none;
+}
+
+.toggle-switch {
+    width: 48px;
+    height: 26px;
+    background: #d1d5db;
+    border-radius: 13px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-label input:checked + .toggle-switch {
+    background: #10b981;
+}
+
+.toggle-label input:checked + .toggle-switch::after {
+    transform: translateX(22px);
+}
+
+.toggle-text {
+    font-weight: 500;
+}
+
+/* ユーザーチェックボックス */
+.user-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.checkbox-label:hover {
+    background: #f1f5f9;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+.checkbox-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.checkbox-role {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.checkbox-role.owner {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+/* 商品グリッド */
+.proxy-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.proxy-item-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
+.proxy-item-card .item-photo {
+    height: 150px;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.proxy-item-card .item-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.proxy-item-card .no-photo {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.proxy-item-card .item-info {
+    padding: 0.75rem;
+}
+
+.proxy-item-card .item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.proxy-item-card .item-brand {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.proxy-item-card .item-start-price {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-bid-info {
+    background: #f0fdf4;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-bid-info .bid-amount {
+    font-weight: 700;
+    color: #16a34a;
+    font-size: 0.9rem;
+}
+
+.proxy-item-card .item-bid-info .bid-count {
+    font-size: 0.75rem;
+    color: #4ade80;
+    margin-left: 0.25rem;
+}
+
+.proxy-item-card .item-bidder {
+    font-size: 0.75rem;
+    color: #16a34a;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-no-bid {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-owner {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+.proxy-item-card .item-actions {
+    padding: 0 0.75rem 0.75rem;
+}
+
+.empty-message {
+    text-align: center;
+    color: #94a3b8;
+    padding: 3rem 1rem;
+    line-height: 1.8;
+}
+
+@media (max-width: 1024px) {
+    .proxy-admin-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .proxy-items-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
+<script>
+function toggleProxyItem(itemId, btn) {
+    fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // カードを削除
+            btn.closest('.proxy-item-card').remove();
+            // カウント更新
+            const countEl = document.querySelector('.item-count');
+            const currentCount = parseInt(countEl.textContent);
+            countEl.textContent = (currentCount - 1) + '件';
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
+</script>
+{% endblock %}

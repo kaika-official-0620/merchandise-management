@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ settings.page_title or 'オークション' }} - 株式会社 開花</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+            padding: 2rem 1rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            color: rgba(255,255,255,0.8);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .countdown-bar {
+            background: #dc2626;
+            color: white;
+            padding: 0.75rem 1rem;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .countdown-bar.ending-soon {
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { background: #dc2626; }
+            50% { background: #b91c1c; }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        .items-count {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #64748b;
+        }
+        
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .item-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .item-photo {
+            height: 220px;
+            background: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .item-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .item-photo .no-image {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .item-info {
+            padding: 1.25rem;
+        }
+        
+        .item-brand {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+        }
+        
+        .item-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+        
+        .item-condition {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            color: #64748b;
+            margin-bottom: 0.75rem;
+        }
+        
+        .start-price {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+        
+        .current-bid {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .current-bid .bid-label {
+            font-size: 0.75rem;
+            color: #16a34a;
+            margin-bottom: 0.25rem;
+        }
+        
+        .current-bid .bid-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #16a34a;
+        }
+        
+        .current-bid .bidder-name {
+            font-size: 0.8rem;
+            color: #4ade80;
+            margin-top: 0.25rem;
+        }
+        
+        .no-bid {
+            background: #f8fafc;
+            border: 1px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .bid-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .bid-form input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+        
+        .bid-form input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        
+        .bid-form .bid-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .bid-form .bid-row input[type="number"] {
+            flex: 1;
+        }
+        
+        .btn-bid {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-bid:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn-bid:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        .bid-success {
+            background: #f0fdf4;
+            color: #16a34a;
+            padding: 0.75rem;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .bid-error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        
+        .empty-message {
+            text-align: center;
+            padding: 4rem 1rem;
+            color: #64748b;
+        }
+        
+        .empty-message h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #64748b;
+            font-size: 0.85rem;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 2rem;
+        }
+        
+        .contact-info {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .contact-info h2 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .contact-info p {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .items-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .item-photo {
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>{{ settings.page_title or 'オークション' }}</h1>
+        {% if settings.page_description %}
+        <p>{{ settings.page_description }}</p>
+        {% endif %}
+    </header>
+    
+    {% if end_datetime %}
+    <div class="countdown-bar" id="countdownBar">
+        終了まで: <span id="countdown">計算中...</span>
+    </div>
+    {% endif %}
+    
+    <main class="container">
+        <div class="contact-info">
+            <h2>入札方法</h2>
+            <p>お名前と入札金額を入力して「入札する」ボタンを押してください。<br>
+            最高入札額を上回る金額で入札できます。</p>
+        </div>
+        
+        {% if items %}
+        <p class="items-count">{{ items|length }}件の商品が出品中</p>
+        
+        <div class="items-grid">
+            {% for item in items %}
+            <div class="item-card" id="item-{{ item.id }}">
+                <div class="item-photo">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                    {% else %}
+                    <span class="no-image">No Image</span>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    {% if item.brand_name %}
+                    <div class="item-brand">{{ item.brand_name }}</div>
+                    {% endif %}
+                    <div class="item-name">{{ item.product_name or '商品名なし' }}</div>
+                    {% if item.item_condition %}
+                    <span class="item-condition">{{ item.item_condition }}</span>
+                    {% endif %}
+                    
+                    <div class="start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    
+                    {% if item.highest_bid %}
+                    <div class="current-bid">
+                        <div class="bid-label">現在の最高入札</div>
+                        <div class="bid-amount" id="bid-amount-{{ item.id }}">¥{{ "{:,}".format(item.highest_bid) }}</div>
+                        <div class="bidder-name" id="bidder-name-{{ item.id }}">入札者: {{ item.highest_bidder }}</div>
+                    </div>
+                    {% else %}
+                    <div class="no-bid" id="no-bid-{{ item.id }}">まだ入札がありません</div>
+                    {% endif %}
+                    
+                    <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})">
+                        <input type="text" name="bidder_name" placeholder="お名前" required id="name-{{ item.id }}">
+                        <div class="bid-row">
+                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ (item.highest_bid or item.listing_price or 0) + 1 }}" id="amount-{{ item.id }}">
+                            <button type="submit" class="btn-bid">入札する</button>
+                        </div>
+                        <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            <h2>現在出品中の商品はありません</h2>
+            <p>新しい商品が追加されるまでお待ちください。</p>
+        </div>
+        {% endif %}
+    </main>
+    
+    <footer class="footer">
+        <p>&copy; 株式会社 開花</p>
+    </footer>
+    
+    <script>
+    // 入札処理
+    function submitBid(event, itemId) {
+        event.preventDefault();
+        
+        const nameInput = document.getElementById('name-' + itemId);
+        const amountInput = document.getElementById('amount-' + itemId);
+        const errorDiv = document.getElementById('error-' + itemId);
+        const form = event.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        
+        errorDiv.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.textContent = '処理中...';
+        
+        fetch('/proxy-service/bid', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                merchandise_id: itemId,
+                bidder_name: nameInput.value,
+                bid_amount: parseInt(amountInput.value)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '入札する';
+            
+            if (data.success) {
+                // 入札成功 - 表示を更新
+                const noBidDiv = document.getElementById('no-bid-' + itemId);
+                if (noBidDiv) {
+                    noBidDiv.outerHTML = `
+                        <div class="current-bid">
+                            <div class="bid-label">現在の最高入札</div>
+                            <div class="bid-amount" id="bid-amount-${itemId}">¥${data.bid_amount.toLocaleString()}</div>
+                            <div class="bidder-name" id="bidder-name-${itemId}">入札者: ${data.bidder_name}</div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('bid-amount-' + itemId).textContent = '¥' + data.bid_amount.toLocaleString();
+                    document.getElementById('bidder-name-' + itemId).textContent = '入札者: ' + data.bidder_name;
+                }
+                
+                // 最低入札額を更新
+                amountInput.min = data.bid_amount + 1;
+                amountInput.value = '';
+                
+                alert('入札が完了しました！');
+            } else {
+                errorDiv.textContent = data.error;
+                errorDiv.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '入札する';
+            errorDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
+            errorDiv.style.display = 'block';
+        });
+    }
+    
+    // カウントダウン
+    {% if end_datetime %}
+    const endTime = new Date('{{ end_datetime }}').getTime();
+    
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const diff = endTime - now;
+        
+        if (diff <= 0) {
+            document.getElementById('countdown').textContent = '終了しました';
+            document.getElementById('countdownBar').classList.add('ended');
+            return;
+        }
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        
+        let text = '';
+        if (hours > 0) text += hours + '時間 ';
+        text += minutes + '分 ' + seconds + '秒';
+        
+        document.getElementById('countdown').textContent = text;
+        
+        // 残り30分以下で点滅
+        if (diff < 30 * 60 * 1000) {
+            document.getElementById('countdownBar').classList.add('ending-soon');
+        }
+    }
+    
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+    {% endif %}
+    </script>
+</body>
+</html>
