@@ -24,9 +24,9 @@
     <h3>自動引き落としについて</h3>
     <ul>
         <li><strong>サブスク開始</strong>：ユーザーがクレジットカードを登録し、毎月自動引き落としが開始されます</li>
-        <li><strong>プラン変更</strong>：商品数の変動により月額が変わった場合、プランを変更して次回から新料金で引き落とし</li>
+        <li><strong>プラン変更</strong>：当月の商品登録数の変動により月額が変わった場合、プランを変更して次回から新料金で引き落とし</li>
         <li><strong>自動更新</strong>：毎月の支払いはStripeが自動処理します（管理者の操作不要）</li>
-        <li><strong>月末一括更新</strong>：月末時点の商品数で翌月の料金を自動決定します</li>
+        <li><strong>月末一括更新</strong>：月末時点の「当月登録件数」で翌月の料金を自動決定します</li>
     </ul>
 </div>
 
@@ -35,7 +35,7 @@
     <div class="batch-header">
         <div>
             <h3>月末一括料金更新</h3>
-            <p class="batch-desc">全ユーザーの現在の商品数に基づいて、サブスクリプション料金を一括更新します。<br>
+            <p class="batch-desc">全ユーザーの<strong>当月の商品登録件数</strong>に基づいて、サブスクリプション料金を一括更新します。<br>
             月末23:59に自動実行されますが、手動で実行することもできます。</p>
         </div>
         {% if stripe_enabled %}
@@ -99,7 +99,8 @@
                 <tr>
                     <th>ユーザー</th>
                     <th>メール</th>
-                    <th>商品数</th>
+                    <th>当月登録</th>
+                    <th>総数</th>
                     <th>月額利用料</th>
                     <th>サブスク状況</th>
                     <th>最終支払日</th>
@@ -117,7 +118,8 @@
                         {% endif %}
                     </td>
                     <td>{{ user.email }}</td>
-                    <td class="text-center">{{ user.item_count or 0 }}件</td>
+                    <td class="text-center"><strong>{{ user.item_count or 0 }}件</strong></td>
+                    <td class="text-center" style="color: #64748b;">{{ user.total_item_count or 0 }}件</td>
                     <td class="amount">
                         <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
                             ¥{{ "{:,}".format(user.monthly_fee) }}
@@ -183,12 +185,12 @@
 
 <!-- 料金体系 -->
 <div class="admin-section">
-    <h2>月額利用料体系（ユーザー管理の商品数に基づく）</h2>
+    <h2>月額利用料体系（当月の商品登録件数に基づく）</h2>
     <div class="fee-table">
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>商品登録数</th>
+                    <th>当月の登録件数</th>
                     <th>月額利用料</th>
                 </tr>
             </thead>
@@ -667,7 +669,7 @@ function startSubscription(userId) {
 }
 
 function changePlan(userId) {
-    if (!confirm('商品数に基づいて料金プランを更新しますか？\n（料金が変わっていない場合は更新されません）')) {
+    if (!confirm('当月の登録件数に基づいて料金プランを更新しますか？\n（料金が変わっていない場合は更新されません）')) {
         return;
     }
     
@@ -729,7 +731,7 @@ function copyUrl() {
 
 // 月末バッチ処理
 function runBatchUpdate() {
-    if (!confirm('全ユーザーの料金プランを現在の商品数に基づいて一括更新しますか？\n\n※通常は月末に自動実行されます。')) {
+    if (!confirm('全ユーザーの料金プランを当月の登録件数に基づいて一括更新しますか？\n\n※通常は月末に自動実行されます。')) {
         return;
     }
     

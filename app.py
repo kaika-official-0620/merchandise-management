@@ -1490,7 +1490,7 @@ def profile():
         flash('プロフィールを更新しました', 'success')
         return redirect(url_for('profile'))
     
-    # ユーザーの商品数と月額利用料を取得
+    # ユーザーの当月商品登録数と月額利用料を取得
     conn = get_db()
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
@@ -1498,7 +1498,8 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
-                   COUNT(m.id) as item_count
+                   COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
+                   COUNT(m.id) as total_item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.id = %s
@@ -1510,7 +1511,8 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
-                   COUNT(m.id) as item_count
+                   COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
+                   COUNT(m.id) as total_item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.id = ?
@@ -1535,8 +1537,11 @@ def profile():
     else:
         monthly_fee = 30000
     
+    total_item_count = user_info.get('total_item_count', 0) if user_info else 0
+    
     billing_info = {
-        'item_count': item_count,
+        'item_count': item_count,  # 当月の登録件数
+        'total_item_count': total_item_count,  # 総登録件数
         'monthly_fee': monthly_fee,
         'subscription_status': user_info.get('subscription_status') if user_info else None,
         'has_subscription': bool(user_info.get('stripe_subscription_id')) if user_info else False,
@@ -9312,7 +9317,8 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
-                   COUNT(m.id) as item_count
+                   COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
+                   COUNT(m.id) as total_item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.role != 'owner'
@@ -9327,7 +9333,8 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
-                   COUNT(m.id) as item_count
+                   COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
+                   COUNT(m.id) as total_item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.role != 'owner'
@@ -9336,19 +9343,10 @@ def admin_stripe_dashboard():
         """)
         users = [dict(row) for row in cur.fetchall()]
     
-    # 月額利用料を計算
+    # 月額利用料を計算（当月の登録件数ベース）
     for user in users:
         item_count = user.get('item_count', 0) or 0
-        if item_count < 50:
-            user['monthly_fee'] = 2500
-        elif item_count < 100:
-            user['monthly_fee'] = 5000
-        elif item_count < 150:
-            user['monthly_fee'] = 10000
-        elif item_count < 200:
-            user['monthly_fee'] = 20000
-        else:
-            user['monthly_fee'] = 30000
+        user['monthly_fee'] = get_monthly_fee(item_count)
     
     cur.close()
     conn.close()
@@ -9375,7 +9373,7 @@ def admin_stripe_dashboard():
                            scheduler_info=scheduler_info)
 
 def get_monthly_fee(item_count):
-    """商品数から月額利用料を計算"""
+    """当月の商品登録数から月額利用料を計算"""
     if item_count < 50:
         return 2500
     elif item_count < 100:
@@ -9447,7 +9445,8 @@ def admin_stripe_subscribe(user_id):
         from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
-            SELECT u.*, COUNT(m.id) as item_count
+            SELECT u.*, 
+                   COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.id = %s
@@ -9457,7 +9456,8 @@ def admin_stripe_subscribe(user_id):
     else:
         cur = conn.cursor()
         cur.execute("""
-            SELECT u.*, COUNT(m.id) as item_count
+            SELECT u.*, 
+                   COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.id = ?
