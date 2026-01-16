@@ -5,56 +5,13 @@
 {% block content %}
 <!-- タブナビゲーション -->
 <div class="doc-tabs">
-    <button class="doc-tab active" data-tab="estimates">請求書 {% if unread_shikiriosho_count > 0 %}<span class="tab-badge">{{ unread_shikiriosho_count }}</span>{% endif %}</button>
-    <button class="doc-tab" data-tab="settlements">買取明細書</button>
-</div>
-
-<!-- 請求書タブ -->
-<div class="tab-content active" id="tab-estimates">
-    <div class="tab-header">
-        <h2>受信した請求書</h2>
-    </div>
-    {% if shikiriosho_list %}
-    <div class="doc-cards">
-        {% for doc in shikiriosho_list %}
-        <div class="doc-card estimate-card {% if not doc.is_read %}unread{% endif %}">
-            <div class="card-header">
-                <span class="doc-no">{{ doc.document_no }}</span>
-                {% if not doc.is_read %}
-                <span class="new-badge">NEW</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <div class="info-row">
-                    <span class="label">発行日</span>
-                    <span class="value">{{ doc.issue_date }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">送信者</span>
-                    <span class="value">{{ doc.sender_display_name or '管理者' }}</span>
-                </div>
-                <div class="info-row total">
-                    <span class="label">税込合計</span>
-                    <span class="value">¥{{ "{:,}".format(doc.total_amount) }}</span>
-                </div>
-            </div>
-            <div class="card-actions">
-                <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-primary">詳細</a>
-                <a href="{{ url_for('user_shikiriosho_download', id=doc.id) }}" class="btn btn-secondary btn-sm">CSV</a>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-icon"></div>
-        <p>受信した請求書はありません</p>
-    </div>
-    {% endif %}
+    <button class="doc-tab active" data-tab="kaitori">買取明細書</button>
+    <button class="doc-tab" data-tab="mitsumori">見積依頼書</button>
+    <button class="doc-tab" data-tab="keisan">計算書</button>
 </div>
 
 <!-- 買取明細書タブ -->
-<div class="tab-content" id="tab-settlements">
+<div class="tab-content active" id="tab-kaitori">
     <div class="tab-header">
         <h2>買取明細書</h2>
         <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -103,9 +60,119 @@
     </div>
     {% else %}
     <div class="empty-state">
-        <div class="empty-icon"></div>
+        <div class="empty-icon">📄</div>
         <p>買取明細書がありません</p>
         <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 見積依頼書タブ -->
+<div class="tab-content" id="tab-mitsumori">
+    <div class="tab-header">
+        <h2>見積依頼書</h2>
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+    {% if user_mitsumori_list %}
+    <div class="doc-cards">
+        {% for doc in user_mitsumori_list %}
+        <div class="doc-card mitsumori-card status-{{ doc.status }}">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ doc.status }}">
+                    {% if doc.status == 'draft' %}下書き
+                    {% elif doc.status == 'completed' %}完了
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="label">発行日</span>
+                    <span class="value">{{ doc.issue_date }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">宛先</span>
+                    <span class="value">{{ doc.company_name or '-' }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">件名</span>
+                    <span class="value">{{ doc.subject or '-' }}</span>
+                </div>
+                <div class="info-row total">
+                    <span class="label">合計金額</span>
+                    <span class="value">¥{{ "{:,}".format(doc.total_amount or 0) }}</span>
+                </div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細</a>
+                {% if doc.status == 'draft' %}
+                    <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary btn-sm">PDF</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>見積依頼書がありません</p>
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">新規作成</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 計算書タブ -->
+<div class="tab-content" id="tab-keisan">
+    <div class="tab-header">
+        <h2>計算書</h2>
+        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+    {% if user_keisan_list %}
+    <div class="doc-cards">
+        {% for doc in user_keisan_list %}
+        <div class="doc-card keisan-card status-{{ doc.status }}">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ doc.status }}">
+                    {% if doc.status == 'draft' %}下書き
+                    {% elif doc.status == 'completed' %}完了
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="label">発行日</span>
+                    <span class="value">{{ doc.issue_date }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">宛先</span>
+                    <span class="value">{{ doc.recipient_name or '-' }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">件名</span>
+                    <span class="value">{{ doc.subject or '-' }}</span>
+                </div>
+                <div class="info-row total">
+                    <span class="label">合計金額</span>
+                    <span class="value">¥{{ "{:,}".format(doc.total_amount or 0) }}</span>
+                </div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-info">詳細</a>
+                {% if doc.status == 'draft' %}
+                    <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
+                <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary btn-sm">PDF</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🧮</div>
+        <p>計算書がありません</p>
+        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">新規作成</a>
     </div>
     {% endif %}
 </div>
@@ -213,6 +280,12 @@
 .settlement-card.status-approved { border-left: 4px solid #10b981; }
 .settlement-card.status-rejected { border-left: 4px solid #ef4444; }
 
+.mitsumori-card.status-draft { border-left: 4px solid #f59e0b; }
+.mitsumori-card.status-completed { border-left: 4px solid #10b981; }
+
+.keisan-card.status-draft { border-left: 4px solid #f59e0b; }
+.keisan-card.status-completed { border-left: 4px solid #10b981; }
+
 .card-header {
     background: #f8fafc;
     padding: 12px 16px;
@@ -255,6 +328,7 @@
 .status-badge.status-sent { background: #cffafe; color: #0891b2; }
 .status-badge.status-approved { background: #d1fae5; color: #059669; }
 .status-badge.status-rejected { background: #fee2e2; color: #dc2626; }
+.status-badge.status-completed { background: #d1fae5; color: #059669; }
 
 .card-body {
     padding: 16px;
@@ -274,6 +348,11 @@
 .info-row .value {
     font-weight: 500;
     color: #1e293b;
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .info-row.total {
@@ -304,182 +383,6 @@
     font-weight: 500;
     border: none;
     cursor: pointer;
-}
-
-/* サービス選択カード（簡潔版） */
-.service-select-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.service-select-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-}
-
-.service-btn {
-    padding: 14px 16px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #334155;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.service-btn:hover {
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-}
-
-@media (max-width: 768px) {
-    .service-select-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-/* サービス書類一覧 */
-.service-docs-list {
-    margin-top: 30px;
-    padding-top: 20px;
-    border-top: 1px solid #e2e8f0;
-}
-
-.service-docs-list h3 {
-    margin: 0 0 16px 0;
-    color: #334155;
-}
-
-.service-type-badge {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.service-type-badge.service-photo_packing { background: #fef3c7; color: #b45309; }
-.service-type-badge.service-wholesale { background: #dbeafe; color: #1d4ed8; }
-.service-type-badge.service-multi_listing { background: #d1fae5; color: #059669; }
-.service-type-badge.service-auction { background: #fce7f3; color: #be185d; }
-
-/* モーダル */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 20px;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 16px;
-    width: 100%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: #1e293b;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #64748b;
-    padding: 0;
-    line-height: 1;
-}
-
-#serviceDocForm {
-    padding: 20px;
-}
-
-.form-group {
-    margin-bottom: 16px;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 6px;
-    font-weight: 500;
-    color: #334155;
-    font-size: 0.9rem;
-}
-
-.required {
-    color: #ef4444;
-}
-
-.form-control {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    box-sizing: border-box;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.checkbox-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.checkbox-group label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 400;
-    cursor: pointer;
-}
-
-.form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.8rem;
-    color: #64748b;
-}
-
-.form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 16px;
-    border-top: 1px solid #e2e8f0;
 }
 
 /* ボタン */

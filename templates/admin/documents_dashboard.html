@@ -8,19 +8,6 @@
 
 
 <div class="doc-types-grid">
-    <!-- 買取明細書 -->
-    <div class="doc-type-card">
-        <h3>買取明細書</h3>
-        <p class="doc-type-desc">商品の買取内容を記載した明細書。<br>身分証・同意書を添付可能。</p>
-        <div class="doc-type-actions">
-            <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
-        </div>
-        <div class="doc-type-count">
-            <span class="count-number">{{ kaitori_count }}</span> 件
-        </div>
-    </div>
-
     <!-- 精算書 -->
     <div class="doc-type-card">
         <h3>精算書</h3>
@@ -47,16 +34,16 @@
         </div>
     </div>
 
-    <!-- 請求書（フリー） -->
+    <!-- 買取明細書 -->
     <div class="doc-type-card">
-        <h3>請求書（フリー）</h3>
-        <p class="doc-type-desc">自由に記載できる請求書。</p>
+        <h3>買取明細書</h3>
+        <p class="doc-type-desc">商品の買取内容を記載した明細書。<br>身分証・同意書を添付可能。</p>
         <div class="doc-type-actions">
-            <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
+            <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
         </div>
         <div class="doc-type-count">
-            <span class="count-number">{{ shikiriosho_count }}</span> 件
+            <span class="count-number">{{ kaitori_count }}</span> 件
         </div>
     </div>
 </div>

@@ -552,6 +552,72 @@ if DATABASE_URL:
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, ('月謝利用料金のお知らせ', '【月謝利用料金のお知らせ】\n\n今月のご利用料金をお知らせします。\n\n{monthly_fee}\n\nご確認よろしくお願いいたします。', 'monthly', '11:00', 1, 'monthly_fee', False))
         
+        # ユーザー向け見積依頼書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_mitsumori (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                valid_until DATE,
+                company_name VARCHAR(200),
+                department VARCHAR(100),
+                contact_person VARCHAR(100),
+                address TEXT,
+                subject VARCHAR(200),
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ユーザー向け見積依頼書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_mitsumori_items (
+                id SERIAL PRIMARY KEY,
+                mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit VARCHAR(20),
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # ユーザー向け計算書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_keisan (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                recipient_name VARCHAR(200),
+                subject VARCHAR(200),
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ユーザー向け計算書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_keisan_items (
+                id SERIAL PRIMARY KEY,
+                keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit VARCHAR(20),
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1065,6 +1131,72 @@ else:
                 INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, ('月謝利用料金のお知らせ', '【月謝利用料金のお知らせ】\n\n今月のご利用料金をお知らせします。\n\n{monthly_fee}\n\nご確認よろしくお願いいたします。', 'monthly', '11:00', 1, 'monthly_fee', 0))
+        
+        # ユーザー向け見積依頼書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_mitsumori (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                valid_until DATE,
+                company_name TEXT,
+                department TEXT,
+                contact_person TEXT,
+                address TEXT,
+                subject TEXT,
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ユーザー向け見積依頼書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_mitsumori_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit TEXT,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # ユーザー向け計算書テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_keisan (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                issue_date DATE NOT NULL,
+                recipient_name TEXT,
+                subject TEXT,
+                total_amount INTEGER DEFAULT 0,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # ユーザー向け計算書明細テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_keisan_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                unit TEXT,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0
+            )
+        ''')
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -5413,46 +5545,25 @@ def documents():
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 請求書
-        cur.execute("""
-            SELECT s.*, u.display_name as sender_display_name
-            FROM shikiriosho s
-            LEFT JOIN users u ON s.sender_id = u.id
-            WHERE s.recipient_id = %s AND s.status = 'sent'
-            ORDER BY s.created_at DESC
-        """, (current_user.id,))
-        shikiriosho_list = [dict(row) for row in cur.fetchall()]
-        
         # 買取明細書
         cur.execute("""
             SELECT * FROM invoices WHERE sender_id = %s ORDER BY created_at DESC
         """, (current_user.id,))
         invoices = [dict(row) for row in cur.fetchall()]
         
-        # サービス書類
+        # ユーザー見積依頼書
         cur.execute("""
-            SELECT * FROM service_documents WHERE user_id = %s ORDER BY created_at DESC
+            SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC
         """, (current_user.id,))
-        service_documents = [dict(row) for row in cur.fetchall()]
+        user_mitsumori_list = [dict(row) for row in cur.fetchall()]
         
-        # 未読請求書カウント
+        # ユーザー計算書
         cur.execute("""
-            SELECT COUNT(*) as count FROM shikiriosho 
-            WHERE recipient_id = %s AND status = 'sent' AND is_read = 0
+            SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC
         """, (current_user.id,))
-        unread_count = cur.fetchone()['count']
+        user_keisan_list = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        
-        # 請求書
-        cur.execute("""
-            SELECT s.*, u.display_name as sender_display_name
-            FROM shikiriosho s
-            LEFT JOIN users u ON s.sender_id = u.id
-            WHERE s.recipient_id = ? AND s.status = 'sent'
-            ORDER BY s.created_at DESC
-        """, (current_user.id,))
-        shikiriosho_list = [dict(row) for row in cur.fetchall()]
         
         # 買取明細書
         cur.execute("""
@@ -5460,27 +5571,25 @@ def documents():
         """, (current_user.id,))
         invoices = [dict(row) for row in cur.fetchall()]
         
-        # サービス書類
+        # ユーザー見積依頼書
         cur.execute("""
-            SELECT * FROM service_documents WHERE user_id = ? ORDER BY created_at DESC
+            SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC
         """, (current_user.id,))
-        service_documents = [dict(row) for row in cur.fetchall()]
+        user_mitsumori_list = [dict(row) for row in cur.fetchall()]
         
-        # 未読請求書カウント
+        # ユーザー計算書
         cur.execute("""
-            SELECT COUNT(*) as count FROM shikiriosho 
-            WHERE recipient_id = ? AND status = 'sent' AND is_read = 0
+            SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC
         """, (current_user.id,))
-        unread_count = dict(cur.fetchone())['count']
+        user_keisan_list = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
     
     return render_template('documents.html',
-                          shikiriosho_list=shikiriosho_list,
                           invoices=invoices,
-                          service_documents=service_documents,
-                          unread_shikiriosho_count=unread_count)
+                          user_mitsumori_list=user_mitsumori_list,
+                          user_keisan_list=user_keisan_list)
 
 @app.route('/service-document/create', methods=['POST'])
 @login_required
@@ -6230,6 +6339,634 @@ def user_invoice_send(id):
     return redirect(url_for('user_invoice_list'))
 
 # ===================
+# ユーザー向け見積依頼書
+# ===================
+
+@app.route('/mitsumori')
+@login_required
+def user_mitsumori_list():
+    """見積依頼書一覧（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+    
+    mitsumori_list = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('mitsumori_list.html', mitsumori_list=mitsumori_list)
+
+@app.route('/mitsumori/add', methods=['GET', 'POST'])
+@login_required
+def user_mitsumori_add():
+    """見積依頼書作成（ユーザー用）"""
+    from datetime import datetime
+    
+    conn = get_db()
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        valid_until = request.form.get('valid_until') or None
+        company_name = request.form.get('company_name', '')
+        department = request.form.get('department', '')
+        contact_person = request.form.get('contact_person', '')
+        address = request.form.get('address', '')
+        subject = request.form.get('subject', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細項目
+        item_names = request.form.getlist('item_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計金額計算
+        total_amount = 0
+        items_data = []
+        for i, name in enumerate(item_names):
+            if name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                total_amount += amount
+                items_data.append({
+                    'item_no': i + 1,
+                    'item_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        now = datetime.now()
+        
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = cur.fetchone()
+            count = (result['count'] if result else 0) + 1
+            document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+            
+            cur.execute("""
+                INSERT INTO user_mitsumori (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (document_no, current_user.id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status))
+            mitsumori_id = cur.fetchone()['id']
+            
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = dict(cur.fetchone())
+            count = (result['count'] if result else 0) + 1
+            document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+            
+            cur.execute("""
+                INSERT INTO user_mitsumori (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (document_no, current_user.id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status))
+            mitsumori_id = cur.lastrowid
+            
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('見積依頼書を作成しました', 'success')
+        return redirect(url_for('documents'))
+    
+    # GETリクエスト
+    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
+                   (current_user.id, now.strftime('%Y-%m-01')))
+        result = cur.fetchone()
+        count = (result['count'] if result else 0) + 1
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
+                   (current_user.id, now.strftime('%Y-%m-01')))
+        result = dict(cur.fetchone())
+        count = (result['count'] if result else 0) + 1
+    
+    document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('mitsumori_form.html', mitsumori=None, items=[], today=today, document_no=document_no)
+
+@app.route('/mitsumori/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def user_mitsumori_edit(id):
+    """見積依頼書編集（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+    
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    if mitsumori['status'] != 'draft':
+        flash('完了済みの見積依頼書は編集できません', 'error')
+        return redirect(url_for('documents'))
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        valid_until = request.form.get('valid_until') or None
+        company_name = request.form.get('company_name', '')
+        department = request.form.get('department', '')
+        contact_person = request.form.get('contact_person', '')
+        address = request.form.get('address', '')
+        subject = request.form.get('subject', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細項目
+        item_names = request.form.getlist('item_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計金額計算
+        total_amount = 0
+        items_data = []
+        for i, name in enumerate(item_names):
+            if name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                total_amount += amount
+                items_data.append({
+                    'item_no': i + 1,
+                    'item_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE user_mitsumori SET issue_date = %s, valid_until = %s, company_name = %s, department = %s, 
+                contact_person = %s, address = %s, subject = %s, total_amount = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, id))
+            
+            cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur.execute("""
+                UPDATE user_mitsumori SET issue_date = ?, valid_until = ?, company_name = ?, department = ?, 
+                contact_person = ?, address = ?, subject = ?, total_amount = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, id))
+            
+            cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('見積依頼書を更新しました', 'success')
+        return redirect(url_for('documents'))
+    
+    # GETリクエスト - 明細取得
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+    else:
+        cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+    
+    items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('mitsumori_form.html', mitsumori=mitsumori, items=items, today=None, document_no=mitsumori['document_no'])
+
+@app.route('/mitsumori/view/<int:id>')
+@login_required
+def user_mitsumori_view(id):
+    """見積依頼書詳細（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+        cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+        cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    return render_template('mitsumori_view.html', mitsumori=mitsumori, items=items)
+
+@app.route('/mitsumori/pdf/<int:id>')
+@login_required
+def user_mitsumori_pdf(id):
+    """見積依頼書PDF（ユーザー用）"""
+    flash('PDF機能は準備中です', 'info')
+    return redirect(url_for('user_mitsumori_view', id=id))
+
+@app.route('/mitsumori/delete/<int:id>')
+@login_required
+def user_mitsumori_delete(id):
+    """見積依頼書削除（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT status FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori and mitsumori['status'] == 'draft':
+            cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
+            cur.execute("DELETE FROM user_mitsumori WHERE id = %s", (id,))
+            conn.commit()
+            flash('見積依頼書を削除しました', 'success')
+        else:
+            flash('完了済みの見積依頼書は削除できません', 'error')
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori and mitsumori['status'] == 'draft':
+            cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
+            cur.execute("DELETE FROM user_mitsumori WHERE id = ?", (id,))
+            conn.commit()
+            flash('見積依頼書を削除しました', 'success')
+        else:
+            flash('完了済みの見積依頼書は削除できません', 'error')
+    
+    cur.close()
+    conn.close()
+    return redirect(url_for('documents'))
+
+# ===================
+# ユーザー向け計算書
+# ===================
+
+@app.route('/keisan')
+@login_required
+def user_keisan_list():
+    """計算書一覧（ユーザー用）"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+    
+    keisan_list = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('keisan_list.html', keisan_list=keisan_list)
+
+@app.route('/keisan/add', methods=['GET', 'POST'])
+@login_required
+def user_keisan_add():
+    """計算書作成（ユーザー用）"""
+    from datetime import datetime
+    
+    conn = get_db()
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        recipient_name = request.form.get('recipient_name', '')
+        subject = request.form.get('subject', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細項目
+        item_names = request.form.getlist('item_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計金額計算
+        total_amount = 0
+        items_data = []
+        for i, name in enumerate(item_names):
+            if name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                total_amount += amount
+                items_data.append({
+                    'item_no': i + 1,
+                    'item_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        now = datetime.now()
+        
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT COUNT(*) as count FROM user_keisan WHERE user_id = %s AND issue_date >= %s", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = cur.fetchone()
+            count = (result['count'] if result else 0) + 1
+            document_no = f"UK-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+            
+            cur.execute("""
+                INSERT INTO user_keisan (document_no, user_id, issue_date, recipient_name, subject, total_amount, notes, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (document_no, current_user.id, issue_date, recipient_name, subject, total_amount, notes, status))
+            keisan_id = cur.fetchone()['id']
+            
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (keisan_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as count FROM user_keisan WHERE user_id = ? AND issue_date >= ?", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = dict(cur.fetchone())
+            count = (result['count'] if result else 0) + 1
+            document_no = f"UK-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+            
+            cur.execute("""
+                INSERT INTO user_keisan (document_no, user_id, issue_date, recipient_name, subject, total_amount, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (document_no, current_user.id, issue_date, recipient_name, subject, total_amount, notes, status))
+            keisan_id = cur.lastrowid
+            
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (keisan_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('計算書を作成しました', 'success')
+        return redirect(url_for('documents'))
+    
+    # GETリクエスト
+    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT COUNT(*) as count FROM user_keisan WHERE user_id = %s AND issue_date >= %s", 
+                   (current_user.id, now.strftime('%Y-%m-01')))
+        result = cur.fetchone()
+        count = (result['count'] if result else 0) + 1
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM user_keisan WHERE user_id = ? AND issue_date >= ?", 
+                   (current_user.id, now.strftime('%Y-%m-01')))
+        result = dict(cur.fetchone())
+        count = (result['count'] if result else 0) + 1
+    
+    document_no = f"UK-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('keisan_form.html', keisan=None, items=[], today=today, document_no=document_no)
+
+@app.route('/keisan/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def user_keisan_edit(id):
+    """計算書編集（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    if keisan['status'] != 'draft':
+        flash('完了済みの計算書は編集できません', 'error')
+        return redirect(url_for('documents'))
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        recipient_name = request.form.get('recipient_name', '')
+        subject = request.form.get('subject', '')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        
+        # 明細項目
+        item_names = request.form.getlist('item_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計金額計算
+        total_amount = 0
+        items_data = []
+        for i, name in enumerate(item_names):
+            if name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                total_amount += amount
+                items_data.append({
+                    'item_no': i + 1,
+                    'item_name': name,
+                    'quantity': qty,
+                    'unit': units[i] if i < len(units) else '',
+                    'unit_price': price,
+                    'amount': amount
+                })
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE user_keisan SET issue_date = %s, recipient_name = %s, subject = %s, total_amount = %s, notes = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (issue_date, recipient_name, subject, total_amount, notes, status, id))
+            
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        else:
+            cur.execute("""
+                UPDATE user_keisan SET issue_date = ?, recipient_name = ?, subject = ?, total_amount = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (issue_date, recipient_name, subject, total_amount, notes, status, id))
+            
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
+            for item in items_data:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('計算書を更新しました', 'success')
+        return redirect(url_for('documents'))
+    
+    # GETリクエスト - 明細取得
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+    else:
+        cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+    
+    items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('keisan_form.html', keisan=keisan, items=items, today=None, document_no=keisan['document_no'])
+
+@app.route('/keisan/view/<int:id>')
+@login_required
+def user_keisan_view(id):
+    """計算書詳細（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+        cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+        cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    return render_template('keisan_view.html', keisan=keisan, items=items)
+
+@app.route('/keisan/pdf/<int:id>')
+@login_required
+def user_keisan_pdf(id):
+    """計算書PDF（ユーザー用）"""
+    flash('PDF機能は準備中です', 'info')
+    return redirect(url_for('user_keisan_view', id=id))
+
+@app.route('/keisan/delete/<int:id>')
+@login_required
+def user_keisan_delete(id):
+    """計算書削除（ユーザー用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT status FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan and keisan['status'] == 'draft':
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
+            cur.execute("DELETE FROM user_keisan WHERE id = %s", (id,))
+            conn.commit()
+            flash('計算書を削除しました', 'success')
+        else:
+            flash('完了済みの計算書は削除できません', 'error')
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan and keisan['status'] == 'draft':
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
+            cur.execute("DELETE FROM user_keisan WHERE id = ?", (id,))
+            conn.commit()
+            flash('計算書を削除しました', 'success')
+        else:
+            flash('完了済みの計算書は削除できません', 'error')
+    
+    cur.close()
+    conn.close()
+    return redirect(url_for('documents'))
+
+# ===================
 # 買取明細書（管理者用）
 # ===================
 
@@ -6790,30 +7527,49 @@ def admin_documents_dashboard():
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 各書類のカウント
+        
+        # 精算書カウント（shikirioshoテーブルを使用）
         cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
-        shikiriosho_count = cur.fetchone()['count']
+        seisan_count = cur.fetchone()['count']
+        
+        # 見積依頼書カウント（管理者向けは今後実装）
+        mitsumori_count = 0
+        
+        # 買取明細書カウント
+        cur.execute("SELECT COUNT(*) as count FROM invoices")
+        kaitori_count = cur.fetchone()['count']
         
         # 承認待ち買取明細書
         cur.execute("""
             SELECT i.*, u.display_name as sender_name 
             FROM invoices i 
             LEFT JOIN users u ON i.sender_id = u.id 
-            WHERE i.status = 'pending' 
+            WHERE i.status = 'sent' 
             ORDER BY i.created_at DESC LIMIT 10
         """)
         pending_invoices = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
+        
+        # 精算書カウント
         cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
         result = cur.fetchone()
-        shikiriosho_count = result[0] if result else 0
+        seisan_count = dict(result)['count'] if result else 0
         
+        # 見積依頼書カウント（管理者向けは今後実装）
+        mitsumori_count = 0
+        
+        # 買取明細書カウント
+        cur.execute("SELECT COUNT(*) as count FROM invoices")
+        result = cur.fetchone()
+        kaitori_count = dict(result)['count'] if result else 0
+        
+        # 承認待ち買取明細書
         cur.execute("""
             SELECT i.*, u.display_name as sender_name 
             FROM invoices i 
             LEFT JOIN users u ON i.sender_id = u.id 
-            WHERE i.status = 'pending' 
+            WHERE i.status = 'sent' 
             ORDER BY i.created_at DESC LIMIT 10
         """)
         pending_invoices = [dict(row) for row in cur.fetchall()]
@@ -6822,10 +7578,9 @@ def admin_documents_dashboard():
     conn.close()
     
     return render_template('admin/documents_dashboard.html',
-        kaitori_count=0,  # 今後実装
-        seisan_count=0,   # 今後実装
-        mitsumori_count=0, # 今後実装
-        shikiriosho_count=shikiriosho_count,
+        seisan_count=seisan_count,
+        mitsumori_count=mitsumori_count,
+        kaitori_count=kaitori_count,
         pending_invoices=pending_invoices
     )
 
