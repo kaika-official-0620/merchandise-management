@@ -12,13 +12,15 @@
     <div class="settings-card">
         <h2>基本設定</h2>
         <form method="POST" action="{{ url_for('admin_proxy_service_settings') }}">
-            <div class="form-group">
+            <div class="form-group toggle-group">
                 <label class="toggle-label">
                     <input type="checkbox" name="is_public" {% if settings.is_public %}checked{% endif %}>
                     <span class="toggle-switch"></span>
-                    <span class="toggle-text">ページを公開する</span>
                 </label>
-                <p class="form-hint">オフにするとページは非公開になります</p>
+                <div class="toggle-info">
+                    <span class="toggle-text">ページを公開する</span>
+                    <p class="form-hint">オフにするとページは非公開になります</p>
+                </div>
             </div>
             
             <div class="form-group">
@@ -48,14 +50,21 @@
             <div class="form-group">
                 <label>公開対象ユーザー</label>
                 <p class="form-hint">チェックしたユーザーの商品が公開対象になります</p>
+                <div class="select-all-container">
+                    <label class="checkbox-label select-all">
+                        <input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this)">
+                        <span class="checkbox-name">すべて選択</span>
+                    </label>
+                </div>
                 <div class="user-checkboxes">
                     {% for user in users %}
                     <label class="checkbox-label">
                         <input type="checkbox" name="selected_users" value="{{ user.id }}" 
+                               class="user-checkbox"
                                {% if user.is_selected %}checked{% endif %}>
                         <span class="checkbox-name">{{ user.display_name or user.username }}</span>
-                        <span class="checkbox-role {% if user.role == 'owner' %}owner{% endif %}">
-                            {{ 'オーナー' if user.role == 'owner' else '管理者' }}
+                        <span class="checkbox-role {% if user.role == 'owner' %}owner{% elif user.role == 'admin' %}admin{% else %}user{% endif %}">
+                            {% if user.role == 'owner' %}オーナー{% elif user.role == 'admin' %}管理者{% else %}ユーザー{% endif %}
                         </span>
                     </label>
                     {% endfor %}
@@ -108,6 +117,42 @@
         <div class="empty-message">
             公開中の商品はありません。<br>
             商品一覧から「代行サービスに掲載」をクリックして商品を追加してください。
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 商品を追加 -->
+    <div class="add-items-card">
+        <h2>商品を追加 <span class="item-count">{{ available_items|length }}件選択可能</span></h2>
+        
+        {% if available_items %}
+        <div class="proxy-items-grid">
+            {% for item in available_items %}
+            <div class="proxy-item-card available" id="available-{{ item.id }}">
+                <div class="item-photo">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                    {% else %}
+                    <div class="no-photo">No Image</div>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    <div class="item-name">{{ item.product_name or '-' }}</div>
+                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-price">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
+                        掲載する
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            選択可能な商品がありません。
         </div>
         {% endif %}
     </div>
@@ -248,11 +293,17 @@
 }
 
 /* トグルスイッチ */
+.toggle-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
 .toggle-label {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .toggle-label input {
@@ -266,6 +317,7 @@
     border-radius: 13px;
     position: relative;
     transition: background 0.2s;
+    flex-shrink: 0;
 }
 
 .toggle-switch::after {
@@ -289,8 +341,18 @@
     transform: translateX(22px);
 }
 
-.toggle-text {
+.toggle-info {
+    flex: 1;
+}
+
+.toggle-info .toggle-text {
     font-weight: 500;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.toggle-info .form-hint {
+    margin-top: 0;
 }
 
 /* ユーザーチェックボックス */
@@ -337,6 +399,60 @@
 .checkbox-role.owner {
     background: #fef3c7;
     color: #b45309;
+}
+
+.checkbox-role.admin {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.checkbox-role.user {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.select-all-container {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.checkbox-label.select-all {
+    background: #f1f5f9;
+}
+
+.checkbox-label.select-all .checkbox-name {
+    color: #64748b;
+}
+
+/* 商品追加カード */
+.add-items-card {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.add-items-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.proxy-item-card.available {
+    border: 1px dashed #d1d5db;
+    background: white;
+}
+
+.proxy-item-card .item-price {
+    font-weight: 700;
+    color: #2563eb;
+    font-size: 1rem;
 }
 
 /* 商品グリッド */
@@ -469,12 +585,8 @@ function toggleProxyItem(itemId, btn) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // カードを削除
-            btn.closest('.proxy-item-card').remove();
-            // カウント更新
-            const countEl = document.querySelector('.item-count');
-            const currentCount = parseInt(countEl.textContent);
-            countEl.textContent = (currentCount - 1) + '件';
+            // ページをリロードして最新状態を表示
+            location.reload();
         } else {
             alert(data.error || 'エラーが発生しました');
         }
@@ -483,5 +595,50 @@ function toggleProxyItem(itemId, btn) {
         alert('エラーが発生しました');
     });
 }
+
+function addProxyItem(itemId, btn) {
+    btn.disabled = true;
+    btn.textContent = '処理中...';
+    
+    fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // ページをリロードして最新状態を表示
+            location.reload();
+        } else {
+            btn.disabled = false;
+            btn.textContent = '掲載する';
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = '掲載する';
+        alert('エラーが発生しました');
+    });
+}
+
+function toggleAllUsers(checkbox) {
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    userCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+}
+
+// 初期状態でチェックボックスの状態を確認
+document.addEventListener('DOMContentLoaded', function() {
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllUsers');
+    const allChecked = Array.from(userCheckboxes).every(cb => cb.checked);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allChecked && userCheckboxes.length > 0;
+    }
+});
 </script>
 {% endblock %}

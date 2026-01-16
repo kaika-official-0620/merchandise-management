@@ -3204,8 +3204,9 @@ def admin_proxy_service():
                    CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
             FROM users u
             LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-            WHERE u.role IN ('owner', 'admin')
-            ORDER BY u.id
+            ORDER BY 
+                CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                u.id
         """)
         users = cur.fetchall()
         
@@ -3232,6 +3233,17 @@ def admin_proxy_service():
             LIMIT 50
         """)
         bids = cur.fetchall()
+        
+        # 選択可能な商品（未掲載かつ未販売）- PostgreSQL
+        cur.execute("""
+            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+            LIMIT 100
+        """)
+        available_items = cur.fetchall()
     else:
         cur = conn.cursor()
         # 設定取得
@@ -3244,8 +3256,9 @@ def admin_proxy_service():
                    CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
             FROM users u
             LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-            WHERE u.role IN ('owner', 'admin')
-            ORDER BY u.id
+            ORDER BY 
+                CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                u.id
         """)
         users = cur.fetchall()
         
@@ -3272,6 +3285,28 @@ def admin_proxy_service():
             LIMIT 50
         """)
         bids = cur.fetchall()
+        
+        # 選択可能な商品（未掲載かつ未販売）
+        cur.execute("""
+            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+            LIMIT 100
+        """)
+        available_items = cur.fetchall()
+    else:
+        # 選択可能な商品（未掲載かつ未販売）
+        cur.execute("""
+            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.show_in_proxy_service = 0 AND m.sale_date IS NULL
+            ORDER BY m.id DESC
+            LIMIT 100
+        """)
+        available_items = cur.fetchall()
     
     cur.close()
     conn.close()
@@ -3280,7 +3315,8 @@ def admin_proxy_service():
                          settings=dict(settings) if settings else {},
                          users=[dict(u) for u in users],
                          items=[dict(i) for i in items],
-                         bids=[dict(b) for b in bids])
+                         bids=[dict(b) for b in bids],
+                         available_items=[dict(i) for i in available_items])
 
 @app.route('/admin/proxy-service/settings', methods=['POST'])
 @login_required
