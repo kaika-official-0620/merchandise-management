@@ -472,6 +472,58 @@ if DATABASE_URL:
         if cur.fetchone()[0] == 0:
             cur.execute("INSERT INTO proxy_service_settings (is_public) VALUES (FALSE)")
         
+        # LINE連携設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_settings (
+                id SERIAL PRIMARY KEY,
+                channel_access_token TEXT,
+                channel_secret VARCHAR(100),
+                is_enabled BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # LINE定期送信メッセージテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_scheduled_messages (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(200) NOT NULL,
+                message_content TEXT NOT NULL,
+                schedule_type VARCHAR(20) DEFAULT 'daily',
+                schedule_time TIME,
+                schedule_day INTEGER,
+                target_type VARCHAR(20) DEFAULT 'all',
+                is_enabled BOOLEAN DEFAULT TRUE,
+                last_sent_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # LINE送信履歴テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_message_logs (
+                id SERIAL PRIMARY KEY,
+                message_type VARCHAR(20),
+                message_content TEXT,
+                target_count INTEGER,
+                success_count INTEGER,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        
+        # ユーザーにLINE user_idカラムを追加
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS line_user_id VARCHAR(100)")
+        except:
+            pass
+        
+        # LINE設定の初期レコード
+        cur.execute("SELECT COUNT(*) FROM line_settings")
+        if cur.fetchone()[0] == 0:
+            cur.execute("INSERT INTO line_settings (is_enabled) VALUES (FALSE)")
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -905,6 +957,58 @@ else:
         cur.execute("SELECT COUNT(*) FROM proxy_service_settings")
         if cur.fetchone()[0] == 0:
             cur.execute("INSERT INTO proxy_service_settings (is_public) VALUES (0)")
+        
+        # LINE連携設定テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_access_token TEXT,
+                channel_secret TEXT,
+                is_enabled INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # LINE定期送信メッセージテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_scheduled_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                message_content TEXT NOT NULL,
+                schedule_type TEXT DEFAULT 'daily',
+                schedule_time TEXT,
+                schedule_day INTEGER,
+                target_type TEXT DEFAULT 'all',
+                is_enabled INTEGER DEFAULT 1,
+                last_sent_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # LINE送信履歴テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS line_message_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_type TEXT,
+                message_content TEXT,
+                target_count INTEGER,
+                success_count INTEGER,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sent_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        
+        # ユーザーにLINE user_idカラムを追加
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN line_user_id TEXT")
+        except:
+            pass
+        
+        # LINE設定の初期レコード
+        cur.execute("SELECT COUNT(*) FROM line_settings")
+        if cur.fetchone()[0] == 0:
+            cur.execute("INSERT INTO line_settings (is_enabled) VALUES (0)")
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -6879,6 +6983,475 @@ def admin_mitsumori_pdf(id):
     return redirect(url_for('admin_mitsumori_list'))
 
 # ===================
+# LINE公式アカウント連携
+# ===================
+
+def send_line_broadcast(message):
+    """LINE一斉送信"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        settings = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        row = cur.fetchone()
+        settings = dict(zip(['id', 'channel_access_token', 'channel_secret', 'is_enabled', 'updated_at'], row)) if row else None
+    cur.close()
+    conn.close()
+    
+    if not settings or not settings.get('channel_access_token'):
+        return {'success': False, 'error': 'LINE設定が完了していません'}
+    
+    import requests
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f"Bearer {settings['channel_access_token']}"
+    }
+    data = {
+        'messages': [{'type': 'text', 'text': message}]
+    }
+    
+    try:
+        response = requests.post(
+            'https://api.line.me/v2/bot/message/broadcast',
+            headers=headers,
+            json=data
+        )
+        if response.status_code == 200:
+            return {'success': True}
+        else:
+            return {'success': False, 'error': response.text}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def send_line_push(user_id, message):
+    """LINE個別送信"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        settings = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        row = cur.fetchone()
+        settings = dict(zip(['id', 'channel_access_token', 'channel_secret', 'is_enabled', 'updated_at'], row)) if row else None
+    cur.close()
+    conn.close()
+    
+    if not settings or not settings.get('channel_access_token'):
+        return {'success': False, 'error': 'LINE設定が完了していません'}
+    
+    import requests
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f"Bearer {settings['channel_access_token']}"
+    }
+    data = {
+        'to': user_id,
+        'messages': [{'type': 'text', 'text': message}]
+    }
+    
+    try:
+        response = requests.post(
+            'https://api.line.me/v2/bot/message/push',
+            headers=headers,
+            json=data
+        )
+        if response.status_code == 200:
+            return {'success': True}
+        else:
+            return {'success': False, 'error': response.text}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@app.route('/admin/line')
+@login_required
+def admin_line_dashboard():
+    """LINE連携ダッシュボード"""
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用可能です', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        # LINE連携済みユーザー数
+        cur.execute("SELECT COUNT(*) as count FROM users WHERE line_user_id IS NOT NULL")
+        linked_users = cur.fetchone()['count']
+        
+        # 定期送信メッセージ
+        cur.execute("SELECT * FROM line_scheduled_messages ORDER BY id DESC")
+        scheduled_messages = cur.fetchall()
+        
+        # 送信履歴
+        cur.execute("""
+            SELECT l.*, u.display_name as sent_by_name
+            FROM line_message_logs l
+            LEFT JOIN users u ON l.sent_by = u.id
+            ORDER BY l.sent_at DESC LIMIT 20
+        """)
+        logs = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM line_settings LIMIT 1")
+        row = cur.fetchone()
+        settings = dict(zip(['id', 'channel_access_token', 'channel_secret', 'is_enabled', 'updated_at'], row)) if row else {}
+        
+        cur.execute("SELECT COUNT(*) FROM users WHERE line_user_id IS NOT NULL")
+        linked_users = cur.fetchone()[0]
+        
+        cur.execute("SELECT * FROM line_scheduled_messages ORDER BY id DESC")
+        scheduled_messages = cur.fetchall()
+        
+        cur.execute("""
+            SELECT l.*, u.display_name as sent_by_name
+            FROM line_message_logs l
+            LEFT JOIN users u ON l.sent_by = u.id
+            ORDER BY l.sent_at DESC LIMIT 20
+        """)
+        logs = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/line_dashboard.html',
+                         settings=dict(settings) if settings else {},
+                         linked_users=linked_users,
+                         scheduled_messages=[dict(m) for m in scheduled_messages] if scheduled_messages else [],
+                         logs=[dict(l) for l in logs] if logs else [])
+
+@app.route('/admin/line/settings', methods=['POST'])
+@login_required
+def admin_line_settings():
+    """LINE設定を保存"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    channel_access_token = request.form.get('channel_access_token', '')
+    channel_secret = request.form.get('channel_secret', '')
+    is_enabled = request.form.get('is_enabled') == 'on'
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE line_settings 
+            SET channel_access_token = %s, channel_secret = %s, is_enabled = %s, updated_at = CURRENT_TIMESTAMP
+        """, (channel_access_token, channel_secret, is_enabled))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE line_settings 
+            SET channel_access_token = ?, channel_secret = ?, is_enabled = ?, updated_at = CURRENT_TIMESTAMP
+        """, (channel_access_token, channel_secret, 1 if is_enabled else 0))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('LINE設定を保存しました', 'success')
+    return redirect(url_for('admin_line_dashboard'))
+
+@app.route('/admin/line/broadcast', methods=['POST'])
+@login_required
+def admin_line_broadcast():
+    """LINE一斉送信"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    message = request.form.get('message', '').strip()
+    if not message:
+        flash('メッセージを入力してください', 'error')
+        return redirect(url_for('admin_line_dashboard'))
+    
+    result = send_line_broadcast(message)
+    
+    # ログを記録
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO line_message_logs (message_type, message_content, target_count, success_count, sent_by)
+            VALUES (%s, %s, %s, %s, %s)
+        """, ('broadcast', message, 0, 1 if result['success'] else 0, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO line_message_logs (message_type, message_content, target_count, success_count, sent_by)
+            VALUES (?, ?, ?, ?, ?)
+        """, ('broadcast', message, 0, 1 if result['success'] else 0, current_user.id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    if result['success']:
+        flash('メッセージを送信しました', 'success')
+    else:
+        flash(f"送信エラー: {result.get('error', '不明なエラー')}", 'error')
+    
+    return redirect(url_for('admin_line_dashboard'))
+
+@app.route('/admin/line/scheduled', methods=['GET', 'POST'])
+@login_required
+def admin_line_scheduled():
+    """定期送信メッセージ管理"""
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用可能です', 'error')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        message_content = request.form.get('message_content', '').strip()
+        schedule_type = request.form.get('schedule_type', 'daily')
+        schedule_time = request.form.get('schedule_time', '09:00')
+        schedule_day = request.form.get('schedule_day', 1)
+        is_enabled = request.form.get('is_enabled') == 'on'
+        
+        if not title or not message_content:
+            flash('タイトルとメッセージ内容を入力してください', 'error')
+            return redirect(url_for('admin_line_scheduled'))
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, is_enabled)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (title, message_content, schedule_type, schedule_time, int(schedule_day), is_enabled))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, is_enabled)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (title, message_content, schedule_type, schedule_time, int(schedule_day), 1 if is_enabled else 0))
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('定期送信メッセージを登録しました', 'success')
+        return redirect(url_for('admin_line_dashboard'))
+    
+    return render_template('admin/line_scheduled_form.html')
+
+@app.route('/admin/line/scheduled/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+def admin_line_scheduled_edit(id):
+    """定期送信メッセージ編集"""
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用可能です', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
+    
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        message_content = request.form.get('message_content', '').strip()
+        schedule_type = request.form.get('schedule_type', 'daily')
+        schedule_time = request.form.get('schedule_time', '09:00')
+        schedule_day = request.form.get('schedule_day', 1)
+        is_enabled = request.form.get('is_enabled') == 'on'
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE line_scheduled_messages 
+                SET title = %s, message_content = %s, schedule_type = %s, schedule_time = %s, 
+                    schedule_day = %s, is_enabled = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (title, message_content, schedule_type, schedule_time, int(schedule_day), is_enabled, id))
+        else:
+            cur.execute("""
+                UPDATE line_scheduled_messages 
+                SET title = ?, message_content = ?, schedule_type = ?, schedule_time = ?, 
+                    schedule_day = ?, is_enabled = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (title, message_content, schedule_type, schedule_time, int(schedule_day), 1 if is_enabled else 0, id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('定期送信メッセージを更新しました', 'success')
+        return redirect(url_for('admin_line_dashboard'))
+    
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM line_scheduled_messages WHERE id = %s", (id,))
+    else:
+        cur.execute("SELECT * FROM line_scheduled_messages WHERE id = ?", (id,))
+    message = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not message:
+        flash('メッセージが見つかりません', 'error')
+        return redirect(url_for('admin_line_dashboard'))
+    
+    return render_template('admin/line_scheduled_form.html', message=dict(message))
+
+@app.route('/admin/line/scheduled/<int:id>/delete', methods=['POST'])
+@login_required
+def admin_line_scheduled_delete(id):
+    """定期送信メッセージ削除"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM line_scheduled_messages WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM line_scheduled_messages WHERE id = ?", (id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('定期送信メッセージを削除しました', 'success')
+    return redirect(url_for('admin_line_dashboard'))
+
+@app.route('/admin/line/scheduled/<int:id>/toggle', methods=['POST'])
+@login_required
+def admin_line_scheduled_toggle(id):
+    """定期送信メッセージの有効/無効切り替え"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT is_enabled FROM line_scheduled_messages WHERE id = %s", (id,))
+        msg = cur.fetchone()
+        if msg:
+            new_value = not msg['is_enabled']
+            cur.execute("UPDATE line_scheduled_messages SET is_enabled = %s WHERE id = %s", (new_value, id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT is_enabled FROM line_scheduled_messages WHERE id = ?", (id,))
+        msg = cur.fetchone()
+        if msg:
+            new_value = 0 if msg[0] else 1
+            cur.execute("UPDATE line_scheduled_messages SET is_enabled = ? WHERE id = ?", (new_value, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+@app.route('/line/webhook', methods=['POST'])
+def line_webhook():
+    """LINE Webhookエンドポイント（友だち追加時などにuser_idを取得）"""
+    import hmac
+    import hashlib
+    import base64
+    
+    # 署名検証
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT channel_secret FROM line_settings LIMIT 1")
+        settings = cur.fetchone()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT channel_secret FROM line_settings LIMIT 1")
+        row = cur.fetchone()
+        settings = {'channel_secret': row[0]} if row else None
+    cur.close()
+    conn.close()
+    
+    if not settings or not settings.get('channel_secret'):
+        return 'OK', 200
+    
+    body = request.get_data(as_text=True)
+    signature = request.headers.get('X-Line-Signature', '')
+    
+    hash = hmac.new(settings['channel_secret'].encode('utf-8'), body.encode('utf-8'), hashlib.sha256).digest()
+    expected_signature = base64.b64encode(hash).decode('utf-8')
+    
+    if signature != expected_signature:
+        return 'Invalid signature', 400
+    
+    # イベント処理
+    data = request.get_json()
+    for event in data.get('events', []):
+        if event.get('type') == 'follow':
+            # 友だち追加時
+            user_id = event.get('source', {}).get('userId')
+            if user_id:
+                # 後でユーザーと紐付ける処理を追加可能
+                pass
+    
+    return 'OK', 200
+
+# 定期送信実行関数
+def run_scheduled_line_messages():
+    """定期送信メッセージを実行"""
+    from datetime import datetime
+    now = datetime.now()
+    current_time = now.strftime('%H:%M')
+    current_day = now.day
+    current_weekday = now.weekday()  # 0=月曜
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM line_scheduled_messages 
+            WHERE is_enabled = TRUE AND schedule_time = %s
+        """, (current_time,))
+        messages = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM line_scheduled_messages 
+            WHERE is_enabled = 1 AND schedule_time = ?
+        """, (current_time,))
+        messages = cur.fetchall()
+    
+    for msg in messages:
+        msg_dict = dict(msg) if not isinstance(msg, dict) else msg
+        should_send = False
+        
+        schedule_type = msg_dict.get('schedule_type', 'daily')
+        schedule_day = msg_dict.get('schedule_day', 1)
+        
+        if schedule_type == 'daily':
+            should_send = True
+        elif schedule_type == 'weekly' and current_weekday == (schedule_day - 1):
+            should_send = True
+        elif schedule_type == 'monthly' and current_day == schedule_day:
+            should_send = True
+        
+        if should_send:
+            result = send_line_broadcast(msg_dict['message_content'])
+            
+            # last_sent_atを更新
+            if DATABASE_URL:
+                cur.execute("UPDATE line_scheduled_messages SET last_sent_at = CURRENT_TIMESTAMP WHERE id = %s", (msg_dict['id'],))
+                cur.execute("""
+                    INSERT INTO line_message_logs (message_type, message_content, success_count)
+                    VALUES (%s, %s, %s)
+                """, ('scheduled', msg_dict['message_content'], 1 if result['success'] else 0))
+            else:
+                cur.execute("UPDATE line_scheduled_messages SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (msg_dict['id'],))
+                cur.execute("""
+                    INSERT INTO line_message_logs (message_type, message_content, success_count)
+                    VALUES (?, ?, ?)
+                """, ('scheduled', msg_dict['message_content'], 1 if result['success'] else 0))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# ===================
 # Stripe決済連携
 # ===================
 
@@ -7894,8 +8467,18 @@ def init_scheduler():
         replace_existing=True
     )
     
+    # LINE定期送信（毎分チェック）
+    scheduler.add_job(
+        run_scheduled_line_messages,
+        CronTrigger(minute='*', timezone='Asia/Tokyo'),
+        id='line_scheduled_messages',
+        name='LINE定期送信',
+        replace_existing=True
+    )
+    
     scheduler.start()
     print(f"[{datetime.now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
+    print(f"[{datetime.now()}] Scheduler started: LINE scheduled messages will be checked every minute")
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ

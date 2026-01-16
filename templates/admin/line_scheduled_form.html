@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}{{ '定期送信編集' if message else '定期送信作成' }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ '定期送信メッセージ編集' if message else '定期送信メッセージ作成' }}</h1>
+    <a href="{{ url_for('admin_line_dashboard') }}" class="btn btn-secondary">戻る</a>
+</div>
+
+<div class="form-container">
+    <form method="POST" class="scheduled-form">
+        <div class="form-card">
+            <h2>メッセージ内容</h2>
+            
+            <div class="form-group">
+                <label>タイトル <span class="required">*</span></label>
+                <input type="text" name="title" class="form-control" required
+                       value="{{ message.title if message else '' }}" placeholder="管理用のタイトル">
+            </div>
+            
+            <div class="form-group">
+                <label>メッセージ内容 <span class="required">*</span></label>
+                <textarea name="message_content" class="form-control" rows="6" required
+                          placeholder="送信するメッセージを入力...">{{ message.message_content if message else '' }}</textarea>
+                <p class="form-hint">最大500文字まで</p>
+            </div>
+        </div>
+        
+        <div class="form-card">
+            <h2>送信スケジュール</h2>
+            
+            <div class="form-group">
+                <label>送信頻度</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="schedule_type" value="daily" 
+                               {% if not message or message.schedule_type == 'daily' %}checked{% endif %}>
+                        <span>毎日</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="schedule_type" value="weekly"
+                               {% if message and message.schedule_type == 'weekly' %}checked{% endif %}>
+                        <span>毎週</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="schedule_type" value="monthly"
+                               {% if message and message.schedule_type == 'monthly' %}checked{% endif %}>
+                        <span>毎月</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" id="daySelectGroup" style="display: none;">
+                    <label>曜日 / 日付</label>
+                    <select name="schedule_day" class="form-control" id="daySelect">
+                        <!-- 週の場合 -->
+                        <optgroup label="曜日" class="weekly-options">
+                            <option value="1" {% if message and message.schedule_day == 1 %}selected{% endif %}>月曜日</option>
+                            <option value="2" {% if message and message.schedule_day == 2 %}selected{% endif %}>火曜日</option>
+                            <option value="3" {% if message and message.schedule_day == 3 %}selected{% endif %}>水曜日</option>
+                            <option value="4" {% if message and message.schedule_day == 4 %}selected{% endif %}>木曜日</option>
+                            <option value="5" {% if message and message.schedule_day == 5 %}selected{% endif %}>金曜日</option>
+                            <option value="6" {% if message and message.schedule_day == 6 %}selected{% endif %}>土曜日</option>
+                            <option value="7" {% if message and message.schedule_day == 7 %}selected{% endif %}>日曜日</option>
+                        </optgroup>
+                        <!-- 月の場合 -->
+                        <optgroup label="日付" class="monthly-options">
+                            {% for i in range(1, 29) %}
+                            <option value="{{ i }}" {% if message and message.schedule_day == i %}selected{% endif %}>{{ i }}日</option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>送信時刻</label>
+                    <input type="time" name="schedule_time" class="form-control" 
+                           value="{{ message.schedule_time if message else '09:00' }}">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="is_enabled" 
+                           {% if not message or message.is_enabled %}checked{% endif %}>
+                    <span>この定期送信を有効にする</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">
+                {{ '更新する' if message else '作成する' }}
+            </button>
+            <a href="{{ url_for('admin_line_dashboard') }}" class="btn btn-secondary btn-lg">キャンセル</a>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.form-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.form-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1.25rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #1e293b;
+}
+
+.form-group label .required {
+    color: #dc2626;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 120px;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+/* ラジオボタン */
+.radio-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.radio-label:hover {
+    background: #f1f5f9;
+}
+
+.radio-label input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+.radio-label input[type="radio"]:checked + span {
+    font-weight: 600;
+    color: #2563eb;
+}
+
+/* チェックボックス */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+/* アクション */
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn-lg {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .radio-group {
+        flex-direction: column;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scheduleTypeRadios = document.querySelectorAll('input[name="schedule_type"]');
+    const daySelectGroup = document.getElementById('daySelectGroup');
+    const daySelect = document.getElementById('daySelect');
+    
+    function updateDaySelect() {
+        const selectedType = document.querySelector('input[name="schedule_type"]:checked').value;
+        
+        if (selectedType === 'daily') {
+            daySelectGroup.style.display = 'none';
+        } else {
+            daySelectGroup.style.display = 'block';
+            
+            // オプショングループの表示/非表示
+            const weeklyOptions = daySelect.querySelector('.weekly-options');
+            const monthlyOptions = daySelect.querySelector('.monthly-options');
+            
+            if (selectedType === 'weekly') {
+                weeklyOptions.style.display = '';
+                monthlyOptions.style.display = 'none';
+                // 週の最初のオプションを選択
+                if (!weeklyOptions.querySelector('option:checked')) {
+                    weeklyOptions.querySelector('option').selected = true;
+                }
+            } else {
+                weeklyOptions.style.display = 'none';
+                monthlyOptions.style.display = '';
+                // 月の最初のオプションを選択
+                if (!monthlyOptions.querySelector('option:checked')) {
+                    monthlyOptions.querySelector('option').selected = true;
+                }
+            }
+        }
+    }
+    
+    scheduleTypeRadios.forEach(radio => {
+        radio.addEventListener('change', updateDaySelect);
+    });
+    
+    // 初期表示
+    updateDaySelect();
+});
+</script>
+{% endblock %}
