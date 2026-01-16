@@ -6,15 +6,6 @@
     <h1>月額利用料管理（自動引き落とし）</h1>
 </div>
 
-<div class="admin-nav">
-    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
-    <a href="{{ url_for('admin_items') }}" class="admin-nav-item">商品管理</a>
-    <a href="{{ url_for('admin_documents_dashboard') }}" class="admin-nav-item">書類管理</a>
-    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
-    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
-    <a href="{{ url_for('admin_stripe_dashboard') }}" class="admin-nav-item active">決済管理</a>
-    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
-</div>
 
 {% if not stripe_enabled %}
 <div class="alert alert-error">

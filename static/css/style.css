@@ -255,6 +255,92 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0.5rem 0;
 }
 
+/* サイドバーサブメニュー */
+.sidebar-submenu {
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-submenu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.875rem 1.25rem;
+    background: none;
+    border: none;
+    border-left: 3px solid transparent;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.sidebar-submenu-toggle:hover {
+    background: var(--bg-main);
+}
+
+.sidebar-submenu-toggle.active {
+    background: rgba(30, 41, 59, 0.1);
+    border-left-color: var(--text-primary);
+}
+
+.sidebar-submenu-toggle .badge-count {
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-right: auto;
+    margin-left: 8px;
+}
+
+.submenu-arrow {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+    color: var(--text-secondary);
+}
+
+.sidebar-submenu-toggle.active .submenu-arrow,
+.sidebar-submenu-items.open + .sidebar-submenu-toggle .submenu-arrow {
+    transform: rotate(180deg);
+}
+
+.sidebar-submenu-items {
+    display: none;
+    flex-direction: column;
+    background: var(--bg-main);
+}
+
+.sidebar-submenu-items.open {
+    display: flex;
+}
+
+.sidebar-submenu-items a {
+    display: block;
+    padding: 0.65rem 1.25rem 0.65rem 2rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-submenu-items a:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.sidebar-submenu-items a.active {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary);
+    border-left-color: var(--primary);
+    font-weight: 600;
+}
+
 body.sidebar-open {
     overflow: hidden;
 }
