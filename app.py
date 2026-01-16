@@ -493,12 +493,19 @@ if DATABASE_URL:
                 schedule_time TIME,
                 schedule_day INTEGER,
                 target_type VARCHAR(20) DEFAULT 'all',
+                report_type VARCHAR(30),
                 is_enabled BOOLEAN DEFAULT TRUE,
                 last_sent_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # report_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE line_scheduled_messages ADD COLUMN IF NOT EXISTS report_type VARCHAR(30)")
+        except:
+            pass
         
         # LINE送信履歴テーブル
         cur.execute('''
@@ -523,6 +530,27 @@ if DATABASE_URL:
         cur.execute("SELECT COUNT(*) FROM line_settings")
         if cur.fetchone()[0] == 0:
             cur.execute("INSERT INTO line_settings (is_enabled) VALUES (FALSE)")
+        
+        # 定期送信の初期設定（週次レポート、月次レポート、月謝利用料金）
+        cur.execute("SELECT COUNT(*) FROM line_scheduled_messages WHERE report_type IS NOT NULL")
+        if cur.fetchone()[0] == 0:
+            # 週次レポート（毎週月曜 10:00）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, ('週次レポート', '【週次レポート】\n\n今週の実績をお知らせします。\n\n{weekly_report}\n\n引き続きよろしくお願いいたします。', 'weekly', '10:00', 1, 'weekly_report', False))
+            
+            # 月次レポート（毎月1日 10:30）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, ('月次レポート', '【月次レポート】\n\n先月の実績をお知らせします。\n\n{monthly_report}\n\n引き続きよろしくお願いいたします。', 'monthly', '10:30', 1, 'monthly_report', False))
+            
+            # 月謝利用料金の変更（毎月1日 11:00）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, ('月謝利用料金のお知らせ', '【月謝利用料金のお知らせ】\n\n今月のご利用料金をお知らせします。\n\n{monthly_fee}\n\nご確認よろしくお願いいたします。', 'monthly', '11:00', 1, 'monthly_fee', False))
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -979,12 +1007,19 @@ else:
                 schedule_time TEXT,
                 schedule_day INTEGER,
                 target_type TEXT DEFAULT 'all',
+                report_type TEXT,
                 is_enabled INTEGER DEFAULT 1,
                 last_sent_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # report_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE line_scheduled_messages ADD COLUMN report_type TEXT")
+        except:
+            pass
         
         # LINE送信履歴テーブル
         cur.execute('''
@@ -1009,6 +1044,27 @@ else:
         cur.execute("SELECT COUNT(*) FROM line_settings")
         if cur.fetchone()[0] == 0:
             cur.execute("INSERT INTO line_settings (is_enabled) VALUES (0)")
+        
+        # 定期送信の初期設定（週次レポート、月次レポート、月謝利用料金）
+        cur.execute("SELECT COUNT(*) FROM line_scheduled_messages WHERE report_type IS NOT NULL")
+        if cur.fetchone()[0] == 0:
+            # 週次レポート（毎週月曜 10:00）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ('週次レポート', '【週次レポート】\n\n今週の実績をお知らせします。\n\n{weekly_report}\n\n引き続きよろしくお願いいたします。', 'weekly', '10:00', 1, 'weekly_report', 0))
+            
+            # 月次レポート（毎月1日 10:30）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ('月次レポート', '【月次レポート】\n\n先月の実績をお知らせします。\n\n{monthly_report}\n\n引き続きよろしくお願いいたします。', 'monthly', '10:30', 1, 'monthly_report', 0))
+            
+            # 月謝利用料金の変更（毎月1日 11:00）
+            cur.execute("""
+                INSERT INTO line_scheduled_messages (title, message_content, schedule_type, schedule_time, schedule_day, report_type, is_enabled)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ('月謝利用料金のお知らせ', '【月謝利用料金のお知らせ】\n\n今月のご利用料金をお知らせします。\n\n{monthly_fee}\n\nご確認よろしくお願いいたします。', 'monthly', '11:00', 1, 'monthly_fee', 0))
         
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -6986,6 +7042,190 @@ def admin_mitsumori_pdf(id):
 # LINE公式アカウント連携
 # ===================
 
+def generate_weekly_report():
+    """週次レポートを生成"""
+    from datetime import datetime, timedelta
+    
+    # 今週の月曜日と日曜日を計算
+    today = datetime.now()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 今週の売上・仕入れを集計
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN 1 ELSE 0 END), 0) as sold_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price - purchase_price ELSE 0 END), 0) as total_profit
+            FROM merchandise
+            WHERE created_at >= %s AND created_at <= %s
+        """, (monday.strftime('%Y-%m-%d'), sunday.strftime('%Y-%m-%d 23:59:59')))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN 1 ELSE 0 END), 0) as sold_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price - purchase_price ELSE 0 END), 0) as total_profit
+            FROM merchandise
+            WHERE created_at >= ? AND created_at <= ?
+        """, (monday.strftime('%Y-%m-%d'), sunday.strftime('%Y-%m-%d 23:59:59')))
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if DATABASE_URL:
+        data = row
+    else:
+        data = {
+            'total_items': row[0] or 0,
+            'sold_items': row[1] or 0,
+            'total_purchase': row[2] or 0,
+            'total_sales': row[3] or 0,
+            'total_profit': row[4] or 0
+        }
+    
+    report = f"""期間: {monday.strftime('%m/%d')} - {sunday.strftime('%m/%d')}
+
+・新規登録数: {data['total_items']}件
+・販売数: {data['sold_items']}件
+・総仕入額: ¥{int(data['total_purchase']):,}
+・総売上: ¥{int(data['total_sales']):,}
+・総利益: ¥{int(data['total_profit']):,}"""
+    
+    return report
+
+def generate_monthly_report():
+    """月次レポートを生成"""
+    from datetime import datetime
+    import calendar
+    
+    # 先月の期間を計算
+    today = datetime.now()
+    if today.month == 1:
+        last_month = 12
+        last_year = today.year - 1
+    else:
+        last_month = today.month - 1
+        last_year = today.year
+    
+    first_day = f"{last_year}-{last_month:02d}-01"
+    last_day_num = calendar.monthrange(last_year, last_month)[1]
+    last_day = f"{last_year}-{last_month:02d}-{last_day_num}"
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN 1 ELSE 0 END), 0) as sold_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price - purchase_price ELSE 0 END), 0) as total_profit
+            FROM merchandise
+            WHERE created_at >= %s AND created_at <= %s
+        """, (first_day, last_day + ' 23:59:59'))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_items,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN 1 ELSE 0 END), 0) as sold_items,
+                COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN status = '販売済' THEN selling_price - purchase_price ELSE 0 END), 0) as total_profit
+            FROM merchandise
+            WHERE created_at >= ? AND created_at <= ?
+        """, (first_day, last_day + ' 23:59:59'))
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if DATABASE_URL:
+        data = row
+    else:
+        data = {
+            'total_items': row[0] or 0,
+            'sold_items': row[1] or 0,
+            'total_purchase': row[2] or 0,
+            'total_sales': row[3] or 0,
+            'total_profit': row[4] or 0
+        }
+    
+    month_names = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+    
+    report = f"""対象月: {last_year}年{month_names[last_month-1]}
+
+・新規登録数: {data['total_items']}件
+・販売数: {data['sold_items']}件
+・総仕入額: ¥{int(data['total_purchase']):,}
+・総売上: ¥{int(data['total_sales']):,}
+・総利益: ¥{int(data['total_profit']):,}"""
+    
+    return report
+
+def generate_monthly_fee_report():
+    """月謝利用料金のお知らせを生成"""
+    from datetime import datetime
+    
+    today = datetime.now()
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # ユーザーごとの利用状況を取得
+        cur.execute("""
+            SELECT 
+                u.display_name,
+                u.subscription_status,
+                COUNT(m.id) as item_count,
+                sp.name as plan_name,
+                sp.base_price,
+                sp.per_item_price
+            FROM users u
+            LEFT JOIN merchandise m ON m.user_id = u.id
+            LEFT JOIN subscription_plans sp ON u.subscription_status = 'active'
+            WHERE u.role IN ('owner', 'admin')
+            GROUP BY u.id, u.display_name, u.subscription_status, sp.name, sp.base_price, sp.per_item_price
+        """)
+        users = cur.fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 
+                u.display_name,
+                u.subscription_status,
+                COUNT(m.id) as item_count
+            FROM users u
+            LEFT JOIN merchandise m ON m.user_id = u.id
+            WHERE u.role IN ('owner', 'admin')
+            GROUP BY u.id
+        """)
+        users = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    month_names = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+    
+    report = f"""対象月: {today.year}年{month_names[today.month-1]}
+
+ご利用料金の詳細は管理画面の「決済管理」よりご確認いただけます。
+
+ご不明な点がございましたら、お気軽にお問い合わせください。"""
+    
+    return report
+
 def send_line_broadcast(message):
     """LINE一斉送信"""
     conn = get_db()
@@ -7346,6 +7586,34 @@ def admin_line_scheduled_toggle(id):
     
     return jsonify({'success': True})
 
+@app.route('/admin/line/preview-report', methods=['POST'])
+@login_required
+def admin_line_preview_report():
+    """レポートのプレビュー生成"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    data = request.get_json()
+    message_content = data.get('message_content', '')
+    report_type = data.get('report_type', '')
+    
+    try:
+        if report_type == 'weekly_report':
+            report_data = generate_weekly_report()
+            preview = message_content.replace('{weekly_report}', report_data)
+        elif report_type == 'monthly_report':
+            report_data = generate_monthly_report()
+            preview = message_content.replace('{monthly_report}', report_data)
+        elif report_type == 'monthly_fee':
+            report_data = generate_monthly_fee_report()
+            preview = message_content.replace('{monthly_fee}', report_data)
+        else:
+            preview = message_content
+        
+        return jsonify({'success': True, 'preview': preview})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/line/webhook', methods=['POST'])
 def line_webhook():
     """LINE Webhookエンドポイント（友だち追加時などにuser_idを取得）"""
@@ -7431,7 +7699,31 @@ def run_scheduled_line_messages():
             should_send = True
         
         if should_send:
-            result = send_line_broadcast(msg_dict['message_content'])
+            # メッセージ内容を取得
+            message_content = msg_dict['message_content']
+            report_type = msg_dict.get('report_type')
+            
+            # レポートタイプに応じてデータを自動生成
+            if report_type == 'weekly_report':
+                try:
+                    weekly_data = generate_weekly_report()
+                    message_content = message_content.replace('{weekly_report}', weekly_data)
+                except Exception as e:
+                    print(f"週次レポート生成エラー: {e}")
+            elif report_type == 'monthly_report':
+                try:
+                    monthly_data = generate_monthly_report()
+                    message_content = message_content.replace('{monthly_report}', monthly_data)
+                except Exception as e:
+                    print(f"月次レポート生成エラー: {e}")
+            elif report_type == 'monthly_fee':
+                try:
+                    fee_data = generate_monthly_fee_report()
+                    message_content = message_content.replace('{monthly_fee}', fee_data)
+                except Exception as e:
+                    print(f"月謝料金レポート生成エラー: {e}")
+            
+            result = send_line_broadcast(message_content)
             
             # last_sent_atを更新
             if DATABASE_URL:
@@ -7439,13 +7731,13 @@ def run_scheduled_line_messages():
                 cur.execute("""
                     INSERT INTO line_message_logs (message_type, message_content, success_count)
                     VALUES (%s, %s, %s)
-                """, ('scheduled', msg_dict['message_content'], 1 if result['success'] else 0))
+                """, ('scheduled', message_content, 1 if result['success'] else 0))
             else:
                 cur.execute("UPDATE line_scheduled_messages SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (msg_dict['id'],))
                 cur.execute("""
                     INSERT INTO line_message_logs (message_type, message_content, success_count)
                     VALUES (?, ?, ?)
-                """, ('scheduled', msg_dict['message_content'], 1 if result['success'] else 0))
+                """, ('scheduled', message_content, 1 if result['success'] else 0))
     
     conn.commit()
     cur.close()

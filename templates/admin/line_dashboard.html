@@ -99,7 +99,17 @@
             {% for msg in scheduled_messages %}
             <div class="scheduled-item">
                 <div class="scheduled-info">
-                    <div class="scheduled-title">{{ msg.title }}</div>
+                    <div class="scheduled-title">
+                        {{ msg.title }}
+                        {% if msg.report_type %}
+                        <span class="badge report-type {{ msg.report_type }}">
+                            {% if msg.report_type == 'weekly_report' %}週次レポート
+                            {% elif msg.report_type == 'monthly_report' %}月次レポート
+                            {% elif msg.report_type == 'monthly_fee' %}月謝料金
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
                     <div class="scheduled-meta">
                         {% if msg.schedule_type == 'daily' %}
                         毎日 {{ msg.schedule_time }}
@@ -118,7 +128,9 @@
                         <span class="toggle-switch small"></span>
                     </label>
                     <a href="{{ url_for('admin_line_scheduled_edit', id=msg.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                    {% if not msg.report_type %}
                     <button class="btn btn-sm btn-danger" onclick="deleteScheduled({{ msg.id }})">削除</button>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -471,6 +483,27 @@
 .badge.scheduled {
     background: #f0fdf4;
     color: #16a34a;
+}
+
+.badge.report-type {
+    font-size: 0.7rem;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+.badge.report-type.weekly_report {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badge.report-type.monthly_report {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.badge.report-type.monthly_fee {
+    background: #f3e8ff;
+    color: #7c3aed;
 }
 
 .empty-message {
