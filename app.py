@@ -3286,18 +3286,7 @@ def admin_proxy_service():
         """)
         bids = cur.fetchall()
         
-        # 選択可能な商品（未掲載かつ未販売）
-        cur.execute("""
-            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
-            FROM merchandise m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-            LIMIT 100
-        """)
-        available_items = cur.fetchall()
-    else:
-        # 選択可能な商品（未掲載かつ未販売）
+        # 選択可能な商品（未掲載かつ未販売）- SQLite
         cur.execute("""
             SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
             FROM merchandise m
