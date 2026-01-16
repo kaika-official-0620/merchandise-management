@@ -4,7 +4,10 @@
 {% block content %}
 <div class="page-header">
     <h1>代行仕入れサービス管理</h1>
-    <a href="{{ url_for('public_proxy_service') }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+    <div class="header-actions">
+        <a href="{{ url_for('public_proxy_service') }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+        <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
+    </div>
 </div>
 
 <div class="proxy-admin-container">
@@ -190,6 +193,26 @@
 </div>
 
 <style>
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
 .proxy-admin-container {
     display: grid;
     grid-template-columns: 1fr 2fr;
@@ -640,5 +663,31 @@ document.addEventListener('DOMContentLoaded', function() {
         selectAllCheckbox.checked = allChecked && userCheckboxes.length > 0;
     }
 });
+
+// オークション終了・落札確定
+function finalizeAuction() {
+    if (!confirm('オークションを終了し、落札者に商品を割り当てますか？\n\nこの操作は取り消せません。入札のあった商品は落札者の商品一覧に移動します。')) {
+        return;
+    }
+    
+    fetch('/admin/proxy-service/finalize', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
 </script>
 {% endblock %}

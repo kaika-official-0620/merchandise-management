@@ -448,11 +448,18 @@ if DATABASE_URL:
             CREATE TABLE IF NOT EXISTS proxy_service_bids (
                 id SERIAL PRIMARY KEY,
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
                 bidder_name VARCHAR(100) NOT NULL,
                 bid_amount INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # user_idカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE proxy_service_bids ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
+        except:
+            pass
         
         # 商品に代行サービス表示フラグを追加
         try:
@@ -875,11 +882,18 @@ else:
             CREATE TABLE IF NOT EXISTS proxy_service_bids (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
                 bidder_name TEXT NOT NULL,
                 bid_amount INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # user_idカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE proxy_service_bids ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        except:
+            pass
         
         # 商品に代行サービス表示フラグを追加
         try:
@@ -3401,6 +3415,80 @@ def admin_proxy_service_toggle_item(item_id):
     
     return jsonify({'success': True, 'new_value': bool(new_value) if DATABASE_URL else bool(new_value)})
 
+@app.route('/admin/proxy-service/finalize', methods=['POST'])
+@login_required
+def admin_proxy_service_finalize():
+    """オークション終了・落札確定処理"""
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': 'オーナー権限が必要です'}), 403
+    
+    conn = get_db()
+    finalized_count = 0
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 入札がある商品を取得
+        cur.execute("""
+            SELECT m.id, m.product_name,
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid
+            FROM merchandise m
+            WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
+        """)
+        items = cur.fetchall()
+        
+        for item in items:
+            if item['winner_user_id'] and item['winning_bid']:
+                # 落札者に商品を移管（user_idを変更、purchase_priceを落札額に）
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET user_id = %s, 
+                        purchase_price = %s,
+                        show_in_proxy_service = FALSE
+                    WHERE id = %s
+                """, (item['winner_user_id'], item['winning_bid'], item['id']))
+                finalized_count += 1
+        
+        # オークションを非公開に
+        cur.execute("UPDATE proxy_service_settings SET is_public = FALSE")
+    else:
+        cur = conn.cursor()
+        
+        # 入札がある商品を取得
+        cur.execute("""
+            SELECT m.id, m.product_name,
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid
+            FROM merchandise m
+            WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
+        """)
+        items = cur.fetchall()
+        
+        for item in items:
+            if item[2] and item[3]:  # winner_user_id and winning_bid
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET user_id = ?, 
+                        purchase_price = ?,
+                        show_in_proxy_service = 0
+                    WHERE id = ?
+                """, (item[2], item[3], item[0]))
+                finalized_count += 1
+        
+        # オークションを非公開に
+        cur.execute("UPDATE proxy_service_settings SET is_public = 0")
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'success': True, 
+        'message': f'{finalized_count}件の商品を落札者に割り当てました',
+        'finalized_count': finalized_count
+    })
+
 @app.route('/proxy-service')
 def public_proxy_service():
     """代行仕入れサービス公開ページ（オークション）"""
@@ -3490,14 +3578,21 @@ def public_proxy_service():
 
 @app.route('/proxy-service/bid', methods=['POST'])
 def proxy_service_bid():
-    """入札API"""
+    """入札API（ログインユーザー専用）"""
+    # ログインチェック
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'error': 'ログインが必要です'}), 401
+    
     data = request.get_json() or request.form
     
     merchandise_id = data.get('merchandise_id')
-    bidder_name = data.get('bidder_name', '').strip()
     bid_amount = data.get('bid_amount')
     
-    if not merchandise_id or not bidder_name or not bid_amount:
+    # ログインユーザーの情報を使用
+    user_id = current_user.id
+    bidder_name = current_user.display_name or current_user.username
+    
+    if not merchandise_id or not bid_amount:
         return jsonify({'success': False, 'error': '必須項目が入力されていません'}), 400
     
     try:
@@ -3541,9 +3636,9 @@ def proxy_service_bid():
         if bid_amount < min_bid:
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
-        # 入札を保存
-        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, bidder_name, bid_amount) VALUES (%s, %s, %s)",
-                   (merchandise_id, bidder_name, bid_amount))
+        # 入札を保存（user_id含む）
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
+                   (merchandise_id, user_id, bidder_name, bid_amount))
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
@@ -3566,9 +3661,9 @@ def proxy_service_bid():
         if bid_amount < min_bid:
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
-        # 入札を保存
-        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, bidder_name, bid_amount) VALUES (?, ?, ?)",
-                   (merchandise_id, bidder_name, bid_amount))
+        # 入札を保存（user_id含む）
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
+                   (merchandise_id, user_id, bidder_name, bid_amount))
     
     conn.commit()
     cur.close()

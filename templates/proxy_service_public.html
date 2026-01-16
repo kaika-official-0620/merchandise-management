@@ -277,6 +277,55 @@
             font-size: 0.9rem;
         }
         
+        .user-info-bar {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .user-info-bar .user-name {
+            color: #16a34a;
+            font-weight: 600;
+        }
+        
+        .login-required {
+            background: white;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .login-required h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: #1e293b;
+        }
+        
+        .login-required p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+        
+        .btn-login {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        .btn-login:hover {
+            background: #1d4ed8;
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 1.5rem;
@@ -308,11 +357,22 @@
     {% endif %}
     
     <main class="container">
+        {% if current_user.is_authenticated %}
+        <div class="user-info-bar">
+            <span class="user-name">ログイン中: {{ current_user.display_name or current_user.username }}</span>
+        </div>
         <div class="contact-info">
             <h2>入札方法</h2>
-            <p>お名前と入札金額を入力して「入札する」ボタンを押してください。<br>
+            <p>入札金額を入力して「入札する」ボタンを押してください。<br>
             最高入札額を上回る金額で入札できます。</p>
         </div>
+        {% else %}
+        <div class="login-required">
+            <h2>ログインが必要です</h2>
+            <p>オークションに参加するにはログインしてください。</p>
+            <a href="{{ url_for('login') }}?next={{ request.path }}" class="btn-login">ログイン</a>
+        </div>
+        {% endif %}
         
         {% if items %}
         <p class="items-count">{{ items|length }}件の商品が出品中</p>
@@ -348,14 +408,15 @@
                     <div class="no-bid" id="no-bid-{{ item.id }}">まだ入札がありません</div>
                     {% endif %}
                     
+                    {% if current_user.is_authenticated %}
                     <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})">
-                        <input type="text" name="bidder_name" placeholder="お名前" required id="name-{{ item.id }}">
                         <div class="bid-row">
                             <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ (item.highest_bid or item.listing_price or 0) + 1 }}" id="amount-{{ item.id }}">
                             <button type="submit" class="btn-bid">入札する</button>
                         </div>
                         <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
                     </form>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -377,7 +438,6 @@
     function submitBid(event, itemId) {
         event.preventDefault();
         
-        const nameInput = document.getElementById('name-' + itemId);
         const amountInput = document.getElementById('amount-' + itemId);
         const errorDiv = document.getElementById('error-' + itemId);
         const form = event.target;
@@ -394,7 +454,6 @@
             },
             body: JSON.stringify({
                 merchandise_id: itemId,
-                bidder_name: nameInput.value,
                 bid_amount: parseInt(amountInput.value)
             })
         })
