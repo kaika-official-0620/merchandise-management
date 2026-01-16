@@ -19,10 +19,6 @@
                 <span></span>
             </button>
             <div class="nav-right">
-                {% if request.endpoint != 'index' %}
-                <a href="{{ url_for('export_csv') }}" class="btn btn-export btn-sm">CSV</a>
-                <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ 登録</a>
-                {% endif %}
                 <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm"> 計算式</button>
             </div>
             <div class="nav-user" id="navUser">

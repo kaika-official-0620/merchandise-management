@@ -1140,14 +1140,43 @@ def index():
     search = request.args.get('search', '')
     
     conn = get_db()
+    
+    # オーナー/管理者の場合、全オーナー/管理者の商品を共有表示
+    is_shared_view = current_user.is_admin() or current_user.is_owner()
+    shared_user_ids = []
+    shared_users = {}  # user_id -> display_name のマッピング
+    
+    if is_shared_view:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
+        
+        for u in cur.fetchall():
+            u_dict = dict(u)
+            shared_user_ids.append(u_dict['id'])
+            shared_users[u_dict['id']] = u_dict['display_name'] or u_dict['username']
+    
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = "SELECT * FROM merchandise WHERE user_id = %s"
-        params = [current_user.id]
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['%s'] * len(shared_user_ids))
+            query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+            params = shared_user_ids.copy()
+        else:
+            query = "SELECT * FROM merchandise WHERE user_id = %s"
+            params = [current_user.id]
     else:
         cur = conn.cursor()
-        query = "SELECT * FROM merchandise WHERE user_id = ?"
-        params = [current_user.id]
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['?'] * len(shared_user_ids))
+            query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+            params = shared_user_ids.copy()
+        else:
+            query = "SELECT * FROM merchandise WHERE user_id = ?"
+            params = [current_user.id]
     
     # フィルター
     today = datetime.now().date()
@@ -1198,27 +1227,53 @@ def index():
     
     # 統計
     if DATABASE_URL:
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
-            FROM merchandise WHERE user_id = %s
-        """, (current_user.id,))
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['%s'] * len(shared_user_ids))
+            cur.execute(f"""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id IN ({placeholders})
+            """, shared_user_ids)
+        else:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id = %s
+            """, (current_user.id,))
     else:
-        cur.execute("""
-            SELECT 
-                COUNT(*) as total_items,
-                COALESCE(SUM(purchase_price), 0) as total_purchase,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
-                    sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
-            FROM merchandise WHERE user_id = ?
-        """, (current_user.id,))
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['?'] * len(shared_user_ids))
+            cur.execute(f"""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id IN ({placeholders})
+            """, shared_user_ids)
+        else:
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                FROM merchandise WHERE user_id = ?
+            """, (current_user.id,))
     
     stats = cur.fetchone()
     cur.close()
@@ -1230,6 +1285,10 @@ def index():
         item_dict = dict(item)
         if item_dict.get('photo_path'):
             item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
+        
+        # 共有ビューの場合、登録者名を追加
+        if is_shared_view:
+            item_dict['owner_name'] = shared_users.get(item_dict.get('user_id'), '不明')
         
         if item_dict.get('sale_date'):
             item_dict['profit'] = calculate_profit(
@@ -1252,7 +1311,8 @@ def index():
     announcements = get_active_announcements()
     
     return render_template('index.html', items=processed_items, stats=dict(stats),
-                         filter_type=filter_type, search=search, announcements=announcements)
+                         filter_type=filter_type, search=search, announcements=announcements,
+                         is_shared_view=is_shared_view)
 
 @app.route('/my-analytics')
 @login_required
@@ -1902,12 +1962,39 @@ def delete_item(id):
 @login_required
 def export_csv():
     conn = get_db()
+    
+    # オーナー/管理者の場合、全オーナー/管理者の商品を共有出力
+    is_shared_view = current_user.is_admin() or current_user.is_owner()
+    shared_user_ids = []
+    shared_users = {}
+    
+    if is_shared_view:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
+        
+        for u in cur.fetchall():
+            u_dict = dict(u)
+            shared_user_ids.append(u_dict['id'])
+            shared_users[u_dict['id']] = u_dict['display_name'] or u_dict['username']
+    
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['%s'] * len(shared_user_ids))
+            cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY id", shared_user_ids)
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['?'] * len(shared_user_ids))
+            cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY id", shared_user_ids)
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
     
     items = cur.fetchall()
     cur.close()
@@ -1916,9 +2003,15 @@ def export_csv():
     output = io.StringIO()
     writer = csv.writer(output)
     
-    writer.writerow(['ID', '仕入日', '商品名', '店舗名', '仕入額', '支払方法', 
-                    '出品価格', '出品済み', '出品日', '売却日', '売上金', 
-                    '送料', '販売先', '手数料', '利益', '利益率', '発送済み'])
+    # 共有ビューの場合は登録者列を追加
+    if is_shared_view:
+        writer.writerow(['ID', '登録者', '仕入日', '商品名', '店舗名', '仕入額', '支払方法', 
+                        '出品価格', '出品済み', '出品日', '売却日', '売上金', 
+                        '送料', '販売先', '手数料', '利益', '利益率', '発送済み'])
+    else:
+        writer.writerow(['ID', '仕入日', '商品名', '店舗名', '仕入額', '支払方法', 
+                        '出品価格', '出品済み', '出品日', '売却日', '売上金', 
+                        '送料', '販売先', '手数料', '利益', '利益率', '発送済み'])
     
     for item in items:
         item_dict = dict(item)
@@ -1930,25 +2023,48 @@ def export_csv():
         )
         profit_rate = calculate_profit_rate(profit, item_dict.get('sale_price', 0) or 0)
         
-        writer.writerow([
-            item_dict['id'],
-            item_dict.get('purchase_date', ''),
-            item_dict.get('product_name', ''),
-            item_dict.get('store_name', ''),
-            item_dict.get('purchase_price', 0),
-            item_dict.get('payment_method', ''),
-            item_dict.get('listing_price', 0),
-            '済' if item_dict.get('is_listed') else '',
-            item_dict.get('listing_date', ''),
-            item_dict.get('sale_date', ''),
-            item_dict.get('sale_price', 0),
-            item_dict.get('shipping_cost', 0),
-            item_dict.get('sales_destination', ''),
-            item_dict.get('commission', 0),
-            profit,
-            f'{profit_rate}%',
-            '済' if item_dict.get('is_shipped') else ''
-        ])
+        if is_shared_view:
+            owner_name = shared_users.get(item_dict.get('user_id'), '不明')
+            writer.writerow([
+                item_dict['id'],
+                owner_name,
+                item_dict.get('purchase_date', ''),
+                item_dict.get('product_name', ''),
+                item_dict.get('store_name', ''),
+                item_dict.get('purchase_price', 0),
+                item_dict.get('payment_method', ''),
+                item_dict.get('listing_price', 0),
+                '済' if item_dict.get('is_listed') else '',
+                item_dict.get('listing_date', ''),
+                item_dict.get('sale_date', ''),
+                item_dict.get('sale_price', 0),
+                item_dict.get('shipping_cost', 0),
+                item_dict.get('sales_destination', ''),
+                item_dict.get('commission', 0),
+                profit,
+                f'{profit_rate}%',
+                '済' if item_dict.get('is_shipped') else ''
+            ])
+        else:
+            writer.writerow([
+                item_dict['id'],
+                item_dict.get('purchase_date', ''),
+                item_dict.get('product_name', ''),
+                item_dict.get('store_name', ''),
+                item_dict.get('purchase_price', 0),
+                item_dict.get('payment_method', ''),
+                item_dict.get('listing_price', 0),
+                '済' if item_dict.get('is_listed') else '',
+                item_dict.get('listing_date', ''),
+                item_dict.get('sale_date', ''),
+                item_dict.get('sale_price', 0),
+                item_dict.get('shipping_cost', 0),
+                item_dict.get('sales_destination', ''),
+                item_dict.get('commission', 0),
+                profit,
+                f'{profit_rate}%',
+                '済' if item_dict.get('is_shipped') else ''
+            ])
     
     output.seek(0)
     return send_file(
