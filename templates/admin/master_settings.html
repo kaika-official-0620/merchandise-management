@@ -3,7 +3,50 @@
 
 {% block content %}
 <style>
-.master-tabs {
+/* メインタブ */
+.main-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.main-tab {
+    padding: 1rem 2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.main-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-main);
+}
+
+.main-tab.active {
+    color: var(--primary);
+    background: var(--primary-light);
+    border-bottom-color: var(--primary-light);
+}
+
+.main-content {
+    display: none;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) var(--radius);
+    padding: 1.5rem;
+}
+
+.main-content.active {
+    display: block;
+}
+
+/* サブタブ */
+.sub-tabs {
     display: flex;
     gap: 0;
     border-bottom: 2px solid var(--border);
@@ -11,7 +54,7 @@
     overflow-x: auto;
 }
 
-.master-tab {
+.sub-tab {
     padding: 0.75rem 1.25rem;
     background: none;
     border: none;
@@ -25,24 +68,25 @@
     transition: all 0.2s;
 }
 
-.master-tab:hover {
+.sub-tab:hover {
     color: var(--text-primary);
     background: var(--bg-main);
 }
 
-.master-tab.active {
+.sub-tab.active {
     color: var(--primary);
     border-bottom-color: var(--primary);
 }
 
-.master-content {
+.sub-content {
     display: none;
 }
 
-.master-content.active {
+.sub-content.active {
     display: block;
 }
 
+/* セクション */
 .master-section {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -203,780 +247,6 @@
     white-space: nowrap;
 }
 
-@media (max-width: 768px) {
-    .add-form-grid,
-    .edit-form-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .master-table {
-        font-size: 0.85rem;
-    }
-    
-    .master-table th,
-    .master-table td {
-        padding: 0.5rem;
-    }
-}
-</style>
-
-<div class="page-header">
-    <h1 class="page-title">マスター設定</h1>
-</div>
-
-{% if not brands and not suppliers and not conditions %}
-<div class="init-section">
-    <p>マスターデータが登録されていません。初期データを登録しますか？</p>
-    <form action="{{ url_for('admin_master_settings_init') }}" method="POST" style="display: inline;">
-        <button type="submit" class="btn btn-primary">初期データを登録</button>
-    </form>
-</div>
-{% endif %}
-
-<!-- タブナビゲーション -->
-<div class="master-tabs">
-    <button class="master-tab active" onclick="showTab('brands')">ブランド名</button>
-    <button class="master-tab" onclick="showTab('brand_categories')">ブランドカテゴリ</button>
-    <button class="master-tab" onclick="showTab('suppliers')">仕入先</button>
-    <button class="master-tab" onclick="showTab('conditions')">商品状態</button>
-    <button class="master-tab" onclick="showTab('payment_methods')">支払方法</button>
-    <button class="master-tab" onclick="showTab('supplier_details')">仕入先詳細</button>
-    <button class="master-tab" onclick="showTab('document_settings')">書類設定</button>
-</div>
-
-<!-- ブランド名 -->
-<div id="tab-brands" class="master-content active">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>ブランド名一覧</h3>
-            <span>{{ brands|length }}件</span>
-        </div>
-        <div style="overflow-x: auto;">
-            <table class="master-table">
-                <thead>
-                    <tr>
-                        <th>値</th>
-                        <th>表示名</th>
-                        <th>カテゴリ</th>
-                        <th>キーワード</th>
-                        <th>順序</th>
-                        <th>状態</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for brand in brands %}
-                    <tr>
-                        <td>{{ brand.value }}</td>
-                        <td>{{ brand.display_name }}</td>
-                        <td>
-                            {% for cat in brand_categories %}
-                                {% if cat.id == brand.category_id %}{{ cat.name }}{% endif %}
-                            {% endfor %}
-                        </td>
-                        <td><span class="keywords-display" title="{{ brand.keywords }}">{{ brand.keywords }}</span></td>
-                        <td>{{ brand.display_order }}</td>
-                        <td>
-                            {% if brand.is_active %}
-                            <span class="status-active">有効</span>
-                            {% else %}
-                            <span class="status-inactive">無効</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brands', {{ brand.id }})">編集</button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="7" style="padding: 0;">
-                            <div id="edit-brands-{{ brand.id }}" class="edit-form">
-                                <form action="{{ url_for('admin_master_edit', table_name='brands', id=brand.id) }}" method="POST">
-                                    <div class="edit-form-grid">
-                                        <div class="form-group">
-                                            <label>値</label>
-                                            <input type="text" name="value" value="{{ brand.value }}" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>表示名</label>
-                                            <input type="text" name="display_name" value="{{ brand.display_name }}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>カテゴリ</label>
-                                            <select name="category_id">
-                                                {% for cat in brand_categories %}
-                                                <option value="{{ cat.id }}" {% if cat.id == brand.category_id %}selected{% endif %}>{{ cat.name }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>キーワード（カンマ区切り）</label>
-                                            <input type="text" name="keywords" value="{{ brand.keywords }}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>表示順</label>
-                                            <input type="number" name="display_order" value="{{ brand.display_order }}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                                <input type="checkbox" name="is_active" {% if brand.is_active %}checked{% endif %}>
-                                                有効
-                                            </label>
-                                        </div>
-                                        <div class="form-group">
-                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brands', {{ brand.id }})">キャンセル</button>
-                                        </div>
-                                    </div>
-                                </form>
-                                <form action="{{ url_for('admin_master_delete', table_name='brands', id=brand.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='brands') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>値（保存用）</label>
-                        <input type="text" name="value" required placeholder="例: Louis Vuitton">
-                    </div>
-                    <div class="form-group">
-                        <label>表示名</label>
-                        <input type="text" name="display_name" placeholder="例: Louis Vuitton（ルイ・ヴィトン）">
-                    </div>
-                    <div class="form-group">
-                        <label>カテゴリ</label>
-                        <select name="category_id">
-                            {% for cat in brand_categories %}
-                            <option value="{{ cat.id }}">{{ cat.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>キーワード（カンマ区切り）</label>
-                        <input type="text" name="keywords" placeholder="例: ヴィトン,LV,ルイヴィトン">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- ブランドカテゴリ -->
-<div id="tab-brand_categories" class="master-content">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>ブランドカテゴリ一覧</h3>
-            <span>{{ brand_categories|length }}件</span>
-        </div>
-        <table class="master-table">
-            <thead>
-                <tr>
-                    <th>カテゴリ名</th>
-                    <th>表示順</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cat in brand_categories %}
-                <tr>
-                    <td>{{ cat.name }}</td>
-                    <td>{{ cat.display_order }}</td>
-                    <td>
-                        {% if cat.is_active %}
-                        <span class="status-active">有効</span>
-                        {% else %}
-                        <span class="status-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brand_categories', {{ cat.id }})">編集</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="4" style="padding: 0;">
-                        <div id="edit-brand_categories-{{ cat.id }}" class="edit-form">
-                            <form action="{{ url_for('admin_master_edit', table_name='brand_categories', id=cat.id) }}" method="POST">
-                                <div class="edit-form-grid">
-                                    <div class="form-group">
-                                        <label>カテゴリ名</label>
-                                        <input type="text" name="name" value="{{ cat.name }}" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示順</label>
-                                        <input type="number" name="display_order" value="{{ cat.display_order }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <input type="checkbox" name="is_active" {% if cat.is_active %}checked{% endif %}>
-                                            有効
-                                        </label>
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brand_categories', {{ cat.id }})">キャンセル</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <form action="{{ url_for('admin_master_delete', table_name='brand_categories', id=cat.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='brand_categories') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>カテゴリ名</label>
-                        <input type="text" name="name" required placeholder="例: アウトドアブランド">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- 仕入先 -->
-<div id="tab-suppliers" class="master-content">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>仕入先一覧</h3>
-            <span>{{ suppliers|length }}件</span>
-        </div>
-        <table class="master-table">
-            <thead>
-                <tr>
-                    <th>値</th>
-                    <th>表示名</th>
-                    <th>表示順</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in suppliers %}
-                <tr>
-                    <td>{{ item.value }}</td>
-                    <td>{{ item.display_name }}</td>
-                    <td>{{ item.display_order }}</td>
-                    <td>
-                        {% if item.is_active %}
-                        <span class="status-active">有効</span>
-                        {% else %}
-                        <span class="status-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('suppliers', {{ item.id }})">編集</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="5" style="padding: 0;">
-                        <div id="edit-suppliers-{{ item.id }}" class="edit-form">
-                            <form action="{{ url_for('admin_master_edit', table_name='suppliers', id=item.id) }}" method="POST">
-                                <div class="edit-form-grid">
-                                    <div class="form-group">
-                                        <label>値</label>
-                                        <input type="text" name="value" value="{{ item.value }}" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示名</label>
-                                        <input type="text" name="display_name" value="{{ item.display_name }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示順</label>
-                                        <input type="number" name="display_order" value="{{ item.display_order }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
-                                            有効
-                                        </label>
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('suppliers', {{ item.id }})">キャンセル</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <form action="{{ url_for('admin_master_delete', table_name='suppliers', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='suppliers') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>値（保存用）</label>
-                        <input type="text" name="value" required placeholder="例: 店舗仕入">
-                    </div>
-                    <div class="form-group">
-                        <label>表示名</label>
-                        <input type="text" name="display_name" placeholder="例: 店舗仕入">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- 商品状態 -->
-<div id="tab-conditions" class="master-content">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>商品状態一覧</h3>
-            <span>{{ conditions|length }}件</span>
-        </div>
-        <table class="master-table">
-            <thead>
-                <tr>
-                    <th>値</th>
-                    <th>表示名</th>
-                    <th>説明</th>
-                    <th>表示順</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in conditions %}
-                <tr>
-                    <td>{{ item.value }}</td>
-                    <td>{{ item.display_name }}</td>
-                    <td>{{ item.description }}</td>
-                    <td>{{ item.display_order }}</td>
-                    <td>
-                        {% if item.is_active %}
-                        <span class="status-active">有効</span>
-                        {% else %}
-                        <span class="status-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('conditions', {{ item.id }})">編集</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="6" style="padding: 0;">
-                        <div id="edit-conditions-{{ item.id }}" class="edit-form">
-                            <form action="{{ url_for('admin_master_edit', table_name='conditions', id=item.id) }}" method="POST">
-                                <div class="edit-form-grid">
-                                    <div class="form-group">
-                                        <label>値</label>
-                                        <input type="text" name="value" value="{{ item.value }}" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示名</label>
-                                        <input type="text" name="display_name" value="{{ item.display_name }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>説明</label>
-                                        <input type="text" name="description" value="{{ item.description }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示順</label>
-                                        <input type="number" name="display_order" value="{{ item.display_order }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
-                                            有効
-                                        </label>
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('conditions', {{ item.id }})">キャンセル</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <form action="{{ url_for('admin_master_delete', table_name='conditions', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='conditions') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>値（保存用）</label>
-                        <input type="text" name="value" required placeholder="例: C">
-                    </div>
-                    <div class="form-group">
-                        <label>表示名</label>
-                        <input type="text" name="display_name" placeholder="例: C：ジャンク品">
-                    </div>
-                    <div class="form-group">
-                        <label>説明</label>
-                        <input type="text" name="description" placeholder="例: 動作不良・破損あり">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- 支払方法 -->
-<div id="tab-payment_methods" class="master-content">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>支払方法一覧</h3>
-            <span>{{ payment_methods|length }}件</span>
-        </div>
-        <table class="master-table">
-            <thead>
-                <tr>
-                    <th>値</th>
-                    <th>表示名</th>
-                    <th>表示順</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in payment_methods %}
-                <tr>
-                    <td>{{ item.value }}</td>
-                    <td>{{ item.display_name }}</td>
-                    <td>{{ item.display_order }}</td>
-                    <td>
-                        {% if item.is_active %}
-                        <span class="status-active">有効</span>
-                        {% else %}
-                        <span class="status-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('payment_methods', {{ item.id }})">編集</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="5" style="padding: 0;">
-                        <div id="edit-payment_methods-{{ item.id }}" class="edit-form">
-                            <form action="{{ url_for('admin_master_edit', table_name='payment_methods', id=item.id) }}" method="POST">
-                                <div class="edit-form-grid">
-                                    <div class="form-group">
-                                        <label>値</label>
-                                        <input type="text" name="value" value="{{ item.value }}" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示名</label>
-                                        <input type="text" name="display_name" value="{{ item.display_name }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示順</label>
-                                        <input type="number" name="display_order" value="{{ item.display_order }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
-                                            有効
-                                        </label>
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('payment_methods', {{ item.id }})">キャンセル</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <form action="{{ url_for('admin_master_delete', table_name='payment_methods', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='payment_methods') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>値（保存用）</label>
-                        <input type="text" name="value" required placeholder="例: 銀行振込">
-                    </div>
-                    <div class="form-group">
-                        <label>表示名</label>
-                        <input type="text" name="display_name" placeholder="例: 銀行振込">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- 仕入先詳細 -->
-<div id="tab-supplier_details" class="master-content">
-    <div class="master-section">
-        <div class="master-section-header">
-            <h3>仕入先詳細一覧</h3>
-            <span>{{ supplier_details|length }}件</span>
-        </div>
-        <table class="master-table">
-            <thead>
-                <tr>
-                    <th>値</th>
-                    <th>表示名</th>
-                    <th>表示順</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in supplier_details %}
-                <tr>
-                    <td>{{ item.value }}</td>
-                    <td>{{ item.display_name }}</td>
-                    <td>{{ item.display_order }}</td>
-                    <td>
-                        {% if item.is_active %}
-                        <span class="status-active">有効</span>
-                        {% else %}
-                        <span class="status-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('supplier_details', {{ item.id }})">編集</button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="5" style="padding: 0;">
-                        <div id="edit-supplier_details-{{ item.id }}" class="edit-form">
-                            <form action="{{ url_for('admin_master_edit', table_name='supplier_details', id=item.id) }}" method="POST">
-                                <div class="edit-form-grid">
-                                    <div class="form-group">
-                                        <label>値</label>
-                                        <input type="text" name="value" value="{{ item.value }}" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示名</label>
-                                        <input type="text" name="display_name" value="{{ item.display_name }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>表示順</label>
-                                        <input type="number" name="display_order" value="{{ item.display_order }}">
-                                    </div>
-                                    <div class="form-group">
-                                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
-                                            有効
-                                        </label>
-                                    </div>
-                                    <div class="form-group">
-                                        <button type="submit" class="btn btn-primary btn-sm">更新</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('supplier_details', {{ item.id }})">キャンセル</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <form action="{{ url_for('admin_master_delete', table_name='supplier_details', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
-                                <button type="submit" class="btn btn-delete btn-sm">削除</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div class="add-form">
-            <h4>＋ 新規追加</h4>
-            <form action="{{ url_for('admin_master_add', table_name='supplier_details') }}" method="POST">
-                <div class="add-form-grid">
-                    <div class="form-group">
-                        <label>値（保存用）</label>
-                        <input type="text" name="value" required placeholder="例: 友人">
-                    </div>
-                    <div class="form-group">
-                        <label>表示名</label>
-                        <input type="text" name="display_name" placeholder="例: 友人">
-                    </div>
-                    <div class="form-group">
-                        <label>表示順</label>
-                        <input type="number" name="display_order" value="0">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">追加</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- 書類設定 -->
-<div id="tab-document_settings" class="master-content">
-    <form action="{{ url_for('admin_document_settings_save') }}" method="POST">
-        <!-- 会社情報 -->
-        <div class="master-section">
-            <div class="master-section-header">
-                <h3>会社情報</h3>
-            </div>
-            <div style="padding: 1.25rem;">
-                <div class="doc-settings-grid">
-                    <div class="form-group">
-                        <label>会社名</label>
-                        <input type="text" name="company_name" value="{{ document_settings.get('company_name', '') }}" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>住所</label>
-                        <input type="text" name="company_address" value="{{ document_settings.get('company_address', '') }}" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>電話番号</label>
-                        <input type="text" name="company_phone" value="{{ document_settings.get('company_phone', '') }}" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>FAX番号</label>
-                        <input type="text" name="company_fax" value="{{ document_settings.get('company_fax', '') }}" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>メールアドレス</label>
-                        <input type="email" name="company_email" value="{{ document_settings.get('company_email', '') }}" class="form-control">
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 振込先銀行情報 -->
-        <div class="master-section">
-            <div class="master-section-header">
-                <h3>振込先銀行情報</h3>
-            </div>
-            <div style="padding: 1.25rem;">
-                <div class="doc-settings-grid">
-                    <div class="form-group">
-                        <label>銀行名</label>
-                        <input type="text" name="bank_name" value="{{ document_settings.get('bank_name', '') }}" class="form-control" placeholder="例: ○○銀行">
-                    </div>
-                    <div class="form-group">
-                        <label>支店名</label>
-                        <input type="text" name="bank_branch" value="{{ document_settings.get('bank_branch', '') }}" class="form-control" placeholder="例: ○○支店">
-                    </div>
-                    <div class="form-group">
-                        <label>口座種別</label>
-                        <select name="bank_account_type" class="form-control">
-                            <option value="普通" {% if document_settings.get('bank_account_type') == '普通' %}selected{% endif %}>普通</option>
-                            <option value="当座" {% if document_settings.get('bank_account_type') == '当座' %}selected{% endif %}>当座</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>口座番号</label>
-                        <input type="text" name="bank_account_number" value="{{ document_settings.get('bank_account_number', '') }}" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>口座名義</label>
-                        <input type="text" name="bank_account_name" value="{{ document_settings.get('bank_account_name', '') }}" class="form-control">
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 精算書設定 -->
-        <div class="master-section">
-            <div class="master-section-header">
-                <h3>精算書設定</h3>
-            </div>
-            <div style="padding: 1.25rem;">
-                <div class="doc-settings-grid">
-                    <div class="form-group">
-                        <label>デフォルト手数料率（%）</label>
-                        <input type="number" name="seisan_default_commission_rate" value="{{ document_settings.get('seisan_default_commission_rate', '10') }}" class="form-control" min="0" max="100">
-                    </div>
-                </div>
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>デフォルト備考</label>
-                    <textarea name="seisan_default_notes" rows="3" class="form-control" placeholder="精算書のデフォルト備考文を入力">{{ document_settings.get('seisan_default_notes', '') }}</textarea>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 買取明細書設定 -->
-        <div class="master-section">
-            <div class="master-section-header">
-                <h3>買取明細書設定</h3>
-            </div>
-            <div style="padding: 1.25rem;">
-                <div class="doc-settings-grid">
-                    <div class="form-group">
-                        <label>デフォルト消費税率（%）</label>
-                        <select name="kaitori_default_tax_rate" class="form-control">
-                            <option value="10" {% if document_settings.get('kaitori_default_tax_rate') == '10' %}selected{% endif %}>10%（内税）</option>
-                            <option value="8" {% if document_settings.get('kaitori_default_tax_rate') == '8' %}selected{% endif %}>8%（軽減税率）</option>
-                            <option value="0" {% if document_settings.get('kaitori_default_tax_rate') == '0' %}selected{% endif %}>0%（非課税）</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>デフォルト備考</label>
-                    <textarea name="kaitori_default_notes" rows="3" class="form-control" placeholder="買取明細書のデフォルト備考文を入力">{{ document_settings.get('kaitori_default_notes', '') }}</textarea>
-                </div>
-            </div>
-        </div>
-        
-        <div style="text-align: center; margin-top: 1.5rem;">
-            <button type="submit" class="btn btn-primary">書類設定を保存</button>
-        </div>
-    </form>
-</div>
-
-<style>
 .doc-settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1004,17 +274,955 @@
 .doc-settings-grid textarea.form-control {
     resize: vertical;
 }
+
+.doc-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary);
+}
+
+@media (max-width: 768px) {
+    .add-form-grid,
+    .edit-form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .master-table {
+        font-size: 0.85rem;
+    }
+    
+    .master-table th,
+    .master-table td {
+        padding: 0.5rem;
+    }
+    
+    .main-tab {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+}
 </style>
 
+<div class="page-header">
+    <h1 class="page-title">マスター設定</h1>
+</div>
+
+{% if not brands and not suppliers and not conditions %}
+<div class="init-section">
+    <p>マスターデータが登録されていません。初期データを登録しますか？</p>
+    <form action="{{ url_for('admin_master_settings_init') }}" method="POST" style="display: inline;">
+        <button type="submit" class="btn btn-primary">初期データを登録</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- メインタブナビゲーション -->
+<div class="main-tabs">
+    <button class="main-tab active" onclick="showMainTab('product')">商品登録</button>
+    <button class="main-tab" onclick="showMainTab('document')">書類作成</button>
+</div>
+
+<!-- ===== 商品登録タブ ===== -->
+<div id="main-product" class="main-content active">
+    <!-- サブタブ -->
+    <div class="sub-tabs">
+        <button class="sub-tab active" onclick="showSubTab('product', 'brands')">ブランド名</button>
+        <button class="sub-tab" onclick="showSubTab('product', 'brand_categories')">ブランドカテゴリ</button>
+        <button class="sub-tab" onclick="showSubTab('product', 'suppliers')">仕入先</button>
+        <button class="sub-tab" onclick="showSubTab('product', 'conditions')">商品状態</button>
+        <button class="sub-tab" onclick="showSubTab('product', 'payment_methods')">支払方法</button>
+        <button class="sub-tab" onclick="showSubTab('product', 'supplier_details')">仕入先詳細</button>
+    </div>
+    
+    <!-- ブランド名 -->
+    <div id="sub-product-brands" class="sub-content active">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>ブランド名一覧</h3>
+                <span>{{ brands|length }}件</span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="master-table">
+                    <thead>
+                        <tr>
+                            <th>値</th>
+                            <th>表示名</th>
+                            <th>カテゴリ</th>
+                            <th>キーワード</th>
+                            <th>順序</th>
+                            <th>状態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for brand in brands %}
+                        <tr>
+                            <td>{{ brand.value }}</td>
+                            <td>{{ brand.display_name }}</td>
+                            <td>
+                                {% for cat in brand_categories %}
+                                    {% if cat.id == brand.category_id %}{{ cat.name }}{% endif %}
+                                {% endfor %}
+                            </td>
+                            <td><span class="keywords-display" title="{{ brand.keywords }}">{{ brand.keywords }}</span></td>
+                            <td>{{ brand.display_order }}</td>
+                            <td>
+                                {% if brand.is_active %}
+                                <span class="status-active">有効</span>
+                                {% else %}
+                                <span class="status-inactive">無効</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brands', {{ brand.id }})">編集</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="7" style="padding: 0;">
+                                <div id="edit-brands-{{ brand.id }}" class="edit-form">
+                                    <form action="{{ url_for('admin_master_edit', table_name='brands', id=brand.id) }}" method="POST">
+                                        <div class="edit-form-grid">
+                                            <div class="form-group">
+                                                <label>値</label>
+                                                <input type="text" name="value" value="{{ brand.value }}" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>表示名</label>
+                                                <input type="text" name="display_name" value="{{ brand.display_name }}">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>カテゴリ</label>
+                                                <select name="category_id">
+                                                    {% for cat in brand_categories %}
+                                                    <option value="{{ cat.id }}" {% if cat.id == brand.category_id %}selected{% endif %}>{{ cat.name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>キーワード（カンマ区切り）</label>
+                                                <input type="text" name="keywords" value="{{ brand.keywords }}">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>表示順</label>
+                                                <input type="number" name="display_order" value="{{ brand.display_order }}">
+                                            </div>
+                                            <div class="form-group">
+                                                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <input type="checkbox" name="is_active" {% if brand.is_active %}checked{% endif %}>
+                                                    有効
+                                                </label>
+                                            </div>
+                                            <div class="form-group">
+                                                <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brands', {{ brand.id }})">キャンセル</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                    <form action="{{ url_for('admin_master_delete', table_name='brands', id=brand.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                        <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='brands') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>値（保存用）</label>
+                            <input type="text" name="value" required placeholder="例: Louis Vuitton">
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" name="display_name" placeholder="例: Louis Vuitton（ルイ・ヴィトン）">
+                        </div>
+                        <div class="form-group">
+                            <label>カテゴリ</label>
+                            <select name="category_id">
+                                {% for cat in brand_categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>キーワード（カンマ区切り）</label>
+                            <input type="text" name="keywords" placeholder="例: ヴィトン,LV,ルイヴィトン">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ブランドカテゴリ -->
+    <div id="sub-product-brand_categories" class="sub-content">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>ブランドカテゴリ一覧</h3>
+                <span>{{ brand_categories|length }}件</span>
+            </div>
+            <table class="master-table">
+                <thead>
+                    <tr>
+                        <th>カテゴリ名</th>
+                        <th>表示順</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in brand_categories %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        <td>{{ cat.display_order }}</td>
+                        <td>
+                            {% if cat.is_active %}
+                            <span class="status-active">有効</span>
+                            {% else %}
+                            <span class="status-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('brand_categories', {{ cat.id }})">編集</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" style="padding: 0;">
+                            <div id="edit-brand_categories-{{ cat.id }}" class="edit-form">
+                                <form action="{{ url_for('admin_master_edit', table_name='brand_categories', id=cat.id) }}" method="POST">
+                                    <div class="edit-form-grid">
+                                        <div class="form-group">
+                                            <label>カテゴリ名</label>
+                                            <input type="text" name="name" value="{{ cat.name }}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示順</label>
+                                            <input type="number" name="display_order" value="{{ cat.display_order }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="checkbox" name="is_active" {% if cat.is_active %}checked{% endif %}>
+                                                有効
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('brand_categories', {{ cat.id }})">キャンセル</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <form action="{{ url_for('admin_master_delete', table_name='brand_categories', id=cat.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='brand_categories') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>カテゴリ名</label>
+                            <input type="text" name="name" required placeholder="例: アウトドアブランド">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 仕入先 -->
+    <div id="sub-product-suppliers" class="sub-content">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>仕入先一覧</h3>
+                <span>{{ suppliers|length }}件</span>
+            </div>
+            <table class="master-table">
+                <thead>
+                    <tr>
+                        <th>値</th>
+                        <th>表示名</th>
+                        <th>表示順</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in suppliers %}
+                    <tr>
+                        <td>{{ item.value }}</td>
+                        <td>{{ item.display_name }}</td>
+                        <td>{{ item.display_order }}</td>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="status-active">有効</span>
+                            {% else %}
+                            <span class="status-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('suppliers', {{ item.id }})">編集</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" style="padding: 0;">
+                            <div id="edit-suppliers-{{ item.id }}" class="edit-form">
+                                <form action="{{ url_for('admin_master_edit', table_name='suppliers', id=item.id) }}" method="POST">
+                                    <div class="edit-form-grid">
+                                        <div class="form-group">
+                                            <label>値</label>
+                                            <input type="text" name="value" value="{{ item.value }}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示名</label>
+                                            <input type="text" name="display_name" value="{{ item.display_name }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示順</label>
+                                            <input type="number" name="display_order" value="{{ item.display_order }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
+                                                有効
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('suppliers', {{ item.id }})">キャンセル</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <form action="{{ url_for('admin_master_delete', table_name='suppliers', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='suppliers') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>値（保存用）</label>
+                            <input type="text" name="value" required placeholder="例: 店舗仕入">
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" name="display_name" placeholder="例: 店舗仕入">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 商品状態 -->
+    <div id="sub-product-conditions" class="sub-content">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>商品状態一覧</h3>
+                <span>{{ conditions|length }}件</span>
+            </div>
+            <table class="master-table">
+                <thead>
+                    <tr>
+                        <th>値</th>
+                        <th>表示名</th>
+                        <th>説明</th>
+                        <th>表示順</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in conditions %}
+                    <tr>
+                        <td>{{ item.value }}</td>
+                        <td>{{ item.display_name }}</td>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.display_order }}</td>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="status-active">有効</span>
+                            {% else %}
+                            <span class="status-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('conditions', {{ item.id }})">編集</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" style="padding: 0;">
+                            <div id="edit-conditions-{{ item.id }}" class="edit-form">
+                                <form action="{{ url_for('admin_master_edit', table_name='conditions', id=item.id) }}" method="POST">
+                                    <div class="edit-form-grid">
+                                        <div class="form-group">
+                                            <label>値</label>
+                                            <input type="text" name="value" value="{{ item.value }}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示名</label>
+                                            <input type="text" name="display_name" value="{{ item.display_name }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>説明</label>
+                                            <input type="text" name="description" value="{{ item.description }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示順</label>
+                                            <input type="number" name="display_order" value="{{ item.display_order }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
+                                                有効
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('conditions', {{ item.id }})">キャンセル</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <form action="{{ url_for('admin_master_delete', table_name='conditions', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='conditions') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>値（保存用）</label>
+                            <input type="text" name="value" required placeholder="例: C">
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" name="display_name" placeholder="例: C：ジャンク品">
+                        </div>
+                        <div class="form-group">
+                            <label>説明</label>
+                            <input type="text" name="description" placeholder="例: 動作不良・破損あり">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 支払方法 -->
+    <div id="sub-product-payment_methods" class="sub-content">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>支払方法一覧</h3>
+                <span>{{ payment_methods|length }}件</span>
+            </div>
+            <table class="master-table">
+                <thead>
+                    <tr>
+                        <th>値</th>
+                        <th>表示名</th>
+                        <th>表示順</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in payment_methods %}
+                    <tr>
+                        <td>{{ item.value }}</td>
+                        <td>{{ item.display_name }}</td>
+                        <td>{{ item.display_order }}</td>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="status-active">有効</span>
+                            {% else %}
+                            <span class="status-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('payment_methods', {{ item.id }})">編集</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" style="padding: 0;">
+                            <div id="edit-payment_methods-{{ item.id }}" class="edit-form">
+                                <form action="{{ url_for('admin_master_edit', table_name='payment_methods', id=item.id) }}" method="POST">
+                                    <div class="edit-form-grid">
+                                        <div class="form-group">
+                                            <label>値</label>
+                                            <input type="text" name="value" value="{{ item.value }}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示名</label>
+                                            <input type="text" name="display_name" value="{{ item.display_name }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示順</label>
+                                            <input type="number" name="display_order" value="{{ item.display_order }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
+                                                有効
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('payment_methods', {{ item.id }})">キャンセル</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <form action="{{ url_for('admin_master_delete', table_name='payment_methods', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='payment_methods') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>値（保存用）</label>
+                            <input type="text" name="value" required placeholder="例: 銀行振込">
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" name="display_name" placeholder="例: 銀行振込">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 仕入先詳細 -->
+    <div id="sub-product-supplier_details" class="sub-content">
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>仕入先詳細一覧</h3>
+                <span>{{ supplier_details|length }}件</span>
+            </div>
+            <table class="master-table">
+                <thead>
+                    <tr>
+                        <th>値</th>
+                        <th>表示名</th>
+                        <th>表示順</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in supplier_details %}
+                    <tr>
+                        <td>{{ item.value }}</td>
+                        <td>{{ item.display_name }}</td>
+                        <td>{{ item.display_order }}</td>
+                        <td>
+                            {% if item.is_active %}
+                            <span class="status-active">有効</span>
+                            {% else %}
+                            <span class="status-inactive">無効</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-edit-toggle" onclick="toggleEdit('supplier_details', {{ item.id }})">編集</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" style="padding: 0;">
+                            <div id="edit-supplier_details-{{ item.id }}" class="edit-form">
+                                <form action="{{ url_for('admin_master_edit', table_name='supplier_details', id=item.id) }}" method="POST">
+                                    <div class="edit-form-grid">
+                                        <div class="form-group">
+                                            <label>値</label>
+                                            <input type="text" name="value" value="{{ item.value }}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示名</label>
+                                            <input type="text" name="display_name" value="{{ item.display_name }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>表示順</label>
+                                            <input type="number" name="display_order" value="{{ item.display_order }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %}>
+                                                有効
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <button type="submit" class="btn btn-primary btn-sm">更新</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit('supplier_details', {{ item.id }})">キャンセル</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <form action="{{ url_for('admin_master_delete', table_name='supplier_details', id=item.id) }}" method="POST" style="margin-top: 0.5rem;" onsubmit="return confirm('削除しますか？');">
+                                    <button type="submit" class="btn btn-delete btn-sm">削除</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="add-form">
+                <h4>＋ 新規追加</h4>
+                <form action="{{ url_for('admin_master_add', table_name='supplier_details') }}" method="POST">
+                    <div class="add-form-grid">
+                        <div class="form-group">
+                            <label>値（保存用）</label>
+                            <input type="text" name="value" required placeholder="例: 友人">
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" name="display_name" placeholder="例: 友人">
+                        </div>
+                        <div class="form-group">
+                            <label>表示順</label>
+                            <input type="number" name="display_order" value="0">
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 書類作成タブ ===== -->
+<div id="main-document" class="main-content">
+    <!-- サブタブ -->
+    <div class="sub-tabs">
+        <button class="sub-tab active" onclick="showSubTab('document', 'common')">共通設定</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'seisan')">精算書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'kaitori')">買取明細書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'shikiriosho')">仕切押し書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'invoice')">請求書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'mitsumori')">見積依頼書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'keisan')">計算書</button>
+    </div>
+    
+    <form action="{{ url_for('admin_document_settings_save') }}" method="POST">
+        <!-- 共通設定 -->
+        <div id="sub-document-common" class="sub-content active">
+            <!-- 会社情報 -->
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>会社情報</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>会社名</label>
+                            <input type="text" name="company_name" value="{{ document_settings.get('company_name', '') }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>住所</label>
+                            <input type="text" name="company_address" value="{{ document_settings.get('company_address', '') }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>電話番号</label>
+                            <input type="text" name="company_phone" value="{{ document_settings.get('company_phone', '') }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>FAX番号</label>
+                            <input type="text" name="company_fax" value="{{ document_settings.get('company_fax', '') }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>メールアドレス</label>
+                            <input type="email" name="company_email" value="{{ document_settings.get('company_email', '') }}" class="form-control">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 振込先銀行情報 -->
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>振込先銀行情報</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>銀行名</label>
+                            <input type="text" name="bank_name" value="{{ document_settings.get('bank_name', '') }}" class="form-control" placeholder="例: ○○銀行">
+                        </div>
+                        <div class="form-group">
+                            <label>支店名</label>
+                            <input type="text" name="bank_branch" value="{{ document_settings.get('bank_branch', '') }}" class="form-control" placeholder="例: ○○支店">
+                        </div>
+                        <div class="form-group">
+                            <label>口座種別</label>
+                            <select name="bank_account_type" class="form-control">
+                                <option value="普通" {% if document_settings.get('bank_account_type') == '普通' %}selected{% endif %}>普通</option>
+                                <option value="当座" {% if document_settings.get('bank_account_type') == '当座' %}selected{% endif %}>当座</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>口座番号</label>
+                            <input type="text" name="bank_account_number" value="{{ document_settings.get('bank_account_number', '') }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>口座名義</label>
+                            <input type="text" name="bank_account_name" value="{{ document_settings.get('bank_account_name', '') }}" class="form-control">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 精算書設定 -->
+        <div id="sub-document-seisan" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>精算書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト手数料率（%）</label>
+                            <input type="number" name="seisan_default_commission_rate" value="{{ document_settings.get('seisan_default_commission_rate', '10') }}" class="form-control" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="seisan_default_notes" rows="3" class="form-control" placeholder="精算書のデフォルト備考文を入力">{{ document_settings.get('seisan_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 買取明細書設定 -->
+        <div id="sub-document-kaitori" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>買取明細書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト消費税率（%）</label>
+                            <select name="kaitori_default_tax_rate" class="form-control">
+                                <option value="10" {% if document_settings.get('kaitori_default_tax_rate') == '10' %}selected{% endif %}>10%（内税）</option>
+                                <option value="8" {% if document_settings.get('kaitori_default_tax_rate') == '8' %}selected{% endif %}>8%（軽減税率）</option>
+                                <option value="0" {% if document_settings.get('kaitori_default_tax_rate') == '0' %}selected{% endif %}>0%（非課税）</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="kaitori_default_notes" rows="3" class="form-control" placeholder="買取明細書のデフォルト備考文を入力">{{ document_settings.get('kaitori_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 仕切押し書設定 -->
+        <div id="sub-document-shikiriosho" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>仕切押し書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト支払条件</label>
+                            <input type="text" name="shikiriosho_default_payment_terms" value="{{ document_settings.get('shikiriosho_default_payment_terms', '30日以内') }}" class="form-control" placeholder="例: 30日以内">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="shikiriosho_default_notes" rows="3" class="form-control" placeholder="仕切押し書のデフォルト備考文を入力">{{ document_settings.get('shikiriosho_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 請求書設定 -->
+        <div id="sub-document-invoice" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>請求書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト消費税率（%）</label>
+                            <select name="invoice_default_tax_rate" class="form-control">
+                                <option value="10" {% if document_settings.get('invoice_default_tax_rate') == '10' %}selected{% endif %}>10%</option>
+                                <option value="8" {% if document_settings.get('invoice_default_tax_rate') == '8' %}selected{% endif %}>8%（軽減税率）</option>
+                                <option value="0" {% if document_settings.get('invoice_default_tax_rate') == '0' %}selected{% endif %}>0%（非課税）</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>デフォルト支払期限</label>
+                            <input type="text" name="invoice_default_payment_terms" value="{{ document_settings.get('invoice_default_payment_terms', '30日以内') }}" class="form-control" placeholder="例: 30日以内">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="invoice_default_notes" rows="3" class="form-control" placeholder="請求書のデフォルト備考文を入力">{{ document_settings.get('invoice_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 見積依頼書設定 -->
+        <div id="sub-document-mitsumori" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>見積依頼書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト有効期限（日）</label>
+                            <input type="number" name="mitsumori_default_valid_days" value="{{ document_settings.get('mitsumori_default_valid_days', '30') }}" class="form-control" min="1" placeholder="例: 30">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="mitsumori_default_notes" rows="3" class="form-control" placeholder="見積依頼書のデフォルト備考文を入力">{{ document_settings.get('mitsumori_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+        
+        <!-- 計算書設定 -->
+        <div id="sub-document-keisan" class="sub-content">
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>計算書設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>デフォルト消費税率（%）</label>
+                            <select name="keisan_default_tax_rate" class="form-control">
+                                <option value="10" {% if document_settings.get('keisan_default_tax_rate') == '10' %}selected{% endif %}>10%</option>
+                                <option value="8" {% if document_settings.get('keisan_default_tax_rate') == '8' %}selected{% endif %}>8%（軽減税率）</option>
+                                <option value="0" {% if document_settings.get('keisan_default_tax_rate') == '0' %}selected{% endif %}>0%（非課税）</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>デフォルト備考</label>
+                        <textarea name="keisan_default_notes" rows="3" class="form-control" placeholder="計算書のデフォルト備考文を入力">{{ document_settings.get('keisan_default_notes', '') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary">設定を保存</button>
+            </div>
+        </div>
+    </form>
+</div>
+
 <script>
-function showTab(tabName) {
-    // すべてのタブを非アクティブに
-    document.querySelectorAll('.master-tab').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.master-content').forEach(content => content.classList.remove('active'));
+function showMainTab(tabName) {
+    // すべてのメインタブを非アクティブに
+    document.querySelectorAll('.main-tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.main-content').forEach(content => content.classList.remove('active'));
     
     // 選択されたタブをアクティブに
     event.target.classList.add('active');
-    document.getElementById('tab-' + tabName).classList.add('active');
+    document.getElementById('main-' + tabName).classList.add('active');
+}
+
+function showSubTab(mainTabName, subTabName) {
+    const mainContent = document.getElementById('main-' + mainTabName);
+    
+    // 該当するメインタブ内のサブタブを非アクティブに
+    mainContent.querySelectorAll('.sub-tab').forEach(tab => tab.classList.remove('active'));
+    mainContent.querySelectorAll('.sub-content').forEach(content => content.classList.remove('active'));
+    
+    // 選択されたサブタブをアクティブに
+    event.target.classList.add('active');
+    document.getElementById('sub-' + mainTabName + '-' + subTabName).classList.add('active');
 }
 
 function toggleEdit(tableName, id) {

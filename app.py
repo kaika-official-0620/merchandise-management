@@ -5173,6 +5173,15 @@ def admin_master_settings_init():
                 ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
                 ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
+                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
+                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
+                ('invoice_default_tax_rate', '10', 'number', 'invoice', '請求書デフォルト消費税率（%）', 1),
+                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '請求書デフォルト支払期限', 2),
+                ('invoice_default_notes', '', 'textarea', 'invoice', '請求書デフォルト備考', 3),
+                ('mitsumori_default_valid_days', '30', 'number', 'mitsumori', '見積依頼書デフォルト有効期限（日）', 1),
+                ('mitsumori_default_notes', '', 'textarea', 'mitsumori', '見積依頼書デフォルト備考', 2),
+                ('keisan_default_tax_rate', '10', 'number', 'keisan', '計算書デフォルト消費税率（%）', 1),
+                ('keisan_default_notes', '', 'textarea', 'keisan', '計算書デフォルト備考', 2),
             ]
             for key, value, stype, cat, display, order in default_doc_settings:
                 cur.execute("INSERT INTO master_document_settings (setting_key, setting_value, setting_type, category, display_name, display_order) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -5236,6 +5245,15 @@ def admin_master_settings_init():
                 ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
                 ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
+                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
+                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
+                ('invoice_default_tax_rate', '10', 'number', 'invoice', '請求書デフォルト消費税率（%）', 1),
+                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '請求書デフォルト支払期限', 2),
+                ('invoice_default_notes', '', 'textarea', 'invoice', '請求書デフォルト備考', 3),
+                ('mitsumori_default_valid_days', '30', 'number', 'mitsumori', '見積依頼書デフォルト有効期限（日）', 1),
+                ('mitsumori_default_notes', '', 'textarea', 'mitsumori', '見積依頼書デフォルト備考', 2),
+                ('keisan_default_tax_rate', '10', 'number', 'keisan', '計算書デフォルト消費税率（%）', 1),
+                ('keisan_default_notes', '', 'textarea', 'keisan', '計算書デフォルト備考', 2),
             ]
             for key, value, stype, cat, display, order in default_doc_settings:
                 cur.execute("INSERT INTO master_document_settings (setting_key, setting_value, setting_type, category, display_name, display_order) VALUES (?, ?, ?, ?, ?, ?)",
@@ -5460,7 +5478,11 @@ def admin_document_settings_save():
         'company_name', 'company_address', 'company_phone', 'company_fax', 'company_email',
         'bank_name', 'bank_branch', 'bank_account_type', 'bank_account_number', 'bank_account_name',
         'seisan_default_commission_rate', 'seisan_default_notes',
-        'kaitori_default_tax_rate', 'kaitori_default_notes'
+        'kaitori_default_tax_rate', 'kaitori_default_notes',
+        'shikiriosho_default_notes', 'shikiriosho_default_payment_terms',
+        'invoice_default_tax_rate', 'invoice_default_payment_terms', 'invoice_default_notes',
+        'mitsumori_default_valid_days', 'mitsumori_default_notes',
+        'keisan_default_tax_rate', 'keisan_default_notes'
     ]
     
     if DATABASE_URL:
