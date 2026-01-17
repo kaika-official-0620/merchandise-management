@@ -255,36 +255,90 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0.5rem 0;
 }
 
-/* サイドバーグループラベル */
-.sidebar-group-label {
+/* サイドバーカテゴリ（アコーディオン） */
+.sidebar-category {
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-category-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.875rem 1.25rem;
+    background: none;
+    border: none;
+    border-left: 3px solid transparent;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.sidebar-category-toggle:hover {
+    background: var(--bg-main);
+}
+
+.sidebar-category-toggle.active {
+    background: rgba(37, 99, 235, 0.05);
+    border-left-color: var(--primary);
+    color: var(--primary);
+}
+
+.sidebar-category-toggle .badge-count {
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-right: auto;
+    margin-left: 8px;
+}
+
+.category-arrow {
     font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    padding: 16px 20px 6px;
+    transition: transform 0.2s;
+    color: var(--text-secondary);
+}
+
+.sidebar-category-toggle.open .category-arrow {
+    transform: rotate(180deg);
+}
+
+.sidebar-category-items {
+    display: none;
+    flex-direction: column;
+    background: var(--bg-main);
+}
+
+.sidebar-category-items.open {
+    display: flex;
+}
+
+.sidebar-category-items a {
+    display: block;
+    padding: 0.65rem 1.25rem 0.65rem 2rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-category-items a:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.sidebar-category-items a.active {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary);
+    border-left-color: var(--primary);
     font-weight: 600;
-}
-
-.sidebar-group-label:not(:first-child) {
-    margin-top: 8px;
-    border-top: 1px solid var(--border);
-    padding-top: 16px;
-}
-
-/* サブメニューグループラベル */
-.submenu-group-label {
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    padding: 12px 20px 4px 2rem;
-    font-weight: 600;
-}
-
-.submenu-group-label:not(:first-child) {
-    margin-top: 6px;
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
 }
 
 /* サイドバーサブメニュー */

@@ -618,6 +618,95 @@ if DATABASE_URL:
             )
         ''')
         
+        # マスター: ブランドカテゴリ
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_brand_categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: ブランド名
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_brands (
+                id SERIAL PRIMARY KEY,
+                category_id INTEGER REFERENCES master_brand_categories(id),
+                value VARCHAR(100) NOT NULL,
+                display_name VARCHAR(200),
+                keywords TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 仕入先
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_suppliers (
+                id SERIAL PRIMARY KEY,
+                value VARCHAR(100) NOT NULL,
+                display_name VARCHAR(200),
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 商品状態
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_conditions (
+                id SERIAL PRIMARY KEY,
+                value VARCHAR(20) NOT NULL,
+                display_name VARCHAR(200),
+                description TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 支払方法
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_payment_methods (
+                id SERIAL PRIMARY KEY,
+                value VARCHAR(100) NOT NULL,
+                display_name VARCHAR(200),
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 仕入先詳細
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_supplier_details (
+                id SERIAL PRIMARY KEY,
+                value VARCHAR(100) NOT NULL,
+                display_name VARCHAR(200),
+                display_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 書類設定
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_document_settings (
+                id SERIAL PRIMARY KEY,
+                setting_key VARCHAR(100) UNIQUE NOT NULL,
+                setting_value TEXT,
+                setting_type VARCHAR(50) DEFAULT 'text',
+                category VARCHAR(50) DEFAULT 'company',
+                display_name VARCHAR(200),
+                display_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1195,6 +1284,95 @@ else:
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # マスター: ブランドカテゴリ
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_brand_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: ブランド名
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_brands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER REFERENCES master_brand_categories(id),
+                value TEXT NOT NULL,
+                display_name TEXT,
+                keywords TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 仕入先
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_suppliers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                value TEXT NOT NULL,
+                display_name TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 商品状態
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_conditions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                value TEXT NOT NULL,
+                display_name TEXT,
+                description TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 支払方法
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_payment_methods (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                value TEXT NOT NULL,
+                display_name TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 仕入先詳細
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_supplier_details (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                value TEXT NOT NULL,
+                display_name TEXT,
+                display_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # マスター: 書類設定
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_document_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                setting_type TEXT DEFAULT 'text',
+                category TEXT DEFAULT 'company',
+                display_name TEXT,
+                display_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -4756,6 +4934,623 @@ def proxy_service_bid():
         'bid_amount': bid_amount,
         'bidder_name': bidder_name
     })
+
+# ===================
+# マスター設定
+# ===================
+
+@app.route('/admin/master-settings')
+@login_required
+@admin_required
+def admin_master_settings():
+    """マスター設定画面"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # ブランドカテゴリ
+        cur.execute("SELECT * FROM master_brand_categories ORDER BY display_order, id")
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        # ブランド
+        cur.execute("SELECT * FROM master_brands ORDER BY display_order, id")
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        # 仕入先
+        cur.execute("SELECT * FROM master_suppliers ORDER BY display_order, id")
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        # 商品状態
+        cur.execute("SELECT * FROM master_conditions ORDER BY display_order, id")
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        # 支払方法
+        cur.execute("SELECT * FROM master_payment_methods ORDER BY display_order, id")
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        # 仕入先詳細
+        cur.execute("SELECT * FROM master_supplier_details ORDER BY display_order, id")
+        supplier_details = [dict(row) for row in cur.fetchall()]
+        
+        # 書類設定
+        cur.execute("SELECT * FROM master_document_settings ORDER BY category, display_order, id")
+        document_settings_raw = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        cur.execute("SELECT * FROM master_brand_categories ORDER BY display_order, id")
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_brands ORDER BY display_order, id")
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_suppliers ORDER BY display_order, id")
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_conditions ORDER BY display_order, id")
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_payment_methods ORDER BY display_order, id")
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_supplier_details ORDER BY display_order, id")
+        supplier_details = [dict(row) for row in cur.fetchall()]
+        
+        # 書類設定
+        cur.execute("SELECT * FROM master_document_settings ORDER BY category, display_order, id")
+        document_settings_raw = [dict(row) for row in cur.fetchall()]
+    
+    # 書類設定をキーで辞書化
+    document_settings = {row['setting_key']: row['setting_value'] for row in document_settings_raw}
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/master_settings.html',
+                         brand_categories=brand_categories,
+                         brands=brands,
+                         suppliers=suppliers,
+                         conditions=conditions,
+                         payment_methods=payment_methods,
+                         supplier_details=supplier_details,
+                         document_settings=document_settings)
+
+
+@app.route('/admin/master-settings/init', methods=['POST'])
+@login_required
+@admin_required
+def admin_master_settings_init():
+    """マスターデータの初期登録"""
+    conn = get_db()
+    
+    # デフォルトデータ
+    default_brand_categories = [
+        ('ラグジュアリーブランド', 1),
+        ('時計・ジュエリー', 2),
+        ('スポーツ・ストリート', 3),
+        ('日本ブランド', 4),
+        ('電子機器', 5),
+        ('その他', 6)
+    ]
+    
+    default_brands = [
+        # ラグジュアリーブランド
+        (1, 'Louis Vuitton', 'Louis Vuitton（ルイ・ヴィトン）', 'ヴィトン,ビトン,LV,ルイヴィトン', 1),
+        (1, 'Hermes', 'Hermes（エルメス）', 'エルメス,HERMES,バーキン,ケリー', 2),
+        (1, 'Chanel', 'Chanel（シャネル）', 'シャネル,CHANEL,マトラッセ', 3),
+        (1, 'Gucci', 'Gucci（グッチ）', 'グッチ,GUCCI', 4),
+        (1, 'Prada', 'Prada（プラダ）', 'プラダ,PRADA', 5),
+        (1, 'Dior', 'Dior（ディオール）', 'ディオール,DIOR', 6),
+        (1, 'Celine', 'Celine（セリーヌ）', 'セリーヌ,CELINE', 7),
+        (1, 'Bottega Veneta', 'Bottega Veneta（ボッテガ・ヴェネタ）', 'ボッテガ,BOTTEGA', 8),
+        (1, 'Balenciaga', 'Balenciaga（バレンシアガ）', 'バレンシアガ,BALENCIAGA', 9),
+        (1, 'Saint Laurent', 'Saint Laurent（サンローラン）', 'サンローラン,YSL', 10),
+        (1, 'Loewe', 'Loewe（ロエベ）', 'ロエベ,LOEWE', 11),
+        (1, 'Fendi', 'Fendi（フェンディ）', 'フェンディ,FENDI', 12),
+        (1, 'Burberry', 'Burberry（バーバリー）', 'バーバリー,BURBERRY', 13),
+        (1, 'Valentino', 'Valentino（ヴァレンティノ）', 'ヴァレンティノ,VALENTINO', 14),
+        (1, 'Givenchy', 'Givenchy（ジバンシィ）', 'ジバンシィ,GIVENCHY', 15),
+        (1, 'Miu Miu', 'Miu Miu（ミュウミュウ）', 'ミュウミュウ,MIU MIU', 16),
+        # 時計・ジュエリー
+        (2, 'Rolex', 'Rolex（ロレックス）', 'ロレックス,ROLEX,サブマリーナ,デイトナ', 1),
+        (2, 'Cartier', 'Cartier（カルティエ）', 'カルティエ,CARTIER', 2),
+        (2, 'Omega', 'Omega（オメガ）', 'オメガ,OMEGA,スピードマスター', 3),
+        (2, 'Patek Philippe', 'Patek Philippe（パテック・フィリップ）', 'パテック,PATEK', 4),
+        (2, 'Audemars Piguet', 'Audemars Piguet（オーデマ・ピゲ）', 'オーデマピゲ,AP,ロイヤルオーク', 5),
+        (2, 'Tiffany', 'Tiffany（ティファニー）', 'ティファニー,TIFFANY', 6),
+        (2, 'Bvlgari', 'Bvlgari（ブルガリ）', 'ブルガリ,BVLGARI', 7),
+        (2, 'Van Cleef', 'Van Cleef（ヴァンクリーフ）', 'ヴァンクリ,VAN CLEEF', 8),
+        # スポーツ・ストリート
+        (3, 'Nike', 'Nike（ナイキ）', 'ナイキ,NIKE,エアマックス,エアフォース', 1),
+        (3, 'Adidas', 'Adidas（アディダス）', 'アディダス,ADIDAS,イージー,YEEZY', 2),
+        (3, 'Supreme', 'Supreme（シュプリーム）', 'シュプリーム,SUPREME', 3),
+        (3, 'Off-White', 'Off-White（オフホワイト）', 'オフホワイト,OFF-WHITE', 4),
+        (3, 'A BATHING APE', 'A BATHING APE（ベイプ）', 'ベイプ,BAPE,エイプ', 5),
+        (3, 'Jordan', 'Jordan（ジョーダン）', 'ジョーダン,JORDAN,AJ1', 6),
+        (3, 'New Balance', 'New Balance（ニューバランス）', 'ニューバランス,NEW BALANCE,NB', 7),
+        # 日本ブランド
+        (4, 'COMME des GARCONS', 'COMME des GARCONS（コムデギャルソン）', 'コムデギャルソン,ギャルソン,CDG', 1),
+        (4, 'Yohji Yamamoto', 'Yohji Yamamoto（ヨウジヤマモト）', 'ヨウジ,YOHJI', 2),
+        (4, 'ISSEY MIYAKE', 'ISSEY MIYAKE（イッセイミヤケ）', 'イッセイミヤケ,ミヤケ', 3),
+        (4, 'sacai', 'sacai（サカイ）', 'サカイ,SACAI', 4),
+        (4, 'UNDERCOVER', 'UNDERCOVER（アンダーカバー）', 'アンダーカバー,UNDERCOVER', 5),
+        # 電子機器
+        (5, 'Apple', 'Apple（アップル）', 'アップル,APPLE,iPhone,iPad,MacBook', 1),
+        (5, 'Sony', 'Sony（ソニー）', 'ソニー,SONY,プレステ,PlayStation', 2),
+        (5, 'Nintendo', 'Nintendo（任天堂）', '任天堂,ニンテンドー,Switch', 3),
+        (5, 'Dyson', 'Dyson（ダイソン）', 'ダイソン,DYSON', 4),
+        (5, 'Bose', 'Bose（ボーズ）', 'ボーズ,BOSE', 5),
+        # その他
+        (6, 'その他', 'その他', '', 1),
+        (6, 'ノーブランド', 'ノーブランド', '', 2),
+    ]
+    
+    default_suppliers = [
+        ('個人', '個人', 1),
+        ('代行サービス', '代行サービス', 2),
+        ('オークション', 'オークション', 3),
+    ]
+    
+    default_conditions = [
+        ('N', 'N：新品', '新品', 1),
+        ('S', 'S：新品ではないが傷なし', '新品ではないが傷なし', 2),
+        ('A', 'A：未使用に近い', '未使用に近い（小さい傷や汚れ）', 3),
+        ('AB', 'AB：傷・汚れあり（小）', '傷・汚れあり（小）', 4),
+        ('B', 'B：傷・汚れあり（大）', '傷・汚れあり（大）', 5),
+    ]
+    
+    default_payment_methods = [
+        ('現金', '現金', 1),
+        ('クレジット', 'クレジット', 2),
+        ('PayPay', 'PayPay', 3),
+        ('その他', 'その他', 4),
+    ]
+    
+    default_supplier_details = [
+        ('業者', '業者', 1),
+        ('クライアント', 'クライアント', 2),
+        ('個人顧客', '個人顧客', 3),
+    ]
+    
+    if DATABASE_URL:
+        cur = conn.cursor()
+        
+        # ブランドカテゴリ
+        cur.execute("SELECT COUNT(*) FROM master_brand_categories")
+        if cur.fetchone()[0] == 0:
+            for name, order in default_brand_categories:
+                cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (%s, %s)", (name, order))
+        
+        # ブランド
+        cur.execute("SELECT COUNT(*) FROM master_brands")
+        if cur.fetchone()[0] == 0:
+            for cat_id, value, display_name, keywords, order in default_brands:
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (%s, %s, %s, %s, %s)",
+                          (cat_id, value, display_name, keywords, order))
+        
+        # 仕入先
+        cur.execute("SELECT COUNT(*) FROM master_suppliers")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_suppliers:
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, order))
+        
+        # 商品状態
+        cur.execute("SELECT COUNT(*) FROM master_conditions")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, desc, order in default_conditions:
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (%s, %s, %s, %s)",
+                          (value, display_name, desc, order))
+        
+        # 支払方法
+        cur.execute("SELECT COUNT(*) FROM master_payment_methods")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_payment_methods:
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, order))
+        
+        # 仕入先詳細
+        cur.execute("SELECT COUNT(*) FROM master_supplier_details")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_supplier_details:
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, order))
+        
+        # 書類設定（初期化）
+        cur.execute("SELECT COUNT(*) FROM master_document_settings")
+        if cur.fetchone()[0] == 0:
+            default_doc_settings = [
+                ('company_name', '株式会社 開花', 'text', 'company', '会社名', 1),
+                ('company_address', '', 'text', 'company', '住所', 2),
+                ('company_phone', '', 'text', 'company', '電話番号', 3),
+                ('company_fax', '', 'text', 'company', 'FAX番号', 4),
+                ('company_email', '', 'text', 'company', 'メールアドレス', 5),
+                ('bank_name', '', 'text', 'bank', '銀行名', 1),
+                ('bank_branch', '', 'text', 'bank', '支店名', 2),
+                ('bank_account_type', '普通', 'text', 'bank', '口座種別', 3),
+                ('bank_account_number', '', 'text', 'bank', '口座番号', 4),
+                ('bank_account_name', '', 'text', 'bank', '口座名義', 5),
+                ('seisan_default_commission_rate', '10', 'number', 'seisan', '精算書デフォルト手数料率（%）', 1),
+                ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
+                ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
+                ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
+            ]
+            for key, value, stype, cat, display, order in default_doc_settings:
+                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value, setting_type, category, display_name, display_order) VALUES (%s, %s, %s, %s, %s, %s)",
+                          (key, value, stype, cat, display, order))
+    else:
+        cur = conn.cursor()
+        
+        # ブランドカテゴリ
+        cur.execute("SELECT COUNT(*) FROM master_brand_categories")
+        if cur.fetchone()[0] == 0:
+            for name, order in default_brand_categories:
+                cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (?, ?)", (name, order))
+        
+        # ブランド
+        cur.execute("SELECT COUNT(*) FROM master_brands")
+        if cur.fetchone()[0] == 0:
+            for cat_id, value, display_name, keywords, order in default_brands:
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (?, ?, ?, ?, ?)",
+                          (cat_id, value, display_name, keywords, order))
+        
+        # 仕入先
+        cur.execute("SELECT COUNT(*) FROM master_suppliers")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_suppliers:
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, order))
+        
+        # 商品状態
+        cur.execute("SELECT COUNT(*) FROM master_conditions")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, desc, order in default_conditions:
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (?, ?, ?, ?)",
+                          (value, display_name, desc, order))
+        
+        # 支払方法
+        cur.execute("SELECT COUNT(*) FROM master_payment_methods")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_payment_methods:
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, order))
+        
+        # 仕入先詳細
+        cur.execute("SELECT COUNT(*) FROM master_supplier_details")
+        if cur.fetchone()[0] == 0:
+            for value, display_name, order in default_supplier_details:
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, order))
+        
+        # 書類設定（初期化）
+        cur.execute("SELECT COUNT(*) FROM master_document_settings")
+        if cur.fetchone()[0] == 0:
+            default_doc_settings = [
+                ('company_name', '株式会社 開花', 'text', 'company', '会社名', 1),
+                ('company_address', '', 'text', 'company', '住所', 2),
+                ('company_phone', '', 'text', 'company', '電話番号', 3),
+                ('company_fax', '', 'text', 'company', 'FAX番号', 4),
+                ('company_email', '', 'text', 'company', 'メールアドレス', 5),
+                ('bank_name', '', 'text', 'bank', '銀行名', 1),
+                ('bank_branch', '', 'text', 'bank', '支店名', 2),
+                ('bank_account_type', '普通', 'text', 'bank', '口座種別', 3),
+                ('bank_account_number', '', 'text', 'bank', '口座番号', 4),
+                ('bank_account_name', '', 'text', 'bank', '口座名義', 5),
+                ('seisan_default_commission_rate', '10', 'number', 'seisan', '精算書デフォルト手数料率（%）', 1),
+                ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
+                ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
+                ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
+            ]
+            for key, value, stype, cat, display, order in default_doc_settings:
+                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value, setting_type, category, display_name, display_order) VALUES (?, ?, ?, ?, ?, ?)",
+                          (key, value, stype, cat, display, order))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('マスターデータを初期登録しました', 'success')
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/admin/master-settings/<table_name>/add', methods=['POST'])
+@login_required
+@admin_required
+def admin_master_add(table_name):
+    """マスターデータの追加"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('admin_master_settings'))
+    
+    conn = get_db()
+    
+    if table_name == 'brand_categories':
+        name = request.form.get('name')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (%s, %s)", (name, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (?, ?)", (name, display_order))
+    
+    elif table_name == 'brands':
+        category_id = int(request.form.get('category_id') or 0)
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        keywords = request.form.get('keywords')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (%s, %s, %s, %s, %s)",
+                      (category_id, value, display_name, keywords, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (?, ?, ?, ?, ?)",
+                      (category_id, value, display_name, keywords, display_order))
+    
+    elif table_name == 'suppliers':
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
+    
+    elif table_name == 'conditions':
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        description = request.form.get('description')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (%s, %s, %s, %s)",
+                      (value, display_name, description, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (?, ?, ?, ?)",
+                      (value, display_name, description, display_order))
+    
+    elif table_name == 'payment_methods':
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
+    
+    elif table_name == 'supplier_details':
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        display_order = int(request.form.get('display_order') or 0)
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
+        else:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('追加しました', 'success')
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/admin/master-settings/<table_name>/<int:id>/edit', methods=['POST'])
+@login_required
+@admin_required
+def admin_master_edit(table_name, id):
+    """マスターデータの編集"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('admin_master_settings'))
+    
+    conn = get_db()
+    full_table_name = f"master_{table_name}"
+    
+    if table_name == 'brand_categories':
+        name = request.form.get('name')
+        display_order = int(request.form.get('display_order') or 0)
+        is_active = 1 if request.form.get('is_active') else 0
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                      (name, display_order, is_active, id))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET name=?, display_order=?, is_active=? WHERE id=?",
+                      (name, display_order, is_active, id))
+    
+    elif table_name == 'brands':
+        category_id = int(request.form.get('category_id') or 0)
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        keywords = request.form.get('keywords')
+        display_order = int(request.form.get('display_order') or 0)
+        is_active = 1 if request.form.get('is_active') else 0
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET category_id=%s, value=%s, display_name=%s, keywords=%s, display_order=%s, is_active=%s WHERE id=%s",
+                      (category_id, value, display_name, keywords, display_order, is_active, id))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET category_id=?, value=?, display_name=?, keywords=?, display_order=?, is_active=? WHERE id=?",
+                      (category_id, value, display_name, keywords, display_order, is_active, id))
+    
+    elif table_name == 'conditions':
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        description = request.form.get('description')
+        display_order = int(request.form.get('display_order') or 0)
+        is_active = 1 if request.form.get('is_active') else 0
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, description=%s, display_order=%s, is_active=%s WHERE id=%s",
+                      (value, display_name, description, display_order, is_active, id))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, description=?, display_order=?, is_active=? WHERE id=?",
+                      (value, display_name, description, display_order, is_active, id))
+    
+    else:
+        value = request.form.get('value')
+        display_name = request.form.get('display_name')
+        display_order = int(request.form.get('display_order') or 0)
+        is_active = 1 if request.form.get('is_active') else 0
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                      (value, display_name, display_order, is_active, id))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, display_order=?, is_active=? WHERE id=?",
+                      (value, display_name, display_order, is_active, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('更新しました', 'success')
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/admin/master-settings/<table_name>/<int:id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_master_delete(table_name, id):
+    """マスターデータの削除"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('admin_master_settings'))
+    
+    conn = get_db()
+    full_table_name = f"master_{table_name}"
+    
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute(f"DELETE FROM {full_table_name} WHERE id=%s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute(f"DELETE FROM {full_table_name} WHERE id=?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('削除しました', 'success')
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/admin/master-settings/document-settings', methods=['POST'])
+@login_required
+@admin_required
+def admin_document_settings_save():
+    """書類設定の保存"""
+    conn = get_db()
+    
+    # 設定キーのリスト
+    setting_keys = [
+        'company_name', 'company_address', 'company_phone', 'company_fax', 'company_email',
+        'bank_name', 'bank_branch', 'bank_account_type', 'bank_account_number', 'bank_account_name',
+        'seisan_default_commission_rate', 'seisan_default_notes',
+        'kaitori_default_tax_rate', 'kaitori_default_notes'
+    ]
+    
+    if DATABASE_URL:
+        cur = conn.cursor()
+        for key in setting_keys:
+            value = request.form.get(key, '')
+            # 既存のレコードがあれば更新、なければ挿入
+            cur.execute("SELECT id FROM master_document_settings WHERE setting_key = %s", (key,))
+            if cur.fetchone():
+                cur.execute("UPDATE master_document_settings SET setting_value = %s, updated_at = CURRENT_TIMESTAMP WHERE setting_key = %s", (value, key))
+            else:
+                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (%s, %s)", (key, value))
+    else:
+        cur = conn.cursor()
+        for key in setting_keys:
+            value = request.form.get(key, '')
+            cur.execute("SELECT id FROM master_document_settings WHERE setting_key = ?", (key,))
+            if cur.fetchone():
+                cur.execute("UPDATE master_document_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?", (value, key))
+            else:
+                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('書類設定を保存しました', 'success')
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/api/master-data')
+@login_required
+def api_master_data():
+    """マスターデータをJSON形式で取得（商品登録フォーム用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = TRUE ORDER BY display_order, id")
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_brands WHERE is_active = TRUE ORDER BY display_order, id")
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_suppliers WHERE is_active = TRUE ORDER BY display_order, id")
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_conditions WHERE is_active = TRUE ORDER BY display_order, id")
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = TRUE ORDER BY display_order, id")
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = TRUE ORDER BY display_order, id")
+        supplier_details = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = 1 ORDER BY display_order, id")
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_brands WHERE is_active = 1 ORDER BY display_order, id")
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_suppliers WHERE is_active = 1 ORDER BY display_order, id")
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_conditions WHERE is_active = 1 ORDER BY display_order, id")
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = 1 ORDER BY display_order, id")
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = 1 ORDER BY display_order, id")
+        supplier_details = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'brand_categories': brand_categories,
+        'brands': brands,
+        'suppliers': suppliers,
+        'conditions': conditions,
+        'payment_methods': payment_methods,
+        'supplier_details': supplier_details
+    })
+
 
 # ===================
 # バックアップ・リストア

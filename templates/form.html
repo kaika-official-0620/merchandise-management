@@ -737,8 +737,103 @@ function toggleSupplierDetail() {
     }
 }
 
+// ブランド名自動判定マッピング
+const brandKeywords = {
+    'Louis Vuitton': ['ヴィトン', 'ビトン', 'LV', 'ルイヴィトン', 'ルイ・ヴィトン', 'LOUIS VUITTON', 'louis vuitton'],
+    'Hermes': ['エルメス', 'HERMES', 'hermes', 'バーキン', 'ケリー', 'ボリード', 'コンスタンス'],
+    'Chanel': ['シャネル', 'CHANEL', 'chanel', 'マトラッセ'],
+    'Gucci': ['グッチ', 'GUCCI', 'gucci'],
+    'Prada': ['プラダ', 'PRADA', 'prada'],
+    'Dior': ['ディオール', 'DIOR', 'dior', 'クリスチャンディオール'],
+    'Celine': ['セリーヌ', 'CELINE', 'celine'],
+    'Bottega Veneta': ['ボッテガ', 'ボッテガヴェネタ', 'BOTTEGA', 'bottega'],
+    'Balenciaga': ['バレンシアガ', 'BALENCIAGA', 'balenciaga'],
+    'Saint Laurent': ['サンローラン', 'イヴサンローラン', 'YSL', 'SAINT LAURENT', 'saint laurent'],
+    'Loewe': ['ロエベ', 'LOEWE', 'loewe'],
+    'Fendi': ['フェンディ', 'FENDI', 'fendi'],
+    'Burberry': ['バーバリー', 'BURBERRY', 'burberry'],
+    'Valentino': ['ヴァレンティノ', 'バレンティノ', 'VALENTINO', 'valentino'],
+    'Givenchy': ['ジバンシィ', 'ジバンシー', 'GIVENCHY', 'givenchy'],
+    'Miu Miu': ['ミュウミュウ', 'MIU MIU', 'miu miu'],
+    'Rolex': ['ロレックス', 'ROLEX', 'rolex', 'サブマリーナ', 'デイトナ', 'デイトジャスト', 'GMTマスター'],
+    'Cartier': ['カルティエ', 'CARTIER', 'cartier', 'タンク', 'パシャ', 'サントス'],
+    'Omega': ['オメガ', 'OMEGA', 'omega', 'スピードマスター', 'シーマスター'],
+    'Patek Philippe': ['パテック', 'パテックフィリップ', 'PATEK', 'patek'],
+    'Audemars Piguet': ['オーデマピゲ', 'オーデマ', 'AP', 'AUDEMARS', 'audemars', 'ロイヤルオーク'],
+    'Tiffany': ['ティファニー', 'TIFFANY', 'tiffany'],
+    'Bvlgari': ['ブルガリ', 'BVLGARI', 'bvlgari'],
+    'Van Cleef': ['ヴァンクリ', 'ヴァンクリーフ', 'VAN CLEEF', 'van cleef'],
+    'Nike': ['ナイキ', 'NIKE', 'nike', 'エアマックス', 'エアフォース', 'ダンク'],
+    'Adidas': ['アディダス', 'ADIDAS', 'adidas', 'イージー', 'YEEZY'],
+    'Supreme': ['シュプリーム', 'SUPREME', 'supreme'],
+    'Off-White': ['オフホワイト', 'OFF-WHITE', 'off-white', 'OFF WHITE'],
+    'A BATHING APE': ['ベイプ', 'BAPE', 'bape', 'エイプ', 'A BATHING APE'],
+    'Jordan': ['ジョーダン', 'JORDAN', 'jordan', 'AJ1', 'エアジョーダン'],
+    'New Balance': ['ニューバランス', 'NEW BALANCE', 'new balance', 'NB'],
+    'COMME des GARCONS': ['コムデギャルソン', 'ギャルソン', 'COMME DES GARCONS', 'CDG'],
+    'Yohji Yamamoto': ['ヨウジ', 'ヨウジヤマモト', 'YOHJI', 'yohji'],
+    'ISSEY MIYAKE': ['イッセイミヤケ', 'ミヤケ', 'ISSEY MIYAKE', 'issey miyake'],
+    'sacai': ['サカイ', 'SACAI', 'sacai'],
+    'UNDERCOVER': ['アンダーカバー', 'UNDERCOVER', 'undercover'],
+    'Apple': ['アップル', 'APPLE', 'apple', 'iPhone', 'iphone', 'iPad', 'ipad', 'MacBook', 'macbook', 'AirPods'],
+    'Sony': ['ソニー', 'SONY', 'sony', 'プレステ', 'PlayStation', 'PS5', 'PS4'],
+    'Nintendo': ['任天堂', 'ニンテンドー', 'NINTENDO', 'nintendo', 'Switch', 'スイッチ'],
+    'Dyson': ['ダイソン', 'DYSON', 'dyson'],
+    'Bose': ['ボーズ', 'BOSE', 'bose']
+};
+
+// 商品名からブランド名を自動判定
+function detectBrandFromProductName(productName) {
+    const input = productName.toLowerCase();
+    
+    for (const [brand, keywords] of Object.entries(brandKeywords)) {
+        for (const keyword of keywords) {
+            if (input.includes(keyword.toLowerCase())) {
+                return brand;
+            }
+        }
+    }
+    return null;
+}
+
+// 商品名入力時にブランド名を自動選択
+function setupBrandAutoDetect() {
+    const productNameInput = document.getElementById('product_name');
+    const brandSelect = document.getElementById('brand_name');
+    
+    if (productNameInput && brandSelect) {
+        productNameInput.addEventListener('input', function() {
+            const detectedBrand = detectBrandFromProductName(this.value);
+            
+            if (detectedBrand) {
+                // ブランドが検出された場合、セレクトボックスを更新
+                // 既に手動で選択されている場合は上書きしない
+                if (brandSelect.value === '' || brandSelect.dataset.autoDetected === 'true') {
+                    brandSelect.value = detectedBrand;
+                    brandSelect.dataset.autoDetected = 'true';
+                    
+                    // 視覚的なフィードバック
+                    brandSelect.style.transition = 'background-color 0.3s';
+                    brandSelect.style.backgroundColor = '#d1fae5';
+                    setTimeout(() => {
+                        brandSelect.style.backgroundColor = '';
+                    }, 1000);
+                }
+            }
+        });
+        
+        // 手動で変更した場合は自動検出フラグをリセット
+        brandSelect.addEventListener('change', function() {
+            this.dataset.autoDetected = 'false';
+        });
+    }
+}
+
 // 初期計算
 document.addEventListener('DOMContentLoaded', function() {
+    // ブランド名自動判定の初期化
+    setupBrandAutoDetect();
+    
     // ステータスフィールドの初期表示
     updateStatusFields();
     
