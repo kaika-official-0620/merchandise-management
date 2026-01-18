@@ -48,6 +48,9 @@
             <button class="sidebar-close" onclick="toggleSidebar()">×</button>
         </div>
         <div class="sidebar-nav">
+            <!-- ========== ユーザー機能 ========== -->
+            <div class="sidebar-group-label">ユーザー機能</div>
+            
             <!-- 日常業務 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -71,7 +74,7 @@
                 </div>
             </div>
             
-            <!-- マイ書類（一般ユーザー向け） -->
+            <!-- マイ書類 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] or ('shikiriosho' in request.endpoint and 'admin' not in request.endpoint) or ('invoice' in request.endpoint and 'admin' not in request.endpoint) %}active{% endif %}" onclick="toggleCategory(this)">
                     マイ書類
@@ -86,8 +89,10 @@
             </div>
             
             {% if current_user.is_admin() %}
+            <!-- ========== 開花管理 ========== -->
+            <div class="sidebar-group-label admin-label">開花管理</div>
             
-            <!-- 書類作成（管理者専用） -->
+            <!-- 書類作成 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
                     書類作成
@@ -98,7 +103,6 @@
                     <a href="{{ url_for('admin_kaitori_add') }}" class="{% if request.endpoint in ['admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}">買取明細書作成</a>
                 </div>
             </div>
-            <div class="sidebar-divider"></div>
             
             <!-- マスタ管理 -->
             <div class="sidebar-category">

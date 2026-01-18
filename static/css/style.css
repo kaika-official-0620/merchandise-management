@@ -255,6 +255,28 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0.5rem 0;
 }
 
+/* サイドバーグループラベル */
+.sidebar-group-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 1rem 1.25rem 0.5rem;
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.sidebar-group-label:first-child {
+    margin-top: 0;
+    border-top: none;
+}
+
+.sidebar-group-label.admin-label {
+    color: var(--primary);
+    background: linear-gradient(to right, rgba(37, 99, 235, 0.08), transparent);
+}
+
 /* サイドバーカテゴリ（アコーディオン） */
 .sidebar-category {
     display: flex;
