@@ -4742,24 +4742,24 @@ def admin_proxy_service_finalize():
                     WHERE id = %s
                 """, (today, winning_bid, original_id))
                 
-                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日）
+                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
                 cur.execute("""
                     INSERT INTO merchandise (
                         user_id, purchase_date, photo_path, product_name, brand_name,
                         item_condition, store_name, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos
+                        model_number, supplier_detail, additional_photos, is_listed
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s
                     ) RETURNING id
                 """, (
                     winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
                     item.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
                     item.get('listing_price', 0), item.get('expected_shipping', 0), item.get('expected_commission', 0),
-                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos')
+                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos'), False
                 ))
                 new_item_id = cur.fetchone()['id']
                 
@@ -4826,24 +4826,24 @@ def admin_proxy_service_finalize():
                     WHERE id = ?
                 """, (today, winning_bid, original_id))
                 
-                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日）
+                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
                 cur.execute("""
                     INSERT INTO merchandise (
                         user_id, purchase_date, photo_path, product_name, brand_name,
                         item_condition, store_name, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos
+                        model_number, supplier_detail, additional_photos, is_listed
                     ) VALUES (
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?,
                         ?, ?, ?,
-                        ?, ?, ?
+                        ?, ?, ?, ?
                     )
                 """, (
                     winner_user_id, today, item_dict.get('photo_path'), item_dict.get('product_name'), item_dict.get('brand_name'),
                     item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
                     item_dict.get('listing_price') or 0, item_dict.get('expected_shipping') or 0, item_dict.get('expected_commission') or 0,
-                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos')
+                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos'), 0
                 ))
                 new_item_id = cur.lastrowid
                 
@@ -4916,7 +4916,7 @@ def public_proxy_service():
         
         # 公開対象ユーザーの商品を取得（最高入札情報付き）
         cur.execute("""
-            SELECT m.id, m.photo_path, m.product_name, m.brand_name, m.item_condition,
+            SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
                    m.listing_price, m.model_number, u.display_name as owner_name,
                    (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
                    (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
@@ -4955,7 +4955,7 @@ def public_proxy_service():
         
         # 公開対象ユーザーの商品を取得
         cur.execute("""
-            SELECT m.id, m.photo_path, m.product_name, m.brand_name, m.item_condition,
+            SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
                    m.listing_price, m.model_number, u.display_name as owner_name,
                    (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
                    (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder

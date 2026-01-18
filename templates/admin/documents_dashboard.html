@@ -8,13 +8,13 @@
 
 
 <div class="doc-types-grid">
-    <!-- 精算書 -->
+    <!-- 精算書（仕切押し書） -->
     <div class="doc-type-card">
         <h3>精算書</h3>
-        <p class="doc-type-desc">開花の名前を借りる場合の精算書。<br>管理者からユーザーへ送付。</p>
+        <p class="doc-type-desc">開花の名前を借りる場合の精算書。<br>管理者からユーザーへ送付。<br>オークション落札時に自動作成。</p>
         <div class="doc-type-actions">
-            <a href="{{ url_for('admin_seisan_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_seisan_add') }}" class="btn btn-primary">+ 新規作成</a>
+            <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">一覧</a>
+            <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
         </div>
         <div class="doc-type-count">
             <span class="count-number">{{ seisan_count }}</span> 件
