@@ -4683,15 +4683,18 @@ def admin_proxy_service_finalize():
     
     conn = get_db()
     finalized_count = 0
+    today = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 入札がある商品を取得
+        # 入札がある商品を取得（商品の全情報も取得）
         cur.execute("""
-            SELECT m.id, m.product_name,
+            SELECT m.*,
                    (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid,
+                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC LIMIT 1) as winner_name
             FROM merchandise m
             WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
         """)
@@ -4699,14 +4702,68 @@ def admin_proxy_service_finalize():
         
         for item in items:
             if item['winner_user_id'] and item['winning_bid']:
-                # 落札者に商品を移管（user_idを変更、purchase_priceを落札額に）
+                winner_user_id = item['winner_user_id']
+                winning_bid = item['winning_bid']
+                winner_name = item['winner_name'] or ''
+                original_id = item['id']
+                
+                # 1. 管理者側の商品を「売却済み」にする
                 cur.execute("""
                     UPDATE merchandise 
-                    SET user_id = %s, 
-                        purchase_price = %s,
+                    SET sale_date = %s,
+                        sale_price = %s,
+                        sale_type = 'auction',
                         show_in_proxy_service = FALSE
                     WHERE id = %s
-                """, (item['winner_user_id'], item['winning_bid'], item['id']))
+                """, (today, winning_bid, original_id))
+                
+                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日）
+                cur.execute("""
+                    INSERT INTO merchandise (
+                        user_id, purchase_date, photo_path, product_name, brand_name,
+                        item_condition, store_name, purchase_price, payment_method,
+                        listing_price, expected_shipping, expected_commission,
+                        model_number, supplier_detail, additional_photos
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s
+                    ) RETURNING id
+                """, (
+                    winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
+                    item.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
+                    item.get('listing_price', 0), item.get('expected_shipping', 0), item.get('expected_commission', 0),
+                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos')
+                ))
+                new_item_id = cur.fetchone()['id']
+                
+                # 3. 計算書（仕切押し書として）を自動作成（送信待ち）
+                doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
+                cur.execute("""
+                    INSERT INTO shikiriosho (
+                        document_no, sender_id, recipient_id, recipient_name,
+                        issue_date, subtotal, tax_amount, total_amount,
+                        tax_rate, notes, status
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s
+                    ) RETURNING id
+                """, (
+                    doc_no, current_user.id, winner_user_id, winner_name,
+                    today, winning_bid, 0, winning_bid,
+                    0, f'代行仕入れサービス落札 - 商品ID: {original_id}', 'draft'
+                ))
+                shikiriosho_id = cur.fetchone()['id']
+                
+                # 計算書明細を追加
+                cur.execute("""
+                    INSERT INTO shikiriosho_items (
+                        shikiriosho_id, item_no, product_name, quantity, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                """, (shikiriosho_id, 1, item.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                
                 finalized_count += 1
         
         # オークションを非公開に
@@ -4714,25 +4771,83 @@ def admin_proxy_service_finalize():
     else:
         cur = conn.cursor()
         
-        # 入札がある商品を取得
+        # 入札がある商品を取得（商品の全情報も取得）
         cur.execute("""
-            SELECT m.id, m.product_name,
+            SELECT m.*,
                    (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid,
+                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC LIMIT 1) as winner_name
             FROM merchandise m
             WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
         """)
         items = cur.fetchall()
         
         for item in items:
-            if item[2] and item[3]:  # winner_user_id and winning_bid
+            item_dict = dict(item)
+            winner_user_id = item_dict.get('winner_user_id')
+            winning_bid = item_dict.get('winning_bid')
+            
+            if winner_user_id and winning_bid:
+                winner_name = item_dict.get('winner_name') or ''
+                original_id = item_dict['id']
+                
+                # 1. 管理者側の商品を「売却済み」にする
                 cur.execute("""
                     UPDATE merchandise 
-                    SET user_id = ?, 
-                        purchase_price = ?,
+                    SET sale_date = ?,
+                        sale_price = ?,
+                        sale_type = 'auction',
                         show_in_proxy_service = 0
                     WHERE id = ?
-                """, (item[2], item[3], item[0]))
+                """, (today, winning_bid, original_id))
+                
+                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日）
+                cur.execute("""
+                    INSERT INTO merchandise (
+                        user_id, purchase_date, photo_path, product_name, brand_name,
+                        item_condition, store_name, purchase_price, payment_method,
+                        listing_price, expected_shipping, expected_commission,
+                        model_number, supplier_detail, additional_photos
+                    ) VALUES (
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, ?
+                    )
+                """, (
+                    winner_user_id, today, item_dict.get('photo_path'), item_dict.get('product_name'), item_dict.get('brand_name'),
+                    item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
+                    item_dict.get('listing_price') or 0, item_dict.get('expected_shipping') or 0, item_dict.get('expected_commission') or 0,
+                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos')
+                ))
+                new_item_id = cur.lastrowid
+                
+                # 3. 計算書（仕切押し書として）を自動作成（送信待ち）
+                doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
+                cur.execute("""
+                    INSERT INTO shikiriosho (
+                        document_no, sender_id, recipient_id, recipient_name,
+                        issue_date, subtotal, tax_amount, total_amount,
+                        tax_rate, notes, status
+                    ) VALUES (
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?
+                    )
+                """, (
+                    doc_no, current_user.id, winner_user_id, winner_name,
+                    today, winning_bid, 0, winning_bid,
+                    0, f'代行仕入れサービス落札 - 商品ID: {original_id}', 'draft'
+                ))
+                shikiriosho_id = cur.lastrowid
+                
+                # 計算書明細を追加
+                cur.execute("""
+                    INSERT INTO shikiriosho_items (
+                        shikiriosho_id, item_no, product_name, quantity, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """, (shikiriosho_id, 1, item_dict.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                
                 finalized_count += 1
         
         # オークションを非公開に
@@ -4744,7 +4859,7 @@ def admin_proxy_service_finalize():
     
     return jsonify({
         'success': True, 
-        'message': f'{finalized_count}件の商品を落札者に割り当てました',
+        'message': f'{finalized_count}件の商品を落札者に割り当てました。計算書を送信待ちに追加しました。',
         'finalized_count': finalized_count
     })
 
