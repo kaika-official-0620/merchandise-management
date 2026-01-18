@@ -707,6 +707,84 @@ if DATABASE_URL:
             )
         ''')
         
+        # 買取承諾書テーブル（ユーザー向け）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                customer_name VARCHAR(100) NOT NULL,
+                customer_address TEXT,
+                customer_phone VARCHAR(50),
+                issue_date DATE NOT NULL,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate DECIMAL(5,2) DEFAULT 0,
+                payment_method VARCHAR(50),
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 買取承諾書明細テーブル（ユーザー向け）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku_items (
+                id SERIAL PRIMARY KEY,
+                kaitori_shoudaku_id INTEGER REFERENCES user_kaitori_shoudaku(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name VARCHAR(200) NOT NULL,
+                brand_name VARCHAR(100),
+                condition VARCHAR(50),
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
+            )
+        ''')
+        
+        # 買取承諾書テーブル（法人版・管理者用）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin_kaitori_shoudaku (
+                id SERIAL PRIMARY KEY,
+                document_no VARCHAR(50) NOT NULL,
+                admin_id INTEGER REFERENCES users(id),
+                company_name VARCHAR(200) NOT NULL,
+                company_address TEXT,
+                company_phone VARCHAR(50),
+                contact_name VARCHAR(100),
+                issue_date DATE NOT NULL,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate DECIMAL(5,2) DEFAULT 10.0,
+                payment_method VARCHAR(50),
+                bank_info TEXT,
+                notes TEXT,
+                status VARCHAR(20) DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 買取承諾書明細テーブル（法人版・管理者用）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin_kaitori_shoudaku_items (
+                id SERIAL PRIMARY KEY,
+                kaitori_shoudaku_id INTEGER REFERENCES admin_kaitori_shoudaku(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name VARCHAR(200) NOT NULL,
+                brand_name VARCHAR(100),
+                condition VARCHAR(50),
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1373,6 +1451,84 @@ else:
                 display_order INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 買取承諾書テーブル（ユーザー向け）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                customer_name TEXT NOT NULL,
+                customer_address TEXT,
+                customer_phone TEXT,
+                issue_date DATE NOT NULL,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate REAL DEFAULT 0,
+                payment_method TEXT,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 買取承諾書明細テーブル（ユーザー向け）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kaitori_shoudaku_id INTEGER REFERENCES user_kaitori_shoudaku(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                brand_name TEXT,
+                condition TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
+            )
+        ''')
+        
+        # 買取承諾書テーブル（法人版・管理者用）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin_kaitori_shoudaku (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL,
+                admin_id INTEGER REFERENCES users(id),
+                company_name TEXT NOT NULL,
+                company_address TEXT,
+                company_phone TEXT,
+                contact_name TEXT,
+                issue_date DATE NOT NULL,
+                subtotal INTEGER DEFAULT 0,
+                tax_amount INTEGER DEFAULT 0,
+                total_amount INTEGER DEFAULT 0,
+                tax_rate REAL DEFAULT 10.0,
+                payment_method TEXT,
+                bank_info TEXT,
+                notes TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 買取承諾書明細テーブル（法人版・管理者用）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin_kaitori_shoudaku_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kaitori_shoudaku_id INTEGER REFERENCES admin_kaitori_shoudaku(id) ON DELETE CASCADE,
+                item_no INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                brand_name TEXT,
+                condition TEXT,
+                quantity INTEGER DEFAULT 1,
+                unit_price INTEGER DEFAULT 0,
+                amount INTEGER DEFAULT 0,
+                notes TEXT
             )
         ''')
         
@@ -11403,6 +11559,581 @@ def init_scheduler():
     scheduler.start()
     print(f"[{datetime.now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
     print(f"[{datetime.now()}] Scheduler started: LINE scheduled messages will be checked every minute")
+
+# =============================================
+# 買取承諾書（ユーザー向け）
+# =============================================
+@app.route('/kaitori-shoudaku')
+@login_required
+def user_kaitori_shoudaku_list():
+    """買取承諾書一覧（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('''
+            SELECT * FROM user_kaitori_shoudaku 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC
+        ''', (current_user.id,))
+    else:
+        cur.execute('''
+            SELECT * FROM user_kaitori_shoudaku 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC
+        ''', (current_user.id,))
+    
+    kaitori_list = [dict(row) if USE_POSTGRES else dict(zip([d[0] for d in cur.description], row)) for row in cur.fetchall()]
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    return render_template('kaitori_shoudaku_list.html', kaitori_list=kaitori_list)
+
+@app.route('/kaitori-shoudaku/add', methods=['GET', 'POST'])
+@login_required
+def user_kaitori_shoudaku_add():
+    """買取承諾書作成（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if request.method == 'POST':
+        # 書類番号生成
+        document_no = f"KS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        customer_name = request.form.get('customer_name', '')
+        customer_address = request.form.get('customer_address', '')
+        customer_phone = request.form.get('customer_phone', '')
+        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        payment_method = request.form.get('payment_method', '')
+        notes = request.form.get('notes', '')
+        
+        # 明細データ取得
+        product_names = request.form.getlist('product_name[]')
+        brand_names = request.form.getlist('brand_name[]')
+        conditions = request.form.getlist('condition[]')
+        quantities = request.form.getlist('quantity[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        for i in range(len(product_names)):
+            if product_names[i]:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                subtotal += qty * price
+        
+        total_amount = subtotal  # 消費税なし
+        
+        if USE_POSTGRES:
+            cur.execute('''
+                INSERT INTO user_kaitori_shoudaku 
+                (document_no, user_id, customer_name, customer_address, customer_phone, 
+                issue_date, subtotal, total_amount, payment_method, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
+                  issue_date, subtotal, total_amount, payment_method, notes))
+            kaitori_id = cur.fetchone()[0]
+        else:
+            cur.execute('''
+                INSERT INTO user_kaitori_shoudaku 
+                (document_no, user_id, customer_name, customer_address, customer_phone, 
+                issue_date, subtotal, total_amount, payment_method, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
+                  issue_date, subtotal, total_amount, payment_method, notes))
+            kaitori_id = cur.lastrowid
+        
+        # 明細追加
+        for i, product_name in enumerate(product_names):
+            if product_name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                
+                if USE_POSTGRES:
+                    cur.execute('''
+                        INSERT INTO user_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+                else:
+                    cur.execute('''
+                        INSERT INTO user_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+        
+        conn.commit()
+        cur.close()
+        if USE_POSTGRES:
+            conn.close()
+        
+        flash('買取承諾書を作成しました', 'success')
+        return redirect(url_for('user_kaitori_shoudaku_list'))
+    
+    # GETリクエスト
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    return render_template('kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
+
+@app.route('/kaitori-shoudaku/<int:id>')
+@login_required
+def user_kaitori_shoudaku_view(id):
+    """買取承諾書詳細表示（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        kaitori = cur.fetchone()
+        if kaitori:
+            kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+        row = cur.fetchone()
+        if row:
+            kaitori = dict(zip([d[0] for d in cur.description], row))
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        else:
+            kaitori = None
+            items = []
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('user_kaitori_shoudaku_list'))
+    
+    return render_template('kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
+
+@app.route('/kaitori-shoudaku/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+def user_kaitori_shoudaku_edit(id):
+    """買取承諾書編集（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # データ取得
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        kaitori = cur.fetchone()
+        if kaitori:
+            kaitori = dict(kaitori)
+    else:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+        row = cur.fetchone()
+        kaitori = dict(zip([d[0] for d in cur.description], row)) if row else None
+    
+    if not kaitori:
+        cur.close()
+        if USE_POSTGRES:
+            conn.close()
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('user_kaitori_shoudaku_list'))
+    
+    if request.method == 'POST':
+        customer_name = request.form.get('customer_name', '')
+        customer_address = request.form.get('customer_address', '')
+        customer_phone = request.form.get('customer_phone', '')
+        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        payment_method = request.form.get('payment_method', '')
+        notes = request.form.get('notes', '')
+        
+        # 明細データ取得
+        product_names = request.form.getlist('product_name[]')
+        brand_names = request.form.getlist('brand_name[]')
+        conditions = request.form.getlist('condition[]')
+        quantities = request.form.getlist('quantity[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        for i in range(len(product_names)):
+            if product_names[i]:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                subtotal += qty * price
+        
+        total_amount = subtotal
+        
+        # 更新
+        if USE_POSTGRES:
+            cur.execute('''
+                UPDATE user_kaitori_shoudaku 
+                SET customer_name = %s, customer_address = %s, customer_phone = %s, 
+                issue_date = %s, subtotal = %s, total_amount = %s, payment_method = %s, notes = %s,
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
+            
+            # 明細削除して再作成
+            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s', (id,))
+        else:
+            cur.execute('''
+                UPDATE user_kaitori_shoudaku 
+                SET customer_name = ?, customer_address = ?, customer_phone = ?, 
+                issue_date = ?, subtotal = ?, total_amount = ?, payment_method = ?, notes = ?,
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
+            
+            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ?', (id,))
+        
+        # 明細追加
+        for i, product_name in enumerate(product_names):
+            if product_name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                
+                if USE_POSTGRES:
+                    cur.execute('''
+                        INSERT INTO user_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+                else:
+                    cur.execute('''
+                        INSERT INTO user_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+        
+        conn.commit()
+        cur.close()
+        if USE_POSTGRES:
+            conn.close()
+        
+        flash('買取承諾書を更新しました', 'success')
+        return redirect(url_for('user_kaitori_shoudaku_view', id=id))
+    
+    # GETリクエスト - 明細取得
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+        items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    return render_template('kaitori_shoudaku_form.html', kaitori=kaitori, items=items, mode='edit')
+
+@app.route('/kaitori-shoudaku/<int:id>/delete')
+@login_required
+def user_kaitori_shoudaku_delete(id):
+    """買取承諾書削除（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+    else:
+        cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+    
+    conn.commit()
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    flash('買取承諾書を削除しました', 'success')
+    return redirect(url_for('user_kaitori_shoudaku_list'))
+
+@app.route('/kaitori-shoudaku/<int:id>/pdf')
+@login_required
+def user_kaitori_shoudaku_pdf(id):
+    """買取承諾書PDF出力（ユーザー用）"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        kaitori = cur.fetchone()
+        if kaitori:
+            kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+        row = cur.fetchone()
+        if row:
+            kaitori = dict(zip([d[0] for d in cur.description], row))
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        else:
+            kaitori = None
+            items = []
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('user_kaitori_shoudaku_list'))
+    
+    return render_template('pdf/kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
+
+# =============================================
+# 買取承諾書（法人版・管理者用）
+# =============================================
+@app.route('/admin/kaitori-shoudaku')
+@login_required
+def admin_kaitori_shoudaku_list():
+    """買取承諾書一覧（法人版・管理者用）"""
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('''
+            SELECT k.*, u.display_name as admin_name 
+            FROM admin_kaitori_shoudaku k
+            LEFT JOIN users u ON k.admin_id = u.id
+            ORDER BY k.created_at DESC
+        ''')
+        kaitori_list = [dict(row) for row in cur.fetchall()]
+    else:
+        cur.execute('''
+            SELECT k.*, u.display_name as admin_name 
+            FROM admin_kaitori_shoudaku k
+            LEFT JOIN users u ON k.admin_id = u.id
+            ORDER BY k.created_at DESC
+        ''')
+        kaitori_list = [dict(zip([d[0] for d in cur.description], row)) for row in cur.fetchall()]
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    return render_template('admin/kaitori_shoudaku_list.html', kaitori_list=kaitori_list)
+
+@app.route('/admin/kaitori-shoudaku/add', methods=['GET', 'POST'])
+@login_required
+def admin_kaitori_shoudaku_add():
+    """買取承諾書作成（法人版・管理者用）"""
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if request.method == 'POST':
+        document_no = f"KSH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        company_name = request.form.get('company_name', '')
+        company_address = request.form.get('company_address', '')
+        company_phone = request.form.get('company_phone', '')
+        contact_name = request.form.get('contact_name', '')
+        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        payment_method = request.form.get('payment_method', '')
+        bank_info = request.form.get('bank_info', '')
+        notes = request.form.get('notes', '')
+        tax_rate = float(request.form.get('tax_rate', 10))
+        
+        # 明細データ取得
+        product_names = request.form.getlist('product_name[]')
+        brand_names = request.form.getlist('brand_name[]')
+        conditions = request.form.getlist('condition[]')
+        quantities = request.form.getlist('quantity[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        # 合計計算
+        subtotal = 0
+        for i in range(len(product_names)):
+            if product_names[i]:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                subtotal += qty * price
+        
+        tax_amount = int(subtotal * tax_rate / 100)
+        total_amount = subtotal + tax_amount
+        
+        if USE_POSTGRES:
+            cur.execute('''
+                INSERT INTO admin_kaitori_shoudaku 
+                (document_no, admin_id, company_name, company_address, company_phone, contact_name,
+                issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
+                  issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
+            kaitori_id = cur.fetchone()[0]
+        else:
+            cur.execute('''
+                INSERT INTO admin_kaitori_shoudaku 
+                (document_no, admin_id, company_name, company_address, company_phone, contact_name,
+                issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
+                  issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
+            kaitori_id = cur.lastrowid
+        
+        # 明細追加
+        for i, product_name in enumerate(product_names):
+            if product_name:
+                qty = int(quantities[i]) if quantities[i] else 1
+                price = int(unit_prices[i]) if unit_prices[i] else 0
+                amount = qty * price
+                
+                if USE_POSTGRES:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+                else:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku_items 
+                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+        
+        conn.commit()
+        cur.close()
+        if USE_POSTGRES:
+            conn.close()
+        
+        flash('買取承諾書を作成しました', 'success')
+        return redirect(url_for('admin_kaitori_shoudaku_list'))
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
+
+@app.route('/admin/kaitori-shoudaku/<int:id>')
+@login_required
+def admin_kaitori_shoudaku_view(id):
+    """買取承諾書詳細表示（法人版・管理者用）"""
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
+        kaitori = cur.fetchone()
+        if kaitori:
+            kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = ?', (id,))
+        row = cur.fetchone()
+        if row:
+            kaitori = dict(zip([d[0] for d in cur.description], row))
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        else:
+            kaitori = None
+            items = []
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('admin_kaitori_shoudaku_list'))
+    
+    return render_template('admin/kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
+
+@app.route('/admin/kaitori-shoudaku/<int:id>/delete')
+@login_required
+def admin_kaitori_shoudaku_delete(id):
+    """買取承諾書削除（法人版・管理者用）"""
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('DELETE FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
+    else:
+        cur.execute('DELETE FROM admin_kaitori_shoudaku WHERE id = ?', (id,))
+    
+    conn.commit()
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    flash('買取承諾書を削除しました', 'success')
+    return redirect(url_for('admin_kaitori_shoudaku_list'))
+
+@app.route('/admin/kaitori-shoudaku/<int:id>/pdf')
+@login_required
+def admin_kaitori_shoudaku_pdf(id):
+    """買取承諾書PDF出力（法人版・管理者用）"""
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if USE_POSTGRES:
+        cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
+        kaitori = cur.fetchone()
+        if kaitori:
+            kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = ?', (id,))
+        row = cur.fetchone()
+        if row:
+            kaitori = dict(zip([d[0] for d in cur.description], row))
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        else:
+            kaitori = None
+            items = []
+    
+    cur.close()
+    if USE_POSTGRES:
+        conn.close()
+    
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('admin_kaitori_shoudaku_list'))
+    
+    return render_template('pdf/admin_kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ

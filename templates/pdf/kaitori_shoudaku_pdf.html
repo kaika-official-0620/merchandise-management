@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>買取承諾書 - {{ kaitori.document_no }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+        }
+        
+        .container {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 15mm;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .document-title {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .document-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .customer-info {
+            flex: 1;
+        }
+        
+        .customer-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .document-details {
+            text-align: right;
+        }
+        
+        .info-row {
+            margin-bottom: 5px;
+        }
+        
+        .info-label {
+            color: #666;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px 10px;
+            text-align: left;
+        }
+        
+        th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .total-row {
+            font-weight: 700;
+            background: #f0f8ff;
+        }
+        
+        .total-amount {
+            font-size: 16px;
+            color: #1a56db;
+        }
+        
+        .notes-section {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .consent-text {
+            margin: 30px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+        
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            
+            .container {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="document-title">買 取 承 諾 書</h1>
+        </div>
+        
+        <div class="document-info">
+            <div class="customer-info">
+                <div class="customer-name">{{ kaitori.customer_name }} 様</div>
+                {% if kaitori.customer_address %}
+                <div class="info-row">〒{{ kaitori.customer_address }}</div>
+                {% endif %}
+                {% if kaitori.customer_phone %}
+                <div class="info-row">TEL: {{ kaitori.customer_phone }}</div>
+                {% endif %}
+            </div>
+            <div class="document-details">
+                <div class="info-row">
+                    <span class="info-label">書類番号:</span> {{ kaitori.document_no }}
+                </div>
+                <div class="info-row">
+                    <span class="info-label">発行日:</span> {{ kaitori.issue_date }}
+                </div>
+            </div>
+        </div>
+        
+        <div class="consent-text">
+            <p>下記の商品を買い取らせていただきましたことを承諾いたします。</p>
+        </div>
+        
+        <div class="section">
+            <h3 class="section-title">買取商品明細</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 40px;">No.</th>
+                        <th>商品名</th>
+                        <th style="width: 100px;">ブランド</th>
+                        <th style="width: 80px;">状態</th>
+                        <th class="text-center" style="width: 50px;">数量</th>
+                        <th class="text-right" style="width: 90px;">単価</th>
+                        <th class="text-right" style="width: 100px;">金額</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td class="text-center">{{ item.item_no }}</td>
+                        <td>{{ item.product_name }}</td>
+                        <td>{{ item.brand_name or '-' }}</td>
+                        <td>{{ item.condition or '-' }}</td>
+                        <td class="text-center">{{ item.quantity }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="6" class="text-right">合計金額</td>
+                        <td class="text-right total-amount">¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        {% if kaitori.payment_method %}
+        <div class="section">
+            <div class="info-row">
+                <span class="info-label">支払方法:</span> {{ kaitori.payment_method }}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if kaitori.notes %}
+        <div class="section">
+            <h3 class="section-title">備考</h3>
+            <div class="notes-section">
+                {{ kaitori.notes }}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p>この書類は買取が完了したことを証明するものです。</p>
+        </div>
+    </div>
+    
+    <script>
+        window.onload = function() {
+            window.print();
+        };
+    </script>
+</body>
+</html>
