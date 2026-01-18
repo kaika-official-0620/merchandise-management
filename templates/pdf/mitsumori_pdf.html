@@ -252,7 +252,7 @@
                         <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
                     </tr>
                     {% endfor %}
-                    {% for i in range(items|length, 24) %}
+                    {% for i in range(items|length, 15) %}
                     <tr>
                         <td class="text-center">{{ i + 1 }}</td>
                         <td></td>
@@ -262,7 +262,7 @@
                     </tr>
                     {% endfor %}
                 {% else %}
-                    {% for i in range(24) %}
+                    {% for i in range(15) %}
                     <tr>
                         <td class="text-center">{{ i + 1 }}</td>
                         <td></td>

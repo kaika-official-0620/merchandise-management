@@ -38,7 +38,7 @@
         .header-section {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .header-left {
@@ -69,11 +69,51 @@
             margin-left: 10px;
         }
         
+        .request-text {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 12px;
+        }
+        
+        /* 請求金額と会社情報を横並び */
+        .amount-company-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            gap: 20px;
+            margin: 15px 0;
+        }
+        
+        .request-amount-box {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #333;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .request-label {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        
+        .request-amount {
+            font-size: 26px;
+            font-weight: 700;
+            color: #1a56db;
+            text-align: center;
+        }
+        
         .company-info {
-            margin-top: 15px;
-            padding: 10px;
+            flex: 1;
+            padding: 12px;
             background: #f9f9f9;
             border: 1px solid #ddd;
+            text-align: right;
         }
         
         .company-name {
@@ -85,38 +125,13 @@
         .company-address {
             font-size: 10px;
             color: #555;
+            line-height: 1.6;
         }
         
         .invoice-number {
             margin-top: 8px;
             font-size: 10px;
             color: #666;
-        }
-        
-        .request-text {
-            text-align: center;
-            margin: 20px 0;
-            font-size: 12px;
-        }
-        
-        .request-amount-box {
-            text-align: center;
-            margin: 20px 0;
-            padding: 15px;
-            border: 2px solid #333;
-            background: #f5f5f5;
-        }
-        
-        .request-label {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        
-        .request-amount {
-            font-size: 28px;
-            font-weight: 700;
-            color: #1a56db;
         }
         
         table {
@@ -204,16 +219,6 @@
                 <div class="recipient-name">
                     {{ invoice.recipient_name if invoice else '' }}<span class="recipient-suffix">様</span>
                 </div>
-                
-                <div class="company-info">
-                    <div class="company-name">株式会社 開花</div>
-                    <div class="company-address">
-                        〒140-0015<br>
-                        東京都品川区西大井2-4-8<br>
-                        オーキッドレジデンス西大井602
-                    </div>
-                    <div class="invoice-number">インボイス番号：T3010701047914</div>
-                </div>
             </div>
             
             <div class="header-right">
@@ -224,9 +229,22 @@
         
         <div class="request-text">下記の通りご請求申し上げます。</div>
         
-        <div class="request-amount-box">
-            <div class="request-label">請求金額</div>
-            <div class="request-amount">¥{{ "{:,}".format(invoice.total_amount if invoice else 0) }} (税込)</div>
+        <!-- 請求金額（左）と会社情報（右）を一列に -->
+        <div class="amount-company-row">
+            <div class="request-amount-box">
+                <div class="request-label">請求金額</div>
+                <div class="request-amount">¥{{ "{:,}".format(invoice.total_amount if invoice else 0) }} (税込)</div>
+            </div>
+            
+            <div class="company-info">
+                <div class="company-name">株式会社 開花</div>
+                <div class="company-address">
+                    〒140-0015<br>
+                    東京都品川区西大井2-4-8<br>
+                    オーキッドレジデンス西大井602
+                </div>
+                <div class="invoice-number">インボイス番号：T3010701047914</div>
+            </div>
         </div>
         
         <table>
@@ -250,7 +268,7 @@
                         <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
                     </tr>
                     {% endfor %}
-                    {% for i in range(items|length, 24) %}
+                    {% for i in range(items|length, 15) %}
                     <tr>
                         <td class="text-center">{{ i + 1 }}</td>
                         <td></td>
@@ -260,7 +278,7 @@
                     </tr>
                     {% endfor %}
                 {% else %}
-                    {% for i in range(24) %}
+                    {% for i in range(15) %}
                     <tr>
                         <td class="text-center">{{ i + 1 }}</td>
                         <td></td>
