@@ -83,21 +83,39 @@
                 </div>
             </div>
             
-            <!-- マイ書類（受信した書類） -->
+            {% if current_user.is_admin() %}
+            <!-- 管理者用：マイ書類（統合メニュー） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'user_invoice_add', 'user_invoice_edit', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
                     マイ書類
                     {% if unread_shikiriosho_count > 0 %}
                     <span class="badge-count">{{ unread_shikiriosho_count }}</span>
                     {% endif %}
                     <span class="category-arrow">▼</span>
                 </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'user_invoice_add', 'user_invoice_edit', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
+                    <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_invoice_list', 'user_invoice_view', 'user_invoice_add', 'user_invoice_edit'] %}active{% endif %}">買取明細書</a>
+                    <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
+                    <a href="{{ url_for('user_keisan_list') }}" class="{% if request.endpoint in ['user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit'] %}active{% endif %}">計算書</a>
+                    <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
+                </div>
+            </div>
+            {% else %}
+            <!-- 一般ユーザー用：受信書類 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    受信書類
+                    {% if unread_shikiriosho_count > 0 %}
+                    <span class="badge-count">{{ unread_shikiriosho_count }}</span>
+                    {% endif %}
+                    <span class="category-arrow">▼</span>
+                </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}open{% endif %}">
-                    <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">受信書類一覧</a>
+                    <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類一覧</a>
                 </div>
             </div>
             
-            <!-- ユーザ→開花（書類作成） -->
+            <!-- 一般ユーザー用：開花への依頼 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
                     開花への依頼
@@ -108,7 +126,7 @@
                 </div>
             </div>
             
-            <!-- ユーザー→個人顧客（書類作成） -->
+            <!-- 一般ユーザー用：顧客への書類 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
                     顧客への書類
@@ -118,6 +136,7 @@
                     <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
                 </div>
             </div>
+            {% endif %}
             
             <!-- サービス -->
             <div class="sidebar-category">
