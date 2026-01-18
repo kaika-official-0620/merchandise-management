@@ -97,6 +97,17 @@
                 </div>
             </div>
             
+            <!-- サービス -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint == 'proxy_service_public' %}active{% endif %}" onclick="toggleCategory(this)">
+                    サービス
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint == 'proxy_service_public' %}open{% endif %}">
+                    <a href="{{ url_for('proxy_service_public') }}" class="{% if request.endpoint == 'proxy_service_public' %}active{% endif %}">代行仕入れサービス</a>
+                </div>
+            </div>
+            
             {% if current_user.is_admin() %}
             <!-- ========== 開花管理 ========== -->
             <div class="sidebar-group-label admin-label">開花管理</div>
