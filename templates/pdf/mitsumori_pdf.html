@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>見積依頼書 - {{ mitsumori.document_no if mitsumori else '' }}</title>
     <style>
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -13,32 +18,32 @@
         
         body {
             font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
-            font-size: 11px;
-            line-height: 1.5;
-            color: #333;
+            font-size: 10px;
+            line-height: 1.4;
+            color: #000;
             background: white;
         }
         
         .container {
-            max-width: 210mm;
+            width: 190mm;
             margin: 0 auto;
-            padding: 10mm 15mm;
+            padding: 5mm;
         }
         
         .document-title {
             text-align: center;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
-            letter-spacing: 0.3em;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #333;
+            letter-spacing: 0.5em;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #000;
         }
         
         .header-section {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         
         .header-left {
@@ -47,19 +52,19 @@
         
         .header-right {
             text-align: right;
-            font-size: 11px;
+            font-size: 10px;
         }
         
         .header-right-row {
-            margin-bottom: 3px;
+            margin-bottom: 2px;
         }
         
         .recipient-name {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             margin-bottom: 5px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #333;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #000;
             display: inline-block;
         }
         
@@ -69,122 +74,140 @@
             margin-left: 10px;
         }
         
-        .recipient-details {
-            margin-top: 10px;
-            font-size: 11px;
+        .company-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin: 10px 0;
         }
         
-        .recipient-row {
-            margin-bottom: 5px;
+        .company-info {
+            text-align: right;
+            font-size: 10px;
+            line-height: 1.5;
         }
         
-        .recipient-label {
-            display: inline-block;
-            width: 70px;
-            color: #666;
+        .company-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        
+        .company-address {
+            font-size: 10px;
+        }
+        
+        .company-tel {
+            margin-top: 3px;
+        }
+        
+        .company-invoice-no {
+            margin-top: 2px;
+            font-size: 9px;
         }
         
         .request-text {
             text-align: center;
-            margin: 20px 0;
-            font-size: 12px;
+            margin: 12px 0;
+            font-size: 11px;
         }
         
         .request-amount-box {
             text-align: center;
-            margin: 20px 0;
-            padding: 15px;
-            border: 2px solid #333;
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px solid #000;
             background: #f5f5f5;
         }
         
         .request-label {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         .request-amount {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
-            color: #1a56db;
         }
         
-        table {
+        table.items-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 15px 0;
-            font-size: 10px;
+            margin: 10px 0;
+            font-size: 9px;
         }
         
-        th, td {
-            border: 1px solid #333;
-            padding: 6px 8px;
+        table.items-table th,
+        table.items-table td {
+            border: 1px solid #000;
+            padding: 3px 5px;
+            height: 18px;
         }
         
-        th {
-            background: #f0f0f0;
+        table.items-table th {
+            background: #e0e0e0;
             font-weight: 600;
             text-align: center;
         }
         
-        .col-no { width: 35px; }
+        .col-no { width: 30px; }
         .col-name { }
-        .col-date { width: 80px; }
-        .col-code { width: 80px; }
-        .col-amount { width: 90px; }
+        .col-date { width: 70px; }
+        .col-code { width: 70px; }
+        .col-amount { width: 80px; }
         
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         
-        .summary-section {
+        .footer-section {
             display: flex;
-            justify-content: flex-end;
-            margin-top: 10px;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+        
+        .footer-left {
+            font-size: 9px;
+            color: #333;
         }
         
         .summary-table {
-            width: 280px;
-            border: none;
+            width: 200px;
+            border-collapse: collapse;
+            font-size: 10px;
         }
         
         .summary-table td {
-            border: 1px solid #333;
-            padding: 5px 10px;
-            font-size: 11px;
+            border: 1px solid #000;
+            padding: 3px 8px;
         }
         
         .summary-table .label {
-            background: #f0f0f0;
+            background: #e0e0e0;
             font-weight: 600;
-            width: 100px;
+            width: 80px;
+            text-align: center;
+        }
+        
+        .summary-table .value {
+            text-align: right;
+            width: 120px;
         }
         
         .summary-table .total-row td {
             font-weight: 700;
-            font-size: 13px;
-        }
-        
-        .summary-table .total-row .value {
-            color: #1a56db;
-        }
-        
-        .notes-section {
-            margin-top: 15px;
-            font-size: 10px;
-            color: #666;
         }
         
         .bank-section {
-            margin-top: 20px;
-            padding: 10px;
-            border: 1px solid #333;
-            background: #fafafa;
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px solid #000;
+            font-size: 10px;
         }
         
         .bank-title {
             font-weight: 600;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         @media print {
@@ -207,20 +230,24 @@
                 <div class="recipient-name">
                     {{ mitsumori.company_name if mitsumori and mitsumori.company_name else '' }}<span class="recipient-suffix">御中</span>
                 </div>
-                
-                <div class="recipient-details">
-                    <div class="recipient-row">
-                        <span class="recipient-label">ご担当者：</span>{{ mitsumori.contact_person if mitsumori and mitsumori.contact_person else '' }}
-                    </div>
-                    <div class="recipient-row">
-                        <span class="recipient-label">〒</span>{{ mitsumori.address if mitsumori and mitsumori.address else '' }}
-                    </div>
-                </div>
             </div>
             
             <div class="header-right">
                 <div class="header-right-row">No.：{{ mitsumori.document_no if mitsumori else '' }}</div>
-                <div class="header-right-row">発行日：{{ mitsumori.issue_date if mitsumori else '' }}</div>
+                <div class="header-right-row">請求日：{{ mitsumori.issue_date if mitsumori else '' }}</div>
+            </div>
+        </div>
+        
+        <div class="company-section">
+            <div></div>
+            <div class="company-info">
+                <div class="company-name">株式会社 開花</div>
+                <div class="company-address">
+                    〒140-0015<br>
+                    東京都品川区西大井2-4-8
+                </div>
+                <div class="company-tel">Tel: 080-6955-4906</div>
+                <div class="company-invoice-no">登録番号：T3010701047914</div>
             </div>
         </div>
         
@@ -231,7 +258,7 @@
             <div class="request-amount">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }} (税込)</div>
         </div>
         
-        <table>
+        <table class="items-table">
             <thead>
                 <tr>
                     <th class="col-no">No.</th>
@@ -242,57 +269,46 @@
                 </tr>
             </thead>
             <tbody>
-                {% if items %}
-                    {% for item in items %}
-                    <tr>
-                        <td class="text-center">{{ item.item_no }}</td>
-                        <td>{{ item.item_name if item.item_name else '' }}</td>
-                        <td class="text-center">{{ item.quantity if item.quantity else '-' }}</td>
-                        <td class="text-center">{{ item.unit if item.unit else '-' }}</td>
-                        <td class="text-right">¥{{ "{:,}".format(item.amount|default(0)|int) }}</td>
-                    </tr>
-                    {% endfor %}
-                    {% for i in range(items|length, 15) %}
-                    <tr>
-                        <td class="text-center">{{ i + 1 }}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    {% for i in range(15) %}
-                    <tr>
-                        <td class="text-center">{{ i + 1 }}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                    {% endfor %}
-                {% endif %}
+                {% for i in range(24) %}
+                <tr>
+                    <td class="text-center">{{ i + 1 }}</td>
+                    <td>{% if items and i < items|length %}{{ items[i].item_name if items[i].item_name else '' }}{% endif %}</td>
+                    <td class="text-center">{% if items and i < items|length %}{{ items[i].quantity if items[i].quantity else '' }}{% endif %}</td>
+                    <td class="text-center">{% if items and i < items|length %}{{ items[i].unit if items[i].unit else '' }}{% endif %}</td>
+                    <td class="text-right">{% if items and i < items|length and items[i].amount %}¥{{ "{:,}".format(items[i].amount|int) }}{% endif %}</td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
         
-        <div class="summary-section">
+        <div class="footer-section">
+            <div class="footer-left">
+                本請求書は消費税を含む内税表記となっております。
+            </div>
             <table class="summary-table">
                 <tr>
                     <td class="label">合計点数</td>
-                    <td class="text-right">{{ items|length if items else 0 }} 点</td>
+                    <td class="value">{{ items|length if items else 0 }} 点</td>
+                </tr>
+                <tr>
+                    <td class="label">小計</td>
+                    <td class="value">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
+                </tr>
+                <tr>
+                    <td class="label">内税(10%)</td>
+                    <td class="value">{{ "{:,}".format((mitsumori.total_amount|default(0)|int * 10 / 110)|int) }}</td>
                 </tr>
                 <tr class="total-row">
-                    <td class="label">合計金額</td>
-                    <td class="text-right value">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
+                    <td class="label">合計（税込）</td>
+                    <td class="value">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>
             </table>
         </div>
         
-        {% if mitsumori and mitsumori.notes %}
-        <div class="notes-section">
-            備考：{{ mitsumori.notes }}
+        <div class="bank-section">
+            <div class="bank-title">振込先</div>
+            <div>{{ mitsumori.notes if mitsumori and mitsumori.notes else '' }}</div>
         </div>
-        {% endif %}
     </div>
     
     <script>
