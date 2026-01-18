@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}計算書一覧 - 物販管理システム{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>計算書一覧</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類No.</th>
+                <th>宛先</th>
+                <th>件名</th>
+                <th>発行日</th>
+                <th>合計金額</th>
+                <th>ステータス</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in keisan_list %}
+            <tr>
+                <td class="doc-no">{{ doc.document_no }}</td>
+                <td>{{ doc.recipient_name or '-' }}</td>
+                <td>{{ doc.subject or '-' }}</td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                <td>
+                    {% if doc.status == 'completed' %}
+                        <span class="status-badge status-completed">完了</span>
+                    {% elif doc.status == 'submitted' %}
+                        <span class="status-badge status-submitted">送信済</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status == 'draft' %}
+                        <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                        <a href="{{ url_for('user_keisan_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この計算書を削除しますか？')">削除</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center text-muted">計算書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-completed { background: #d4edda; color: #155724; }
+.status-submitted { background: #cce5ff; color: #004085; }
+.status-draft { background: #fff3cd; color: #856404; }
+
+.btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
+.btn-info { background: #17a2b8; color: white; }
+.btn-pdf { background: #dc3545; color: white; }
+.btn-primary { background: #3b82f6; color: white; }
+
+.actions { white-space: nowrap; }
+
+.amount {
+    font-family: 'Consolas', monospace;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
