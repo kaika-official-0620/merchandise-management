@@ -8354,8 +8354,38 @@ def user_mitsumori_view(id):
 @login_required
 def user_mitsumori_pdf(id):
     """見積依頼書PDF（ユーザー用）"""
-    flash('PDF機能は準備中です', 'info')
-    return redirect(url_for('user_mitsumori_view', id=id))
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+        row = cur.fetchone()
+        mitsumori = dict(row) if row else None
+        if mitsumori:
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    html_content = render_template('pdf/mitsumori_pdf.html', mitsumori=mitsumori, items=items)
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/mitsumori/delete/<int:id>')
 @login_required
@@ -8663,8 +8693,38 @@ def user_keisan_view(id):
 @login_required
 def user_keisan_pdf(id):
     """計算書PDF（ユーザー用）"""
-    flash('PDF機能は準備中です', 'info')
-    return redirect(url_for('user_keisan_view', id=id))
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        row = cur.fetchone()
+        keisan = dict(row) if row else None
+        if keisan:
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('documents'))
+    
+    html_content = render_template('pdf/keisan_pdf.html', keisan=keisan, items=items)
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/keisan/delete/<int:id>')
 @login_required
@@ -9386,8 +9446,38 @@ def admin_kaitori_delete(id):
 @admin_required
 def admin_kaitori_pdf(id):
     """買取明細書PDF"""
-    flash('この機能は準備中です', 'info')
-    return redirect(url_for('admin_kaitori_list'))
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM invoices WHERE id = %s", (id,))
+        invoice = cur.fetchone()
+        if invoice:
+            invoice = dict(invoice)
+            cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY id", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
+        row = cur.fetchone()
+        invoice = dict(row) if row else None
+        if invoice:
+            cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not invoice:
+        flash('買取明細書が見つかりません', 'error')
+        return redirect(url_for('admin_kaitori_list'))
+    
+    html_content = render_template('pdf/invoice_pdf.html', invoice=invoice, items=items)
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ===================
 # 精算書（管理者用）
@@ -9523,8 +9613,38 @@ def admin_mitsumori_delete(id):
 @admin_required
 def admin_mitsumori_pdf(id):
     """見積依頼書PDF"""
-    flash('この機能は準備中です', 'info')
-    return redirect(url_for('admin_mitsumori_list'))
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = %s", (id,))
+        mitsumori = cur.fetchone()
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = ?", (id,))
+        row = cur.fetchone()
+        mitsumori = dict(row) if row else None
+        if mitsumori:
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('admin_mitsumori_list'))
+    
+    html_content = render_template('pdf/mitsumori_pdf.html', mitsumori=mitsumori, items=items)
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ===================
 # LINE公式アカウント連携

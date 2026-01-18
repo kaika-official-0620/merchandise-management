@@ -29,7 +29,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('monthly', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('monthly', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('monthly', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -46,7 +45,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('inventory', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('inventory', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('inventory', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -72,7 +70,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('expenses', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('expenses', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('expenses', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -93,7 +90,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('annual', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('annual', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('annual', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -120,7 +116,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('kaitori', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('kaitori', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('kaitori', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -147,7 +142,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('sales', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('sales', 'csv')" class="btn btn-secondary">CSV</button>
-                <button onclick="generateReport('sales', 'pdf')" class="btn btn-primary">PDF</button>
             </div>
         </div>
     </div>
@@ -166,8 +160,7 @@
         </div>
         <div class="report-modal-footer">
             <button onclick="closeReportModal()" class="btn btn-secondary">閉じる</button>
-            <button id="downloadCsvBtn" class="btn btn-secondary">CSVダウンロード</button>
-            <button id="downloadPdfBtn" class="btn btn-primary">PDFダウンロード</button>
+            <button id="downloadCsvBtn" class="btn btn-primary">CSVダウンロード</button>
         </div>
     </div>
 </div>
@@ -524,7 +517,6 @@ function openReportModal(type) {
     
     // ダウンロードボタンの設定
     document.getElementById('downloadCsvBtn').onclick = () => downloadReport(type, 'csv');
-    document.getElementById('downloadPdfBtn').onclick = () => downloadReport(type, 'pdf');
 }
 
 function closeReportModal() {

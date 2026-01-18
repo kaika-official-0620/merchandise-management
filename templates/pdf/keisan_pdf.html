@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>計算書 - {{ keisan.document_no }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 12mm 15mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Yu Gothic", "游ゴシック", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #000;
+            background: white;
+        }
+        
+        .document {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        
+        .title {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .title h1 {
+            font-size: 22pt;
+            font-weight: bold;
+            letter-spacing: 12px;
+            padding: 8px 0;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            display: inline-block;
+            padding-left: 12px;
+        }
+        
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .header-left {
+            width: 50%;
+        }
+        
+        .header-right {
+            width: 45%;
+            text-align: right;
+        }
+        
+        .doc-info {
+            margin-bottom: 10px;
+        }
+        
+        .doc-info-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 3px;
+            font-size: 10pt;
+        }
+        
+        .doc-info-label {
+            margin-right: 10px;
+        }
+        
+        .doc-info-value {
+            min-width: 100px;
+            border-bottom: 1px solid #000;
+            text-align: left;
+            padding-left: 5px;
+        }
+        
+        .recipient-section {
+            margin-bottom: 15px;
+        }
+        
+        .recipient-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .recipient-name {
+            font-size: 14pt;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+            display: inline-block;
+            min-width: 200px;
+        }
+        
+        .recipient-suffix {
+            font-size: 12pt;
+            margin-left: 15px;
+        }
+        
+        .subject-section {
+            margin: 15px 0;
+            font-size: 11pt;
+        }
+        
+        .subject-label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .amount-box {
+            border: 2px solid #000;
+            padding: 10px 20px;
+            display: inline-block;
+            margin-bottom: 15px;
+            background: #f5f5f5;
+        }
+        
+        .amount-label {
+            font-size: 11pt;
+            margin-right: 15px;
+        }
+        
+        .amount-value {
+            font-size: 16pt;
+            font-weight: bold;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            font-size: 9pt;
+        }
+        
+        .items-table th,
+        .items-table td {
+            border: 1px solid #000;
+            padding: 4px 6px;
+            text-align: center;
+        }
+        
+        .items-table th {
+            background: #e0e0e0;
+            font-weight: bold;
+            font-size: 9pt;
+        }
+        
+        .items-table .col-no { width: 8%; }
+        .items-table .col-name { width: 40%; text-align: left; padding-left: 8px; }
+        .items-table .col-qty { width: 10%; }
+        .items-table .col-unit { width: 10%; }
+        .items-table .col-price { width: 15%; text-align: right; padding-right: 8px; }
+        .items-table .col-amount { width: 17%; text-align: right; padding-right: 8px; }
+        
+        .items-table tbody td { height: 18px; }
+        .items-table td.text-left { text-align: left; padding-left: 8px; }
+        .items-table td.text-right { text-align: right; padding-right: 8px; }
+        
+        .totals-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .totals-table {
+            border-collapse: collapse;
+            font-size: 10pt;
+        }
+        
+        .totals-table td {
+            border: 1px solid #000;
+            padding: 5px 10px;
+        }
+        
+        .totals-table .label {
+            background: #e0e0e0;
+            text-align: center;
+            width: 100px;
+        }
+        
+        .totals-table .value {
+            text-align: right;
+            width: 120px;
+            padding-right: 10px;
+        }
+        
+        .totals-table .total-row td {
+            font-weight: bold;
+            background: #f0f0f0;
+        }
+        
+        .notes-section {
+            border: 1px solid #000;
+            padding: 10px;
+            font-size: 9pt;
+            min-height: 50px;
+        }
+        
+        .notes-label {
+            font-weight: bold;
+        }
+        
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2563eb;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14pt;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        
+        .print-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        @media print {
+            .print-btn { display: none; }
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .document { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+    
+    <div class="document">
+        <div class="title">
+            <h1>計算書</h1>
+        </div>
+        
+        <div class="header-info">
+            <div class="header-left"></div>
+            <div class="header-right">
+                <div class="doc-info">
+                    <div class="doc-info-row">
+                        <span class="doc-info-label">No.：</span>
+                        <span class="doc-info-value">{{ keisan.document_no }}</span>
+                    </div>
+                    <div class="doc-info-row">
+                        <span class="doc-info-label">発行日：</span>
+                        <span class="doc-info-value">{{ keisan.issue_date }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="recipient-section">
+            <div class="recipient-row">
+                <span class="recipient-name">{{ keisan.recipient_name or '' }}</span>
+                <span class="recipient-suffix">様</span>
+            </div>
+        </div>
+        
+        {% if keisan.subject %}
+        <div class="subject-section">
+            <span class="subject-label">件名：</span>{{ keisan.subject }}
+        </div>
+        {% endif %}
+        
+        <div class="amount-box">
+            <span class="amount-label">合計金額</span>
+            <span class="amount-value">¥{{ "{:,}".format(keisan.total_amount) }}</span>
+        </div>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="col-no">No.</th>
+                    <th class="col-name">品名</th>
+                    <th class="col-qty">数量</th>
+                    <th class="col-unit">単位</th>
+                    <th class="col-price">単価</th>
+                    <th class="col-amount">金額</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td class="text-left">{{ item.item_name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.unit or '' }}</td>
+                    <td class="text-right">{% if item.unit_price %}¥{{ "{:,}".format(item.unit_price) }}{% endif %}</td>
+                    <td class="text-right">{% if item.amount %}¥{{ "{:,}".format(item.amount) }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% for i in range(items|length, 15) %}
+                <tr>
+                    <td>{{ items|length + loop.index }}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="totals-section">
+            <table class="totals-table">
+                <tr>
+                    <td class="label">合計点数</td>
+                    <td class="value">{{ items|length }} 点</td>
+                </tr>
+                <tr class="total-row">
+                    <td class="label">合計金額</td>
+                    <td class="value">¥{{ "{:,}".format(keisan.total_amount) }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="notes-section">
+            <span class="notes-label">備考欄：</span>
+            {% if keisan.notes %}
+            {{ keisan.notes|replace('\n', '<br>')|safe }}
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
