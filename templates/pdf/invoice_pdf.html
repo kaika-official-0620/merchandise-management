@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>買取明細書 - {{ invoice.document_no if invoice else '' }}</title>
+    <title>買取明細書 - {{ invoice.invoice_no if invoice else '' }}</title>
     <style>
         * {
             margin: 0;
@@ -217,7 +217,7 @@
             </div>
             
             <div class="header-right">
-                <div class="header-right-row">No.：{{ invoice.document_no if invoice else '' }}</div>
+                <div class="header-right-row">No.：{{ invoice.invoice_no if invoice else '' }}</div>
                 <div class="header-right-row">請求日：{{ invoice.issue_date if invoice else '' }}</div>
             </div>
         </div>
@@ -285,7 +285,7 @@
                 </tr>
                 <tr>
                     <td class="label">内税(10%)</td>
-                    <td class="text-right">{{ "{:,}".format(invoice.tax_amount if invoice else 0) }}</td>
+                    <td class="text-right">{{ "{:,}".format((invoice.tax_amount_8 or 0) + (invoice.tax_amount_10 or 0) if invoice else 0) }}</td>
                 </tr>
                 <tr class="total-row">
                     <td class="label">合計（税込）</td>

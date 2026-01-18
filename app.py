@@ -9475,11 +9475,15 @@ def invoice_pdf(id):
             cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
         else:
             cur.execute("SELECT * FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
-        invoice = cur.fetchone()
-        if invoice:
-            invoice = dict(invoice)
+        row = cur.fetchone()
+        if row:
+            columns = [d[0] for d in cur.description]
+            invoice = dict(zip(columns, row))
+        else:
+            invoice = None
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
-        items = [dict(row) for row in cur.fetchall()]
+        item_columns = [d[0] for d in cur.description] if cur.description else []
+        items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
     
     cur.close()
     conn.close()
