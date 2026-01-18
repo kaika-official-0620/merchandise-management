@@ -2,13 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>請求書 - {{ shikiriosho.document_no }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>精算書 - {{ shikiriosho.document_no if shikiriosho else '' }}</title>
     <style>
-        @page {
-            size: A4;
-            margin: 12mm 15mm;
-        }
-        
         * {
             margin: 0;
             padding: 0;
@@ -16,353 +12,214 @@
         }
         
         body {
-            font-family: "Yu Gothic", "游ゴシック", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-            font-size: 10pt;
-            line-height: 1.4;
-            color: #000;
+            font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #333;
             background: white;
         }
         
-        .document {
-            width: 100%;
+        .container {
             max-width: 210mm;
             margin: 0 auto;
-            padding: 10px;
+            padding: 10mm 15mm;
         }
         
-        /* タイトル */
-        .title {
+        .document-title {
             text-align: center;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.3em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #333;
+        }
+        
+        .header-section {
+            display: flex;
+            justify-content: space-between;
             margin-bottom: 20px;
         }
         
-        .title h1 {
-            font-size: 22pt;
-            font-weight: bold;
-            letter-spacing: 12px;
-            padding: 8px 0;
-            border-top: 2px solid #000;
-            border-bottom: 2px solid #000;
-            display: inline-block;
-            padding-left: 12px;
-        }
-        
-        /* ヘッダー情報 */
-        .header-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-        
         .header-left {
-            width: 50%;
+            flex: 1;
         }
         
         .header-right {
-            width: 45%;
             text-align: right;
+            font-size: 11px;
         }
         
-        .doc-info {
-            margin-bottom: 10px;
-        }
-        
-        .doc-info-row {
-            display: flex;
-            justify-content: flex-end;
+        .header-right-row {
             margin-bottom: 3px;
-            font-size: 10pt;
-        }
-        
-        .doc-info-label {
-            margin-right: 10px;
-        }
-        
-        .doc-info-value {
-            min-width: 100px;
-            border-bottom: 1px solid #000;
-            text-align: left;
-            padding-left: 5px;
-        }
-        
-        /* 宛名セクション */
-        .recipient-section {
-            margin-bottom: 15px;
-        }
-        
-        .recipient-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
         }
         
         .recipient-name {
-            font-size: 14pt;
-            font-weight: bold;
-            border-bottom: 1px solid #000;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 5px;
             padding-bottom: 5px;
+            border-bottom: 1px solid #333;
             display: inline-block;
-            min-width: 200px;
         }
         
         .recipient-suffix {
-            font-size: 12pt;
-            margin-left: 15px;
+            font-size: 14px;
+            font-weight: normal;
+            margin-left: 10px;
         }
         
-        .personal-info {
-            display: flex;
-            gap: 30px;
+        .recipient-details {
             margin-top: 10px;
-            font-size: 10pt;
+            font-size: 11px;
         }
         
-        .personal-info-item {
-            display: flex;
-            align-items: center;
+        .recipient-row {
+            margin-bottom: 5px;
         }
         
-        .personal-info-label {
-            margin-right: 10px;
-        }
-        
-        .personal-info-value {
-            border-bottom: 1px solid #000;
-            min-width: 150px;
-            padding-left: 5px;
-        }
-        
-        /* 請求文言 */
-        .request-text {
-            margin: 15px 0;
-            font-size: 10pt;
-        }
-        
-        /* 請求金額ボックス */
-        .amount-box {
-            border: 2px solid #000;
-            padding: 10px 20px;
+        .recipient-label {
             display: inline-block;
-            margin-bottom: 15px;
+            width: 70px;
+            color: #666;
+        }
+        
+        .request-text {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+        
+        .request-amount-box {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px solid #333;
             background: #f5f5f5;
         }
         
-        .amount-label {
-            font-size: 11pt;
-            margin-right: 15px;
+        .request-label {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 5px;
         }
         
-        .amount-value {
-            font-size: 16pt;
-            font-weight: bold;
+        .request-amount {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a56db;
         }
         
-        .amount-suffix {
-            font-size: 10pt;
-            margin-left: 5px;
-        }
-        
-        /* 明細テーブル */
-        .items-table {
+        table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
-            font-size: 9pt;
+            margin: 15px 0;
+            font-size: 10px;
         }
         
-        .items-table th,
-        .items-table td {
-            border: 1px solid #000;
-            padding: 4px 6px;
+        th, td {
+            border: 1px solid #333;
+            padding: 6px 8px;
+        }
+        
+        th {
+            background: #f0f0f0;
+            font-weight: 600;
             text-align: center;
         }
         
-        .items-table th {
-            background: #e0e0e0;
-            font-weight: bold;
-            font-size: 9pt;
-        }
+        .col-no { width: 35px; }
+        .col-name { }
+        .col-date { width: 80px; }
+        .col-code { width: 80px; }
+        .col-amount { width: 90px; }
         
-        .items-table .col-no {
-            width: 7%;
-        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
         
-        .items-table .col-name {
-            width: 38%;
-            text-align: left;
-            padding-left: 8px;
-        }
-        
-        .items-table .col-date {
-            width: 15%;
-        }
-        
-        .items-table .col-code {
-            width: 18%;
-        }
-        
-        .items-table .col-amount {
-            width: 18%;
-            text-align: right;
-            padding-right: 8px;
-        }
-        
-        .items-table tbody td {
-            height: 18px;
-        }
-        
-        .items-table td.text-left {
-            text-align: left;
-            padding-left: 8px;
-        }
-        
-        .items-table td.text-right {
-            text-align: right;
-            padding-right: 8px;
-        }
-        
-        /* 合計セクション */
-        .totals-section {
+        .summary-section {
             display: flex;
             justify-content: flex-end;
-            margin-top: 5px;
-            margin-bottom: 15px;
+            margin-top: 10px;
         }
         
-        .totals-table {
-            border-collapse: collapse;
-            font-size: 10pt;
+        .summary-table {
+            width: 280px;
+            border: none;
         }
         
-        .totals-table td {
-            border: 1px solid #000;
+        .summary-table td {
+            border: 1px solid #333;
             padding: 5px 10px;
+            font-size: 11px;
         }
         
-        .totals-table .label {
-            background: #e0e0e0;
-            text-align: center;
+        .summary-table .label {
+            background: #f0f0f0;
+            font-weight: 600;
             width: 100px;
         }
         
-        .totals-table .value {
-            text-align: right;
-            width: 120px;
-            padding-right: 10px;
+        .summary-table .total-row td {
+            font-weight: 700;
+            font-size: 13px;
         }
         
-        .totals-table .total-row td {
-            font-weight: bold;
-            background: #f0f0f0;
+        .summary-table .total-row .value {
+            color: #1a56db;
         }
         
-        /* 備考欄 */
         .notes-section {
-            border: 1px solid #000;
-            padding: 10px;
-            font-size: 9pt;
-            min-height: 50px;
-        }
-        
-        .notes-label {
-            font-weight: bold;
-        }
-        
-        /* 印刷ボタン */
-        .print-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #2563eb;
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14pt;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            z-index: 1000;
-        }
-        
-        .print-btn:hover {
-            background: #1d4ed8;
+            margin-top: 15px;
+            font-size: 10px;
+            color: #666;
         }
         
         @media print {
-            .print-btn {
-                display: none;
-            }
             body {
-                -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
             }
-            .document {
+            .container {
                 padding: 0;
             }
         }
     </style>
 </head>
 <body>
-    <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
-    
-    <div class="document">
-        <!-- タイトル -->
-        <div class="title">
-            <h1>請求書</h1>
-        </div>
+    <div class="container">
+        <h1 class="document-title">精 算 書</h1>
         
-        <!-- ヘッダー情報 -->
-        <div class="header-info">
+        <div class="header-section">
             <div class="header-left">
-                <!-- 空白（宛名は下に配置） -->
-            </div>
-            <div class="header-right">
-                <div class="doc-info">
-                    <div class="doc-info-row">
-                        <span class="doc-info-label">No.：</span>
-                        <span class="doc-info-value">{{ shikiriosho.document_no }}</span>
+                <div class="recipient-name">
+                    {{ shikiriosho.recipient_name if shikiriosho else '' }}<span class="recipient-suffix">御中</span>
+                </div>
+                
+                <div class="recipient-details">
+                    <div class="recipient-row">
+                        <span class="recipient-label">個人番号：</span>{{ shikiriosho.personal_number if shikiriosho and shikiriosho.personal_number else '' }}
                     </div>
-                    <div class="doc-info-row">
-                        <span class="doc-info-label">請求日：</span>
-                        <span class="doc-info-value">{{ shikiriosho.issue_date }}</span>
+                    <div class="recipient-row">
+                        <span class="recipient-label">お名前：</span>{{ shikiriosho.contact_name if shikiriosho and shikiriosho.contact_name else '' }}
                     </div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- 宛名セクション -->
-        <div class="recipient-section">
-            <div class="recipient-row">
-                <span class="recipient-name">{{ shikiriosho.recipient_name or '' }}</span>
-                <span class="recipient-suffix">御中</span>
             </div>
             
-            <div class="personal-info">
-                <div class="personal-info-item">
-                    <span class="personal-info-label">お名前</span>
-                    <span class="personal-info-value">{{ shikiriosho.contact_name or '' }}</span>
-                </div>
-                <div class="personal-info-item">
-                    <span class="personal-info-label">個人番号</span>
-                    <span class="personal-info-value">{{ shikiriosho.personal_number or '' }}</span>
-                </div>
+            <div class="header-right">
+                <div class="header-right-row">No.：{{ shikiriosho.document_no if shikiriosho else '' }}</div>
+                <div class="header-right-row">請求日：{{ shikiriosho.issue_date if shikiriosho else '' }}</div>
             </div>
         </div>
         
-        <!-- 請求文言 -->
-        <div class="request-text">
-            下記の通りご請求申し上げます。
+        <div class="request-text">下記の通りご請求申し上げます。</div>
+        
+        <div class="request-amount-box">
+            <div class="request-label">請求金額</div>
+            <div class="request-amount">¥{{ "{:,}".format(shikiriosho.total_amount if shikiriosho else 0) }} (税込)</div>
         </div>
         
-        <!-- 請求金額 -->
-        <div class="amount-box">
-            <span class="amount-label">請求金額</span>
-            <span class="amount-value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</span>
-            <span class="amount-suffix">(税込)</span>
-        </div>
-        
-        <!-- 明細テーブル -->
-        <table class="items-table">
+        <table>
             <thead>
                 <tr>
                     <th class="col-no">No.</th>
@@ -373,56 +230,69 @@
                 </tr>
             </thead>
             <tbody>
-                {% for item in items %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td class="text-left">{{ item.product_name }}</td>
-                    <td>{{ item.product_date or '' }}</td>
-                    <td>{{ item.product_code or '' }}</td>
-                    <td class="text-right">{% if item.amount %}¥{{ "{:,}".format(item.amount) }}{% endif %}</td>
-                </tr>
-                {% endfor %}
-                {% for i in range(items|length, 24) %}
-                <tr>
-                    <td>{{ items|length + loop.index }}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-                {% endfor %}
+                {% if items %}
+                    {% for item in items %}
+                    <tr>
+                        <td class="text-center">{{ item.item_no }}</td>
+                        <td>{{ item.product_name }}</td>
+                        <td class="text-center">{{ item.product_date if item.product_date else '-' }}</td>
+                        <td class="text-center">{{ item.product_code if item.product_code else '-' }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for i in range(items|length, 24) %}
+                    <tr>
+                        <td class="text-center">{{ i + 1 }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    {% for i in range(24) %}
+                    <tr>
+                        <td class="text-center">{{ i + 1 }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
             </tbody>
         </table>
         
-        <!-- 合計セクション -->
-        <div class="totals-section">
-            <table class="totals-table">
+        <div class="summary-section">
+            <table class="summary-table">
                 <tr>
                     <td class="label">合計点数</td>
-                    <td class="value">{{ items|length }} 点</td>
+                    <td class="text-right">{{ items|length if items else 0 }} 点</td>
                 </tr>
                 <tr>
                     <td class="label">小計</td>
-                    <td class="value">¥{{ "{:,}".format(shikiriosho.subtotal) }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(shikiriosho.subtotal if shikiriosho else 0) }}</td>
                 </tr>
                 <tr>
                     <td class="label">内税(10%)</td>
-                    <td class="value">{{ "{:,}".format((shikiriosho.subtotal * 10 // 110)) }}</td>
+                    <td class="text-right">{{ "{:,}".format(shikiriosho.tax_amount if shikiriosho else 0) }}</td>
                 </tr>
                 <tr class="total-row">
                     <td class="label">合計（税込）</td>
-                    <td class="value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</td>
+                    <td class="text-right value">¥{{ "{:,}".format(shikiriosho.total_amount if shikiriosho else 0) }}</td>
                 </tr>
             </table>
         </div>
         
-        <!-- 備考欄 -->
         <div class="notes-section">
-            <span class="notes-label">備考欄：</span>本買取明細書は消費税を含む内税表記となっております。
-            {% if shikiriosho.notes %}
-            <br>{{ shikiriosho.notes|replace('\n', '<br>')|safe }}
-            {% endif %}
+            備考欄：本請求書は消費税を含む内税表記となっております。
         </div>
     </div>
+    
+    <script>
+        window.onload = function() {
+            window.print();
+        };
+    </script>
 </body>
 </html>

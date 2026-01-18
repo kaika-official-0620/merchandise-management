@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>計算書 - {{ keisan.document_no if keisan else '' }}</title>
+    <title>見積依頼書 - {{ mitsumori.document_no if mitsumori else '' }}</title>
     <style>
         * {
             margin: 0;
@@ -87,9 +87,14 @@
             color: #555;
         }
         
-        .personal-number {
-            margin-top: 10px;
-            font-size: 11px;
+        .company-contact {
+            margin-top: 8px;
+            font-size: 10px;
+        }
+        
+        .invoice-number {
+            font-size: 10px;
+            color: #666;
         }
         
         .request-text {
@@ -178,9 +183,21 @@
         }
         
         .notes-section {
-            margin-top: 15px;
+            margin-top: 10px;
             font-size: 10px;
             color: #666;
+        }
+        
+        .bank-section {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #333;
+            background: #fafafa;
+        }
+        
+        .bank-title {
+            font-weight: 600;
+            margin-bottom: 5px;
         }
         
         @media print {
@@ -196,33 +213,30 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="document-title">計 算 書</h1>
+        <h1 class="document-title">見 積 依 頼 書</h1>
         
         <div class="header-section">
             <div class="header-left">
                 <div class="recipient-name">
-                    {{ keisan.recipient_name if keisan else '' }}<span class="recipient-suffix">様</span>
+                    {{ mitsumori.recipient_name if mitsumori else '' }}<span class="recipient-suffix">御中</span>
                 </div>
                 
                 <div class="company-info">
                     <div class="company-name">株式会社 開花</div>
                     <div class="company-address">
                         〒140-0015<br>
-                        東京都品川区西大井2-4-8<br>
-                        オーキッドレジデンス西大井602
+                        東京都品川区西大井2-4-8
                     </div>
+                    <div class="company-contact">
+                        Tel: 080-6955-4906
+                    </div>
+                    <div class="invoice-number">登録番号：T3010701047914</div>
                 </div>
-                
-                {% if keisan and keisan.personal_number %}
-                <div class="personal-number">
-                    個人番号：{{ keisan.personal_number }}
-                </div>
-                {% endif %}
             </div>
             
             <div class="header-right">
-                <div class="header-right-row">No.：{{ keisan.document_no if keisan else '' }}</div>
-                <div class="header-right-row">請求日：{{ keisan.issue_date if keisan else '' }}</div>
+                <div class="header-right-row">No.：{{ mitsumori.document_no if mitsumori else '' }}</div>
+                <div class="header-right-row">請求日：{{ mitsumori.issue_date if mitsumori else '' }}</div>
             </div>
         </div>
         
@@ -230,7 +244,7 @@
         
         <div class="request-amount-box">
             <div class="request-label">請求金額</div>
-            <div class="request-amount">¥{{ "{:,}".format(keisan.total_amount if keisan else 0) }} (税込)</div>
+            <div class="request-amount">¥{{ "{:,}".format(mitsumori.total_amount if mitsumori else 0) }} (税込)</div>
         </div>
         
         <table>
@@ -285,21 +299,26 @@
                 </tr>
                 <tr>
                     <td class="label">小計</td>
-                    <td class="text-right">¥{{ "{:,}".format(keisan.subtotal if keisan else 0) }}</td>
+                    <td class="text-right">¥{{ "{:,}".format(mitsumori.subtotal if mitsumori else 0) }}</td>
                 </tr>
                 <tr>
                     <td class="label">内税(10%)</td>
-                    <td class="text-right">{{ "{:,}".format(keisan.tax_amount if keisan else 0) }}</td>
+                    <td class="text-right">{{ "{:,}".format(mitsumori.tax_amount if mitsumori else 0) }}</td>
                 </tr>
                 <tr class="total-row">
                     <td class="label">合計（税込）</td>
-                    <td class="text-right value">¥{{ "{:,}".format(keisan.total_amount if keisan else 0) }}</td>
+                    <td class="text-right value">¥{{ "{:,}".format(mitsumori.total_amount if mitsumori else 0) }}</td>
                 </tr>
             </table>
         </div>
         
         <div class="notes-section">
-            備考欄：本請求書は消費税を含む内税表記となっております。
+            本請求書は消費税を含む内税表記となっております。
+        </div>
+        
+        <div class="bank-section">
+            <div class="bank-title">振込先</div>
+            <div>{{ mitsumori.bank_info if mitsumori and mitsumori.bank_info else '' }}</div>
         </div>
     </div>
     
