@@ -32,21 +32,18 @@
 <!-- 経費内訳サマリー -->
 <div class="expense-summary">
     <div class="expense-card">
-        <div class="expense-icon">📦</div>
         <div class="expense-content">
             <div class="expense-label">総送料</div>
             <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_shipping or 0)|int) }}</div>
         </div>
     </div>
     <div class="expense-card">
-        <div class="expense-icon">💳</div>
         <div class="expense-content">
             <div class="expense-label">総手数料</div>
             <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_commission or 0)|int) }}</div>
         </div>
     </div>
     <div class="expense-card total">
-        <div class="expense-icon">📊</div>
         <div class="expense-content">
             <div class="expense-label">経費合計</div>
             <div class="expense-value">¥{{ "{:,}".format(((analytics.kpi.total_shipping or 0) + (analytics.kpi.total_commission or 0))|int) }}</div>
@@ -347,10 +344,6 @@
 .expense-card.total {
     border-left-color: #f59e0b;
     background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-}
-
-.expense-icon {
-    font-size: 1.75rem;
 }
 
 .expense-content {
