@@ -7615,11 +7615,18 @@ def service_document_pdf(id):
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM service_documents WHERE id = %s AND user_id = %s", (id, current_user.id))
+        row = cur.fetchone()
+        doc = dict(row) if row else None
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM service_documents WHERE id = ? AND user_id = ?", (id, current_user.id))
+        row = cur.fetchone()
+        if row:
+            columns = [d[0] for d in cur.description]
+            doc = dict(zip(columns, row))
+        else:
+            doc = None
     
-    doc = cur.fetchone()
     cur.close()
     conn.close()
     
@@ -7627,7 +7634,6 @@ def service_document_pdf(id):
         flash('書類が見つかりません', 'error')
         return redirect(url_for('documents'))
     
-    doc = dict(doc)
     if doc.get('service_data'):
         try:
             doc['service_data'] = json.loads(doc['service_data'])
@@ -8555,11 +8561,14 @@ def user_mitsumori_pdf(id):
         cur = conn.cursor()
         cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
         row = cur.fetchone()
-        mitsumori = dict(row) if row else None
-        if mitsumori:
+        if row:
+            columns = [d[0] for d in cur.description]
+            mitsumori = dict(zip(columns, row))
             cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
-            items = [dict(row) for row in cur.fetchall()]
+            item_columns = [d[0] for d in cur.description] if cur.description else []
+            items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
         else:
+            mitsumori = None
             items = []
     
     cur.close()
@@ -8894,11 +8903,14 @@ def user_keisan_pdf(id):
         cur = conn.cursor()
         cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
         row = cur.fetchone()
-        keisan = dict(row) if row else None
-        if keisan:
+        if row:
+            columns = [d[0] for d in cur.description]
+            keisan = dict(zip(columns, row))
             cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
-            items = [dict(row) for row in cur.fetchall()]
+            item_columns = [d[0] for d in cur.description] if cur.description else []
+            items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
         else:
+            keisan = None
             items = []
     
     cur.close()
@@ -9433,11 +9445,15 @@ def shikiriosho_pdf(id):
         else:
             cur.execute("SELECT * FROM shikiriosho WHERE id = ? AND (sender_id = ? OR recipient_id = ?)", 
                        (id, current_user.id, current_user.id))
-        shikiriosho = cur.fetchone()
-        if shikiriosho:
-            shikiriosho = dict(shikiriosho)
+        row = cur.fetchone()
+        if row:
+            columns = [d[0] for d in cur.description]
+            shikiriosho = dict(zip(columns, row))
+        else:
+            shikiriosho = None
         cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
-        items = [dict(row) for row in cur.fetchall()]
+        item_columns = [d[0] for d in cur.description] if cur.description else []
+        items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -9651,11 +9667,14 @@ def admin_kaitori_pdf(id):
         cur = conn.cursor()
         cur.execute("SELECT * FROM invoices WHERE id = ?", (id,))
         row = cur.fetchone()
-        invoice = dict(row) if row else None
-        if invoice:
+        if row:
+            columns = [d[0] for d in cur.description]
+            invoice = dict(zip(columns, row))
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id", (id,))
-            items = [dict(row) for row in cur.fetchall()]
+            item_columns = [d[0] for d in cur.description] if cur.description else []
+            items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
         else:
+            invoice = None
             items = []
     
     cur.close()
@@ -9818,11 +9837,14 @@ def admin_mitsumori_pdf(id):
         cur = conn.cursor()
         cur.execute("SELECT * FROM user_mitsumori WHERE id = ?", (id,))
         row = cur.fetchone()
-        mitsumori = dict(row) if row else None
-        if mitsumori:
+        if row:
+            columns = [d[0] for d in cur.description]
+            mitsumori = dict(zip(columns, row))
             cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
-            items = [dict(row) for row in cur.fetchall()]
+            item_columns = [d[0] for d in cur.description] if cur.description else []
+            items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
         else:
+            mitsumori = None
             items = []
     
     cur.close()
