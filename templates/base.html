@@ -92,26 +92,26 @@
             <!-- ========== 開花管理 ========== -->
             <div class="sidebar-group-label admin-label">開花管理</div>
             
-            <!-- 書類作成 -->
+            <!-- ユーザ管理（書類作成 + ユーザ管理を統合） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    書類作成
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    ユーザ管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
                     <a href="{{ url_for('admin_seisan_add') }}" class="{% if request.endpoint in ['admin_seisan_add', 'admin_seisan_list', 'admin_seisan_view', 'admin_seisan_edit'] %}active{% endif %}">精算書作成</a>
                     <a href="{{ url_for('admin_kaitori_add') }}" class="{% if request.endpoint in ['admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}">買取明細書作成</a>
+                    <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
                 </div>
             </div>
             
             <!-- マスタ管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item', 'admin_master_settings'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_items', 'admin_add_item', 'admin_master_settings'] %}active{% endif %}" onclick="toggleCategory(this)">
                     マスタ管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item', 'admin_master_settings'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー管理</a>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_items', 'admin_add_item', 'admin_master_settings'] %}open{% endif %}">
                     <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品管理</a>
                     <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">マスター設定</a>
                 </div>

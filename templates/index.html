@@ -43,6 +43,20 @@
     color: #ef4444;
 }
 
+.stats-inventory {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-color: #f59e0b;
+}
+
+.stats-inventory .stats-label {
+    color: #92400e;
+}
+
+.stats-inventory .stats-value {
+    color: #b45309;
+    font-weight: 700;
+}
+
 @media (max-width: 768px) {
     .stats-summary {
         display: grid;
@@ -1087,6 +1101,10 @@
     <div class="stats-item">
         <span class="stats-label">総仕入額</span>
         <span class="stats-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+    </div>
+    <div class="stats-item stats-inventory">
+        <span class="stats-label">保管金額</span>
+        <span class="stats-value">¥{{ "{:,}".format(stats.inventory_value or 0) }}</span>
     </div>
     <div class="stats-item">
         <span class="stats-label">総売上</span>

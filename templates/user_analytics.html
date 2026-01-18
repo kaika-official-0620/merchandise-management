@@ -17,6 +17,10 @@
         <div class="summary-label">総仕入額</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_purchase or 0)|int) }}</div>
     </div>
+    <div class="summary-card inventory-card">
+        <div class="summary-label">保管金額</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.summary.inventory_value or 0)|int) }}</div>
+    </div>
     <div class="summary-card">
         <div class="summary-label">総売上</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_sales or 0)|int) }}</div>
@@ -525,6 +529,20 @@
 
 .summary-card.highlight .summary-value {
     color: #10b981;
+}
+
+.summary-card.inventory-card {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid #f59e0b;
+}
+
+.summary-card.inventory-card .summary-label {
+    color: #92400e;
+}
+
+.summary-card.inventory-card .summary-value {
+    color: #b45309;
+    font-weight: 700;
 }
 
 .summary-label {

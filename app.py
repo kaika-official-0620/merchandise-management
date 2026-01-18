@@ -1836,7 +1836,8 @@ def index():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value
                 FROM merchandise WHERE user_id IN ({placeholders})
             """, shared_user_ids)
         else:
@@ -1847,7 +1848,8 @@ def index():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value
                 FROM merchandise WHERE user_id = %s
             """, (current_user.id,))
     else:
@@ -1860,7 +1862,8 @@ def index():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value
                 FROM merchandise WHERE user_id IN ({placeholders})
             """, shared_user_ids)
         else:
@@ -1871,7 +1874,8 @@ def index():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count
+                    COUNT(CASE WHEN sale_date IS NOT NULL THEN 1 END) as sold_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value
                 FROM merchandise WHERE user_id = ?
             """, (current_user.id,))
     
@@ -2777,6 +2781,7 @@ def user_analytics():
                 COUNT(*) as total_items,
                 SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
                 COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
                 COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                 COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
@@ -2794,6 +2799,7 @@ def user_analytics():
                     SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
                     SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
                     COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
@@ -2804,7 +2810,7 @@ def user_analytics():
             analytics_data['kpi'] = dict(cur.fetchone() or {})
         except Exception as e:
             print(f"KPI query error: {e}")
-            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
         
         # 月別キャッシュフロー
         try:
@@ -2906,6 +2912,7 @@ def user_analytics():
                 COUNT(*) as total_items,
                 SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
                 COALESCE(SUM(purchase_price), 0) as total_purchase,
+                COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
                 COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                 COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
@@ -2923,6 +2930,7 @@ def user_analytics():
                     SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
                     SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
                     COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
@@ -2933,7 +2941,7 @@ def user_analytics():
             analytics_data['kpi'] = dict(cur.fetchone() or {})
         except Exception as e:
             print(f"KPI query error: {e}")
-            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+            analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
         
         # 月別キャッシュフロー
         try:
