@@ -99,12 +99,12 @@
             
             <!-- サービス -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint == 'proxy_service_public' %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint == 'public_proxy_service' %}active{% endif %}" onclick="toggleCategory(this)">
                     サービス
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint == 'proxy_service_public' %}open{% endif %}">
-                    <a href="{{ url_for('proxy_service_public') }}" class="{% if request.endpoint == 'proxy_service_public' %}active{% endif %}">代行仕入れサービス</a>
+                <div class="sidebar-category-items {% if request.endpoint == 'public_proxy_service' %}open{% endif %}">
+                    <a href="{{ url_for('public_proxy_service') }}" class="{% if request.endpoint == 'public_proxy_service' %}active{% endif %}">代行仕入れサービス</a>
                 </div>
             </div>
             
