@@ -160,42 +160,63 @@
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         
-        .summary-section {
+        .footer-section {
             display: flex;
-            justify-content: flex-end;
-            margin-top: 10px;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-top: 5px;
+            font-size: 10px;
+        }
+        
+        .footer-left {
+            color: #333;
+            padding-top: 30px;
         }
         
         .summary-table {
-            width: 280px;
-            border: none;
+            border-collapse: collapse;
         }
         
         .summary-table td {
             border: 1px solid #333;
-            padding: 5px 10px;
-            font-size: 11px;
+            padding: 4px 10px;
+            font-size: 10px;
         }
         
         .summary-table .label {
             background: #f0f0f0;
             font-weight: 600;
-            width: 100px;
+            text-align: center;
+            width: 80px;
+        }
+        
+        .summary-table .text-right {
+            width: 80px;
         }
         
         .summary-table .total-row td {
             font-weight: 700;
-            font-size: 13px;
         }
         
         .summary-table .total-row .value {
-            color: #1a56db;
+            color: #000;
         }
         
-        .notes-section {
+        .bank-section {
             margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 10px;
+        }
+        
+        .bank-title {
+            font-weight: 600;
+            font-size: 11px;
+            margin-bottom: 5px;
+        }
+        
+        .bank-content {
+            min-height: 30px;
             font-size: 10px;
-            color: #666;
         }
         
         @media print {
@@ -269,24 +290,34 @@
             </tbody>
         </table>
         
-        <div class="summary-section">
+        <div class="footer-section">
+            <div class="footer-left">
+                本請求書は消費税を含む内税表記となっております。
+            </div>
             <table class="summary-table">
                 <tr>
                     <td class="label">合計点数</td>
                     <td class="text-right">{{ items|length if items else 0 }} 点</td>
+                    <td class="label">小 計</td>
+                    <td class="text-right">¥{{ "{:,}".format(keisan.total_amount|default(0)|int) }}</td>
+                </tr>
+                <tr>
+                    <td rowspan="2" class="label">　</td>
+                    <td rowspan="2">　</td>
+                    <td class="label">内税(10%)</td>
+                    <td class="text-right">{{ "{:,}".format((keisan.total_amount|default(0)|int * 10 / 110)|int) }}</td>
                 </tr>
                 <tr class="total-row">
-                    <td class="label">合計金額</td>
+                    <td class="label">合計（税込）</td>
                     <td class="text-right value">¥{{ "{:,}".format(keisan.total_amount|default(0)|int) }}</td>
                 </tr>
             </table>
         </div>
         
-        {% if keisan and keisan.notes %}
-        <div class="notes-section">
-            備考：{{ keisan.notes }}
+        <div class="bank-section">
+            <div class="bank-title">振込先</div>
+            <div class="bank-content">{{ keisan.notes if keisan and keisan.notes else '' }}</div>
         </div>
-        {% endif %}
     </div>
     
     <script>

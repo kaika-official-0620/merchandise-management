@@ -302,12 +302,14 @@
                     <td class="text-right">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>
                 <tr>
-                    <td class="label" colspan="2">内税(10%)</td>
-                    <td class="text-right" colspan="2">{{ "{:,}".format((mitsumori.total_amount|default(0)|int * 10 / 110)|int) }}</td>
+                    <td rowspan="2" class="label">　</td>
+                    <td rowspan="2">　</td>
+                    <td class="label">内税(10%)</td>
+                    <td class="text-right">{{ "{:,}".format((mitsumori.total_amount|default(0)|int * 10 / 110)|int) }}</td>
                 </tr>
                 <tr class="total-row">
-                    <td class="label" colspan="2">合計（税込）</td>
-                    <td class="text-right value" colspan="2">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
+                    <td class="label">合計（税込）</td>
+                    <td class="text-right value">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>
             </table>
         </div>
