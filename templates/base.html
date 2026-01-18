@@ -40,6 +40,15 @@
         </div>
     </nav>
     
+    <!-- 支払い遅延警告バナー -->
+    {% if current_user.is_payment_overdue() %}
+    <div class="payment-warning-banner">
+        <span class="warning-icon">⚠️</span>
+        <span class="warning-text">月謝のお支払いが確認できておりません。お早めにお支払いをお願いいたします。</span>
+        <a href="{{ url_for('profile') }}" class="warning-link">決済情報を確認</a>
+    </div>
+    {% endif %}
+    
     <!-- サイドバーメニュー -->
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
     <aside class="sidebar" id="sidebar">

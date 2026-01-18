@@ -1399,12 +1399,13 @@ class User(UserMixin):
         'backup': 'バックアップ'
     }
     
-    def __init__(self, id, username, email, role, display_name, admin_permissions=None):
+    def __init__(self, id, username, email, role, display_name, admin_permissions=None, subscription_status=None):
         self.id = id
         self.username = username
         self.email = email
         self.role = role
         self.display_name = display_name or username
+        self.subscription_status = subscription_status or 'inactive'
         # admin_permissionsはJSON文字列またはリスト
         if admin_permissions:
             if isinstance(admin_permissions, str):
@@ -1416,6 +1417,17 @@ class User(UserMixin):
                 self.admin_permissions = admin_permissions
         else:
             self.admin_permissions = []
+    
+    def is_payment_overdue(self):
+        """支払いが遅延しているか"""
+        return self.subscription_status == 'past_due'
+    
+    def can_participate_auction(self):
+        """オークションに参加できるか"""
+        # オーナーは常に参加可能、それ以外は支払い遅延時は不可
+        if self.role == 'owner':
+            return True
+        return self.subscription_status != 'past_due'
     
     def is_owner(self):
         """オーナー権限を持っているか"""
@@ -1474,7 +1486,12 @@ def load_user(user_id):
             admin_permissions = user['admin_permissions']
         except (KeyError, TypeError):
             admin_permissions = None
-        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions)
+        # subscription_statusを安全に取得
+        try:
+            subscription_status = user['subscription_status']
+        except (KeyError, TypeError):
+            subscription_status = 'inactive'
+        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions, subscription_status)
     return None
 
 # 管理者専用デコレータ
@@ -4964,6 +4981,10 @@ def proxy_service_bid():
     # ログインチェック
     if not current_user.is_authenticated:
         return jsonify({'success': False, 'error': 'ログインが必要です'}), 401
+    
+    # 支払い遅延チェック
+    if not current_user.can_participate_auction():
+        return jsonify({'success': False, 'error': '月謝のお支払いが確認できていないため、入札できません'}), 403
     
     data = request.get_json() or request.form
     
