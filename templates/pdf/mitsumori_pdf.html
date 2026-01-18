@@ -205,22 +205,22 @@
         <div class="header-section">
             <div class="header-left">
                 <div class="recipient-name">
-                    {{ mitsumori.recipient_name if mitsumori else '' }}<span class="recipient-suffix">御中</span>
+                    {{ mitsumori.company_name if mitsumori and mitsumori.company_name else '' }}<span class="recipient-suffix">御中</span>
                 </div>
                 
                 <div class="recipient-details">
                     <div class="recipient-row">
-                        <span class="recipient-label">お名前：</span>{{ mitsumori.contact_name if mitsumori and mitsumori.contact_name else '' }}
+                        <span class="recipient-label">ご担当者：</span>{{ mitsumori.contact_person if mitsumori and mitsumori.contact_person else '' }}
                     </div>
                     <div class="recipient-row">
-                        <span class="recipient-label">〒</span>{{ mitsumori.recipient_address if mitsumori and mitsumori.recipient_address else '' }}
+                        <span class="recipient-label">〒</span>{{ mitsumori.address if mitsumori and mitsumori.address else '' }}
                     </div>
                 </div>
             </div>
             
             <div class="header-right">
                 <div class="header-right-row">No.：{{ mitsumori.document_no if mitsumori else '' }}</div>
-                <div class="header-right-row">請求日：{{ mitsumori.issue_date if mitsumori else '' }}</div>
+                <div class="header-right-row">発行日：{{ mitsumori.issue_date if mitsumori else '' }}</div>
             </div>
         </div>
         
@@ -228,7 +228,7 @@
         
         <div class="request-amount-box">
             <div class="request-label">請求金額</div>
-            <div class="request-amount">¥{{ "{:,}".format(mitsumori.total_amount if mitsumori else 0) }} (税込)</div>
+            <div class="request-amount">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }} (税込)</div>
         </div>
         
         <table>
@@ -246,10 +246,10 @@
                     {% for item in items %}
                     <tr>
                         <td class="text-center">{{ item.item_no }}</td>
-                        <td>{{ item.product_name }}</td>
-                        <td class="text-center">{{ item.purchase_date if item.purchase_date else '-' }}</td>
-                        <td class="text-center">{{ item.product_code if item.product_code else '-' }}</td>
-                        <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
+                        <td>{{ item.item_name if item.item_name else '' }}</td>
+                        <td class="text-center">{{ item.quantity if item.quantity else '-' }}</td>
+                        <td class="text-center">{{ item.unit if item.unit else '-' }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount|default(0)|int) }}</td>
                     </tr>
                     {% endfor %}
                     {% for i in range(items|length, 15) %}
@@ -281,29 +281,18 @@
                     <td class="label">合計点数</td>
                     <td class="text-right">{{ items|length if items else 0 }} 点</td>
                 </tr>
-                <tr>
-                    <td class="label">小計</td>
-                    <td class="text-right">¥{{ "{:,}".format(mitsumori.subtotal if mitsumori else 0) }}</td>
-                </tr>
-                <tr>
-                    <td class="label">内税(10%)</td>
-                    <td class="text-right">{{ "{:,}".format(mitsumori.tax_amount if mitsumori else 0) }}</td>
-                </tr>
                 <tr class="total-row">
-                    <td class="label">合計（税込）</td>
-                    <td class="text-right value">¥{{ "{:,}".format(mitsumori.total_amount if mitsumori else 0) }}</td>
+                    <td class="label">合計金額</td>
+                    <td class="text-right value">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>
             </table>
         </div>
         
+        {% if mitsumori and mitsumori.notes %}
         <div class="notes-section">
-            本請求書は消費税を含む内税表記となっております。
+            備考：{{ mitsumori.notes }}
         </div>
-        
-        <div class="bank-section">
-            <div class="bank-title">振込先</div>
-            <div>{{ mitsumori.bank_info if mitsumori and mitsumori.bank_info else '' }}</div>
-        </div>
+        {% endif %}
     </div>
     
     <script>

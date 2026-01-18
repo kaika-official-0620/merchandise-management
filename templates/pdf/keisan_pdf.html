@@ -212,12 +212,6 @@
                         オーキッドレジデンス西大井602
                     </div>
                 </div>
-                
-                {% if keisan and keisan.personal_number %}
-                <div class="personal-number">
-                    個人番号：{{ keisan.personal_number }}
-                </div>
-                {% endif %}
             </div>
             
             <div class="header-right">
@@ -230,7 +224,7 @@
         
         <div class="request-amount-box">
             <div class="request-label">請求金額</div>
-            <div class="request-amount">¥{{ "{:,}".format(keisan.total_amount if keisan else 0) }} (税込)</div>
+            <div class="request-amount">¥{{ "{:,}".format(keisan.total_amount|default(0)|int) }} (税込)</div>
         </div>
         
         <table>
@@ -248,10 +242,10 @@
                     {% for item in items %}
                     <tr>
                         <td class="text-center">{{ item.item_no }}</td>
-                        <td>{{ item.product_name }}</td>
-                        <td class="text-center">{{ item.purchase_date if item.purchase_date else '-' }}</td>
-                        <td class="text-center">{{ item.product_code if item.product_code else '-' }}</td>
-                        <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
+                        <td>{{ item.item_name if item.item_name else '' }}</td>
+                        <td class="text-center">{{ item.quantity if item.quantity else '-' }}</td>
+                        <td class="text-center">{{ item.unit if item.unit else '-' }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount|default(0)|int) }}</td>
                     </tr>
                     {% endfor %}
                     {% for i in range(items|length, 15) %}
@@ -283,24 +277,18 @@
                     <td class="label">合計点数</td>
                     <td class="text-right">{{ items|length if items else 0 }} 点</td>
                 </tr>
-                <tr>
-                    <td class="label">小計</td>
-                    <td class="text-right">¥{{ "{:,}".format(keisan.subtotal if keisan else 0) }}</td>
-                </tr>
-                <tr>
-                    <td class="label">内税(10%)</td>
-                    <td class="text-right">{{ "{:,}".format(keisan.tax_amount if keisan else 0) }}</td>
-                </tr>
                 <tr class="total-row">
-                    <td class="label">合計（税込）</td>
-                    <td class="text-right value">¥{{ "{:,}".format(keisan.total_amount if keisan else 0) }}</td>
+                    <td class="label">合計金額</td>
+                    <td class="text-right value">¥{{ "{:,}".format(keisan.total_amount|default(0)|int) }}</td>
                 </tr>
             </table>
         </div>
         
+        {% if keisan and keisan.notes %}
         <div class="notes-section">
-            備考欄：本請求書は消費税を含む内税表記となっております。
+            備考：{{ keisan.notes }}
         </div>
+        {% endif %}
     </div>
     
     <script>
