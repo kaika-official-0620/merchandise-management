@@ -11583,11 +11583,15 @@ def user_kaitori_shoudaku_list():
             ORDER BY created_at DESC
         ''', (current_user.id,))
     
-    kaitori_list = [dict(row) if USE_POSTGRES else dict(zip([d[0] for d in cur.description], row)) for row in cur.fetchall()]
+    rows = cur.fetchall()
+    if USE_POSTGRES:
+        kaitori_list = [dict(row) for row in rows]
+    else:
+        columns = [d[0] for d in cur.description] if cur.description else []
+        kaitori_list = [dict(zip(columns, row)) for row in rows]
     
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     return render_template('kaitori_shoudaku_list.html', kaitori_list=kaitori_list)
 
@@ -11670,16 +11674,14 @@ def user_kaitori_shoudaku_add():
         
         conn.commit()
         cur.close()
-        if USE_POSTGRES:
-            conn.close()
+        conn.close()
         
         flash('買取承諾書を作成しました', 'success')
         return redirect(url_for('user_kaitori_shoudaku_list'))
     
     # GETリクエスト
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     return render_template('kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
 
@@ -11711,8 +11713,7 @@ def user_kaitori_shoudaku_view(id):
             items = []
     
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     if not kaitori:
         flash('買取承諾書が見つかりません', 'error')
@@ -11740,8 +11741,7 @@ def user_kaitori_shoudaku_edit(id):
     
     if not kaitori:
         cur.close()
-        if USE_POSTGRES:
-            conn.close()
+        conn.close()
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('user_kaitori_shoudaku_list'))
     
@@ -11817,8 +11817,7 @@ def user_kaitori_shoudaku_edit(id):
         
         conn.commit()
         cur.close()
-        if USE_POSTGRES:
-            conn.close()
+        conn.close()
         
         flash('買取承諾書を更新しました', 'success')
         return redirect(url_for('user_kaitori_shoudaku_view', id=id))
@@ -11832,8 +11831,7 @@ def user_kaitori_shoudaku_edit(id):
         items = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
     
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     return render_template('kaitori_shoudaku_form.html', kaitori=kaitori, items=items, mode='edit')
 
@@ -11851,8 +11849,7 @@ def user_kaitori_shoudaku_delete(id):
     
     conn.commit()
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     flash('買取承諾書を削除しました', 'success')
     return redirect(url_for('user_kaitori_shoudaku_list'))
@@ -11885,8 +11882,7 @@ def user_kaitori_shoudaku_pdf(id):
             items = []
     
     cur.close()
-    if USE_POSTGRES:
-        conn.close()
+    conn.close()
     
     if not kaitori:
         flash('買取承諾書が見つかりません', 'error')

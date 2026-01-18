@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}書類管理 - 株式会社 開花{% endblock %}
+{% block title %}受信書類一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+<div class="page-header">
+    <h1>受信書類一覧</h1>
+</div>
+
 <!-- タブナビゲーション -->
 <div class="doc-tabs">
     <button class="doc-tab active" data-tab="kaitori">買取明細書</button>
@@ -14,7 +18,6 @@
 <div class="tab-content active" id="tab-kaitori">
     <div class="tab-header">
         <h2>買取明細書</h2>
-        <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
     </div>
     {% if invoices %}
     <div class="doc-cards">
@@ -61,8 +64,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📄</div>
-        <p>買取明細書がありません</p>
-        <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
+        <p>受信した買取明細書がありません</p>
     </div>
     {% endif %}
 </div>
@@ -71,7 +73,6 @@
 <div class="tab-content" id="tab-mitsumori">
     <div class="tab-header">
         <h2>見積依頼書</h2>
-        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
     </div>
     {% if user_mitsumori_list %}
     <div class="doc-cards">
@@ -116,8 +117,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📋</div>
-        <p>見積依頼書がありません</p>
-        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">新規作成</a>
+        <p>受信した見積依頼書がありません</p>
     </div>
     {% endif %}
 </div>
@@ -126,7 +126,6 @@
 <div class="tab-content" id="tab-keisan">
     <div class="tab-header">
         <h2>計算書</h2>
-        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
     </div>
     {% if user_keisan_list %}
     <div class="doc-cards">
@@ -171,13 +170,23 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">🧮</div>
-        <p>計算書がありません</p>
-        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">新規作成</a>
+        <p>受信した計算書がありません</p>
     </div>
     {% endif %}
 </div>
 
 <style>
+/* ページヘッダー */
+.page-header {
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #1e293b;
+}
+
 /* タブナビゲーション */
 .doc-tabs {
     display: flex;
