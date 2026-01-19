@@ -9601,7 +9601,7 @@ def admin_kaitori_list():
         cur.execute("""
             SELECT i.*, u.display_name as user_display_name
             FROM invoices i
-            LEFT JOIN users u ON i.user_id = u.id
+            LEFT JOIN users u ON i.sender_id = u.id
             WHERE i.invoice_no LIKE 'KT-%'
             ORDER BY i.created_at DESC
         """)
@@ -9611,7 +9611,7 @@ def admin_kaitori_list():
         cur.execute("""
             SELECT i.*, u.display_name as user_display_name
             FROM invoices i
-            LEFT JOIN users u ON i.user_id = u.id
+            LEFT JOIN users u ON i.sender_id = u.id
             WHERE i.invoice_no LIKE 'KT-%'
             ORDER BY i.created_at DESC
         """)
