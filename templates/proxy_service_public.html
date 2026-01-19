@@ -593,6 +593,10 @@
             opacity: 0.7;
         }
         
+        .user-info-bar .budget-info .no-budget {
+            color: #dc2626;
+        }
+        
         .login-required {
             background: white;
             border-radius: 12px;
@@ -662,12 +666,15 @@
         {% if current_user.is_authenticated %}
         <div class="user-info-bar">
             <span class="user-name">ログイン中: {{ current_user.display_name or current_user.username }}</span>
-            {% if current_user.proxy_service_budget > 0 %}
             <span class="budget-info">
+                {% if current_user.proxy_service_budget > 0 %}
                 利用可能残高: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</strong>
                 <small>/ ¥{{ "{:,}".format(current_user.proxy_service_budget) }}</small>
+                {% else %}
+                利用可能残高: <strong class="no-budget">¥0</strong>
+                <small>（利用不可）</small>
+                {% endif %}
             </span>
-            {% endif %}
         </div>
         {% if current_user.is_payment_overdue() %}
         <div class="payment-warning-box">

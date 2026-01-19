@@ -1666,14 +1666,14 @@ class User(UserMixin):
     def get_proxy_service_remaining_budget(self):
         """代行仕入れサービスの残り利用可能金額を取得"""
         if self.proxy_service_budget == 0:
-            return None  # 0は無制限
+            return 0  # 0は0円（使えない）
         used = self.get_proxy_service_used_amount()
         return max(0, self.proxy_service_budget - used)
     
     def can_purchase_proxy_item(self, price):
         """代行仕入れサービスで指定金額の商品を購入できるか"""
         if self.proxy_service_budget == 0:
-            return True  # 無制限
+            return False  # 0は使えない
         remaining = self.get_proxy_service_remaining_budget()
         return remaining >= price
     
@@ -6825,7 +6825,7 @@ def import_user_backup():
 @login_required
 @admin_required
 def admin_items():
-    """管理者商品一覧（全商品）"""
+    """管理者商品一覧（管理者/オーナーの商品のみ）"""
     items = []
     users = []
     
@@ -6833,8 +6833,17 @@ def admin_items():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 全商品を取得（シンプルなクエリ）
-            cur.execute("SELECT * FROM merchandise ORDER BY created_at DESC")
+            # 管理者/オーナーのユーザーIDを取得
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
+            admin_users = cur.fetchall()
+            admin_user_ids = [u['id'] for u in admin_users]
+            
+            # 管理者/オーナーの商品のみ取得
+            if admin_user_ids:
+                placeholders = ','.join(['%s'] * len(admin_user_ids))
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", admin_user_ids)
+            else:
+                cur.execute("SELECT * FROM merchandise WHERE 1=0")
             items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
@@ -6859,7 +6868,17 @@ def admin_items():
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.execute("SELECT * FROM merchandise ORDER BY created_at DESC")
+            # 管理者/オーナーのユーザーIDを取得
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
+            admin_users = cur.fetchall()
+            admin_user_ids = [u['id'] for u in admin_users]
+            
+            # 管理者/オーナーの商品のみ取得
+            if admin_user_ids:
+                placeholders = ','.join(['?'] * len(admin_user_ids))
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", admin_user_ids)
+            else:
+                cur.execute("SELECT * FROM merchandise WHERE 1=0")
             items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
@@ -6887,13 +6906,9 @@ def admin_items():
         print(f"Admin items error: {e}")
         import traceback
         traceback.print_exc()
-        # エラー時は空のリストでテンプレートを表示
-        return render_template('admin/items.html', items=[], users=[])
+        return render_template('admin/admin_items.html', items=[], users=[])
     
-    # 管理者商品とユーザー商品を分類
-    admin_items = []
-    user_items = []
-    
+    # 利益計算
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
@@ -6904,17 +6919,113 @@ def admin_items():
                 item.get('shipping_cost', 0) or 0,
                 item.get('commission', 0) or 0
             )
-        
-        # 所有者のロールで分類
-        owner_role = item.get('owner_role')
-        if owner_role in ['admin', 'owner'] or not owner_role:
-            admin_items.append(item)
-        else:
-            user_items.append(item)
     
-    return render_template('admin/items.html', 
-                          admin_items=admin_items, 
-                          user_items=user_items, 
+    return render_template('admin/admin_items.html', 
+                          items=items, 
+                          users=[dict(u) for u in users])
+
+
+@app.route('/admin/user-products')
+@login_required
+@admin_required
+def admin_user_products():
+    """ユーザーの商品一覧（一般ユーザーの商品のみ）"""
+    items = []
+    users = []
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 一般ユーザーのIDを取得
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user'")
+            normal_users = cur.fetchall()
+            normal_user_ids = [u['id'] for u in normal_users]
+            
+            # 一般ユーザーの商品のみ取得
+            if normal_user_ids:
+                placeholders = ','.join(['%s'] * len(normal_user_ids))
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", normal_user_ids)
+            else:
+                cur.execute("SELECT * FROM merchandise WHERE 1=0")
+            items_raw = cur.fetchall()
+            
+            # 転送先ユーザー一覧（全ユーザー）
+            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            users = cur.fetchall()
+            
+            # ユーザー情報をマッピング
+            user_map = {u['id']: u for u in users}
+            items = []
+            for item in items_raw:
+                item_dict = dict(item)
+                user_info = user_map.get(item_dict.get('user_id'))
+                if user_info:
+                    item_dict['owner_username'] = user_info.get('username')
+                    item_dict['owner_display_name'] = user_info.get('display_name')
+                    item_dict['owner_role'] = user_info.get('role')
+                else:
+                    item_dict['owner_username'] = None
+                    item_dict['owner_display_name'] = None
+                    item_dict['owner_role'] = None
+                items.append(item_dict)
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            # 一般ユーザーのIDを取得
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user'")
+            normal_users = cur.fetchall()
+            normal_user_ids = [u['id'] for u in normal_users]
+            
+            # 一般ユーザーの商品のみ取得
+            if normal_user_ids:
+                placeholders = ','.join(['?'] * len(normal_user_ids))
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", normal_user_ids)
+            else:
+                cur.execute("SELECT * FROM merchandise WHERE 1=0")
+            items_raw = cur.fetchall()
+            
+            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            users = cur.fetchall()
+            
+            # ユーザー情報をマッピング
+            user_map = {u['id']: dict(u) for u in users}
+            items = []
+            for item in items_raw:
+                item_dict = dict(item)
+                user_info = user_map.get(item_dict.get('user_id'))
+                if user_info:
+                    item_dict['owner_username'] = user_info.get('username')
+                    item_dict['owner_display_name'] = user_info.get('display_name')
+                    item_dict['owner_role'] = user_info.get('role')
+                else:
+                    item_dict['owner_username'] = None
+                    item_dict['owner_display_name'] = None
+                    item_dict['owner_role'] = None
+                items.append(item_dict)
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"User products error: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template('admin/user_products.html', items=[], users=[])
+    
+    # 利益計算
+    for item in items:
+        if item.get('photo_path'):
+            item['photo_path'] = item['photo_path'].replace('\\', '/')
+        if item.get('sale_date'):
+            item['profit'] = calculate_profit(
+                item.get('sale_price', 0) or 0,
+                item.get('purchase_price', 0) or 0,
+                item.get('shipping_cost', 0) or 0,
+                item.get('commission', 0) or 0
+            )
+    
+    return render_template('admin/user_products.html', 
+                          items=items, 
                           users=[dict(u) for u in users])
 
 @app.route('/admin/items/add', methods=['GET', 'POST'])

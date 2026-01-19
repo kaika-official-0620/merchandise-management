@@ -59,7 +59,7 @@
     </div>
     
     <!-- 代行仕入れサービス残高 -->
-    {% if current_user.proxy_service_budget > 0 %}
+    {% if current_user.proxy_service_budget is not none %}
     <div class="proxy-budget-section">
         <h2>代行仕入れサービス</h2>
         <div class="budget-card">

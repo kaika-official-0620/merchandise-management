@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}管理者の商品 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>管理者の商品</h1>
+    <a href="{{ url_for('admin_add_item') }}" class="btn btn-primary">+ 商品登録</a>
+</div>
+
+{% if items %}
+<div class="bulk-actions">
+    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
+            <span>すべて選択</span>
+        </label>
+        <select name="target_user_id" required style="min-width: 200px;">
+            <option value="">転送先ユーザーを選択</option>
+            {% for user in users %}
+            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="admin-table-container">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th style="width: 40px;"></th>
+                <th>ID</th>
+                <th>写真</th>
+                <th>商品名</th>
+                <th>所有者</th>
+                <th>仕入日</th>
+                <th>仕入額</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr class="{% if item.sale_date %}row-sold{% endif %}">
+                <td>
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
+                </td>
+                <td>{{ item.id }}</td>
+                <td>
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumbnail" alt="">
+                    {% else %}
+                    <span class="no-thumb">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <strong>{{ item.product_name or '-' }}</strong>
+                    {% if item.brand_name %}
+                    <br><small style="color: #64748b;">{{ item.brand_name }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.owner_display_name or item.owner_username %}
+                    <span class="badge badge-admin">{{ item.owner_display_name or item.owner_username }}</span>
+                    {% else %}
+                    <span class="badge badge-admin">未割当</span>
+                    {% endif %}
+                </td>
+                <td>{{ item.purchase_date or '-' }}</td>
+                <td>¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                <td>
+                    {% if item.sale_date %}
+                    <span class="badge badge-sold">売却済</span>
+                    {% elif item.is_listed %}
+                    <span class="badge badge-listed">出品中</span>
+                    {% else %}
+                    <span class="badge badge-pending">未出品</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="empty-cell">管理者の商品がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 転送モーダル -->
+<div id="transfer-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品を転送</h2>
+            <button type="button" class="modal-close" onclick="closeTransferModal()">&times;</button>
+        </div>
+        <form id="transfer-form" method="POST">
+            <div class="modal-body">
+                <p id="transfer-item-name" style="margin-bottom: 1rem; font-weight: 500;"></p>
+                <div class="form-group">
+                    <label for="modal-target-user">転送先ユーザー</label>
+                    <select id="modal-target-user" name="target_user_id" required>
+                        <option value="">選択してください</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeTransferModal()">キャンセル</button>
+                <button type="submit" class="btn btn-primary">転送する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.bulk-actions {
+    background: #f8fafc;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    border-radius: 12px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.125rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.modal-close:hover {
+    color: #1e293b;
+}
+
+.modal-body {
+    padding: 1rem;
+}
+
+.modal-footer {
+    padding: 1rem;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.table-thumbnail {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.no-thumb {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    background: #f1f5f9;
+    line-height: 50px;
+    text-align: center;
+    color: #94a3b8;
+    border-radius: 6px;
+}
+
+.badge-admin {
+    background: #1e40af;
+    color: white;
+}
+</style>
+
+<script>
+function openTransferModal(itemId, itemName) {
+    const modal = document.getElementById('transfer-modal');
+    const form = document.getElementById('transfer-form');
+    const nameEl = document.getElementById('transfer-item-name');
+    
+    form.action = '/admin/items/' + itemId + '/transfer';
+    nameEl.textContent = '商品: ' + itemName;
+    modal.style.display = 'flex';
+}
+
+function closeTransferModal() {
+    document.getElementById('transfer-modal').style.display = 'none';
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+function confirmBulkTransfer() {
+    const checked = document.querySelectorAll('.item-checkbox:checked');
+    const form = document.getElementById('bulk-transfer-form');
+    const targetUser = form.querySelector('select[name="target_user_id"]').value;
+    
+    if (checked.length === 0) {
+        alert('転送する商品を選択してください');
+        return false;
+    }
+    
+    if (!targetUser) {
+        alert('転送先ユーザーを選択してください');
+        return false;
+    }
+    
+    return confirm(checked.length + '件の商品を転送しますか？');
+}
+
+// モーダル外クリックで閉じる
+document.getElementById('transfer-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeTransferModal();
+    }
+});
+</script>
+{% endblock %}

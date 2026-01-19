@@ -62,12 +62,16 @@
             
             <!-- 商品管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger', 'admin_user_products'] %}active{% endif %}" onclick="toggleCategory(this)">
                     商品管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger', 'admin_user_products'] %}open{% endif %}">
+                    {% if current_user.is_admin() %}
+                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' %}active{% endif %}">商品一覧</a>
+                    {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
+                    {% endif %}
                     <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}active{% endif %}">レポート</a>
                 </div>
             </div>
@@ -175,15 +179,25 @@
                 </div>
             </div>
             
-            <!-- ユーザー・商品管理 -->
+            <!-- ユーザー管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    ユーザー・商品管理
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    ユーザー管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
                     <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
-                    <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品管理</a>
+                </div>
+            </div>
+            
+            <!-- 商品管理（管理者の商品） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_items', 'admin_add_item'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    商品管理
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_items', 'admin_add_item'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品一覧</a>
                 </div>
             </div>
             
