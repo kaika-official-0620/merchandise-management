@@ -11709,7 +11709,8 @@ def user_kaitori_shoudaku_add():
     cur.close()
     conn.close()
     
-    return render_template('kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
+    today = datetime.now().strftime('%Y-%m-%d')
+    return render_template('kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add', today=today)
 
 @app.route('/kaitori-shoudaku/<int:id>')
 @login_required
@@ -12049,7 +12050,8 @@ def admin_kaitori_shoudaku_add():
     if DATABASE_URL:
         conn.close()
     
-    return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
+    today = datetime.now().strftime('%Y-%m-%d')
+    return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add', today=today)
 
 @app.route('/admin/kaitori-shoudaku/<int:id>')
 @login_required
