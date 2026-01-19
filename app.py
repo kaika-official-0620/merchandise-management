@@ -12142,7 +12142,7 @@ def admin_kaitori_shoudaku_add():
                 RETURNING id
             ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
                   issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
-            kaitori_id = cur.fetchone()[0]
+            kaitori_id = cur.fetchone()['id']
         else:
             cur.execute('''
                 INSERT INTO admin_kaitori_shoudaku 
@@ -12177,15 +12177,13 @@ def admin_kaitori_shoudaku_add():
         
         conn.commit()
         cur.close()
-        if DATABASE_URL:
-            conn.close()
+        conn.close()
         
         flash('買取承諾書を作成しました', 'success')
         return redirect(url_for('admin_kaitori_shoudaku_list'))
     
     cur.close()
-    if DATABASE_URL:
-        conn.close()
+    conn.close()
     
     today = datetime.now().strftime('%Y-%m-%d')
     return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add', today=today)
