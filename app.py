@@ -7185,7 +7185,7 @@ def admin_shikiriosho_add():
                 RETURNING id
             """, (document_no, current_user.id, recipient_id or None, recipient_name, contact_name, personal_number,
                   issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status))
-            shikiriosho_id = cur.fetchone()[0]
+            shikiriosho_id = cur.fetchone()['id']
             
             for item in items:
                 cur.execute("""
@@ -7996,7 +7996,7 @@ def user_invoice_add():
             """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name, postal_number,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
                   service_type, commission_rate, commission_amount, bank_info, notes, status))
-            invoice_id = cur.fetchone()[0]
+            invoice_id = cur.fetchone()['id']
             
             for item in items:
                 cur.execute("""
@@ -11790,7 +11790,7 @@ def user_kaitori_shoudaku_add():
                     RETURNING id
                 ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
                       issue_date, subtotal, total_amount, payment_method, notes))
-                kaitori_id = cur.fetchone()[0]
+                kaitori_id = cur.fetchone()['id']
             else:
                 cur.execute('''
                     INSERT INTO user_kaitori_shoudaku 
