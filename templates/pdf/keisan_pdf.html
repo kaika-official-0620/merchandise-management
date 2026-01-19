@@ -153,8 +153,8 @@
         
         .col-no { width: 35px; }
         .col-name { }
-        .col-qty { width: 60px; }
-        .col-unit { width: 60px; }
+        .col-date { width: 80px; }
+        .col-code { width: 80px; }
         .col-amount { width: 90px; }
         
         .text-center { text-align: center; }
@@ -272,8 +272,8 @@
                 <tr>
                     <th class="col-no">No.</th>
                     <th class="col-name">商品名／品名</th>
-                    <th class="col-qty">数量</th>
-                    <th class="col-unit">単位</th>
+                    <th class="col-date">仕入れ日</th>
+                    <th class="col-code">商品番号</th>
                     <th class="col-amount">金額(税込)</th>
                 </tr>
             </thead>
@@ -282,8 +282,8 @@
                 <tr>
                     <td class="text-center">{{ i + 1 }}</td>
                     <td>{% if items and i < items|length %}{{ items[i].item_name if items[i].item_name else '' }}{% endif %}</td>
-                    <td class="text-center">{% if items and i < items|length %}{{ items[i].quantity if items[i].quantity else '' }}{% endif %}</td>
-                    <td class="text-center">{% if items and i < items|length %}{{ items[i].unit if items[i].unit else '' }}{% endif %}</td>
+                    <td class="text-center">{% if items and i < items|length %}{{ items[i].purchase_date if items[i].purchase_date else '' }}{% endif %}</td>
+                    <td class="text-center">{% if items and i < items|length %}{{ items[i].product_code if items[i].product_code else '' }}{% endif %}</td>
                     <td class="text-right">{% if items and i < items|length and items[i].amount %}¥{{ "{:,}".format(items[i].amount|int) }}{% endif %}</td>
                 </tr>
                 {% endfor %}

@@ -11596,7 +11596,7 @@ def user_kaitori_shoudaku_list():
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('''
             SELECT * FROM user_kaitori_shoudaku 
             WHERE user_id = %s 
@@ -11610,7 +11610,7 @@ def user_kaitori_shoudaku_list():
         ''', (current_user.id,))
     
     rows = cur.fetchall()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         kaitori_list = [dict(row) for row in rows]
     else:
         columns = [d[0] for d in cur.description] if cur.description else []
@@ -11656,7 +11656,7 @@ def user_kaitori_shoudaku_add():
         
         total_amount = subtotal  # 消費税なし
         
-        if USE_POSTGRES:
+        if DATABASE_URL:
             cur.execute('''
                 INSERT INTO user_kaitori_shoudaku 
                 (document_no, user_id, customer_name, customer_address, customer_phone, 
@@ -11683,7 +11683,7 @@ def user_kaitori_shoudaku_add():
                 price = int(unit_prices[i]) if unit_prices[i] else 0
                 amount = qty * price
                 
-                if USE_POSTGRES:
+                if DATABASE_URL:
                     cur.execute('''
                         INSERT INTO user_kaitori_shoudaku_items 
                         (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
@@ -11718,7 +11718,7 @@ def user_kaitori_shoudaku_view(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
         kaitori = cur.fetchone()
         if kaitori:
@@ -11755,7 +11755,7 @@ def user_kaitori_shoudaku_edit(id):
     cur = conn.cursor()
     
     # データ取得
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
         kaitori = cur.fetchone()
         if kaitori:
@@ -11797,7 +11797,7 @@ def user_kaitori_shoudaku_edit(id):
         total_amount = subtotal
         
         # 更新
-        if USE_POSTGRES:
+        if DATABASE_URL:
             cur.execute('''
                 UPDATE user_kaitori_shoudaku 
                 SET customer_name = %s, customer_address = %s, customer_phone = %s, 
@@ -11826,7 +11826,7 @@ def user_kaitori_shoudaku_edit(id):
                 price = int(unit_prices[i]) if unit_prices[i] else 0
                 amount = qty * price
                 
-                if USE_POSTGRES:
+                if DATABASE_URL:
                     cur.execute('''
                         INSERT INTO user_kaitori_shoudaku_items 
                         (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
@@ -11849,7 +11849,7 @@ def user_kaitori_shoudaku_edit(id):
         return redirect(url_for('user_kaitori_shoudaku_view', id=id))
     
     # GETリクエスト - 明細取得
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -11868,7 +11868,7 @@ def user_kaitori_shoudaku_delete(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
     else:
         cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
@@ -11887,7 +11887,7 @@ def user_kaitori_shoudaku_pdf(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
         kaitori = cur.fetchone()
         if kaitori:
@@ -11930,7 +11930,7 @@ def admin_kaitori_shoudaku_list():
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('''
             SELECT k.*, u.display_name as admin_name 
             FROM admin_kaitori_shoudaku k
@@ -11948,7 +11948,7 @@ def admin_kaitori_shoudaku_list():
         kaitori_list = [dict(zip([d[0] for d in cur.description], row)) for row in cur.fetchall()]
     
     cur.close()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         conn.close()
     
     return render_template('admin/kaitori_shoudaku_list.html', kaitori_list=kaitori_list)
@@ -11995,7 +11995,7 @@ def admin_kaitori_shoudaku_add():
         tax_amount = int(subtotal * tax_rate / 100)
         total_amount = subtotal + tax_amount
         
-        if USE_POSTGRES:
+        if DATABASE_URL:
             cur.execute('''
                 INSERT INTO admin_kaitori_shoudaku 
                 (document_no, admin_id, company_name, company_address, company_phone, contact_name,
@@ -12022,7 +12022,7 @@ def admin_kaitori_shoudaku_add():
                 price = int(unit_prices[i]) if unit_prices[i] else 0
                 amount = qty * price
                 
-                if USE_POSTGRES:
+                if DATABASE_URL:
                     cur.execute('''
                         INSERT INTO admin_kaitori_shoudaku_items 
                         (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
@@ -12039,14 +12039,14 @@ def admin_kaitori_shoudaku_add():
         
         conn.commit()
         cur.close()
-        if USE_POSTGRES:
+        if DATABASE_URL:
             conn.close()
         
         flash('買取承諾書を作成しました', 'success')
         return redirect(url_for('admin_kaitori_shoudaku_list'))
     
     cur.close()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         conn.close()
     
     return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add')
@@ -12062,7 +12062,7 @@ def admin_kaitori_shoudaku_view(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
         kaitori = cur.fetchone()
         if kaitori:
@@ -12083,7 +12083,7 @@ def admin_kaitori_shoudaku_view(id):
             items = []
     
     cur.close()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         conn.close()
     
     if not kaitori:
@@ -12103,14 +12103,14 @@ def admin_kaitori_shoudaku_delete(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('DELETE FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
     else:
         cur.execute('DELETE FROM admin_kaitori_shoudaku WHERE id = ?', (id,))
     
     conn.commit()
     cur.close()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         conn.close()
     
     flash('買取承諾書を削除しました', 'success')
@@ -12127,7 +12127,7 @@ def admin_kaitori_shoudaku_pdf(id):
     conn = get_db()
     cur = conn.cursor()
     
-    if USE_POSTGRES:
+    if DATABASE_URL:
         cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
         kaitori = cur.fetchone()
         if kaitori:
@@ -12148,7 +12148,7 @@ def admin_kaitori_shoudaku_pdf(id):
             items = []
     
     cur.close()
-    if USE_POSTGRES:
+    if DATABASE_URL:
         conn.close()
     
     if not kaitori:
