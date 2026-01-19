@@ -1035,6 +1035,46 @@
                 </div>
             </div>
             
+            <!-- 書類名設定 -->
+            <div class="master-section">
+                <div class="master-section-header">
+                    <h3>書類名設定</h3>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">各書類の表示名をカスタマイズできます。空欄の場合はデフォルト名が使用されます。</p>
+                    <div class="doc-settings-grid">
+                        <div class="form-group">
+                            <label>精算書</label>
+                            <input type="text" name="doc_name_seisan" value="{{ document_settings.get('doc_name_seisan', '') }}" class="form-control" placeholder="精算書">
+                        </div>
+                        <div class="form-group">
+                            <label>買取明細書</label>
+                            <input type="text" name="doc_name_kaitori" value="{{ document_settings.get('doc_name_kaitori', '') }}" class="form-control" placeholder="買取明細書">
+                        </div>
+                        <div class="form-group">
+                            <label>仕切押し書</label>
+                            <input type="text" name="doc_name_shikiriosho" value="{{ document_settings.get('doc_name_shikiriosho', '') }}" class="form-control" placeholder="仕切押し書">
+                        </div>
+                        <div class="form-group">
+                            <label>請求書</label>
+                            <input type="text" name="doc_name_invoice" value="{{ document_settings.get('doc_name_invoice', '') }}" class="form-control" placeholder="請求書">
+                        </div>
+                        <div class="form-group">
+                            <label>見積依頼書</label>
+                            <input type="text" name="doc_name_mitsumori" value="{{ document_settings.get('doc_name_mitsumori', '') }}" class="form-control" placeholder="見積依頼書">
+                        </div>
+                        <div class="form-group">
+                            <label>計算書</label>
+                            <input type="text" name="doc_name_keisan" value="{{ document_settings.get('doc_name_keisan', '') }}" class="form-control" placeholder="計算書">
+                        </div>
+                        <div class="form-group">
+                            <label>買取承諾書</label>
+                            <input type="text" name="doc_name_kaitori_shoudaku" value="{{ document_settings.get('doc_name_kaitori_shoudaku', '') }}" class="form-control" placeholder="買取承諾書">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div style="text-align: center; margin-top: 1.5rem;">
                 <button type="submit" class="btn btn-primary">設定を保存</button>
             </div>

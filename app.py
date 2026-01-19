@@ -5777,6 +5777,10 @@ def admin_document_settings_save():
     setting_keys = [
         'company_name', 'company_address', 'company_phone', 'company_fax', 'company_email',
         'bank_name', 'bank_branch', 'bank_account_type', 'bank_account_number', 'bank_account_name',
+        # 書類名設定
+        'doc_name_seisan', 'doc_name_kaitori', 'doc_name_shikiriosho', 
+        'doc_name_invoice', 'doc_name_mitsumori', 'doc_name_keisan', 'doc_name_kaitori_shoudaku',
+        # 各書類の詳細設定
         'seisan_default_commission_rate', 'seisan_default_notes',
         'kaitori_default_tax_rate', 'kaitori_default_notes',
         'shikiriosho_default_notes', 'shikiriosho_default_payment_terms',
@@ -11594,25 +11598,23 @@ def init_scheduler():
 def user_kaitori_shoudaku_list():
     """買取承諾書一覧（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
     
     if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute('''
             SELECT * FROM user_kaitori_shoudaku 
             WHERE user_id = %s 
             ORDER BY created_at DESC
         ''', (current_user.id,))
+        kaitori_list = [dict(row) for row in cur.fetchall()]
     else:
+        cur = conn.cursor()
         cur.execute('''
             SELECT * FROM user_kaitori_shoudaku 
             WHERE user_id = ? 
             ORDER BY created_at DESC
         ''', (current_user.id,))
-    
-    rows = cur.fetchall()
-    if DATABASE_URL:
-        kaitori_list = [dict(row) for row in rows]
-    else:
+        rows = cur.fetchall()
         columns = [d[0] for d in cur.description] if cur.description else []
         kaitori_list = [dict(zip(columns, row)) for row in rows]
     
@@ -11626,7 +11628,10 @@ def user_kaitori_shoudaku_list():
 def user_kaitori_shoudaku_add():
     """買取承諾書作成（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if request.method == 'POST':
         # 書類番号生成
@@ -11717,9 +11722,9 @@ def user_kaitori_shoudaku_add():
 def user_kaitori_shoudaku_view(id):
     """買取承諾書詳細表示（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
     
     if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
         kaitori = cur.fetchone()
         if kaitori:
@@ -11753,7 +11758,10 @@ def user_kaitori_shoudaku_view(id):
 def user_kaitori_shoudaku_edit(id):
     """買取承諾書編集（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     # データ取得
     if DATABASE_URL:
@@ -11867,7 +11875,10 @@ def user_kaitori_shoudaku_edit(id):
 def user_kaitori_shoudaku_delete(id):
     """買取承諾書削除（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
@@ -11886,7 +11897,10 @@ def user_kaitori_shoudaku_delete(id):
 def user_kaitori_shoudaku_pdf(id):
     """買取承諾書PDF出力（ユーザー用）"""
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
@@ -11929,7 +11943,10 @@ def admin_kaitori_shoudaku_list():
         return redirect(url_for('index'))
     
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('''
@@ -11963,7 +11980,10 @@ def admin_kaitori_shoudaku_add():
         return redirect(url_for('index'))
     
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if request.method == 'POST':
         document_no = f"KSH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -12062,7 +12082,10 @@ def admin_kaitori_shoudaku_view(id):
         return redirect(url_for('index'))
     
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
@@ -12103,7 +12126,10 @@ def admin_kaitori_shoudaku_delete(id):
         return redirect(url_for('index'))
     
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('DELETE FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
@@ -12127,7 +12153,10 @@ def admin_kaitori_shoudaku_pdf(id):
         return redirect(url_for('index'))
     
     conn = get_db()
-    cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     if DATABASE_URL:
         cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))

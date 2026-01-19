@@ -160,61 +160,45 @@
             <!-- ========== 開花管理 ========== -->
             <div class="sidebar-group-label admin-label">開花管理</div>
             
-            <!-- 顧客管理画面（開花→ユーザへの書類作成） -->
+            <!-- 書類作成（親カテゴリ） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    顧客管理書類
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    📝 書類作成
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_shikiriosho_list') }}" class="{% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit'] %}active{% endif %}">精算書</a>
-                    <a href="{{ url_for('admin_kaitori_list') }}" class="{% if request.endpoint in ['admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}">買取明細書</a>
-                    <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}open{% endif %}">
+                    
+                    <!-- 顧客管理書類 -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">顧客管理書類</div>
+                        <a href="{{ url_for('admin_shikiriosho_list') }}" class="{% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit'] %}active{% endif %}">精算書</a>
+                        <a href="{{ url_for('admin_kaitori_list') }}" class="{% if request.endpoint in ['admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit'] %}active{% endif %}">買取明細書</a>
+                        <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
+                    </div>
+                    
+                    <!-- 個人顧客書類 -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">個人顧客書類</div>
+                        <a href="{{ url_for('admin_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}active{% endif %}">買取承諾書（法人版）</a>
+                    </div>
+                    
+                    <!-- 対法人書類 -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">対法人書類</div>
+                        <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}">見積依頼書（対法人）</a>
+                    </div>
                 </div>
             </div>
             
-            <!-- 開花→個人顧客（法人向け買取承諾書） -->
+            <!-- ユーザー・商品管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    個人顧客書類
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    ユーザー・商品管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}active{% endif %}">買取承諾書（法人版）</a>
-                </div>
-            </div>
-            
-            <!-- 開花→外向け（対法人） -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    対法人書類
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}">見積依頼書（対法人）</a>
-                </div>
-            </div>
-            
-            <!-- ユーザー管理 -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    ユーザー管理
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user', 'admin_items', 'admin_add_item'] %}open{% endif %}">
                     <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
-                </div>
-            </div>
-            
-            <!-- マスタ管理 -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_items', 'admin_add_item', 'admin_master_settings'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    マスタ管理
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_items', 'admin_add_item', 'admin_master_settings'] %}open{% endif %}">
                     <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品管理</a>
-                    <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">マスター設定</a>
                 </div>
             </div>
             
@@ -243,17 +227,28 @@
             
             <!-- システム設定 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_stripe_dashboard', 'admin_proxy_service', 'admin_backup'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
-                    システム設定
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_master_settings', 'admin_stripe_dashboard', 'admin_proxy_service', 'admin_backup'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
+                    ⚙️ システム設定
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_stripe_dashboard', 'admin_proxy_service', 'admin_backup'] or 'line' in request.endpoint %}open{% endif %}">
-                    <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
-                    {% if current_user.is_owner() %}
-                    <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
-                    <a href="{{ url_for('admin_line_dashboard') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
-                    {% endif %}
-                    <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_master_settings', 'admin_stripe_dashboard', 'admin_proxy_service', 'admin_backup'] or 'line' in request.endpoint %}open{% endif %}">
+                    
+                    <!-- マスタ管理 -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">マスタ管理</div>
+                        <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">マスター設定</a>
+                    </div>
+                    
+                    <!-- サービス -->
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">サービス</div>
+                        {% if current_user.is_owner() %}
+                        <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
+                        <a href="{{ url_for('admin_line_dashboard') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
+                        {% endif %}
+                        <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
+                        <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+                    </div>
                 </div>
             </div>
             {% endif %}
