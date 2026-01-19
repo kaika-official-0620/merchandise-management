@@ -338,6 +338,8 @@ if DATABASE_URL:
                 sender_id INTEGER REFERENCES users(id),
                 issue_date DATE NOT NULL,
                 payment_due_date DATE,
+                recipient_name VARCHAR(200),
+                postal_number VARCHAR(20),
                 subtotal INTEGER DEFAULT 0,
                 tax_amount_8 INTEGER DEFAULT 0,
                 tax_amount_10 INTEGER DEFAULT 0,
@@ -1070,6 +1072,8 @@ else:
                 sender_id INTEGER REFERENCES users(id),
                 issue_date DATE NOT NULL,
                 payment_due_date DATE,
+                recipient_name TEXT,
+                postal_number TEXT,
                 subtotal INTEGER DEFAULT 0,
                 tax_amount_8 INTEGER DEFAULT 0,
                 tax_amount_10 INTEGER DEFAULT 0,
@@ -7985,7 +7989,7 @@ def user_invoice_add():
         invoice_no = generate_invoice_no()
         
         if DATABASE_URL:
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 INSERT INTO invoices 
                 (invoice_no, sender_id, issue_date, payment_due_date, recipient_name, postal_number,
