@@ -6908,17 +6908,23 @@ def admin_items():
         traceback.print_exc()
         return render_template('admin/admin_items.html', items=[], users=[])
     
-    # 利益計算
+    # 利益計算と利益率の追加
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
         if item.get('sale_date'):
-            item['profit'] = calculate_profit(
-                item.get('sale_price', 0) or 0,
-                item.get('purchase_price', 0) or 0,
-                item.get('shipping_cost', 0) or 0,
-                item.get('commission', 0) or 0
-            )
+            sale_price = item.get('sale_price', 0) or 0
+            purchase_price = item.get('purchase_price', 0) or 0
+            shipping_cost = item.get('shipping_cost', 0) or 0
+            commission = item.get('commission', 0) or 0
+            
+            item['profit'] = calculate_profit(sale_price, purchase_price, shipping_cost, commission)
+            
+            # 利益率計算
+            if sale_price > 0:
+                item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
+            else:
+                item['profit_rate'] = 0
     
     return render_template('admin/admin_items.html', 
                           items=items, 
@@ -7012,17 +7018,23 @@ def admin_user_products():
         traceback.print_exc()
         return render_template('admin/user_products.html', items=[], users=[])
     
-    # 利益計算
+    # 利益計算と利益率の追加
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
         if item.get('sale_date'):
-            item['profit'] = calculate_profit(
-                item.get('sale_price', 0) or 0,
-                item.get('purchase_price', 0) or 0,
-                item.get('shipping_cost', 0) or 0,
-                item.get('commission', 0) or 0
-            )
+            sale_price = item.get('sale_price', 0) or 0
+            purchase_price = item.get('purchase_price', 0) or 0
+            shipping_cost = item.get('shipping_cost', 0) or 0
+            commission = item.get('commission', 0) or 0
+            
+            item['profit'] = calculate_profit(sale_price, purchase_price, shipping_cost, commission)
+            
+            # 利益率計算
+            if sale_price > 0:
+                item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
+            else:
+                item['profit_rate'] = 0
     
     return render_template('admin/user_products.html', 
                           items=items, 
