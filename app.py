@@ -9648,11 +9648,7 @@ def admin_kaitori_add():
         try:
             # フォームデータを取得
             issue_date = request.form.get('issue_date')
-            tax_rate = int(request.form.get('tax_rate', 10))
             seller_id = request.form.get('seller_id') or None
-            seller_name = request.form.get('seller_name', '')
-            seller_address = request.form.get('seller_address', '')
-            seller_phone = request.form.get('seller_phone', '')
             notes = request.form.get('notes', '')
             status = request.form.get('status', 'draft')
             
@@ -9687,20 +9683,18 @@ def admin_kaitori_add():
             # invoicesテーブルに保存
             if DATABASE_URL:
                 cur.execute("""
-                    INSERT INTO invoices (invoice_no, issue_date, customer_name, customer_address, 
-                        customer_phone, total_amount, tax_rate, status, notes, user_id, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO invoices (invoice_no, issue_date, sender_id, total_amount, 
+                        status, notes, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
-                """, (document_no, issue_date, seller_name, seller_address, seller_phone,
-                      total_amount, tax_rate, status, notes, seller_id, datetime.now()))
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, datetime.now()))
                 invoice_id = cur.fetchone()['id']
             else:
                 cur.execute("""
-                    INSERT INTO invoices (invoice_no, issue_date, customer_name, customer_address, 
-                        customer_phone, total_amount, tax_rate, status, notes, user_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (document_no, issue_date, seller_name, seller_address, seller_phone,
-                      total_amount, tax_rate, status, notes, seller_id, datetime.now()))
+                    INSERT INTO invoices (invoice_no, issue_date, sender_id, total_amount, 
+                        status, notes, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, datetime.now()))
                 invoice_id = cur.lastrowid
             
             # 商品明細を保存
@@ -9714,16 +9708,14 @@ def admin_kaitori_add():
                     
                     if DATABASE_URL:
                         cur.execute("""
-                            INSERT INTO invoice_items (invoice_id, item_no, product_name, brand_name, 
-                                purchase_date, item_condition, amount, merchandise_id)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (invoice_id, i + 1, item_name, brand, p_date or None, condition, amount, merch_id))
+                            INSERT INTO invoice_items (invoice_id, item_no, product_name, quantity, amount)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (invoice_id, i + 1, item_name, 1, amount))
                     else:
                         cur.execute("""
-                            INSERT INTO invoice_items (invoice_id, item_no, product_name, brand_name, 
-                                purchase_date, item_condition, amount, merchandise_id)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (invoice_id, i + 1, item_name, brand, p_date or None, condition, amount, merch_id))
+                            INSERT INTO invoice_items (invoice_id, item_no, product_name, quantity, amount)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (invoice_id, i + 1, item_name, 1, amount))
             
             conn.commit()
             flash('買取明細書を保存しました', 'success')
