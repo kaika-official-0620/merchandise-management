@@ -48,6 +48,70 @@
     </div>
 </div>
 
+<!-- ユーザーからの見積依頼書（受信BOX） -->
+<div class="doc-section mitsumori-inbox">
+    <h2>ユーザーからの見積依頼書</h2>
+    {% if user_mitsumori_summary %}
+    <div class="user-mitsumori-list">
+        {% for user in user_mitsumori_summary %}
+        <div class="user-mitsumori-card">
+            <div class="user-header" onclick="toggleUserMitsumori({{ user.user_id }})">
+                <div class="user-info">
+                    <span class="user-name">{{ user.display_name or user.username }}</span>
+                    <span class="mitsumori-count-badge">{{ user.mitsumori_count }}件</span>
+                </div>
+                <div class="status-summary">
+                    {% if user.draft_count and user.draft_count > 0 %}
+                    <span class="status-mini status-draft">下書き {{ user.draft_count }}</span>
+                    {% endif %}
+                    {% if user.completed_count and user.completed_count > 0 %}
+                    <span class="status-mini status-completed">完了 {{ user.completed_count }}</span>
+                    {% endif %}
+                </div>
+                <span class="toggle-icon" id="toggle-icon-{{ user.user_id }}">▼</span>
+            </div>
+            <div class="user-mitsumori-details" id="mitsumori-details-{{ user.user_id }}" style="display: none;">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>件名</th>
+                            <th>発行日</th>
+                            <th>金額</th>
+                            <th>ステータス</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in user_mitsumori_details[user.user_id] %}
+                        <tr>
+                            <td class="doc-no">{{ m.document_no }}</td>
+                            <td>{{ m.subject or '（件名なし）' }}</td>
+                            <td>{{ m.issue_date }}</td>
+                            <td class="amount">¥{{ "{:,}".format(m.total_amount or 0) }}</td>
+                            <td>
+                                {% if m.status == 'completed' %}
+                                <span class="status-badge status-completed">完了</span>
+                                {% else %}
+                                <span class="status-badge status-draft">下書き</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('admin_user_mitsumori_view', id=m.id) }}" class="btn btn-sm btn-info">詳細</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-message">ユーザーからの見積依頼書はありません</p>
+    {% endif %}
+</div>
+
 <!-- ユーザーからの買取明細書（受信） -->
 <div class="doc-section">
     <h2>ユーザーからの買取明細書（承認待ち）</h2>
@@ -185,5 +249,152 @@
     background: #0ea5e9;
     color: white;
 }
+
+/* 見積依頼書受信BOX */
+.mitsumori-inbox {
+    margin-top: 20px;
+}
+
+.mitsumori-inbox h2 {
+    color: #1e40af;
+}
+
+.user-mitsumori-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.user-mitsumori-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.user-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.user-header:hover {
+    background: #f1f5f9;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.mitsumori-count-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.status-summary {
+    display: flex;
+    gap: 8px;
+}
+
+.status-mini {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-mini.status-draft {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-mini.status-completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.toggle-icon {
+    color: #64748b;
+    font-size: 0.85rem;
+    transition: transform 0.3s;
+}
+
+.toggle-icon.open {
+    transform: rotate(180deg);
+}
+
+.user-mitsumori-details {
+    border-top: 1px solid #e2e8f0;
+    padding: 16px;
+    background: white;
+}
+
+.compact-table {
+    font-size: 0.9rem;
+}
+
+.compact-table th,
+.compact-table td {
+    padding: 8px 12px;
+}
+
+.status-badge.status-completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.status-draft {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.empty-message {
+    color: #64748b;
+    text-align: center;
+    padding: 30px;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .user-header {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .status-summary {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
 </style>
+
+<script>
+function toggleUserMitsumori(userId) {
+    const details = document.getElementById('mitsumori-details-' + userId);
+    const icon = document.getElementById('toggle-icon-' + userId);
+    
+    if (details.style.display === 'none') {
+        details.style.display = 'block';
+        icon.classList.add('open');
+    } else {
+        details.style.display = 'none';
+        icon.classList.remove('open');
+    }
+}
+</script>
 {% endblock %}

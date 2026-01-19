@@ -9554,13 +9554,37 @@ def admin_documents_dashboard():
             ORDER BY i.created_at DESC LIMIT 10
         """)
         pending_invoices = [dict(row) for row in cur.fetchall()]
+        
+        # ユーザーからの見積依頼書（ユーザーごとにまとめる）
+        cur.execute("""
+            SELECT u.id as user_id, u.display_name, u.username,
+                   COUNT(m.id) as mitsumori_count,
+                   SUM(CASE WHEN m.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                   SUM(CASE WHEN m.status = 'draft' THEN 1 ELSE 0 END) as draft_count
+            FROM users u
+            INNER JOIN user_mitsumori m ON u.id = m.user_id
+            WHERE u.role != 'admin' AND u.role != 'owner'
+            GROUP BY u.id, u.display_name, u.username
+            ORDER BY MAX(m.created_at) DESC
+        """)
+        user_mitsumori_summary = [dict(row) for row in cur.fetchall()]
+        
+        # 各ユーザーの見積依頼書詳細を取得
+        user_mitsumori_details = {}
+        for user in user_mitsumori_summary:
+            cur.execute("""
+                SELECT * FROM user_mitsumori 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC
+            """, (user['user_id'],))
+            user_mitsumori_details[user['user_id']] = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
         
         # 精算書カウント
         cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
         result = cur.fetchone()
-        seisan_count = dict(result)['count'] if result else 0
+        seisan_count = result[0] if result else 0
         
         # 見積依頼書カウント（管理者向けは今後実装）
         mitsumori_count = 0
@@ -9568,7 +9592,7 @@ def admin_documents_dashboard():
         # 買取明細書カウント
         cur.execute("SELECT COUNT(*) as count FROM invoices")
         result = cur.fetchone()
-        kaitori_count = dict(result)['count'] if result else 0
+        kaitori_count = result[0] if result else 0
         
         # 承認待ち買取明細書
         cur.execute("""
@@ -9578,7 +9602,34 @@ def admin_documents_dashboard():
             WHERE i.status = 'sent' 
             ORDER BY i.created_at DESC LIMIT 10
         """)
-        pending_invoices = [dict(row) for row in cur.fetchall()]
+        columns = [d[0] for d in cur.description]
+        pending_invoices = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        # ユーザーからの見積依頼書（ユーザーごとにまとめる）
+        cur.execute("""
+            SELECT u.id as user_id, u.display_name, u.username,
+                   COUNT(m.id) as mitsumori_count,
+                   SUM(CASE WHEN m.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                   SUM(CASE WHEN m.status = 'draft' THEN 1 ELSE 0 END) as draft_count
+            FROM users u
+            INNER JOIN user_mitsumori m ON u.id = m.user_id
+            WHERE u.role != 'admin' AND u.role != 'owner'
+            GROUP BY u.id, u.display_name, u.username
+            ORDER BY MAX(m.created_at) DESC
+        """)
+        columns = [d[0] for d in cur.description]
+        user_mitsumori_summary = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        # 各ユーザーの見積依頼書詳細を取得
+        user_mitsumori_details = {}
+        for user in user_mitsumori_summary:
+            cur.execute("""
+                SELECT * FROM user_mitsumori 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC
+            """, (user['user_id'],))
+            columns = [d[0] for d in cur.description]
+            user_mitsumori_details[user['user_id']] = [dict(zip(columns, row)) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -9587,8 +9638,64 @@ def admin_documents_dashboard():
         seisan_count=seisan_count,
         mitsumori_count=mitsumori_count,
         kaitori_count=kaitori_count,
-        pending_invoices=pending_invoices
+        pending_invoices=pending_invoices,
+        user_mitsumori_summary=user_mitsumori_summary,
+        user_mitsumori_details=user_mitsumori_details
     )
+
+# ===================
+# ユーザー見積依頼書詳細（管理者用）
+# ===================
+@app.route('/admin/user-mitsumori/<int:id>')
+@login_required
+@admin_required
+def admin_user_mitsumori_view(id):
+    """ユーザーの見積依頼書詳細表示（管理者用）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT m.*, u.display_name as user_name, u.username
+            FROM user_mitsumori m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.id = %s
+        """, (id,))
+        mitsumori = cur.fetchone()
+        
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT m.*, u.display_name as user_name, u.username
+            FROM user_mitsumori m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.id = ?
+        """, (id,))
+        row = cur.fetchone()
+        if row:
+            columns = [d[0] for d in cur.description]
+            mitsumori = dict(zip(columns, row))
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+            columns = [d[0] for d in cur.description]
+            items = [dict(zip(columns, row)) for row in cur.fetchall()]
+        else:
+            mitsumori = None
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('admin_documents_dashboard'))
+    
+    return render_template('admin/user_mitsumori_view.html', mitsumori=mitsumori, items=items)
 
 # ===================
 # 買取明細書（管理者用）
