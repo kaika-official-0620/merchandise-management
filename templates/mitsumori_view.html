@@ -59,16 +59,12 @@
         </div>
 
         <div class="items-section">
-            <h3>明細</h3>
+            <h3>依頼品目</h3>
             <table class="items-table">
                 <thead>
                     <tr>
-                        <th>No.</th>
+                        <th width="15%">No.</th>
                         <th>品名・内容</th>
-                        <th>数量</th>
-                        <th>単位</th>
-                        <th>単価</th>
-                        <th>金額</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -76,23 +72,13 @@
                     <tr>
                         <td>{{ item.item_no }}</td>
                         <td>{{ item.item_name }}</td>
-                        <td class="text-right">{{ item.quantity }}</td>
-                        <td>{{ item.unit or '個' }}</td>
-                        <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
-                        <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="text-center">明細がありません</td>
+                        <td colspan="2" class="text-center">品目がありません</td>
                     </tr>
                     {% endfor %}
                 </tbody>
-                <tfoot>
-                    <tr class="total-row">
-                        <td colspan="5" class="text-right"><strong>合計金額</strong></td>
-                        <td class="text-right total-amount">¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
 
@@ -250,20 +236,6 @@
 .items-table .text-center {
     text-align: center;
     color: #64748b;
-}
-
-.total-row {
-    background: #f0f9ff;
-}
-
-.total-row td {
-    border-top: 2px solid #3b82f6;
-}
-
-.total-amount {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #3b82f6;
 }
 
 .notes-text {

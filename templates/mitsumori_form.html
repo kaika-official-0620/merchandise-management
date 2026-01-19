@@ -50,13 +50,9 @@
             <table class="items-table" id="items-table">
                 <thead>
                     <tr>
-                        <th width="5%">No.</th>
-                        <th width="35%">品名・内容 <span class="required">*</span></th>
-                        <th width="10%">数量</th>
-                        <th width="10%">単位</th>
-                        <th width="15%">単価</th>
-                        <th width="15%">金額</th>
-                        <th width="5%"></th>
+                        <th width="10%">No.</th>
+                        <th width="80%">品名・内容 <span class="required">*</span></th>
+                        <th width="10%"></th>
                     </tr>
                 </thead>
                 <tbody id="items-body">
@@ -65,10 +61,6 @@
                         <tr class="item-row">
                             <td class="item-no">{{ item.item_no }}</td>
                             <td><input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required></td>
-                            <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control calc-input" min="1"></td>
-                            <td><input type="text" name="unit[]" value="{{ item.unit or '個' }}" class="form-control" placeholder="個"></td>
-                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control calc-input" min="0"></td>
-                            <td class="row-amount">¥{{ "{:,}".format(item.amount) }}</td>
                             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
                         </tr>
                         {% endfor %}
@@ -77,10 +69,6 @@
                         <tr class="item-row">
                             <td class="item-no">{{ i + 1 }}</td>
                             <td><input type="text" name="item_name[]" class="form-control"></td>
-                            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
-                            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
-                            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" value="0"></td>
-                            <td class="row-amount">¥0</td>
                             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
                         </tr>
                         {% endfor %}
@@ -88,15 +76,9 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="7">
+                        <td colspan="3">
                             <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
                         </td>
-                    </tr>
-                    <tr class="totals-row">
-                        <td colspan="4"></td>
-                        <td class="text-right"><strong>合計金額</strong></td>
-                        <td id="total-amount">¥0</td>
-                        <td></td>
                     </tr>
                 </tfoot>
             </table>
@@ -214,25 +196,6 @@
     padding: 6px 8px;
 }
 
-.row-amount {
-    font-weight: 600;
-    text-align: right;
-}
-
-.totals-row td {
-    border-top: 2px solid #ddd;
-    font-weight: 600;
-}
-
-.totals-row .text-right {
-    text-align: right;
-}
-
-#total-amount {
-    color: #3b82f6;
-    font-size: 1.1rem;
-}
-
 .form-actions {
     display: flex;
     gap: 10px;
@@ -270,10 +233,6 @@ document.addEventListener('DOMContentLoaded', function() {
         newRow.innerHTML = `
             <td class="item-no">${rowCount + 1}</td>
             <td><input type="text" name="item_name[]" class="form-control"></td>
-            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
-            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
-            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" value="0"></td>
-            <td class="row-amount">¥0</td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
         `;
         itemsBody.appendChild(newRow);
@@ -283,19 +242,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     addRowBtn.addEventListener('click', addRow);
     
-    // 行を削除・計算イベント
+    // 行を削除イベント
     function attachRowEvents(row) {
         const removeBtn = row.querySelector('.remove-row');
-        const calcInputs = row.querySelectorAll('.calc-input');
         
         removeBtn.addEventListener('click', function() {
             row.remove();
             renumberRows();
-            calculateTotals();
-        });
-        
-        calcInputs.forEach(input => {
-            input.addEventListener('input', calculateTotals);
         });
     }
     
@@ -307,30 +260,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 合計を計算
-    function calculateTotals() {
-        let total = 0;
-        
-        const rows = itemsBody.querySelectorAll('.item-row');
-        rows.forEach(row => {
-            const quantity = parseInt(row.querySelector('[name="quantity[]"]').value) || 0;
-            const unitPrice = parseInt(row.querySelector('[name="unit_price[]"]').value) || 0;
-            const amount = quantity * unitPrice;
-            
-            row.querySelector('.row-amount').textContent = '¥' + amount.toLocaleString();
-            total += amount;
-        });
-        
-        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
-    }
-    
     // 既存の行にイベントを付与
     document.querySelectorAll('.item-row').forEach(row => {
         attachRowEvents(row);
     });
-    
-    // 初期計算
-    calculateTotals();
 });
 </script>
 {% endblock %}

@@ -127,6 +127,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # 代行仕入れサービス利用可能金額カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS proxy_service_budget INTEGER DEFAULT 0")
+        except:
+            pass
+        
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
             cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
@@ -431,6 +437,12 @@ if DATABASE_URL:
         try:
             cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS start_datetime TIMESTAMP")
             cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS end_datetime TIMESTAMP")
+        except:
+            pass
+        
+        # 販売方式カラムを追加（既存テーブル用） auction=オークション, fixed=即決
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS sale_mode VARCHAR(20) DEFAULT 'auction'")
         except:
             pass
         
@@ -856,6 +868,12 @@ else:
         except:
             pass
         
+        # 代行仕入れサービス利用可能金額カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN proxy_service_budget INTEGER DEFAULT 0")
+        except:
+            pass
+        
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
             cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
@@ -1180,6 +1198,12 @@ else:
             pass
         try:
             cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN end_datetime TIMESTAMP")
+        except:
+            pass
+        
+        # 販売方式カラムを追加（既存テーブル用） auction=オークション, fixed=即決
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN sale_mode TEXT DEFAULT 'auction'")
         except:
             pass
         
@@ -1559,13 +1583,14 @@ class User(UserMixin):
         'backup': 'バックアップ'
     }
     
-    def __init__(self, id, username, email, role, display_name, admin_permissions=None, subscription_status=None):
+    def __init__(self, id, username, email, role, display_name, admin_permissions=None, subscription_status=None, proxy_service_budget=0):
         self.id = id
         self.username = username
         self.email = email
         self.role = role
         self.display_name = display_name or username
         self.subscription_status = subscription_status or 'inactive'
+        self.proxy_service_budget = proxy_service_budget or 0
         # admin_permissionsはJSON文字列またはリスト
         if admin_permissions:
             if isinstance(admin_permissions, str):
@@ -1609,6 +1634,49 @@ class User(UserMixin):
             return permission in self.admin_permissions
         return False
     
+    def get_proxy_service_used_amount(self):
+        """代行仕入れサービスで使用済みの金額を取得"""
+        conn = get_db()
+        used_amount = 0
+        
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 即決購入で購入した商品の合計金額
+            cur.execute("""
+                SELECT COALESCE(SUM(sale_price), 0) as total
+                FROM merchandise
+                WHERE sales_destination LIKE %s AND sale_date IS NOT NULL
+            """, (f'即決購入: {self.display_name}%',))
+            result = cur.fetchone()
+            used_amount = result['total'] if result else 0
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COALESCE(SUM(sale_price), 0) as total
+                FROM merchandise
+                WHERE sales_destination LIKE ? AND sale_date IS NOT NULL
+            """, (f'即決購入: {self.display_name}%',))
+            result = cur.fetchone()
+            used_amount = result[0] if result else 0
+        
+        cur.close()
+        conn.close()
+        return used_amount
+    
+    def get_proxy_service_remaining_budget(self):
+        """代行仕入れサービスの残り利用可能金額を取得"""
+        if self.proxy_service_budget == 0:
+            return None  # 0は無制限
+        used = self.get_proxy_service_used_amount()
+        return max(0, self.proxy_service_budget - used)
+    
+    def can_purchase_proxy_item(self, price):
+        """代行仕入れサービスで指定金額の商品を購入できるか"""
+        if self.proxy_service_budget == 0:
+            return True  # 無制限
+        remaining = self.get_proxy_service_remaining_budget()
+        return remaining >= price
+    
     def get_role_display(self):
         """権限の表示名を取得"""
         role_names = {
@@ -1651,7 +1719,12 @@ def load_user(user_id):
             subscription_status = user['subscription_status']
         except (KeyError, TypeError):
             subscription_status = 'inactive'
-        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions, subscription_status)
+        # proxy_service_budgetを安全に取得
+        try:
+            proxy_service_budget = user['proxy_service_budget'] or 0
+        except (KeyError, TypeError):
+            proxy_service_budget = 0
+        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions, subscription_status, proxy_service_budget)
     return None
 
 # 管理者専用デコレータ
@@ -3150,6 +3223,11 @@ def user_analytics():
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_item():
+    # 管理者のみ商品登録可能
+    if not current_user.is_admin():
+        flash('商品登録は管理者のみ可能です', 'error')
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         photo_path = None
         additional_photos = []
@@ -3280,6 +3358,11 @@ def add_item():
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_item(id):
+    # 管理者のみ商品編集可能
+    if not current_user.is_admin():
+        flash('商品編集は管理者のみ可能です', 'error')
+        return redirect(url_for('index'))
+    
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3515,6 +3598,11 @@ def view_item(id):
 @app.route('/delete/<int:id>')
 @login_required
 def delete_item(id):
+    # 管理者のみ商品削除可能
+    if not current_user.is_admin():
+        flash('商品削除は管理者のみ可能です', 'error')
+        return redirect(url_for('index'))
+    
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -4046,6 +4134,13 @@ def admin_edit_user(id):
         email = request.form.get('email')
         role = request.form.get('role', 'user')
         new_password = request.form.get('new_password')
+        proxy_service_budget = request.form.get('proxy_service_budget', 0)
+        
+        # 金額をint変換
+        try:
+            proxy_service_budget = int(proxy_service_budget) if proxy_service_budget else 0
+        except ValueError:
+            proxy_service_budget = 0
         
         # 管理者権限の設定を取得
         admin_permissions = request.form.getlist('admin_permissions')
@@ -4064,25 +4159,25 @@ def admin_edit_user(id):
             if new_password and len(new_password) >= 6:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s, proxy_service_budget = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?, proxy_service_budget = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, id))
             else:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s, proxy_service_budget = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, admin_permissions_json, id))
+                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?, proxy_service_budget = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, admin_permissions_json, id))
+                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, id))
             
             conn.commit()
             flash('ユーザー情報を更新しました', 'success')
@@ -4778,6 +4873,7 @@ def admin_proxy_service_settings():
     page_description = request.form.get('page_description', '')
     start_datetime = request.form.get('start_datetime', '') or None
     end_datetime = request.form.get('end_datetime', '') or None
+    sale_mode = request.form.get('sale_mode', 'auction')  # auction or fixed
     selected_users = request.form.getlist('selected_users')
     
     conn = get_db()
@@ -4787,9 +4883,9 @@ def admin_proxy_service_settings():
         cur.execute("""
             UPDATE proxy_service_settings 
             SET is_public = %s, page_title = %s, page_description = %s,
-                start_datetime = %s, end_datetime = %s,
+                start_datetime = %s, end_datetime = %s, sale_mode = %s,
                 updated_by = %s, updated_at = CURRENT_TIMESTAMP
-        """, (is_public, page_title, page_description, start_datetime, end_datetime, current_user.id))
+        """, (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, current_user.id))
         
         # ユーザー選択を更新
         cur.execute("DELETE FROM proxy_service_users")
@@ -4800,9 +4896,9 @@ def admin_proxy_service_settings():
         cur.execute("""
             UPDATE proxy_service_settings 
             SET is_public = ?, page_title = ?, page_description = ?,
-                start_datetime = ?, end_datetime = ?,
+                start_datetime = ?, end_datetime = ?, sale_mode = ?,
                 updated_by = ?, updated_at = CURRENT_TIMESTAMP
-        """, (1 if is_public else 0, page_title, page_description, start_datetime, end_datetime, current_user.id))
+        """, (1 if is_public else 0, page_title, page_description, start_datetime, end_datetime, sale_mode, current_user.id))
         
         cur.execute("DELETE FROM proxy_service_users")
         for user_id in selected_users:
@@ -5096,8 +5192,11 @@ def public_proxy_service():
             return render_template('proxy_service_closed.html', reason='disabled')
         
         # SQLiteの場合、カラム名でアクセスできるようにする
-        columns = ['id', 'is_public', 'page_title', 'page_description', 'start_datetime', 'end_datetime', 'updated_by', 'updated_at']
-        settings_dict = dict(zip(columns, row))
+        columns = ['id', 'is_public', 'page_title', 'page_description', 'start_datetime', 'end_datetime', 'updated_by', 'updated_at', 'sale_mode']
+        settings_dict = dict(zip(columns, row[:len(columns)]))
+        # sale_modeが取得できない場合のデフォルト値
+        if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
+            settings_dict['sale_mode'] = 'auction'
         
         # 日時チェック
         start_dt = settings_dict.get('start_datetime')
@@ -5199,6 +5298,11 @@ def proxy_service_bid():
         if bid_amount < min_bid:
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
+        # 利用可能金額チェック
+        if not current_user.can_purchase_proxy_item(bid_amount):
+            remaining = current_user.get_proxy_service_remaining_budget()
+            return jsonify({'success': False, 'error': f'利用可能残高を超えています（残高: ¥{remaining:,}）'}), 400
+        
         # 入札を保存（user_id含む）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
                    (merchandise_id, user_id, bidder_name, bid_amount))
@@ -5224,6 +5328,11 @@ def proxy_service_bid():
         if bid_amount < min_bid:
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
+        # 利用可能金額チェック
+        if not current_user.can_purchase_proxy_item(bid_amount):
+            remaining = current_user.get_proxy_service_remaining_budget()
+            return jsonify({'success': False, 'error': f'利用可能残高を超えています（残高: ¥{remaining:,}）'}), 400
+        
         # 入札を保存（user_id含む）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
                    (merchandise_id, user_id, bidder_name, bid_amount))
@@ -5237,6 +5346,143 @@ def proxy_service_bid():
         'message': '入札が完了しました',
         'bid_amount': bid_amount,
         'bidder_name': bidder_name
+    })
+
+@app.route('/proxy-service/purchase', methods=['POST'])
+def proxy_service_purchase():
+    """即決購入API（早い者勝ちモード用）"""
+    # ログインチェック
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'error': 'ログインが必要です'}), 401
+    
+    # 支払い遅延チェック
+    if not current_user.can_participate_auction():
+        return jsonify({'success': False, 'error': '月謝のお支払いが確認できていないため、購入できません'}), 403
+    
+    data = request.get_json() or request.form
+    merchandise_id = data.get('merchandise_id')
+    
+    if not merchandise_id:
+        return jsonify({'success': False, 'error': '商品IDが指定されていません'}), 400
+    
+    user_id = current_user.id
+    buyer_name = current_user.display_name or current_user.username
+    
+    conn = get_db()
+    now = datetime.now()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 設定確認
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        settings = cur.fetchone()
+        
+        if not settings or not settings['is_public']:
+            return jsonify({'success': False, 'error': '販売は現在行われていません'}), 400
+        
+        # 即決モードか確認
+        if settings.get('sale_mode') != 'fixed':
+            return jsonify({'success': False, 'error': 'この商品は即決購入できません'}), 400
+        
+        start_dt = settings.get('start_datetime')
+        end_dt = settings.get('end_datetime')
+        
+        if start_dt and now < start_dt:
+            return jsonify({'success': False, 'error': '販売はまだ開始されていません'}), 400
+        if end_dt and now > end_dt:
+            return jsonify({'success': False, 'error': '販売は終了しました'}), 400
+        
+        # 商品確認（未売却かつ代行サービス表示中）
+        cur.execute("SELECT id, listing_price, product_name, sale_date FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 既に購入済みかチェック
+        if item.get('sale_date'):
+            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+        
+        purchase_price = item['listing_price'] or 0
+        
+        # 利用可能金額チェック
+        if not current_user.can_purchase_proxy_item(purchase_price):
+            remaining = current_user.get_proxy_service_remaining_budget()
+            return jsonify({'success': False, 'error': f'利用可能残高が不足しています（残高: ¥{remaining:,}）'}), 400
+        
+        # 商品を購入済みにマーク（sale_dateを設定、購入者情報を記録）
+        cur.execute("""
+            UPDATE merchandise 
+            SET sale_date = %s, 
+                sale_price = %s,
+                sales_destination = %s,
+                show_in_proxy_service = FALSE
+            WHERE id = %s AND sale_date IS NULL
+        """, (now.date(), purchase_price, f'即決購入: {buyer_name}', merchandise_id))
+        
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'この商品は既に購入されました'}), 400
+        
+        # 入札履歴にも記録（購入記録として）
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
+                   (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        row = cur.fetchone()
+        
+        if not row or not row[1]:
+            return jsonify({'success': False, 'error': '販売は現在行われていません'}), 400
+        
+        # sale_modeの位置を確認（8番目のカラム、インデックス8）
+        sale_mode = row[8] if len(row) > 8 else 'auction'
+        if sale_mode != 'fixed':
+            return jsonify({'success': False, 'error': 'この商品は即決購入できません'}), 400
+        
+        # 商品確認
+        cur.execute("SELECT id, listing_price, product_name, sale_date FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 既に購入済みかチェック
+        if item[3]:  # sale_date
+            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+        
+        purchase_price = item[1] or 0
+        
+        # 利用可能金額チェック
+        if not current_user.can_purchase_proxy_item(purchase_price):
+            remaining = current_user.get_proxy_service_remaining_budget()
+            return jsonify({'success': False, 'error': f'利用可能残高が不足しています（残高: ¥{remaining:,}）'}), 400
+        
+        # 商品を購入済みにマーク
+        cur.execute("""
+            UPDATE merchandise 
+            SET sale_date = ?, 
+                sale_price = ?,
+                sales_destination = ?,
+                show_in_proxy_service = 0
+            WHERE id = ? AND sale_date IS NULL
+        """, (now.strftime('%Y-%m-%d'), purchase_price, f'即決購入: {buyer_name}', merchandise_id))
+        
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'この商品は既に購入されました'}), 400
+        
+        # 入札履歴にも記録
+        cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
+                   (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'message': '購入が完了しました！',
+        'purchase_price': purchase_price,
+        'buyer_name': buyer_name
     })
 
 # ===================

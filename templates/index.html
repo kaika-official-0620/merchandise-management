@@ -1128,7 +1128,9 @@
     </div>
     <div class="action-buttons">
         <a href="{{ url_for('export_csv') }}" class="btn btn-export">CSV</a>
+        {% if current_user.is_admin() %}
         <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 登録</a>
+        {% endif %}
     </div>
 </div>
 
@@ -1337,6 +1339,7 @@
                     </td>
                     <td class="action-cell">
                         <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        {% if current_user.is_admin() %}
                         <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                         {% if is_shared_view and not item.sale_date %}
                         <button class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}" 
@@ -1346,12 +1349,17 @@
                         {% endif %}
                         <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
                            onclick="return confirm('削除しますか？')">×</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
                     <td colspan="{% if is_shared_view %}15{% else %}14{% endif %}" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        {% if current_user.is_admin() %}
                         商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+                        {% else %}
+                        商品がありません。
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -1462,14 +1470,20 @@
         </div>
         <div class="card-actions">
             <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+            {% if current_user.is_admin() %}
             <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
             <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
                onclick="return confirm('削除しますか？')">削除</a>
+            {% endif %}
         </div>
     </div>
     {% else %}
     <div class="empty-card">
+        {% if current_user.is_admin() %}
         商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+        {% else %}
+        商品がありません。
+        {% endif %}
     </div>
     {% endfor %}
     <div class="table-info mobile-only">

@@ -287,6 +287,81 @@
             margin-bottom: 0.5rem;
         }
         
+        /* 即決モード用スタイル */
+        .fixed-price {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .fixed-price .price-label {
+            font-size: 0.75rem;
+            color: #b45309;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        
+        .fixed-price .price-amount {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #d97706;
+        }
+        
+        .btn-purchase {
+            width: 100%;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+        
+        .btn-purchase:hover {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        
+        .btn-purchase:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-purchase.sold {
+            background: #64748b;
+            cursor: default;
+        }
+        
+        .item-card.sold {
+            opacity: 0.6;
+            position: relative;
+        }
+        
+        .item-card.sold::after {
+            content: '売り切れ';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 0.5rem 2rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+        
         .current-bid {
             background: #f0fdf4;
             border: 1px solid #86efac;
@@ -487,9 +562,35 @@
             text-align: center;
         }
         
+        .user-info-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
         .user-info-bar .user-name {
             color: #16a34a;
             font-weight: 600;
+        }
+        
+        .user-info-bar .budget-info {
+            background: #fef3c7;
+            color: #b45309;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        
+        .user-info-bar .budget-info strong {
+            font-size: 1rem;
+            color: #d97706;
+        }
+        
+        .user-info-bar .budget-info small {
+            color: #92400e;
+            opacity: 0.7;
         }
         
         .login-required {
@@ -561,6 +662,12 @@
         {% if current_user.is_authenticated %}
         <div class="user-info-bar">
             <span class="user-name">ログイン中: {{ current_user.display_name or current_user.username }}</span>
+            {% if current_user.proxy_service_budget > 0 %}
+            <span class="budget-info">
+                利用可能残高: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</strong>
+                <small>/ ¥{{ "{:,}".format(current_user.proxy_service_budget) }}</small>
+            </span>
+            {% endif %}
         </div>
         {% if current_user.is_payment_overdue() %}
         <div class="payment-warning-box">
@@ -571,15 +678,25 @@
         </div>
         {% else %}
         <div class="contact-info">
+            {% if settings.sale_mode == 'fixed' %}
+            <h2>購入方法</h2>
+            <p>「購入する」ボタンを押すと、その場で購入が確定します。<br>
+            <strong>早い者勝ち</strong>ですので、お早めにどうぞ！</p>
+            {% else %}
             <h2>入札方法</h2>
             <p>入札金額を入力して「入札する」ボタンを押してください。<br>
             最高入札額を上回る金額で入札できます。</p>
+            {% endif %}
         </div>
         {% endif %}
         {% else %}
         <div class="login-required">
             <h2>ログインが必要です</h2>
+            {% if settings.sale_mode == 'fixed' %}
+            <p>購入するにはログインしてください。</p>
+            {% else %}
             <p>オークションに参加するにはログインしてください。</p>
+            {% endif %}
             <a href="{{ url_for('login') }}?next={{ request.path }}" class="btn-login">ログイン</a>
         </div>
         {% endif %}
@@ -615,6 +732,25 @@
                     <span class="item-condition">{{ item.item_condition }}</span>
                     {% endif %}
                     
+                    {% if settings.sale_mode == 'fixed' %}
+                    <!-- 即決モード -->
+                    <div class="fixed-price">
+                        <div class="price-label">販売価格</div>
+                        <div class="price-amount">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    </div>
+                    
+                    {% if current_user.is_authenticated and current_user.can_participate_auction() %}
+                    <button class="btn-purchase" onclick="submitPurchase({{ item.id }}, this)" id="purchase-btn-{{ item.id }}">
+                        🛒 購入する
+                    </button>
+                    <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
+                    {% elif current_user.is_authenticated and current_user.is_payment_overdue() %}
+                    <div class="bid-disabled">
+                        <span>⚠️ 購入不可</span>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <!-- オークションモード -->
                     <div class="start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
                     
                     {% if item.highest_bid %}
@@ -643,6 +779,7 @@
                     <div class="bid-disabled">
                         <span>⚠️ 入札不可</span>
                     </div>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -820,6 +957,52 @@
         .catch(err => {
             submitBtn.disabled = false;
             submitBtn.textContent = '入札する';
+            errorDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
+            errorDiv.style.display = 'block';
+        });
+    }
+    
+    // 即決購入処理
+    function submitPurchase(itemId, btn) {
+        if (!confirm('この商品を購入しますか？\n購入後のキャンセルはできません。')) {
+            return;
+        }
+        
+        const errorDiv = document.getElementById('error-' + itemId);
+        errorDiv.style.display = 'none';
+        btn.disabled = true;
+        btn.textContent = '処理中...';
+        
+        fetch('/proxy-service/purchase', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                merchandise_id: itemId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 購入成功 - カードを売り切れ表示に
+                const itemCard = document.getElementById('item-' + itemId);
+                itemCard.classList.add('sold');
+                btn.textContent = '✓ 購入済み';
+                btn.classList.add('sold');
+                btn.disabled = true;
+                
+                alert('購入が完了しました！\n¥' + data.purchase_price.toLocaleString());
+            } else {
+                btn.disabled = false;
+                btn.textContent = '🛒 購入する';
+                errorDiv.textContent = data.error;
+                errorDiv.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = '🛒 購入する';
             errorDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
             errorDiv.style.display = 'block';
         });

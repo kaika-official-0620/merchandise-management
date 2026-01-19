@@ -75,6 +75,20 @@
         </div>
         
         <div class="form-section">
+            <h2>代行仕入れサービス</h2>
+            <div class="form-group">
+                <label for="proxy_service_budget">利用可能金額</label>
+                <div class="budget-input-group">
+                    <span class="budget-prefix">¥</span>
+                    <input type="number" id="proxy_service_budget" name="proxy_service_budget" 
+                           value="{{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }}"
+                           min="0" step="1000" class="form-control budget-input">
+                </div>
+                <small>このユーザーが代行仕入れサービスで使用できる上限金額（0=無制限）</small>
+            </div>
+        </div>
+        
+        <div class="form-section">
             <h2>パスワード{% if user %}変更{% endif %}</h2>
             
             {% if not user %}
@@ -138,6 +152,28 @@
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid #e2e8f0;
+}
+
+.budget-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.budget-prefix {
+    background: #f1f5f9;
+    border: 1px solid #d1d5db;
+    border-right: none;
+    padding: 10px 12px;
+    border-radius: 6px 0 0 6px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.budget-input {
+    border-radius: 0 6px 6px 0 !important;
+    font-size: 1.1rem;
+    font-weight: 600;
 }
 </style>
 
