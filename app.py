@@ -11772,55 +11772,67 @@ def user_kaitori_shoudaku_add():
         subtotal = 0
         for i in range(len(product_names)):
             if product_names[i]:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty_str = quantities[i] if i < len(quantities) else ''
+                price_str = unit_prices[i] if i < len(unit_prices) else ''
+                qty = int(qty_str) if qty_str else 1
+                price = int(price_str) if price_str else 0
                 subtotal += qty * price
         
         total_amount = subtotal  # 消費税なし
         
-        if DATABASE_URL:
-            cur.execute('''
-                INSERT INTO user_kaitori_shoudaku 
-                (document_no, user_id, customer_name, customer_address, customer_phone, 
-                issue_date, subtotal, total_amount, payment_method, notes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
-                  issue_date, subtotal, total_amount, payment_method, notes))
-            kaitori_id = cur.fetchone()[0]
-        else:
-            cur.execute('''
-                INSERT INTO user_kaitori_shoudaku 
-                (document_no, user_id, customer_name, customer_address, customer_phone, 
-                issue_date, subtotal, total_amount, payment_method, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
-                  issue_date, subtotal, total_amount, payment_method, notes))
-            kaitori_id = cur.lastrowid
+        try:
+            if DATABASE_URL:
+                cur.execute('''
+                    INSERT INTO user_kaitori_shoudaku 
+                    (document_no, user_id, customer_name, customer_address, customer_phone, 
+                    issue_date, subtotal, total_amount, payment_method, notes)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
+                      issue_date, subtotal, total_amount, payment_method, notes))
+                kaitori_id = cur.fetchone()[0]
+            else:
+                cur.execute('''
+                    INSERT INTO user_kaitori_shoudaku 
+                    (document_no, user_id, customer_name, customer_address, customer_phone, 
+                    issue_date, subtotal, total_amount, payment_method, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
+                      issue_date, subtotal, total_amount, payment_method, notes))
+                kaitori_id = cur.lastrowid
+            
+            # 明細追加
+            for i, product_name in enumerate(product_names):
+                if product_name:
+                    qty_str = quantities[i] if i < len(quantities) else ''
+                    price_str = unit_prices[i] if i < len(unit_prices) else ''
+                    qty = int(qty_str) if qty_str else 1
+                    price = int(price_str) if price_str else 0
+                    amount = qty * price
+                    
+                    if DATABASE_URL:
+                        cur.execute('''
+                            INSERT INTO user_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+                    else:
+                        cur.execute('''
+                            INSERT INTO user_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+            
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            flash(f'買取承諾書の作成に失敗しました: {str(e)}', 'error')
+            return redirect(url_for('user_kaitori_shoudaku_add'))
         
-        # 明細追加
-        for i, product_name in enumerate(product_names):
-            if product_name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
-                amount = qty * price
-                
-                if DATABASE_URL:
-                    cur.execute('''
-                        INSERT INTO user_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
-                else:
-                    cur.execute('''
-                        INSERT INTO user_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
-        
-        conn.commit()
         cur.close()
         conn.close()
         
@@ -11916,58 +11928,70 @@ def user_kaitori_shoudaku_edit(id):
         subtotal = 0
         for i in range(len(product_names)):
             if product_names[i]:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty_str = quantities[i] if i < len(quantities) else ''
+                price_str = unit_prices[i] if i < len(unit_prices) else ''
+                qty = int(qty_str) if qty_str else 1
+                price = int(price_str) if price_str else 0
                 subtotal += qty * price
         
         total_amount = subtotal
         
-        # 更新
-        if DATABASE_URL:
-            cur.execute('''
-                UPDATE user_kaitori_shoudaku 
-                SET customer_name = %s, customer_address = %s, customer_phone = %s, 
-                issue_date = %s, subtotal = %s, total_amount = %s, payment_method = %s, notes = %s,
-                updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
-            
-            # 明細削除して再作成
-            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s', (id,))
-        else:
-            cur.execute('''
-                UPDATE user_kaitori_shoudaku 
-                SET customer_name = ?, customer_address = ?, customer_phone = ?, 
-                issue_date = ?, subtotal = ?, total_amount = ?, payment_method = ?, notes = ?,
-                updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
-            
-            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ?', (id,))
-        
-        # 明細追加
-        for i, product_name in enumerate(product_names):
-            if product_name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
-                amount = qty * price
+        try:
+            # 更新
+            if DATABASE_URL:
+                cur.execute('''
+                    UPDATE user_kaitori_shoudaku 
+                    SET customer_name = %s, customer_address = %s, customer_phone = %s, 
+                    issue_date = %s, subtotal = %s, total_amount = %s, payment_method = %s, notes = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
                 
-                if DATABASE_URL:
-                    cur.execute('''
-                        INSERT INTO user_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
-                else:
-                    cur.execute('''
-                        INSERT INTO user_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
+                # 明細削除して再作成
+                cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s', (id,))
+            else:
+                cur.execute('''
+                    UPDATE user_kaitori_shoudaku 
+                    SET customer_name = ?, customer_address = ?, customer_phone = ?, 
+                    issue_date = ?, subtotal = ?, total_amount = ?, payment_method = ?, notes = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
+                
+                cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ?', (id,))
+            
+            # 明細追加
+            for i, product_name in enumerate(product_names):
+                if product_name:
+                    qty_str = quantities[i] if i < len(quantities) else ''
+                    price_str = unit_prices[i] if i < len(unit_prices) else ''
+                    qty = int(qty_str) if qty_str else 1
+                    price = int(price_str) if price_str else 0
+                    amount = qty * price
+                    
+                    if DATABASE_URL:
+                        cur.execute('''
+                            INSERT INTO user_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+                    else:
+                        cur.execute('''
+                            INSERT INTO user_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+            
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            flash(f'買取承諾書の更新に失敗しました: {str(e)}', 'error')
+            return redirect(url_for('user_kaitori_shoudaku_edit', id=id))
         
-        conn.commit()
         cur.close()
         conn.close()
         
@@ -12126,56 +12150,68 @@ def admin_kaitori_shoudaku_add():
         subtotal = 0
         for i in range(len(product_names)):
             if product_names[i]:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty_str = quantities[i] if i < len(quantities) else ''
+                price_str = unit_prices[i] if i < len(unit_prices) else ''
+                qty = int(qty_str) if qty_str else 1
+                price = int(price_str) if price_str else 0
                 subtotal += qty * price
         
         tax_amount = int(subtotal * tax_rate / 100)
         total_amount = subtotal + tax_amount
         
-        if DATABASE_URL:
-            cur.execute('''
-                INSERT INTO admin_kaitori_shoudaku 
-                (document_no, admin_id, company_name, company_address, company_phone, contact_name,
-                issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
-                  issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
-            kaitori_id = cur.fetchone()['id']
-        else:
-            cur.execute('''
-                INSERT INTO admin_kaitori_shoudaku 
-                (document_no, admin_id, company_name, company_address, company_phone, contact_name,
-                issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
-                  issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
-            kaitori_id = cur.lastrowid
+        try:
+            if DATABASE_URL:
+                cur.execute('''
+                    INSERT INTO admin_kaitori_shoudaku 
+                    (document_no, admin_id, company_name, company_address, company_phone, contact_name,
+                    issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
+                      issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
+                kaitori_id = cur.fetchone()['id']
+            else:
+                cur.execute('''
+                    INSERT INTO admin_kaitori_shoudaku 
+                    (document_no, admin_id, company_name, company_address, company_phone, contact_name,
+                    issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (document_no, current_user.id, company_name, company_address, company_phone, contact_name,
+                      issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes))
+                kaitori_id = cur.lastrowid
+            
+            # 明細追加
+            for i, product_name in enumerate(product_names):
+                if product_name:
+                    qty_str = quantities[i] if i < len(quantities) else ''
+                    price_str = unit_prices[i] if i < len(unit_prices) else ''
+                    qty = int(qty_str) if qty_str else 1
+                    price = int(price_str) if price_str else 0
+                    amount = qty * price
+                    
+                    if DATABASE_URL:
+                        cur.execute('''
+                            INSERT INTO admin_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+                    else:
+                        cur.execute('''
+                            INSERT INTO admin_kaitori_shoudaku_items 
+                            (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
+                              conditions[i] if i < len(conditions) else '', qty, price, amount))
+            
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            flash(f'買取承諾書の作成に失敗しました: {str(e)}', 'error')
+            return redirect(url_for('admin_kaitori_shoudaku_add'))
         
-        # 明細追加
-        for i, product_name in enumerate(product_names):
-            if product_name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
-                amount = qty * price
-                
-                if DATABASE_URL:
-                    cur.execute('''
-                        INSERT INTO admin_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
-                else:
-                    cur.execute('''
-                        INSERT INTO admin_kaitori_shoudaku_items 
-                        (kaitori_shoudaku_id, item_no, product_name, brand_name, condition, quantity, unit_price, amount)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (kaitori_id, i+1, product_name, brand_names[i] if i < len(brand_names) else '',
-                          conditions[i] if i < len(conditions) else '', qty, price, amount))
-        
-        conn.commit()
         cur.close()
         conn.close()
         
