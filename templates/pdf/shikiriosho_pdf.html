@@ -160,36 +160,32 @@
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         
-        .summary-section {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 10px;
-        }
-        
         .summary-table {
-            width: 280px;
+            width: 100%;
             border: none;
+            margin-top: 0;
         }
         
         .summary-table td {
             border: 1px solid #333;
-            padding: 5px 10px;
+            padding: 6px 10px;
             font-size: 11px;
         }
         
         .summary-table .label {
-            background: #f0f0f0;
+            background: #d4e5f7;
             font-weight: 600;
-            width: 100px;
+            width: 80px;
+            text-align: center;
         }
         
         .summary-table .total-row td {
             font-weight: 700;
-            font-size: 13px;
+            font-size: 12px;
         }
         
         .summary-table .total-row .value {
-            color: #1a56db;
+            color: #000;
         }
         
         .notes-section {
@@ -269,21 +265,27 @@
             </tbody>
         </table>
         
-        <div class="summary-section">
-            <table class="summary-table">
-                <tr>
-                    <td class="label">合計点数</td>
-                    <td class="text-right">{{ items|length if items else 0 }} 点</td>
-                </tr>
-                <tr class="total-row">
-                    <td class="label">合計金額</td>
-                    <td class="text-right value">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }}</td>
-                </tr>
-            </table>
-        </div>
+        <table class="summary-table">
+            <tr>
+                <td class="label">合計点数</td>
+                <td class="text-right">{{ items|length if items else 0 }} 点</td>
+                <td class="label">小 計</td>
+                <td class="text-right">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }}</td>
+            </tr>
+            <tr>
+                <td rowspan="2" class="label" style="border-bottom: none;"></td>
+                <td rowspan="2" style="border-bottom: none;"></td>
+                <td class="label">内税(10%)</td>
+                <td class="text-right">{{ "{:,}".format((shikiriosho.total_amount|default(0)|int * 10 / 110)|int) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td class="label">合計（税込）</td>
+                <td class="text-right value">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }}</td>
+            </tr>
+        </table>
         
         <div class="notes-section">
-            備考：本請求書は消費税を含む内税表記となっております。
+            <strong>備考欄：</strong>　本請求書は消費税を含む内税表記となっております。
         </div>
     </div>
     

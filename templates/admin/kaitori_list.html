@@ -29,19 +29,19 @@
         <tbody>
             {% for doc in kaitori_list %}
             <tr>
-                <td class="doc-no">{{ doc.document_no }}</td>
+                <td class="doc-no">{{ doc.invoice_no }}</td>
                 <td>
-                    {% if doc.seller_display_name %}
-                        {{ doc.seller_display_name }}
-                    {% elif doc.seller_name %}
-                        {{ doc.seller_name }}
+                    {% if doc.user_display_name %}
+                        {{ doc.user_display_name }}
+                    {% elif doc.customer_name %}
+                        {{ doc.customer_name }}
                     {% else %}
                         <span class="text-muted">未設定</span>
                     {% endif %}
                 </td>
                 <td>{{ doc.issue_date }}</td>
-                <td class="text-center">{{ doc.item_count }} 点</td>
-                <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
+                <td class="text-center">-</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount|default(0)|int) }}</td>
                 <td class="text-center">
                     {% if doc.id_document_path %}
                         <span class="doc-attached">○</span>
