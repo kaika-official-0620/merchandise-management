@@ -614,6 +614,17 @@
     color: #065f46;
 }
 
+.status-badge.pending-sale {
+    background: #fef3c7;
+    color: #92400e;
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 .status-badge.listed {
     background: #dbeafe;
     color: #1e40af;
@@ -952,6 +963,20 @@
     background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+/* 申請修正ボタン */
+.btn-edit-request {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+}
+
+.btn-edit-request:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
 /* 売却申請モーダル */
@@ -1509,6 +1534,8 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
+                        {% elif item.pending_sale_request %}
+                        <span class="status-badge pending-sale">申請中</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1535,11 +1562,19 @@
                         <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;" title="1日以上経過した商品はオーナーのみ削除可能">×</span>
                         {% endif %}
                         {% else %}
-                        {# ユーザー向け：売却申請ボタン（売却済み以外で表示） #}
+                        {# ユーザー向け #}
                         {% if not item.sale_date %}
-                        <button class="btn btn-sm btn-sale-request" onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
-                            売却申請
-                        </button>
+                            {% if item.pending_sale_request %}
+                            {# 申請中の場合は修正ボタン #}
+                            <button class="btn btn-sm btn-edit-request" onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                                申請修正
+                            </button>
+                            {% else %}
+                            {# 未申請の場合は新規申請ボタン #}
+                            <button class="btn btn-sm btn-sale-request" onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                                売却申請
+                            </button>
+                            {% endif %}
                         {% endif %}
                         {% endif %}
                     </td>
@@ -1608,6 +1643,8 @@
             <div class="card-status">
                 {% if item.sale_date %}
                 <span class="status-badge sold">売却済</span>
+                {% elif item.pending_sale_request %}
+                <span class="status-badge pending-sale">申請中</span>
                 {% elif item.is_listed %}
                 <span class="status-badge listed">出品中</span>
                 {% else %}
@@ -1675,11 +1712,19 @@
             <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;" title="1日以上経過">削除不可</span>
             {% endif %}
             {% else %}
-            {# ユーザー向け：売却申請ボタン（売却済み以外で表示） #}
+            {# ユーザー向け #}
             {% if not item.sale_date %}
-            <button class="btn btn-sm btn-sale-request" onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
-                売却申請
-            </button>
+                {% if item.pending_sale_request %}
+                {# 申請中の場合は修正ボタン #}
+                <button class="btn btn-sm btn-edit-request" onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                    申請修正
+                </button>
+                {% else %}
+                {# 未申請の場合は新規申請ボタン #}
+                <button class="btn btn-sm btn-sale-request" onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                    売却申請
+                </button>
+                {% endif %}
             {% endif %}
             {% endif %}
         </div>
@@ -2108,6 +2153,68 @@ document.getElementById('saleRequestModal')?.addEventListener('click', function(
         closeSaleRequestModal();
     }
 });
+
+// ========== 売却申請修正機能 ==========
+function openEditRequestModal(requestId, productName, salePrice, qrImagePath) {
+    document.getElementById('editRequestId').value = requestId;
+    document.getElementById('editRequestProductName').textContent = productName;
+    document.getElementById('editRequestPrice').value = salePrice || '';
+    document.getElementById('editRequestQrImage').value = '';
+    
+    const uploadArea = document.getElementById('editFileUploadArea');
+    const uploadText = document.getElementById('editFileUploadText');
+    const uploadName = document.getElementById('editFileUploadName');
+    const currentImage = document.getElementById('editCurrentImage');
+    
+    uploadArea.classList.remove('has-file');
+    uploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
+    uploadName.textContent = '';
+    
+    // 現在の画像を表示
+    if (qrImagePath) {
+        currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
+        currentImage.style.display = 'block';
+    } else {
+        currentImage.innerHTML = '';
+        currentImage.style.display = 'none';
+    }
+    
+    document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
+    document.getElementById('editRequestModal').classList.add('open');
+}
+
+function closeEditRequestModal() {
+    document.getElementById('editRequestModal').classList.remove('open');
+}
+
+// 編集モーダルのファイル選択時の処理
+document.addEventListener('DOMContentLoaded', function() {
+    const editFileInput = document.getElementById('editRequestQrImage');
+    const editUploadArea = document.getElementById('editFileUploadArea');
+    const editUploadText = document.getElementById('editFileUploadText');
+    const editUploadName = document.getElementById('editFileUploadName');
+    
+    if (editFileInput) {
+        editFileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                editUploadArea.classList.add('has-file');
+                editUploadText.textContent = '新しい画像を選択済み';
+                editUploadName.textContent = this.files[0].name;
+            } else {
+                editUploadArea.classList.remove('has-file');
+                editUploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
+                editUploadName.textContent = '';
+            }
+        });
+    }
+});
+
+// モーダル外クリックで閉じる
+document.getElementById('editRequestModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeEditRequestModal();
+    }
+});
 </script>
 
 {% if not current_user.is_admin() %}
@@ -2147,5 +2254,63 @@ document.getElementById('saleRequestModal')?.addEventListener('click', function(
         </form>
     </div>
 </div>
+
+<!-- 売却申請修正モーダル -->
+<div class="sale-request-modal" id="editRequestModal">
+    <div class="sale-request-content" style="background: white;">
+        <div class="sale-request-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+            <h3>📝 売却申請の修正</h3>
+            <button class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
+            <input type="hidden" id="editRequestId" name="request_id" value="">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="editRequestProductName"></div>
+                
+                <div class="sale-request-form">
+                    <div class="form-group">
+                        <label>売上金額（税込） <small>※必須</small></label>
+                        <input type="number" id="editRequestPrice" name="sale_price" required min="1" placeholder="販売価格を入力">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>現在のQRコード画像</label>
+                        <div id="editCurrentImage" style="margin-bottom: 10px; display: none;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>新しいQRコード画像 <small>（変更する場合のみ）</small></label>
+                        <div class="file-upload-area" id="editFileUploadArea" onclick="document.getElementById('editRequestQrImage').click();">
+                            <div class="file-upload-icon">📷</div>
+                            <div class="file-upload-text" id="editFileUploadText">クリックまたはドラッグして新しい画像を選択</div>
+                            <div class="file-upload-name" id="editFileUploadName"></div>
+                        </div>
+                        <input type="file" id="editRequestQrImage" name="qr_image" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+            </div>
+            <div class="sale-request-footer" style="flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="btn btn-cancel" onclick="closeEditRequestModal()" style="flex: 1;">キャンセル</button>
+                    <button type="submit" class="btn" style="flex: 1; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; border: none;">修正を保存</button>
+                </div>
+                <button type="button" class="btn" onclick="cancelSaleRequest()" style="width: 100%; background: #fee2e2; color: #991b1b; border: none;">申請をキャンセル</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function cancelSaleRequest() {
+    if (confirm('売却申請をキャンセルしますか？')) {
+        const requestId = document.getElementById('editRequestId').value;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/sale-request/cancel/' + requestId;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
 {% endif %}
 {% endblock %}
