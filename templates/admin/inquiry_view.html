@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}{{ inquiry.title }} - 問い合わせ管理{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>問い合わせ詳細</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('admin_inquiries') }}" class="btn btn-secondary">← 一覧に戻る</a>
+    </div>
+</div>
+
+<div class="inquiry-detail-container">
+    <div class="detail-grid">
+        <!-- 左カラム：問い合わせ詳細 -->
+        <div class="main-column">
+            <!-- 問い合わせ情報 -->
+            <div class="inquiry-info-card">
+                <div class="inquiry-header">
+                    <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
+                    <div class="status-selector">
+                        <select id="statusSelect" class="status-select status-{{ inquiry.status }}" onchange="changeStatus(this.value)">
+                            {% for key, value in statuses.items() %}
+                            <option value="{{ key }}" {% if inquiry.status == key %}selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <h2 class="inquiry-title">{{ inquiry.title }}</h2>
+                <div class="inquiry-content">
+                    {{ inquiry.content | replace('\n', '<br>') | safe }}
+                </div>
+            </div>
+            
+            <!-- やり取り履歴 -->
+            <div class="thread-section">
+                <h3>やり取り履歴</h3>
+                
+                {% if replies %}
+                <div class="thread-list">
+                    {% for reply in replies %}
+                    <div class="thread-item {% if reply.is_admin_reply %}admin-reply{% else %}user-reply{% endif %}">
+                        <div class="thread-header">
+                            <span class="thread-author">
+                                {% if reply.is_admin_reply %}
+                                <span class="admin-badge">管理者</span>
+                                {% else %}
+                                <span class="user-badge">ユーザー</span>
+                                {% endif %}
+                                {{ reply.display_name or reply.username }}
+                            </span>
+                            <span class="thread-date">{{ reply.created_at.strftime('%Y/%m/%d %H:%M') if reply.created_at else '-' }}</span>
+                        </div>
+                        <div class="thread-content">
+                            {{ reply.content | replace('\n', '<br>') | safe }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="no-replies">まだ返信はありません</div>
+                {% endif %}
+            </div>
+            
+            <!-- 返信フォーム -->
+            <div class="reply-form-section">
+                <h3>返信を送信</h3>
+                <form method="POST" action="{{ url_for('admin_inquiry_reply', id=inquiry.id) }}">
+                    <div class="form-group">
+                        <textarea name="content" class="form-control" rows="4" required
+                                  placeholder="返信内容を入力してください"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group status-change-group">
+                            <label>返信後のステータス</label>
+                            <select name="status" class="form-control-sm">
+                                <option value="">変更しない</option>
+                                {% for key, value in statuses.items() %}
+                                <option value="{{ key }}" {% if key == 'in_progress' %}selected{% endif %}>{{ value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">返信を送信</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 右カラム：ユーザー情報 -->
+        <div class="side-column">
+            <div class="user-info-card">
+                <h3>送信者情報</h3>
+                <div class="user-info-item">
+                    <label>ユーザー名</label>
+                    <span>{{ inquiry.display_name or inquiry.username }}</span>
+                </div>
+                <div class="user-info-item">
+                    <label>メールアドレス</label>
+                    <span>{{ inquiry.email }}</span>
+                </div>
+                <div class="user-info-item">
+                    <label>送信日時</label>
+                    <span>{{ inquiry.created_at.strftime('%Y/%m/%d %H:%M') if inquiry.created_at else '-' }}</span>
+                </div>
+                <div class="user-info-item">
+                    <label>最終更新</label>
+                    <span>{{ inquiry.updated_at.strftime('%Y/%m/%d %H:%M') if inquiry.updated_at else '-' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.inquiry-detail-container {
+    max-width: 1200px;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1.5rem;
+}
+
+.main-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.inquiry-info-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.inquiry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.inquiry-category {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background: #f1f5f9;
+    border-radius: 4px;
+    color: #64748b;
+}
+
+.status-select {
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+}
+
+.status-select.status-new { background: #fef3c7; color: #b45309; }
+.status-select.status-in_progress { background: #dbeafe; color: #1d4ed8; }
+.status-select.status-resolved { background: #d1fae5; color: #059669; }
+.status-select.status-closed { background: #e2e8f0; color: #64748b; }
+
+.inquiry-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 1rem 0;
+}
+
+.inquiry-content {
+    color: #374151;
+    line-height: 1.7;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.thread-section, .reply-form-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.thread-section h3, .reply-form-section h3 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1e293b;
+}
+
+.thread-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.thread-item {
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.thread-item.user-reply {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.thread-item.admin-reply {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+}
+
+.thread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.thread-author {
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    background: #2563eb;
+    color: white;
+    border-radius: 4px;
+}
+
+.user-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    background: #64748b;
+    color: white;
+    border-radius: 4px;
+}
+
+.thread-date {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.thread-content {
+    color: #374151;
+    line-height: 1.6;
+}
+
+.no-replies {
+    text-align: center;
+    color: #94a3b8;
+    padding: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    resize: vertical;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.status-change-group {
+    margin-bottom: 0;
+}
+
+.status-change-group label {
+    display: block;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.form-control-sm {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.form-actions {
+    margin-bottom: 0;
+}
+
+.user-info-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 1rem;
+}
+
+.user-info-card h3 {
+    font-size: 1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1e293b;
+}
+
+.user-info-item {
+    margin-bottom: 1rem;
+}
+
+.user-info-item:last-child {
+    margin-bottom: 0;
+}
+
+.user-info-item label {
+    display: block;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 0.25rem;
+}
+
+.user-info-item span {
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+@media (max-width: 1024px) {
+    .detail-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .user-info-card {
+        position: static;
+    }
+}
+</style>
+
+<script>
+function changeStatus(status) {
+    fetch('{{ url_for("admin_inquiry_status", id=inquiry.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // ステータス表示を更新
+            const select = document.getElementById('statusSelect');
+            select.className = 'status-select status-' + status;
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
+</script>
+{% endblock %}

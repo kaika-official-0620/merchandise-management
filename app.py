@@ -811,6 +811,32 @@ if DATABASE_URL:
             )
         ''')
         
+        # 問い合わせテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS inquiries (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                category VARCHAR(50) DEFAULT 'general',
+                title VARCHAR(200) NOT NULL,
+                content TEXT NOT NULL,
+                status VARCHAR(20) DEFAULT 'new',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 問い合わせ返信テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS inquiry_replies (
+                id SERIAL PRIMARY KEY,
+                inquiry_id INTEGER REFERENCES inquiries(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
+                is_admin_reply BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1581,6 +1607,32 @@ else:
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0,
                 notes TEXT
+            )
+        ''')
+        
+        # 問い合わせテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS inquiries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                category TEXT DEFAULT 'general',
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                status TEXT DEFAULT 'new',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 問い合わせ返信テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS inquiry_replies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inquiry_id INTEGER REFERENCES inquiries(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
+                is_admin_reply INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -13680,6 +13732,452 @@ def admin_kaitori_shoudaku_pdf(id):
         return redirect(url_for('admin_kaitori_shoudaku_list'))
     
     return render_template('pdf/admin_kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
+
+# ========== 問い合わせ機能 ==========
+
+# 問い合わせカテゴリ
+INQUIRY_CATEGORIES = {
+    'general': '一般',
+    'technical': '技術的な質問',
+    'billing': '請求・支払い',
+    'feature': '機能リクエスト',
+    'other': 'その他'
+}
+
+# 問い合わせステータス
+INQUIRY_STATUS = {
+    'new': '新着',
+    'in_progress': '対応中',
+    'resolved': '解決済み',
+    'closed': 'クローズ'
+}
+
+@app.route('/inquiry')
+@login_required
+def inquiry_list():
+    """ユーザーの問い合わせ一覧"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('''
+            SELECT i.*, 
+                   (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = TRUE 
+                    AND created_at > COALESCE(
+                        (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = FALSE),
+                        i.created_at
+                    )) as unread_replies
+            FROM inquiries i
+            WHERE i.user_id = %s
+            ORDER BY i.updated_at DESC
+        ''', (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT i.*, 
+                   (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 1 
+                    AND created_at > COALESCE(
+                        (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 0),
+                        i.created_at
+                    )) as unread_replies
+            FROM inquiries i
+            WHERE i.user_id = ?
+            ORDER BY i.updated_at DESC
+        ''', (current_user.id,))
+    
+    inquiries = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('inquiry/list.html', 
+                         inquiries=inquiries,
+                         categories=INQUIRY_CATEGORIES,
+                         statuses=INQUIRY_STATUS)
+
+@app.route('/inquiry/new', methods=['GET', 'POST'])
+@login_required
+def inquiry_new():
+    """新規問い合わせ作成"""
+    if request.method == 'POST':
+        category = request.form.get('category', 'general')
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        
+        if not title or not content:
+            flash('タイトルと内容を入力してください', 'error')
+            return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
+        
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO inquiries (user_id, category, title, content)
+                VALUES (%s, %s, %s, %s)
+            ''', (current_user.id, category, title, content))
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO inquiries (user_id, category, title, content)
+                VALUES (?, ?, ?, ?)
+            ''', (current_user.id, category, title, content))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('お問い合わせを送信しました', 'success')
+        return redirect(url_for('inquiry_list'))
+    
+    return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
+
+@app.route('/inquiry/<int:id>')
+@login_required
+def inquiry_view(id):
+    """問い合わせ詳細"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('SELECT * FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
+    else:
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
+    
+    inquiry = cur.fetchone()
+    if not inquiry:
+        cur.close()
+        conn.close()
+        flash('お問い合わせが見つかりません', 'error')
+        return redirect(url_for('inquiry_list'))
+    
+    # 返信を取得
+    if DATABASE_URL:
+        cur.execute('''
+            SELECT r.*, u.display_name, u.username, u.role
+            FROM inquiry_replies r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.inquiry_id = %s
+            ORDER BY r.created_at ASC
+        ''', (id,))
+    else:
+        cur.execute('''
+            SELECT r.*, u.display_name, u.username, u.role
+            FROM inquiry_replies r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.inquiry_id = ?
+            ORDER BY r.created_at ASC
+        ''', (id,))
+    
+    replies = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('inquiry/view.html',
+                         inquiry=dict(inquiry),
+                         replies=replies,
+                         categories=INQUIRY_CATEGORIES,
+                         statuses=INQUIRY_STATUS)
+
+@app.route('/inquiry/<int:id>/reply', methods=['POST'])
+@login_required
+def inquiry_reply(id):
+    """問い合わせに返信"""
+    content = request.form.get('content', '').strip()
+    
+    if not content:
+        flash('返信内容を入力してください', 'error')
+        return redirect(url_for('inquiry_view', id=id))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # 自分の問い合わせか確認
+        cur.execute('SELECT * FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
+        inquiry = cur.fetchone()
+        
+        if not inquiry:
+            cur.close()
+            conn.close()
+            flash('お問い合わせが見つかりません', 'error')
+            return redirect(url_for('inquiry_list'))
+        
+        # 返信を追加
+        cur.execute('''
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
+            VALUES (%s, %s, %s, FALSE)
+        ''', (id, current_user.id, content))
+        
+        # 問い合わせの更新日時を更新
+        cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = %s', (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
+        inquiry = cur.fetchone()
+        
+        if not inquiry:
+            cur.close()
+            conn.close()
+            flash('お問い合わせが見つかりません', 'error')
+            return redirect(url_for('inquiry_list'))
+        
+        cur.execute('''
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
+            VALUES (?, ?, ?, 0)
+        ''', (id, current_user.id, content))
+        
+        cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('返信を送信しました', 'success')
+    return redirect(url_for('inquiry_view', id=id))
+
+# ========== 管理者：問い合わせ管理 ==========
+
+@app.route('/admin/inquiries')
+@login_required
+def admin_inquiries():
+    """管理者：問い合わせ一覧"""
+    if not current_user.is_admin():
+        flash('アクセス権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    status_filter = request.args.get('status', '')
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if status_filter:
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username,
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = %s
+                ORDER BY 
+                    CASE WHEN i.status = 'new' THEN 0 
+                         WHEN i.status = 'in_progress' THEN 1 
+                         ELSE 2 END,
+                    i.updated_at DESC
+            ''', (status_filter,))
+        else:
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username,
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                ORDER BY 
+                    CASE WHEN i.status = 'new' THEN 0 
+                         WHEN i.status = 'in_progress' THEN 1 
+                         ELSE 2 END,
+                    i.updated_at DESC
+            ''')
+    else:
+        cur = conn.cursor()
+        if status_filter:
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username,
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = ?
+                ORDER BY 
+                    CASE WHEN i.status = 'new' THEN 0 
+                         WHEN i.status = 'in_progress' THEN 1 
+                         ELSE 2 END,
+                    i.updated_at DESC
+            ''', (status_filter,))
+        else:
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username,
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                ORDER BY 
+                    CASE WHEN i.status = 'new' THEN 0 
+                         WHEN i.status = 'in_progress' THEN 1 
+                         ELSE 2 END,
+                    i.updated_at DESC
+            ''')
+    
+    inquiries = [dict(row) for row in cur.fetchall()]
+    
+    # 新着件数を取得
+    if DATABASE_URL:
+        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+    else:
+        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+    new_count = cur.fetchone()[0]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/inquiries.html',
+                         inquiries=inquiries,
+                         categories=INQUIRY_CATEGORIES,
+                         statuses=INQUIRY_STATUS,
+                         status_filter=status_filter,
+                         new_count=new_count)
+
+@app.route('/admin/inquiry/<int:id>')
+@login_required
+def admin_inquiry_view(id):
+    """管理者：問い合わせ詳細"""
+    if not current_user.is_admin():
+        flash('アクセス権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('''
+            SELECT i.*, u.display_name, u.username, u.email
+            FROM inquiries i
+            JOIN users u ON i.user_id = u.id
+            WHERE i.id = %s
+        ''', (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT i.*, u.display_name, u.username, u.email
+            FROM inquiries i
+            JOIN users u ON i.user_id = u.id
+            WHERE i.id = ?
+        ''', (id,))
+    
+    inquiry = cur.fetchone()
+    if not inquiry:
+        cur.close()
+        conn.close()
+        flash('お問い合わせが見つかりません', 'error')
+        return redirect(url_for('admin_inquiries'))
+    
+    # 返信を取得
+    if DATABASE_URL:
+        cur.execute('''
+            SELECT r.*, u.display_name, u.username, u.role
+            FROM inquiry_replies r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.inquiry_id = %s
+            ORDER BY r.created_at ASC
+        ''', (id,))
+    else:
+        cur.execute('''
+            SELECT r.*, u.display_name, u.username, u.role
+            FROM inquiry_replies r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.inquiry_id = ?
+            ORDER BY r.created_at ASC
+        ''', (id,))
+    
+    replies = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/inquiry_view.html',
+                         inquiry=dict(inquiry),
+                         replies=replies,
+                         categories=INQUIRY_CATEGORIES,
+                         statuses=INQUIRY_STATUS)
+
+@app.route('/admin/inquiry/<int:id>/reply', methods=['POST'])
+@login_required
+def admin_inquiry_reply(id):
+    """管理者：問い合わせに返信"""
+    if not current_user.is_admin():
+        flash('アクセス権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    content = request.form.get('content', '').strip()
+    new_status = request.form.get('status', '')
+    
+    if not content:
+        flash('返信内容を入力してください', 'error')
+        return redirect(url_for('admin_inquiry_view', id=id))
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        # 返信を追加
+        cur.execute('''
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
+            VALUES (%s, %s, %s, TRUE)
+        ''', (id, current_user.id, content))
+        
+        # ステータス更新
+        if new_status:
+            cur.execute('UPDATE inquiries SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s', (new_status, id))
+        else:
+            cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = %s', (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply)
+            VALUES (?, ?, ?, 1)
+        ''', (id, current_user.id, content))
+        
+        if new_status:
+            cur.execute('UPDATE inquiries SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_status, id))
+        else:
+            cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('返信を送信しました', 'success')
+    return redirect(url_for('admin_inquiry_view', id=id))
+
+@app.route('/admin/inquiry/<int:id>/status', methods=['POST'])
+@login_required
+def admin_inquiry_status(id):
+    """管理者：ステータス変更"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'error': 'アクセス権限がありません'}), 403
+    
+    data = request.get_json()
+    new_status = data.get('status', '')
+    
+    if new_status not in INQUIRY_STATUS:
+        return jsonify({'success': False, 'error': '無効なステータスです'}), 400
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute('UPDATE inquiries SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s', (new_status, id))
+    else:
+        cur = conn.cursor()
+        cur.execute('UPDATE inquiries SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_status, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({'success': True, 'status': new_status, 'status_label': INQUIRY_STATUS[new_status]})
+
+# 未読問い合わせ件数を取得するヘルパー関数
+def get_unread_inquiry_count():
+    """管理者向け：新着問い合わせ件数を取得"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return 0
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+    
+    count = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return count
+
+# テンプレートで使えるようにコンテキストプロセッサに追加
+@app.context_processor
+def inject_inquiry_count():
+    return dict(get_unread_inquiry_count=get_unread_inquiry_count)
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ

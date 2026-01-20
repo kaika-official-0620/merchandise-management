@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}お問い合わせ - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>お問い合わせ</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('inquiry_new') }}" class="btn btn-primary">新規問い合わせ</a>
+    </div>
+</div>
+
+<div class="inquiry-container">
+    {% if inquiries %}
+    <div class="inquiry-list">
+        {% for inquiry in inquiries %}
+        <a href="{{ url_for('inquiry_view', id=inquiry.id) }}" class="inquiry-card">
+            <div class="inquiry-header">
+                <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
+                <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
+            </div>
+            <div class="inquiry-title">
+                {{ inquiry.title }}
+                {% if inquiry.unread_replies and inquiry.unread_replies > 0 %}
+                <span class="unread-badge">{{ inquiry.unread_replies }}件の返信</span>
+                {% endif %}
+            </div>
+            <div class="inquiry-meta">
+                <span class="inquiry-date">{{ inquiry.created_at.strftime('%Y/%m/%d %H:%M') if inquiry.created_at else '-' }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-message">
+        <p>お問い合わせはありません</p>
+        <a href="{{ url_for('inquiry_new') }}" class="btn btn-primary">新規問い合わせを作成</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.inquiry-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.inquiry-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.inquiry-card {
+    display: block;
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s;
+    border: 1px solid #e2e8f0;
+}
+
+.inquiry-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    border-color: #2563eb;
+}
+
+.inquiry-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.inquiry-category {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background: #f1f5f9;
+    border-radius: 4px;
+    color: #64748b;
+}
+
+.inquiry-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.inquiry-status.status-new {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.inquiry-status.status-in_progress {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.inquiry-status.status-resolved {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.inquiry-status.status-closed {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.inquiry-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.unread-badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    background: #ef4444;
+    color: white;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.inquiry-meta {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.empty-message p {
+    color: #94a3b8;
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+</style>
+{% endblock %}

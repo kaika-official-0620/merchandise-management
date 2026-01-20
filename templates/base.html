@@ -174,9 +174,35 @@
                     <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
                 </div>
             </div>
+            
+            <!-- 問い合わせ管理（管理者用） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    問い合わせ管理
+                    {% if get_unread_inquiry_count() > 0 %}
+                    <span class="menu-badge">{{ get_unread_inquiry_count() }}</span>
+                    {% endif %}
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_inquiries') }}" class="{% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view'] %}active{% endif %}">問い合わせ一覧</a>
+                </div>
+            </div>
             {% endif %}
             
             {% if not current_user.is_admin() %}
+            <!-- お問い合わせ（一般ユーザーのみ表示） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['inquiry_list', 'inquiry_new', 'inquiry_view', 'inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    お問い合わせ
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['inquiry_list', 'inquiry_new', 'inquiry_view', 'inquiry_reply'] %}open{% endif %}">
+                    <a href="{{ url_for('inquiry_list') }}" class="{% if request.endpoint in ['inquiry_list', 'inquiry_view'] %}active{% endif %}">問い合わせ一覧</a>
+                    <a href="{{ url_for('inquiry_new') }}" class="{% if request.endpoint == 'inquiry_new' %}active{% endif %}">新規問い合わせ</a>
+                </div>
+            </div>
+            
             <!-- サービス（一般ユーザーのみ表示） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint == 'public_proxy_service' %}active{% endif %}" onclick="toggleCategory(this)">
@@ -224,6 +250,32 @@
                 </div>
             </div>
             
+            <!-- データ確認 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    データ確認
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_analytics') }}" class="{% if request.endpoint == 'admin_analytics' %}active{% endif %}">すべてのアカウントの分析</a>
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花（管理者）の分析</a>
+                </div>
+            </div>
+            
+            <!-- マスター設定 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    マスター設定
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">商品登録用マスター</a>
+                    <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+                </div>
+            </div>
+            
+            <!-- ===== 開花管理のみ ===== -->
+            
             <!-- ユーザー管理 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -232,18 +284,6 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
                     <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
-                </div>
-            </div>
-            
-            <!-- データ・分析 -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    データ・分析
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_analytics') }}" class="{% if request.endpoint == 'admin_analytics' %}active{% endif %}">すべてのアカウントの分析</a>
-                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花（管理者）の分析</a>
                 </div>
             </div>
             
@@ -257,18 +297,6 @@
                     {% if current_user.is_owner() %}
                     <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
                     {% endif %}
-                </div>
-            </div>
-            
-            <!-- マスター設定 -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    マスター設定
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">商品登録用マスター</a>
-                    <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
                 </div>
             </div>
             {% endif %}
