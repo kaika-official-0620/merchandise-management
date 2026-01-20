@@ -14161,18 +14161,22 @@ def get_unread_inquiry_count():
     if not current_user.is_authenticated or not current_user.is_admin():
         return 0
     
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-    
-    count = cur.fetchone()[0]
-    cur.close()
-    conn.close()
-    return count
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+        
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except Exception as e:
+        # テーブルが存在しない場合など
+        return 0
 
 # テンプレートで使えるようにコンテキストプロセッサに追加
 @app.context_processor

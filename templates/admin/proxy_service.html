@@ -442,19 +442,20 @@
     position: relative;
     transition: all 0.3s ease;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .toggle-switch::after {
     content: '';
     position: absolute;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     background: white;
     border-radius: 50%;
-    top: 2px;
-    left: 2px;
+    top: 3px;
+    left: 3px;
     transition: transform 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .toggle-label input:checked + .toggle-switch {
@@ -464,6 +465,11 @@
 
 .toggle-label input:checked + .toggle-switch::after {
     transform: translateX(24px);
+}
+
+/* スイッチとステータスの間隔を確保 */
+.toggle-switch + .toggle-status {
+    margin-left: 0.5rem;
 }
 
 .toggle-status {
