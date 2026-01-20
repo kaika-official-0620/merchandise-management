@@ -14363,71 +14363,62 @@ def admin_sale_requests():
     
     try:
         conn = get_db()
-        cur = conn.cursor()
         
-        # テーブルが存在するか確認
         if DATABASE_URL:
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'sale_requests'
-                )
-            """)
-            table_exists = cur.fetchone()[0]
-        else:
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_requests'")
-            table_exists = cur.fetchone() is not None
-        
-        if table_exists:
-            if DATABASE_URL:
-                cur.execute('''
-                    SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
-                           u.username, u.display_name as user_display_name,
-                           p.username as processor_name, p.display_name as processor_display_name
-                    FROM sale_requests sr
-                    JOIN merchandise m ON sr.merchandise_id = m.id
-                    JOIN users u ON sr.user_id = u.id
-                    LEFT JOIN users p ON sr.processed_by = p.id
-                    ORDER BY 
-                        CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
-                        sr.created_at DESC
-                ''')
-            else:
-                cur.execute('''
-                    SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
-                           u.username, u.display_name as user_display_name,
-                           p.username as processor_name, p.display_name as processor_display_name
-                    FROM sale_requests sr
-                    JOIN merchandise m ON sr.merchandise_id = m.id
-                    JOIN users u ON sr.user_id = u.id
-                    LEFT JOIN users p ON sr.processed_by = p.id
-                    ORDER BY 
-                        CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
-                        sr.created_at DESC
-                ''')
-            
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # メインクエリ
+            cur.execute('''
+                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                       u.username, u.display_name as user_display_name,
+                       p.username as processor_name, p.display_name as processor_display_name
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                JOIN users u ON sr.user_id = u.id
+                LEFT JOIN users p ON sr.processed_by = p.id
+                ORDER BY 
+                    CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
+                    sr.created_at DESC
+            ''')
             requests_list = cur.fetchall()
             
             # 統計情報
-            if DATABASE_URL:
-                cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
-                pending_count = cur.fetchone()['count']
-                cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'approved'")
-                approved_count = cur.fetchone()['count']
-                cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'rejected'")
-                rejected_count = cur.fetchone()['count']
-            else:
-                cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
-                pending_count = cur.fetchone()[0]
-                cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'approved'")
-                approved_count = cur.fetchone()[0]
-                cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
-                rejected_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
+            pending_count = cur.fetchone()['count']
+            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'approved'")
+            approved_count = cur.fetchone()['count']
+            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'rejected'")
+            rejected_count = cur.fetchone()['count']
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                       u.username, u.display_name as user_display_name,
+                       p.username as processor_name, p.display_name as processor_display_name
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                JOIN users u ON sr.user_id = u.id
+                LEFT JOIN users p ON sr.processed_by = p.id
+                ORDER BY 
+                    CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
+                    sr.created_at DESC
+            ''')
+            requests_list = cur.fetchall()
+            
+            # 統計情報
+            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
+            pending_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'approved'")
+            approved_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
+            rejected_count = cur.fetchone()[0]
         
         cur.close()
         conn.close()
     except Exception as e:
+        # テーブルが存在しない場合など - 空のリストを返す
         print(f"Error in admin_sale_requests: {e}")
+        import traceback
+        traceback.print_exc()
     
     return render_template('admin/sale_requests.html', 
                          requests=requests_list,
