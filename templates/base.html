@@ -62,17 +62,17 @@
             
             <!-- 商品管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger', 'admin_user_products'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products'] %}active{% endif %}" onclick="toggleCategory(this)">
                     商品管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger', 'admin_user_products'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
                     <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' %}active{% endif %}">商品一覧</a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
                     {% endif %}
-                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_expenses', 'report_annual', 'report_kaitori_ledger'] %}active{% endif %}">レポート</a>
+                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                 </div>
             </div>
             
@@ -86,6 +86,19 @@
                     <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
                 </div>
             </div>
+            
+            {% if current_user.is_admin() %}
+            <!-- マスター設定（ユーザー機能用） -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint == 'user_master_settings' %}active{% endif %}" onclick="toggleCategory(this)">
+                    マスター設定
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint == 'user_master_settings' %}open{% endif %}">
+                    <a href="{{ url_for('user_master_settings') }}" class="{% if request.endpoint == 'user_master_settings' %}active{% endif %}">商品登録用マスター</a>
+                </div>
+            </div>
+            {% endif %}
             
             {% if current_user.is_admin() %}
             <!-- 管理者用：書類 -->

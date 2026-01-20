@@ -1809,6 +1809,58 @@ def get_active_announcements():
 # データベース初期化
 init_db()
 
+# マスターテーブルにscopeカラムを追加するマイグレーション
+def migrate_add_scope_column():
+    """マスターテーブルにscopeカラムを追加（ユーザー機能/開花管理の分離用）"""
+    try:
+        conn = get_db()
+        
+        master_tables = [
+            'master_brand_categories',
+            'master_brands', 
+            'master_suppliers',
+            'master_conditions',
+            'master_payment_methods',
+            'master_supplier_details'
+        ]
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            for table in master_tables:
+                try:
+                    # カラムが存在しない場合のみ追加
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN scope VARCHAR(20) DEFAULT 'admin'")
+                    conn.commit()
+                    print(f"Added scope column to {table}")
+                except Exception as e:
+                    conn.rollback()
+                    if 'already exists' in str(e).lower() or 'duplicate column' in str(e).lower():
+                        pass  # カラムが既に存在する場合は無視
+                    else:
+                        print(f"Migration warning for {table}: {e}")
+        else:
+            cur = conn.cursor()
+            for table in master_tables:
+                try:
+                    # SQLiteでカラムの存在確認
+                    cur.execute(f"PRAGMA table_info({table})")
+                    columns = [col[1] for col in cur.fetchall()]
+                    if 'scope' not in columns:
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN scope TEXT DEFAULT 'admin'")
+                        conn.commit()
+                        print(f"Added scope column to {table}")
+                except Exception as e:
+                    print(f"Migration warning for {table}: {e}")
+        
+        cur.close()
+        conn.close()
+        print("Scope column migration completed")
+    except Exception as e:
+        print(f"Migration error: {e}")
+
+# マイグレーション実行
+migrate_add_scope_column()
+
 # ===================
 # 認証関連ルート
 # ===================
@@ -2233,7 +2285,7 @@ def api_report(report_type):
         if report_type == 'monthly':
             # 月次売上報告書
             cur.execute("""
-                SELECT id, sale_date, product_name, brand_name, sale_price, purchase_price, 
+                SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
                 WHERE user_id = %s AND sale_date IS NOT NULL
@@ -2450,7 +2502,7 @@ def api_report(report_type):
         
         if report_type == 'monthly':
             cur.execute("""
-                SELECT id, sale_date, product_name, brand_name, sale_price, purchase_price, 
+                SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
                 WHERE user_id = ? AND sale_date IS NOT NULL
@@ -2652,7 +2704,7 @@ def api_report_download(report_type):
         
         if report_type == 'monthly':
             cur.execute("""
-                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
                 WHERE user_id = %s AND sale_date IS NOT NULL
@@ -2662,7 +2714,7 @@ def api_report_download(report_type):
             """, (current_user.id, year, month))
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
-            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
             
         elif report_type == 'inventory':
             cur.execute("""
@@ -2756,7 +2808,7 @@ def api_report_download(report_type):
         
         if report_type == 'monthly':
             cur.execute("""
-                SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
+                SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
                 WHERE user_id = ? AND sale_date IS NOT NULL
@@ -2766,7 +2818,7 @@ def api_report_download(report_type):
             """, (current_user.id, str(year), str(month).zfill(2)))
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
-            headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
+            headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
             
         elif report_type == 'inventory':
             cur.execute("""
@@ -2871,6 +2923,7 @@ def api_report_download(report_type):
                     item.get('sale_date'),
                     item.get('product_name'),
                     item.get('brand_name') or '',
+                    item.get('store_name') or '',
                     item.get('sale_price') or 0,
                     item.get('purchase_price') or 0,
                     item.get('shipping_cost') or 0,
@@ -5493,34 +5546,35 @@ def proxy_service_purchase():
 @login_required
 @admin_required
 def admin_master_settings():
-    """マスター設定画面"""
+    """マスター設定画面（開花管理用 - scope='admin'）"""
     conn = get_db()
+    scope = 'admin'
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # ブランドカテゴリ
-        cur.execute("SELECT * FROM master_brand_categories ORDER BY display_order, id")
+        # ブランドカテゴリ（scope指定）
+        cur.execute("SELECT * FROM master_brand_categories WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         brand_categories = [dict(row) for row in cur.fetchall()]
         
         # ブランド
-        cur.execute("SELECT * FROM master_brands ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brands WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         brands = [dict(row) for row in cur.fetchall()]
         
         # 仕入先
-        cur.execute("SELECT * FROM master_suppliers ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_suppliers WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         suppliers = [dict(row) for row in cur.fetchall()]
         
         # 商品状態
-        cur.execute("SELECT * FROM master_conditions ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_conditions WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         conditions = [dict(row) for row in cur.fetchall()]
         
         # 支払方法
-        cur.execute("SELECT * FROM master_payment_methods ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_payment_methods WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         payment_methods = [dict(row) for row in cur.fetchall()]
         
         # 仕入先詳細
-        cur.execute("SELECT * FROM master_supplier_details ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_supplier_details WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (scope,))
         supplier_details = [dict(row) for row in cur.fetchall()]
         
         # 書類設定
@@ -5530,22 +5584,22 @@ def admin_master_settings():
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
         
-        cur.execute("SELECT * FROM master_brand_categories ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brand_categories WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         brand_categories = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_brands ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brands WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         brands = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_suppliers ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_suppliers WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         suppliers = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_conditions ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_conditions WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         conditions = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_payment_methods ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_payment_methods WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         payment_methods = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_supplier_details ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_supplier_details WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (scope,))
         supplier_details = [dict(row) for row in cur.fetchall()]
         
         # 書類設定
@@ -5565,7 +5619,76 @@ def admin_master_settings():
                          conditions=conditions,
                          payment_methods=payment_methods,
                          supplier_details=supplier_details,
-                         document_settings=document_settings)
+                         document_settings=document_settings,
+                         scope=scope)
+
+
+@app.route('/user/master-settings')
+@login_required
+def user_master_settings():
+    """ユーザー機能用マスター設定画面（scope='user'）"""
+    conn = get_db()
+    scope = 'user'
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # ブランドカテゴリ
+        cur.execute("SELECT * FROM master_brand_categories WHERE scope = %s ORDER BY display_order, id", (scope,))
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        # ブランド
+        cur.execute("SELECT * FROM master_brands WHERE scope = %s ORDER BY display_order, id", (scope,))
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        # 仕入先
+        cur.execute("SELECT * FROM master_suppliers WHERE scope = %s ORDER BY display_order, id", (scope,))
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        # 商品状態
+        cur.execute("SELECT * FROM master_conditions WHERE scope = %s ORDER BY display_order, id", (scope,))
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        # 支払方法
+        cur.execute("SELECT * FROM master_payment_methods WHERE scope = %s ORDER BY display_order, id", (scope,))
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        # 仕入先詳細
+        cur.execute("SELECT * FROM master_supplier_details WHERE scope = %s ORDER BY display_order, id", (scope,))
+        supplier_details = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        cur.execute("SELECT * FROM master_brand_categories WHERE scope = ? ORDER BY display_order, id", (scope,))
+        brand_categories = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_brands WHERE scope = ? ORDER BY display_order, id", (scope,))
+        brands = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_suppliers WHERE scope = ? ORDER BY display_order, id", (scope,))
+        suppliers = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_conditions WHERE scope = ? ORDER BY display_order, id", (scope,))
+        conditions = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_payment_methods WHERE scope = ? ORDER BY display_order, id", (scope,))
+        payment_methods = [dict(row) for row in cur.fetchall()]
+        
+        cur.execute("SELECT * FROM master_supplier_details WHERE scope = ? ORDER BY display_order, id", (scope,))
+        supplier_details = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('user_master_settings.html',
+                         brand_categories=brand_categories,
+                         brands=brands,
+                         suppliers=suppliers,
+                         conditions=conditions,
+                         payment_methods=payment_methods,
+                         supplier_details=supplier_details,
+                         scope=scope)
 
 
 @app.route('/admin/master-settings/init', methods=['POST'])
@@ -5821,92 +5944,204 @@ def admin_master_settings_init():
 @login_required
 @admin_required
 def admin_master_add(table_name):
-    """マスターデータの追加"""
+    """マスターデータの追加（開花管理用 - scope='admin'）"""
     valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
     if table_name not in valid_tables:
         flash('無効なテーブルです', 'error')
         return redirect(url_for('admin_master_settings'))
     
-    conn = get_db()
+    scope = 'admin'
     
-    if table_name == 'brand_categories':
-        name = request.form.get('name')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (%s, %s)", (name, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_brand_categories (name, display_order) VALUES (?, ?)", (name, display_order))
+    try:
+        conn = get_db()
+        
+        if table_name == 'brand_categories':
+            name = request.form.get('name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (%s, %s, %s)", (name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (?, ?, ?)", (name, display_order, scope))
+        
+        elif table_name == 'brands':
+            category_id_str = request.form.get('category_id')
+            category_id = int(category_id_str) if category_id_str else None
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            keywords = request.form.get('keywords')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, scope) VALUES (%s, %s, %s, %s, %s, %s)",
+                          (category_id, value, display_name, keywords, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, scope) VALUES (?, ?, ?, ?, ?, ?)",
+                          (category_id, value, display_name, keywords, display_order, scope))
+        
+        elif table_name == 'suppliers':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        elif table_name == 'conditions':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            description = request.form.get('description')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (%s, %s, %s, %s, %s)",
+                          (value, display_name, description, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (?, ?, ?, ?, ?)",
+                          (value, display_name, description, display_order, scope))
+        
+        elif table_name == 'payment_methods':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        elif table_name == 'supplier_details':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('追加しました', 'success')
+    except Exception as e:
+        print(f"Master add error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'追加エラー: {str(e)}', 'error')
     
-    elif table_name == 'brands':
-        category_id = int(request.form.get('category_id') or 0)
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        keywords = request.form.get('keywords')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (%s, %s, %s, %s, %s)",
-                      (category_id, value, display_name, keywords, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order) VALUES (?, ?, ?, ?, ?)",
-                      (category_id, value, display_name, keywords, display_order))
-    
-    elif table_name == 'suppliers':
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_suppliers (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
-    
-    elif table_name == 'conditions':
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        description = request.form.get('description')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (%s, %s, %s, %s)",
-                      (value, display_name, description, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order) VALUES (?, ?, ?, ?)",
-                      (value, display_name, description, display_order))
-    
-    elif table_name == 'payment_methods':
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
-    
-    elif table_name == 'supplier_details':
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        display_order = int(request.form.get('display_order') or 0)
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (%s, %s, %s)", (value, display_name, display_order))
-        else:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order) VALUES (?, ?, ?)", (value, display_name, display_order))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    flash('追加しました', 'success')
     return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/user/master-settings/<table_name>/add', methods=['POST'])
+@login_required
+@admin_required
+def user_master_add(table_name):
+    """マスターデータの追加（ユーザー機能用 - scope='user'）"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('user_master_settings'))
+    
+    scope = 'user'
+    
+    try:
+        conn = get_db()
+        
+        if table_name == 'brand_categories':
+            name = request.form.get('name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (%s, %s, %s)", (name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (?, ?, ?)", (name, display_order, scope))
+        
+        elif table_name == 'brands':
+            category_id_str = request.form.get('category_id')
+            category_id = int(category_id_str) if category_id_str else None
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            keywords = request.form.get('keywords')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, scope) VALUES (%s, %s, %s, %s, %s, %s)",
+                          (category_id, value, display_name, keywords, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, scope) VALUES (?, ?, ?, ?, ?, ?)",
+                          (category_id, value, display_name, keywords, display_order, scope))
+        
+        elif table_name == 'suppliers':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        elif table_name == 'conditions':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            description = request.form.get('description')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (%s, %s, %s, %s, %s)",
+                          (value, display_name, description, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (?, ?, ?, ?, ?)",
+                          (value, display_name, description, display_order, scope))
+        
+        elif table_name == 'payment_methods':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        elif table_name == 'supplier_details':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, display_order, scope))
+            else:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, display_order, scope))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('追加しました', 'success')
+    except Exception as e:
+        print(f"User master add error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'追加エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('user_master_settings'))
 
 
 @app.route('/admin/master-settings/<table_name>/<int:id>/edit', methods=['POST'])
@@ -5919,72 +6154,80 @@ def admin_master_edit(table_name, id):
         flash('無効なテーブルです', 'error')
         return redirect(url_for('admin_master_settings'))
     
-    conn = get_db()
-    full_table_name = f"master_{table_name}"
-    
-    if table_name == 'brand_categories':
-        name = request.form.get('name')
-        display_order = int(request.form.get('display_order') or 0)
-        is_active = 1 if request.form.get('is_active') else 0
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET name=%s, display_order=%s, is_active=%s WHERE id=%s",
-                      (name, display_order, is_active, id))
+    try:
+        conn = get_db()
+        full_table_name = f"master_{table_name}"
+        
+        # PostgreSQLではブール値として扱う
+        is_active_value = True if request.form.get('is_active') else False
+        is_active_sqlite = 1 if request.form.get('is_active') else 0
+        
+        if table_name == 'brand_categories':
+            name = request.form.get('name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (name, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET name=?, display_order=?, is_active=? WHERE id=?",
+                          (name, display_order, is_active_sqlite, id))
+        
+        elif table_name == 'brands':
+            category_id_str = request.form.get('category_id')
+            category_id = int(category_id_str) if category_id_str else None
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            keywords = request.form.get('keywords')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET category_id=%s, value=%s, display_name=%s, keywords=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (category_id, value, display_name, keywords, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET category_id=?, value=?, display_name=?, keywords=?, display_order=?, is_active=? WHERE id=?",
+                          (category_id, value, display_name, keywords, display_order, is_active_sqlite, id))
+        
+        elif table_name == 'conditions':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            description = request.form.get('description')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, description=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (value, display_name, description, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, description=?, display_order=?, is_active=? WHERE id=?",
+                          (value, display_name, description, display_order, is_active_sqlite, id))
+        
         else:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET name=?, display_order=?, is_active=? WHERE id=?",
-                      (name, display_order, is_active, id))
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (value, display_name, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, display_order=?, is_active=? WHERE id=?",
+                          (value, display_name, display_order, is_active_sqlite, id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('更新しました', 'success')
+    except Exception as e:
+        print(f"Master edit error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'更新エラー: {str(e)}', 'error')
     
-    elif table_name == 'brands':
-        category_id = int(request.form.get('category_id') or 0)
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        keywords = request.form.get('keywords')
-        display_order = int(request.form.get('display_order') or 0)
-        is_active = 1 if request.form.get('is_active') else 0
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET category_id=%s, value=%s, display_name=%s, keywords=%s, display_order=%s, is_active=%s WHERE id=%s",
-                      (category_id, value, display_name, keywords, display_order, is_active, id))
-        else:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET category_id=?, value=?, display_name=?, keywords=?, display_order=?, is_active=? WHERE id=?",
-                      (category_id, value, display_name, keywords, display_order, is_active, id))
-    
-    elif table_name == 'conditions':
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        description = request.form.get('description')
-        display_order = int(request.form.get('display_order') or 0)
-        is_active = 1 if request.form.get('is_active') else 0
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, description=%s, display_order=%s, is_active=%s WHERE id=%s",
-                      (value, display_name, description, display_order, is_active, id))
-        else:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, description=?, display_order=?, is_active=? WHERE id=?",
-                      (value, display_name, description, display_order, is_active, id))
-    
-    else:
-        value = request.form.get('value')
-        display_name = request.form.get('display_name')
-        display_order = int(request.form.get('display_order') or 0)
-        is_active = 1 if request.form.get('is_active') else 0
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, display_order=%s, is_active=%s WHERE id=%s",
-                      (value, display_name, display_order, is_active, id))
-        else:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, display_order=?, is_active=? WHERE id=?",
-                      (value, display_name, display_order, is_active, id))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    flash('更新しました', 'success')
     return redirect(url_for('admin_master_settings'))
 
 
@@ -5998,22 +6241,244 @@ def admin_master_delete(table_name, id):
         flash('無効なテーブルです', 'error')
         return redirect(url_for('admin_master_settings'))
     
-    conn = get_db()
-    full_table_name = f"master_{table_name}"
+    try:
+        conn = get_db()
+        full_table_name = f"master_{table_name}"
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {full_table_name} WHERE id=%s", (id,))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {full_table_name} WHERE id=?", (id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('削除しました', 'success')
+    except Exception as e:
+        print(f"Master delete error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'削除エラー: {str(e)}', 'error')
     
-    if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute(f"DELETE FROM {full_table_name} WHERE id=%s", (id,))
-    else:
-        cur = conn.cursor()
-        cur.execute(f"DELETE FROM {full_table_name} WHERE id=?", (id,))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    flash('削除しました', 'success')
     return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/user/master-settings/<table_name>/<int:id>/edit', methods=['POST'])
+@login_required
+@admin_required
+def user_master_edit(table_name, id):
+    """ユーザー機能用マスターデータの編集"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('user_master_settings'))
+    
+    try:
+        conn = get_db()
+        full_table_name = f"master_{table_name}"
+        
+        is_active_value = True if request.form.get('is_active') else False
+        is_active_sqlite = 1 if request.form.get('is_active') else 0
+        
+        if table_name == 'brand_categories':
+            name = request.form.get('name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (name, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET name=?, display_order=?, is_active=? WHERE id=?",
+                          (name, display_order, is_active_sqlite, id))
+        
+        elif table_name == 'brands':
+            category_id_str = request.form.get('category_id')
+            category_id = int(category_id_str) if category_id_str else None
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            keywords = request.form.get('keywords')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET category_id=%s, value=%s, display_name=%s, keywords=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (category_id, value, display_name, keywords, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET category_id=?, value=?, display_name=?, keywords=?, display_order=?, is_active=? WHERE id=?",
+                          (category_id, value, display_name, keywords, display_order, is_active_sqlite, id))
+        
+        elif table_name == 'conditions':
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            description = request.form.get('description')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, description=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (value, display_name, description, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, description=?, display_order=?, is_active=? WHERE id=?",
+                          (value, display_name, description, display_order, is_active_sqlite, id))
+        
+        else:
+            value = request.form.get('value')
+            display_name = request.form.get('display_name')
+            display_order = int(request.form.get('display_order') or 0)
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=%s, display_name=%s, display_order=%s, is_active=%s WHERE id=%s",
+                          (value, display_name, display_order, is_active_value, id))
+            else:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {full_table_name} SET value=?, display_name=?, display_order=?, is_active=? WHERE id=?",
+                          (value, display_name, display_order, is_active_sqlite, id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('更新しました', 'success')
+    except Exception as e:
+        print(f"User master edit error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'更新エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('user_master_settings'))
+
+
+@app.route('/user/master-settings/<table_name>/<int:id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def user_master_delete(table_name, id):
+    """ユーザー機能用マスターデータの削除"""
+    valid_tables = ['brand_categories', 'brands', 'suppliers', 'conditions', 'payment_methods', 'supplier_details']
+    if table_name not in valid_tables:
+        flash('無効なテーブルです', 'error')
+        return redirect(url_for('user_master_settings'))
+    
+    try:
+        conn = get_db()
+        full_table_name = f"master_{table_name}"
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {full_table_name} WHERE id=%s", (id,))
+        else:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {full_table_name} WHERE id=?", (id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('削除しました', 'success')
+    except Exception as e:
+        print(f"User master delete error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'削除エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('user_master_settings'))
+
+
+@app.route('/user/master-settings/init', methods=['POST'])
+@login_required
+@admin_required
+def user_master_settings_init():
+    """ユーザー機能用マスターデータの初期登録"""
+    conn = get_db()
+    scope = 'user'
+    
+    # デフォルトデータ（ユーザー向け）
+    default_brand_categories = [
+        ('ラグジュアリーブランド', 1),
+        ('時計・ジュエリー', 2),
+        ('スポーツ・ストリート', 3),
+        ('日本ブランド', 4),
+        ('電子機器', 5),
+        ('その他', 6)
+    ]
+    
+    default_suppliers = [
+        ('店舗仕入', '店舗仕入', 1),
+        ('オンライン', 'オンライン仕入', 2),
+        ('卸業者', '卸業者', 3),
+        ('その他', 'その他', 4)
+    ]
+    
+    default_conditions = [
+        ('N', 'N：新品・未使用', '新品、未開封、タグ付き', 1),
+        ('S', 'S：未使用に近い', '使用回数1-2回、ほぼ新品', 2),
+        ('A', 'A：目立った傷汚れなし', '使用感はあるが状態良好', 3),
+        ('AB', 'AB：やや傷汚れあり', '若干の使用感あり', 4),
+        ('B', 'B：傷汚れあり', '使用感や傷が目立つ', 5)
+    ]
+    
+    default_payment_methods = [
+        ('現金', '現金', 1),
+        ('クレジットカード', 'クレジットカード', 2),
+        ('その他', 'その他', 3)
+    ]
+    
+    default_supplier_details = [
+        ('セカンドストリート', 'セカンドストリート', 1),
+        ('トレジャーファクトリー', 'トレジャーファクトリー', 2),
+        ('メルカリ', 'メルカリ', 3),
+        ('ヤフオク', 'ヤフオク', 4),
+        ('その他', 'その他', 5)
+    ]
+    
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            
+            for name, order in default_brand_categories:
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (%s, %s, %s)", (name, order, scope))
+            
+            for value, display_name, order in default_suppliers:
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+            
+            for value, display_name, description, order in default_conditions:
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (%s, %s, %s, %s, %s)", (value, display_name, description, order, scope))
+            
+            for value, display_name, order in default_payment_methods:
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+            
+            for value, display_name, order in default_supplier_details:
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+        else:
+            cur = conn.cursor()
+            
+            for name, order in default_brand_categories:
+                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (?, ?, ?)", (name, order, scope))
+            
+            for value, display_name, order in default_suppliers:
+                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+            
+            for value, display_name, description, order in default_conditions:
+                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (?, ?, ?, ?, ?)", (value, display_name, description, order, scope))
+            
+            for value, display_name, order in default_payment_methods:
+                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+            
+            for value, display_name, order in default_supplier_details:
+                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('ユーザー機能用の初期データを登録しました', 'success')
+    except Exception as e:
+        print(f"User master init error: {e}")
+        flash(f'初期データ登録エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('user_master_settings'))
 
 
 @app.route('/admin/master-settings/document-settings', methods=['POST'])
@@ -6021,98 +6486,119 @@ def admin_master_delete(table_name, id):
 @admin_required
 def admin_document_settings_save():
     """書類設定の保存"""
-    conn = get_db()
+    try:
+        conn = get_db()
+        
+        # 設定キーのリスト
+        setting_keys = [
+            'company_name', 'company_address', 'company_phone', 'company_fax', 'company_email',
+            'bank_name', 'bank_branch', 'bank_account_type', 'bank_account_number', 'bank_account_name',
+            # 書類名設定
+            'doc_name_seisan', 'doc_name_kaitori', 'doc_name_shikiriosho', 
+            'doc_name_invoice', 'doc_name_mitsumori', 'doc_name_keisan', 'doc_name_kaitori_shoudaku',
+            # 各書類の詳細設定
+            'seisan_default_commission_rate', 'seisan_default_notes',
+            'kaitori_default_tax_rate', 'kaitori_default_notes',
+            'shikiriosho_default_notes', 'shikiriosho_default_payment_terms',
+            'invoice_default_tax_rate', 'invoice_default_payment_terms', 'invoice_default_notes',
+            'mitsumori_default_valid_days', 'mitsumori_default_notes',
+            'keisan_default_tax_rate', 'keisan_default_notes'
+        ]
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            for key in setting_keys:
+                value = request.form.get(key, '')
+                # 既存のレコードがあれば更新、なければ挿入
+                cur.execute("SELECT id FROM master_document_settings WHERE setting_key = %s", (key,))
+                if cur.fetchone():
+                    cur.execute("UPDATE master_document_settings SET setting_value = %s, updated_at = CURRENT_TIMESTAMP WHERE setting_key = %s", (value, key))
+                else:
+                    cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (%s, %s)", (key, value))
+        else:
+            cur = conn.cursor()
+            for key in setting_keys:
+                value = request.form.get(key, '')
+                cur.execute("SELECT id FROM master_document_settings WHERE setting_key = ?", (key,))
+                if cur.fetchone():
+                    cur.execute("UPDATE master_document_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?", (value, key))
+                else:
+                    cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('書類設定を保存しました', 'success')
+    except Exception as e:
+        print(f"Document settings save error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'設定保存エラー: {str(e)}', 'error')
     
-    # 設定キーのリスト
-    setting_keys = [
-        'company_name', 'company_address', 'company_phone', 'company_fax', 'company_email',
-        'bank_name', 'bank_branch', 'bank_account_type', 'bank_account_number', 'bank_account_name',
-        # 書類名設定
-        'doc_name_seisan', 'doc_name_kaitori', 'doc_name_shikiriosho', 
-        'doc_name_invoice', 'doc_name_mitsumori', 'doc_name_keisan', 'doc_name_kaitori_shoudaku',
-        # 各書類の詳細設定
-        'seisan_default_commission_rate', 'seisan_default_notes',
-        'kaitori_default_tax_rate', 'kaitori_default_notes',
-        'shikiriosho_default_notes', 'shikiriosho_default_payment_terms',
-        'invoice_default_tax_rate', 'invoice_default_payment_terms', 'invoice_default_notes',
-        'mitsumori_default_valid_days', 'mitsumori_default_notes',
-        'keisan_default_tax_rate', 'keisan_default_notes'
-    ]
-    
-    if DATABASE_URL:
-        cur = conn.cursor()
-        for key in setting_keys:
-            value = request.form.get(key, '')
-            # 既存のレコードがあれば更新、なければ挿入
-            cur.execute("SELECT id FROM master_document_settings WHERE setting_key = %s", (key,))
-            if cur.fetchone():
-                cur.execute("UPDATE master_document_settings SET setting_value = %s, updated_at = CURRENT_TIMESTAMP WHERE setting_key = %s", (value, key))
-            else:
-                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (%s, %s)", (key, value))
-    else:
-        cur = conn.cursor()
-        for key in setting_keys:
-            value = request.form.get(key, '')
-            cur.execute("SELECT id FROM master_document_settings WHERE setting_key = ?", (key,))
-            if cur.fetchone():
-                cur.execute("UPDATE master_document_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?", (value, key))
-            else:
-                cur.execute("INSERT INTO master_document_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    flash('書類設定を保存しました', 'success')
     return redirect(url_for('admin_master_settings'))
 
 
 @app.route('/api/master-data')
 @login_required
 def api_master_data():
-    """マスターデータをJSON形式で取得（商品登録フォーム用）"""
+    """マスターデータをJSON形式で取得（商品登録フォーム用）
+    
+    クエリパラメータ:
+    - scope: 'user' または 'admin'（デフォルト: ユーザーの役割に応じて自動判定）
+    """
     conn = get_db()
+    
+    # スコープの決定: URLパラメータ > ユーザー役割
+    scope = request.args.get('scope')
+    if not scope:
+        # ユーザーの役割に応じてスコープを決定
+        if current_user.is_authenticated and current_user.is_admin():
+            scope = 'admin'
+        else:
+            scope = 'user'
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = TRUE ORDER BY display_order, id")
+        # スコープに応じたデータを取得（該当スコープまたはNULL）
+        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         brand_categories = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_brands WHERE is_active = TRUE ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brands WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         brands = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_suppliers WHERE is_active = TRUE ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_suppliers WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         suppliers = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_conditions WHERE is_active = TRUE ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_conditions WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         conditions = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = TRUE ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         payment_methods = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = TRUE ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = TRUE AND (scope = %s OR scope IS NULL) ORDER BY display_order, id", (scope,))
         supplier_details = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
         
-        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brand_categories WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         brand_categories = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_brands WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_brands WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         brands = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_suppliers WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_suppliers WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         suppliers = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_conditions WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_conditions WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         conditions = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_payment_methods WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         payment_methods = [dict(row) for row in cur.fetchall()]
         
-        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = 1 ORDER BY display_order, id")
+        cur.execute("SELECT * FROM master_supplier_details WHERE is_active = 1 AND (scope = ? OR scope IS NULL) ORDER BY display_order, id", (scope,))
         supplier_details = [dict(row) for row in cur.fetchall()]
     
     cur.close()
@@ -6124,7 +6610,8 @@ def api_master_data():
         'suppliers': suppliers,
         'conditions': conditions,
         'payment_methods': payment_methods,
-        'supplier_details': supplier_details
+        'supplier_details': supplier_details,
+        'scope': scope
     })
 
 

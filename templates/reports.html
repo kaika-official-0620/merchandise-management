@@ -49,31 +49,6 @@
         </div>
     </div>
 
-    <!-- 月次経費精算書 -->
-    <div class="report-card">
-        <div class="report-icon"></div>
-        <div class="report-content">
-            <h3>月次経費精算書</h3>
-            <p>選択した月の送料・手数料の内訳</p>
-            <div class="report-options">
-                <select id="expenses-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="expenses-month" class="form-control">
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button onclick="generateReport('expenses', 'preview')" class="btn btn-info">プレビュー</button>
-                <button onclick="generateReport('expenses', 'csv')" class="btn btn-secondary">CSV</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 年間収支報告書 -->
     <div class="report-card">
         <div class="report-icon"></div>
@@ -90,32 +65,6 @@
             <div class="report-actions">
                 <button onclick="generateReport('annual', 'preview')" class="btn btn-info">プレビュー</button>
                 <button onclick="generateReport('annual', 'csv')" class="btn btn-secondary">CSV</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 買取台帳 -->
-    <div class="report-card">
-        <div class="report-icon"></div>
-        <div class="report-content">
-            <h3>買取台帳</h3>
-            <p>個人から仕入れた商品の記録（古物営業法対応）</p>
-            <div class="report-options">
-                <select id="kaitori-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="kaitori-month" class="form-control">
-                    <option value="0">全期間</option>
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button onclick="generateReport('kaitori', 'preview')" class="btn btn-info">プレビュー</button>
-                <button onclick="generateReport('kaitori', 'csv')" class="btn btn-secondary">CSV</button>
             </div>
         </div>
     </div>
@@ -458,16 +407,8 @@ function generateReport(type, format) {
             currentParams.year = document.getElementById('monthly-year').value;
             currentParams.month = document.getElementById('monthly-month').value;
             break;
-        case 'expenses':
-            currentParams.year = document.getElementById('expenses-year').value;
-            currentParams.month = document.getElementById('expenses-month').value;
-            break;
         case 'annual':
             currentParams.year = document.getElementById('annual-year').value;
-            break;
-        case 'kaitori':
-            currentParams.year = document.getElementById('kaitori-year').value;
-            currentParams.month = document.getElementById('kaitori-month').value;
             break;
         case 'sales':
             currentParams.year = document.getElementById('sales-year').value;
@@ -493,9 +434,7 @@ function openReportModal(type) {
     const titles = {
         'monthly': '月次売上報告書',
         'inventory': '在庫一覧表',
-        'expenses': '月次経費精算書',
         'annual': '年間収支報告書',
-        'kaitori': '買取台帳',
         'sales': '売却一覧'
     };
     
@@ -536,12 +475,8 @@ function renderReportPreview(type, data) {
             return renderMonthlyReport(data);
         case 'inventory':
             return renderInventoryReport(data);
-        case 'expenses':
-            return renderExpensesReport(data);
         case 'annual':
             return renderAnnualReport(data);
-        case 'kaitori':
-            return renderKaitoriReport(data);
         case 'sales':
             return renderSalesReport(data);
         default:
@@ -583,6 +518,7 @@ function renderMonthlyReport(data) {
                     <th>売却日</th>
                     <th>商品名</th>
                     <th>ブランド</th>
+                    <th>仕入先</th>
                     <th class="text-right">売上</th>
                     <th class="text-right">仕入</th>
                     <th class="text-right">送料</th>
@@ -600,6 +536,7 @@ function renderMonthlyReport(data) {
                 <td>${item.sale_date}</td>
                 <td>${item.product_name}</td>
                 <td>${item.brand_name || '-'}</td>
+                <td>${item.store_name || '-'}</td>
                 <td class="text-right">¥${Number(item.sale_price).toLocaleString()}</td>
                 <td class="text-right">¥${Number(item.purchase_price).toLocaleString()}</td>
                 <td class="text-right">¥${Number(item.shipping_cost).toLocaleString()}</td>
@@ -663,67 +600,6 @@ function renderInventoryReport(data) {
     return html;
 }
 
-function renderExpensesReport(data) {
-    let html = `
-        <div class="report-summary">
-            <div class="summary-item">
-                <div class="label">取引件数</div>
-                <div class="value">${data.summary.count}件</div>
-            </div>
-            <div class="summary-item">
-                <div class="label">送料合計</div>
-                <div class="value">¥${Number(data.summary.total_shipping).toLocaleString()}</div>
-            </div>
-            <div class="summary-item">
-                <div class="label">手数料合計</div>
-                <div class="value">¥${Number(data.summary.total_commission).toLocaleString()}</div>
-            </div>
-            <div class="summary-item">
-                <div class="label">経費合計</div>
-                <div class="value">¥${Number(data.summary.total_expenses).toLocaleString()}</div>
-            </div>
-        </div>
-        <table class="report-table">
-            <thead>
-                <tr>
-                    <th>売却日</th>
-                    <th>商品名</th>
-                    <th>販売タイプ</th>
-                    <th class="text-right">売上</th>
-                    <th class="text-right">送料</th>
-                    <th class="text-right">手数料</th>
-                    <th class="text-right">経費計</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    data.items.forEach(item => {
-        const saleTypeLabel = {
-            'normal': '通常',
-            'photo_packing': '撮影梱包等代行',
-            'wholesale': '業者卸販売',
-            'multi_listing': '同時出品',
-            'auction': 'オークション流し'
-        };
-        const expenses = item.shipping_cost + item.commission;
-        html += `
-            <tr>
-                <td>${item.sale_date}</td>
-                <td>${item.product_name}</td>
-                <td>${saleTypeLabel[item.sale_type] || item.sale_type}</td>
-                <td class="text-right">¥${Number(item.sale_price).toLocaleString()}</td>
-                <td class="text-right">¥${Number(item.shipping_cost).toLocaleString()}</td>
-                <td class="text-right">¥${Number(item.commission).toLocaleString()}</td>
-                <td class="text-right">¥${Number(expenses).toLocaleString()}</td>
-            </tr>
-        `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
-
 function renderAnnualReport(data) {
     let html = `
         <div class="report-summary">
@@ -774,50 +650,6 @@ function renderAnnualReport(data) {
                 <td class="text-right">¥${Number(m.shipping).toLocaleString()}</td>
                 <td class="text-right">¥${Number(m.commission).toLocaleString()}</td>
                 <td class="text-right ${m.profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(m.profit).toLocaleString()}</td>
-            </tr>
-        `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
-
-function renderKaitoriReport(data) {
-    let html = `
-        <div class="report-summary">
-            <div class="summary-item">
-                <div class="label">買取件数</div>
-                <div class="value">${data.summary.count}件</div>
-            </div>
-            <div class="summary-item">
-                <div class="label">買取総額</div>
-                <div class="value">¥${Number(data.summary.total_purchase).toLocaleString()}</div>
-            </div>
-        </div>
-        <table class="report-table">
-            <thead>
-                <tr>
-                    <th>仕入日</th>
-                    <th>商品名</th>
-                    <th>ブランド</th>
-                    <th>仕入先</th>
-                    <th class="text-right">買取金額</th>
-                    <th>本人確認</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    data.items.forEach(item => {
-        const hasId = item.id_document_path ? '✓' : '-';
-        html += `
-            <tr>
-                <td>${item.purchase_date || '-'}</td>
-                <td>${item.product_name}</td>
-                <td>${item.brand_name || '-'}</td>
-                <td>${item.store_name || '-'}</td>
-                <td class="text-right">¥${Number(item.purchase_price).toLocaleString()}</td>
-                <td>${hasId}</td>
             </tr>
         `;
     });
