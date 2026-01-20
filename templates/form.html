@@ -117,28 +117,69 @@
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+/* 読み取り専用フィールドのスタイル */
+.basic-readonly-notice {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: #92400e;
+    font-size: 0.85rem;
+}
+
+.basic-readonly-notice strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+input:disabled, select:disabled, textarea:disabled {
+    background-color: #f1f5f9 !important;
+    cursor: not-allowed;
+    color: #64748b;
+}
+
+.owner-only-label {
+    color: #ef4444;
+    font-size: 0.75rem;
+    font-weight: normal;
+    margin-left: 4px;
+}
 </style>
+
+{% set basic_readonly = not current_user.is_owner() and item %}
+
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
     <div class="form-grid">
         <!-- 左カラム: 基本情報 -->
         <div class="form-section">
-            <h2>基本情報</h2>
+            <h2>基本情報{% if basic_readonly %}<span class="owner-only-label">（オーナーのみ編集可）</span>{% endif %}</h2>
+            
+            {% if basic_readonly %}
+            <div class="basic-readonly-notice">
+                <strong>⚠️ 基本情報は編集できません</strong>
+                仕入れ情報（仕入日〜支払方法、写真）はオーナーのみ編集可能です。売却情報のみ編集できます。
+            </div>
+            {% endif %}
             
             <div class="form-group">
                 <label for="purchase_date">仕入日</label>
                 <input type="date" id="purchase_date" name="purchase_date" 
-                       value="{{ item.purchase_date if item else '' }}">
+                       value="{{ item.purchase_date if item else '' }}"
+                       {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <div class="form-group">
                 <label for="product_name">商品名</label>
                 <input type="text" id="product_name" name="product_name" 
-                       value="{{ item.product_name if item else '' }}" required>
+                       value="{{ item.product_name if item else '' }}" required
+                       {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <div class="form-group">
                 <label for="brand_name">ブランド名</label>
-                <select id="brand_name" name="brand_name">
+                <select id="brand_name" name="brand_name" {% if basic_readonly %}disabled{% endif %}>
                     <option value="">選択してください</option>
                     <!-- マスターデータから動的に生成 -->
                 </select>
@@ -148,12 +189,13 @@
             <div class="form-group">
                 <label for="model_number">型番</label>
                 <input type="text" id="model_number" name="model_number" 
-                       value="{{ item.model_number if item else '' }}" placeholder="例: M44874, 116500LN">
+                       value="{{ item.model_number if item else '' }}" placeholder="例: M44874, 116500LN"
+                       {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <div class="form-group">
                 <label for="item_condition">商品状態</label>
-                <select id="item_condition" name="item_condition">
+                <select id="item_condition" name="item_condition" {% if basic_readonly %}disabled{% endif %}>
                     <option value="">選択してください</option>
                     <!-- マスターデータから動的に生成 -->
                 </select>
@@ -162,7 +204,7 @@
             
             <div class="form-group">
                 <label for="store_name">仕入先</label>
-                <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
+                <select id="store_name" name="store_name" onchange="toggleSupplierDetail()" {% if basic_readonly %}disabled{% endif %}>
                     <option value="">選択してください</option>
                     <!-- マスターデータから動的に生成 -->
                 </select>
@@ -173,7 +215,7 @@
             <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
                 <div class="form-group">
                     <label for="supplier_detail">仕入先詳細</label>
-                    <select id="supplier_detail" name="supplier_detail">
+                    <select id="supplier_detail" name="supplier_detail" {% if basic_readonly %}disabled{% endif %}>
                         <option value="">選択してください</option>
                         <!-- マスターデータから動的に生成 -->
                     </select>
@@ -182,7 +224,8 @@
                 
                 <div class="form-group">
                     <label for="id_document">身分証</label>
-                    <input type="file" id="id_document" name="id_document" accept="image/*,.pdf">
+                    <input type="file" id="id_document" name="id_document" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
                     {% if item and item.id_document_path %}
                     <div class="current-file">
                         <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank">現在のファイルを表示</a>
@@ -193,7 +236,8 @@
                 
                 <div class="form-group">
                     <label for="consent_form">同意書</label>
-                    <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf">
+                    <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
                     {% if item and item.consent_form_path %}
                     <div class="current-file">
                         <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank">現在のファイルを表示</a>
@@ -206,12 +250,13 @@
             <div class="form-group">
                 <label for="purchase_price">仕入額</label>
                 <input type="number" id="purchase_price" name="purchase_price" 
-                       value="{{ item.purchase_price if item else 0 }}" min="0">
+                       value="{{ item.purchase_price if item else 0 }}" min="0"
+                       {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <div class="form-group">
                 <label for="payment_method">支払方法</label>
-                <select id="payment_method" name="payment_method">
+                <select id="payment_method" name="payment_method" {% if basic_readonly %}disabled{% endif %}>
                     <option value="">選択してください</option>
                     <!-- マスターデータから動的に生成 -->
                 </select>
@@ -220,7 +265,8 @@
             
             <div class="form-group">
                 <label for="photo">メイン写真（1枚目）</label>
-                <input type="file" id="photo" name="photo" accept="image/*">
+                <input type="file" id="photo" name="photo" accept="image/*"
+                       {% if basic_readonly %}disabled{% endif %}>
                 {% if item and item.photo_path %}
                 <div class="current-photo">
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="現在の写真">
@@ -231,7 +277,8 @@
             
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
-                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple
+                       {% if basic_readonly %}disabled{% endif %}>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
                 
                 {% if item and item.additional_photos_list and item.additional_photos_list|length > 0 %}
@@ -241,10 +288,12 @@
                     <div class="additional-photo-item">
                         <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
                         <span class="photo-number">{{ loop.index + 1 }}枚目</span>
+                        {% if not basic_readonly %}
                         <label class="delete-checkbox">
                             <input type="checkbox" name="delete_photos" value="{{ photo }}">
                             <span>削除</span>
                         </label>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>

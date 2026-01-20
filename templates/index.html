@@ -1263,6 +1263,7 @@
                     <th>状態</th>
                     <th class="sortable" data-sort="store_name">仕入先</th>
                     {% if is_shared_view %}<th>登録者</th>{% endif %}
+                    <th>最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
                     <th class="sortable" data-sort="purchase_price">仕入額</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
@@ -1305,6 +1306,7 @@
                     </td>
                     <td>{{ item.store_name or '-' }}</td>
                     {% if is_shared_view %}<td class="owner-cell">{{ item.owner_name or '-' }}</td>{% endif %}
+                    <td class="owner-cell">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
                     <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
                     <td class="amount">
@@ -1347,14 +1349,18 @@
                             {% if item.show_in_proxy_service %}掲載中{% else %}代行{% endif %}
                         </button>
                         {% endif %}
+                        {% if item.can_delete %}
                         <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
                            onclick="return confirm('削除しますか？')">×</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;" title="1日以上経過した商品はオーナーのみ削除可能">×</span>
+                        {% endif %}
                         {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{% if is_shared_view %}15{% else %}14{% endif %}" style="text-align: center; padding: 40px; color: #94a3b8;">
+                    <td colspan="{% if is_shared_view %}16{% else %}15{% endif %}" style="text-align: center; padding: 40px; color: #94a3b8;">
                         {% if current_user.is_admin() %}
                         商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
                         {% else %}
@@ -1438,6 +1444,10 @@
                 <span class="card-label">仕入日</span>
                 <span class="card-value">{{ item.purchase_date or '-' }}</span>
             </div>
+            <div class="card-row">
+                <span class="card-label">最終更新者</span>
+                <span class="card-value">{{ item.updated_by_name or '-' }}</span>
+            </div>
             <div class="card-prices three-col">
                 <div class="price-item">
                     <span class="price-label">仕入</span>
@@ -1472,8 +1482,12 @@
             <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
             {% if current_user.is_admin() %}
             <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+            {% if item.can_delete %}
             <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete" 
                onclick="return confirm('削除しますか？')">削除</a>
+            {% else %}
+            <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;" title="1日以上経過">削除不可</span>
+            {% endif %}
             {% endif %}
         </div>
     </div>

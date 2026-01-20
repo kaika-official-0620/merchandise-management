@@ -222,6 +222,18 @@ if DATABASE_URL:
         except:
             pass
         
+        # updated_byカラムを追加（最終更新者）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id)")
+        except:
+            pass
+        
+        # updated_atカラムを追加（最終更新日時）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP")
+        except:
+            pass
+        
         # 顧客テーブル（user_id追加）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS customers (
@@ -960,6 +972,18 @@ else:
         # consent_form_pathカラムを追加（同意書）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN consent_form_path TEXT")
+        except:
+            pass
+        
+        # updated_byカラムを追加（最終更新者）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN updated_by INTEGER REFERENCES users(id)")
+        except:
+            pass
+        
+        # updated_atカラムを追加（最終更新日時）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN updated_at TIMESTAMP")
         except:
             pass
         
@@ -2048,12 +2072,23 @@ def index():
     shared_user_ids = []
     shared_users = {}  # user_id -> display_name のマッピング
     
+    # すべてのユーザーをマッピング（最終更新者表示用）
+    all_users = {}
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, display_name, username FROM users")
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, display_name, username FROM users")
+    
+    for u in cur.fetchall():
+        u_dict = dict(u)
+        all_users[u_dict['id']] = u_dict['display_name'] or u_dict['username']
+    
     if is_shared_view:
         if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
         else:
-            cur = conn.cursor()
             cur.execute("SELECT id, display_name, username FROM users WHERE role IN ('owner', 'admin')")
         
         for u in cur.fetchall():
@@ -2196,6 +2231,34 @@ def index():
         if is_shared_view:
             item_dict['owner_name'] = shared_users.get(item_dict.get('user_id'), '不明')
         
+        # 最終更新者名を追加
+        updated_by_id = item_dict.get('updated_by')
+        if updated_by_id:
+            item_dict['updated_by_name'] = all_users.get(updated_by_id, '不明')
+        else:
+            item_dict['updated_by_name'] = '-'
+        
+        # 削除可能かどうかを判定（オーナーは常に削除可能、管理者は1日以内のみ削除可能）
+        if current_user.is_owner():
+            item_dict['can_delete'] = True
+        else:
+            created_at = item_dict.get('created_at')
+            if created_at:
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                        except:
+                            created_at = None
+                if created_at:
+                    item_dict['can_delete'] = datetime.now() - created_at <= timedelta(days=1)
+                else:
+                    item_dict['can_delete'] = True
+            else:
+                item_dict['can_delete'] = True
+        
         if item_dict.get('sale_date'):
             item_dict['profit'] = calculate_profit(
                 item_dict.get('sale_price', 0) or 0,
@@ -2218,7 +2281,7 @@ def index():
     
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements,
-                         is_shared_view=is_shared_view)
+                         is_shared_view=is_shared_view, all_users=all_users)
 
 # ===================
 # レポート機能
@@ -3458,61 +3521,93 @@ def edit_item(id):
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        photo_path = item['photo_path']
+        # オーナーかどうかを判定
+        is_owner_user = current_user.is_owner()
         
-        # 既存の追加写真を取得
-        existing_additional = item.get('additional_photos')
-        if existing_additional:
-            try:
-                additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
-            except:
+        # 管理者（非オーナー）の場合、基本情報は元の値を維持
+        if is_owner_user:
+            # オーナーは全フィールド編集可能
+            photo_path = item['photo_path']
+            
+            # 既存の追加写真を取得
+            existing_additional = item.get('additional_photos')
+            if existing_additional:
+                try:
+                    additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
+                except:
+                    additional_photos = []
+            else:
                 additional_photos = []
-        else:
-            additional_photos = []
-        
-        # メイン写真の更新
-        if 'photo' in request.files:
-            file = request.files['photo']
-            if file and file.filename and allowed_file(file.filename):
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                photo_path = f'uploads/{filename}'
-        
-        # 追加写真の追加
-        if 'additional_photos' in request.files:
-            files = request.files.getlist('additional_photos')
-            for i, file in enumerate(files):
-                if len(additional_photos) >= 19:  # 最大19枚まで
-                    break
+            
+            # メイン写真の更新
+            if 'photo' in request.files:
+                file = request.files['photo']
                 if file and file.filename and allowed_file(file.filename):
-                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
                     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    additional_photos.append(f'uploads/{filename}')
-        
-        # 削除する写真を処理
-        delete_photos = request.form.getlist('delete_photos')
-        if delete_photos:
-            additional_photos = [p for p in additional_photos if p not in delete_photos]
-        
-        additional_photos_json = json.dumps(additional_photos) if additional_photos else None
-        
-        # 身分証ファイル
-        id_document_path = item.get('id_document_path')
-        if 'id_document' in request.files:
-            file = request.files['id_document']
-            if file and file.filename:
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                id_document_path = f'uploads/{filename}'
-        
-        # 同意書ファイル
-        consent_form_path = item.get('consent_form_path')
-        if 'consent_form' in request.files:
-            file = request.files['consent_form']
-            if file and file.filename:
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                consent_form_path = f'uploads/{filename}'
+                    photo_path = f'uploads/{filename}'
+            
+            # 追加写真の追加
+            if 'additional_photos' in request.files:
+                files = request.files.getlist('additional_photos')
+                for i, file in enumerate(files):
+                    if len(additional_photos) >= 19:  # 最大19枚まで
+                        break
+                    if file and file.filename and allowed_file(file.filename):
+                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                        additional_photos.append(f'uploads/{filename}')
+            
+            # 削除する写真を処理
+            delete_photos = request.form.getlist('delete_photos')
+            if delete_photos:
+                additional_photos = [p for p in additional_photos if p not in delete_photos]
+            
+            additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+            
+            # 身分証ファイル
+            id_document_path = item.get('id_document_path')
+            if 'id_document' in request.files:
+                file = request.files['id_document']
+                if file and file.filename:
+                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    id_document_path = f'uploads/{filename}'
+            
+            # 同意書ファイル
+            consent_form_path = item.get('consent_form_path')
+            if 'consent_form' in request.files:
+                file = request.files['consent_form']
+                if file and file.filename:
+                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    consent_form_path = f'uploads/{filename}'
+            
+            # 基本情報はフォームから取得
+            new_purchase_date = request.form.get('purchase_date') or None
+            new_product_name = request.form.get('product_name')
+            new_brand_name = request.form.get('brand_name')
+            new_model_number = request.form.get('model_number')
+            new_item_condition = request.form.get('item_condition')
+            new_store_name = request.form.get('store_name')
+            new_supplier_detail = request.form.get('supplier_detail')
+            new_purchase_price = int(request.form.get('purchase_price') or 0)
+            new_payment_method = request.form.get('payment_method')
+        else:
+            # 管理者は基本情報を元の値で維持（変更不可）
+            photo_path = item['photo_path']
+            additional_photos_json = item.get('additional_photos')
+            id_document_path = item.get('id_document_path')
+            consent_form_path = item.get('consent_form_path')
+            new_purchase_date = item['purchase_date']
+            new_product_name = item['product_name']
+            new_brand_name = item['brand_name']
+            new_model_number = item.get('model_number')
+            new_item_condition = item['item_condition']
+            new_store_name = item['store_name']
+            new_supplier_detail = item.get('supplier_detail')
+            new_purchase_price = item['purchase_price']
+            new_payment_method = item['payment_method']
         
         # ステータスを取得（未出品/出品中/売却済み）
         item_status = request.form.get('item_status', 'unlisted')
@@ -3525,22 +3620,23 @@ def edit_item(id):
                     purchase_price = %s, payment_method = %s, listing_price = %s, 
                     expected_shipping = %s, expected_commission = %s,
                     is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
-                    shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s
+                    shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
+                    updated_by = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s AND user_id = %s
             ''', (
-                request.form.get('purchase_date') or None,
+                new_purchase_date,
                 photo_path,
                 additional_photos_json,
-                request.form.get('product_name'),
-                request.form.get('brand_name'),
-                request.form.get('model_number'),
-                request.form.get('item_condition'),
-                request.form.get('store_name'),
-                request.form.get('supplier_detail'),
+                new_product_name,
+                new_brand_name,
+                new_model_number,
+                new_item_condition,
+                new_store_name,
+                new_supplier_detail,
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
-                request.form.get('payment_method'),
+                new_purchase_price,
+                new_payment_method,
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
@@ -3553,6 +3649,7 @@ def edit_item(id):
                 request.form.get('sales_destination'),
                 int(request.form.get('commission') or 0),
                 'is_shipped' in request.form,
+                current_user.id,
                 id, current_user.id
             ))
         else:
@@ -3563,22 +3660,23 @@ def edit_item(id):
                     purchase_price = ?, payment_method = ?, listing_price = ?, 
                     expected_shipping = ?, expected_commission = ?,
                     is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
-                    shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?
+                    shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
+                    updated_by = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND user_id = ?
             ''', (
-                request.form.get('purchase_date') or None,
+                new_purchase_date,
                 photo_path,
                 additional_photos_json,
-                request.form.get('product_name'),
-                request.form.get('brand_name'),
-                request.form.get('model_number'),
-                request.form.get('item_condition'),
-                request.form.get('store_name'),
-                request.form.get('supplier_detail'),
+                new_product_name,
+                new_brand_name,
+                new_model_number,
+                new_item_condition,
+                new_store_name,
+                new_supplier_detail,
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
-                request.form.get('payment_method'),
+                new_purchase_price,
+                new_payment_method,
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
@@ -3591,6 +3689,7 @@ def edit_item(id):
                 request.form.get('sales_destination'),
                 int(request.form.get('commission') or 0),
                 1 if 'is_shipped' in request.form else 0,
+                current_user.id,
                 id, current_user.id
             ))
         
@@ -3686,12 +3785,50 @@ def delete_item(id):
     
     conn = get_db()
     if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
     else:
         cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
+    item = cur.fetchone()
+    if not item:
+        cur.close()
+        conn.close()
+        flash('商品が見つかりません', 'error')
+        return redirect(url_for('index'))
+    
+    item_dict = dict(item)
+    
+    # 管理者（非オーナー）の場合、1日経った商品は削除不可
+    if not current_user.is_owner():
+        created_at = item_dict.get('created_at')
+        if created_at:
+            # created_atが文字列の場合はパース
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                except:
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                    except:
+                        created_at = None
+            
+            # 1日以上経過しているかチェック
+            if created_at and datetime.now() - created_at > timedelta(days=1):
+                cur.close()
+                conn.close()
+                flash('登録から1日以上経過した商品は削除できません。オーナーに連絡してください。', 'error')
+                return redirect(url_for('index'))
+    
+    # 削除実行
+    if DATABASE_URL:
+        cur.execute("DELETE FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+    else:
         cur.execute("DELETE FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+    
     conn.commit()
+    cur.close()
     conn.close()
     flash('商品を削除しました', 'info')
     return redirect(url_for('index'))
@@ -7631,7 +7768,8 @@ def admin_items():
         traceback.print_exc()
         return render_template('admin/admin_items.html', items=[], users=[])
     
-    # 利益計算と利益率の追加
+    # 利益計算と利益率の追加、最終更新者名の追加
+    all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
@@ -7648,6 +7786,13 @@ def admin_items():
                 item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
             else:
                 item['profit_rate'] = 0
+        
+        # 最終更新者名を追加
+        updated_by_id = item.get('updated_by')
+        if updated_by_id:
+            item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
+        else:
+            item['updated_by_name'] = '-'
     
     return render_template('admin/admin_items.html', 
                           items=items, 
@@ -7741,7 +7886,8 @@ def admin_user_products():
         traceback.print_exc()
         return render_template('admin/user_products.html', items=[], users=[])
     
-    # 利益計算と利益率の追加
+    # 利益計算と利益率の追加、最終更新者名の追加
+    all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
@@ -7758,6 +7904,13 @@ def admin_user_products():
                 item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
             else:
                 item['profit_rate'] = 0
+        
+        # 最終更新者名を追加
+        updated_by_id = item.get('updated_by')
+        if updated_by_id:
+            item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
+        else:
+            item['updated_by_name'] = '-'
     
     return render_template('admin/user_products.html', 
                           items=items, 
