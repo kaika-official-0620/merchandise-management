@@ -14005,10 +14005,11 @@ def admin_inquiries():
         
         # 新着件数を取得
         if DATABASE_URL:
-            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+            cur.execute("SELECT COUNT(*) as count FROM inquiries WHERE status = 'new'")
+            new_count = cur.fetchone()['count']
         else:
             cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-        new_count = cur.fetchone()[0]
+            new_count = cur.fetchone()[0]
         
         cur.close()
         conn.close()
@@ -14176,12 +14177,12 @@ def get_unread_inquiry_count():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+            cur.execute("SELECT COUNT(*) as count FROM inquiries WHERE status = 'new'")
+            count = cur.fetchone()[0]
         else:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-        
-        count = cur.fetchone()[0]
+            count = cur.fetchone()[0]
         cur.close()
         conn.close()
         return count

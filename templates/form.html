@@ -329,25 +329,6 @@ input:disabled, select:disabled, textarea:disabled {
                        value="{{ item.listing_price if item else 0 }}" min="0">
             </div>
             
-            <!-- 出品中時のみ表示 - 出品サービス選択 -->
-            <div id="listing-service-group" style="display: none;">
-                <div class="form-group">
-                    <label>出品サービス（複数選択可）</label>
-                    <div class="sale-type-checkboxes listing-services">
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="listing_service[]" value="wholesale"
-                                   {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}>
-                            <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="listing_service[]" value="multi_listing"
-                                   {% if item and 'multi_listing' in (item.sale_type or '') %}checked{% endif %}>
-                            <span class="sale-type-label">同時出品サービス（手数料3%）</span>
-                        </label>
-                    </div>
-                    <small class="form-help">売却時に適用される手数料サービスを事前に選択できます</small>
-                </div>
-            </div>
             
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
@@ -361,15 +342,11 @@ input:disabled, select:disabled, textarea:disabled {
                 <div class="form-group">
                     <label>販売タイプ（複数選択可）</label>
                     <div class="sale-type-checkboxes">
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="sale_type[]" value="normal" 
-                                   {% if not item or not item.sale_type or 'normal' in (item.sale_type or '') %}checked{% endif %}>
-                            <span class="sale-type-label">通常（手数料10%）</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="sale_type[]" value="photo_packing"
-                                   {% if item and 'photo_packing' in (item.sale_type or '') %}checked{% endif %}>
-                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
+                        <!-- 撮影梱包等代行は固定（常にチェック、変更不可） -->
+                        <label class="sale-type-option fixed-option">
+                            <input type="checkbox" name="sale_type[]" value="photo_packing" checked disabled>
+                            <input type="hidden" name="sale_type[]" value="photo_packing">
+                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）<span class="fixed-badge">固定</span></span>
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="wholesale"
@@ -387,7 +364,8 @@ input:disabled, select:disabled, textarea:disabled {
                             <span class="sale-type-label">オークション流し（手数料5%）</span>
                         </label>
                     </div>
-                    <input type="hidden" id="sale_type" name="sale_type" value="{{ item.sale_type if item else 'normal' }}">
+                    <small class="form-help">販売タイプを選択してください。撮影梱包等代行は必須です。</small>
+                    <input type="hidden" id="sale_type" name="sale_type" value="{{ item.sale_type if item else 'photo_packing' }}">
                 </div>
                 
                 <div class="form-group">
@@ -488,6 +466,32 @@ input:disabled, select:disabled, textarea:disabled {
     color: #374151;
 }
 
+.sale-type-option.fixed-option {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    cursor: default;
+}
+
+.sale-type-option.fixed-option:hover {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+}
+
+.sale-type-option.fixed-option input[type="checkbox"] {
+    accent-color: #10b981;
+}
+
+.fixed-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: #10b981;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
 .selected-types-summary {
     margin-top: 8px;
     padding: 8px 12px;
@@ -497,28 +501,6 @@ input:disabled, select:disabled, textarea:disabled {
     color: #1e40af;
 }
 
-/* 出品サービス選択 */
-.listing-services {
-    border: 2px solid #22c55e;
-    background: #f0fdf4 !important;
-}
-
-.listing-services .sale-type-option {
-    background: white;
-}
-
-.listing-services .sale-type-option:hover {
-    border-color: #22c55e;
-    background: #dcfce7;
-}
-
-.listing-services .sale-type-option input[type="checkbox"] {
-    accent-color: #22c55e;
-}
-
-.listing-services .sale-type-option input[type="checkbox"]:checked + .sale-type-label {
-    color: #15803d;
-}
 </style>
 
 <script>
@@ -527,17 +509,12 @@ let autoCalculateCommission = true;
 
 // 販売タイプごとの手数料計算ルール
 const saleTypeRules = {
-    'normal': {
-        name: '通常',
-        calculate: (price) => Math.floor(price * 0.10),
-        hint: '通常: 売上金の10%',
-        shippingHint: ''
-    },
     'photo_packing': {
         name: '撮影梱包等代行',
         calculate: (price) => price >= 25000 ? Math.floor(price * 0.02) : 500,
         hint: (price) => price >= 25000 ? '撮影梱包: 売上金の2%（25,000円以上）' : '撮影梱包: 500円（25,000円未満）',
-        shippingHint: ''
+        shippingHint: '',
+        isFixed: true  // 固定費用
     },
     'wholesale': {
         name: '業者卸販売',
@@ -562,9 +539,13 @@ const saleTypeRules = {
 
 // チェックボックスの選択状況をhiddenフィールドに反映
 function updateSaleTypeValue() {
-    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked');
+    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked:not(:disabled)');
     const values = Array.from(checkboxes).map(cb => cb.value);
-    document.getElementById('sale_type').value = values.join(',') || 'normal';
+    // photo_packingは常に含める（固定）
+    if (!values.includes('photo_packing')) {
+        values.unshift('photo_packing');
+    }
+    document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
     
     // 自動計算が有効なら手数料を再計算
     if (autoCalculateCommission) {
@@ -590,7 +571,7 @@ function calculateCommission() {
     if (!autoCalculateCommission) return;
     
     const saleTypeValue = document.getElementById('sale_type').value;
-    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['normal'];
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     
     // 複数タイプが選択されている場合、手数料を合計
@@ -669,7 +650,6 @@ function updateStatusFields() {
     const status = document.getElementById('item_status').value;
     const listingDateGroup = document.getElementById('listing-date-group');
     const listingPriceGroup = document.getElementById('listing-price-group');
-    const listingServiceGroup = document.getElementById('listing-service-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
     
@@ -682,36 +662,14 @@ function updateStatusFields() {
         listingPriceGroup.style.display = 'none';
     }
     
-    // 出品サービス選択：出品中のみ表示
-    if (status === 'listed') {
-        listingServiceGroup.style.display = 'block';
-    } else {
-        listingServiceGroup.style.display = 'none';
-    }
-    
     // 売却日・売却関連フィールド：売却済みで表示
     if (status === 'sold') {
         saleDateGroup.style.display = 'block';
         soldFields.style.display = 'block';
-        
-        // 出品中で選択したサービスを売却時の販売タイプに引き継ぎ
-        syncListingServiceToSaleType();
     } else {
         saleDateGroup.style.display = 'none';
         soldFields.style.display = 'none';
     }
-}
-
-// 出品サービスの選択を販売タイプに同期
-function syncListingServiceToSaleType() {
-    const listingServices = document.querySelectorAll('input[name="listing_service[]"]:checked');
-    listingServices.forEach(service => {
-        const saleTypeCheckbox = document.querySelector(`input[name="sale_type[]"][value="${service.value}"]`);
-        if (saleTypeCheckbox && !saleTypeCheckbox.checked) {
-            saleTypeCheckbox.checked = true;
-        }
-    });
-    updateSaleTypeValue();
 }
 
 // 仕入先詳細セクションの表示切替
@@ -969,26 +927,10 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
             checkbox.checked = selectedTypes.includes(checkbox.value);
         });
-        // 出品サービスのチェックボックスも初期化
-        document.querySelectorAll('input[name="listing_service[]"]').forEach(checkbox => {
-            checkbox.checked = selectedTypes.includes(checkbox.value);
-        });
     }
     
-    // 出品サービスのチェックボックスにイベントリスナーを設定
-    document.querySelectorAll('input[name="listing_service[]"]').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            // 対応する販売タイプのチェックボックスも同期
-            const saleTypeCheckbox = document.querySelector(`input[name="sale_type[]"][value="${this.value}"]`);
-            if (saleTypeCheckbox) {
-                saleTypeCheckbox.checked = this.checked;
-            }
-            updateSaleTypeValue();
-        });
-    });
-    
     // 初期ヒント表示（複数選択対応）
-    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['normal'];
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
     let hints = [];
     selectedTypes.forEach(type => {
         const rule = saleTypeRules[type];
