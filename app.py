@@ -13944,80 +13944,91 @@ def admin_inquiries():
     
     status_filter = request.args.get('status', '')
     
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        if status_filter:
-            cur.execute('''
-                SELECT i.*, u.display_name, u.username,
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
-                FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                WHERE i.status = %s
-                ORDER BY 
-                    CASE WHEN i.status = 'new' THEN 0 
-                         WHEN i.status = 'in_progress' THEN 1 
-                         ELSE 2 END,
-                    i.updated_at DESC
-            ''', (status_filter,))
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if status_filter:
+                cur.execute('''
+                    SELECT i.*, u.display_name, u.username,
+                           (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                    FROM inquiries i
+                    JOIN users u ON i.user_id = u.id
+                    WHERE i.status = %s
+                    ORDER BY 
+                        CASE WHEN i.status = 'new' THEN 0 
+                             WHEN i.status = 'in_progress' THEN 1 
+                             ELSE 2 END,
+                        i.updated_at DESC
+                ''', (status_filter,))
+            else:
+                cur.execute('''
+                    SELECT i.*, u.display_name, u.username,
+                           (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                    FROM inquiries i
+                    JOIN users u ON i.user_id = u.id
+                    ORDER BY 
+                        CASE WHEN i.status = 'new' THEN 0 
+                             WHEN i.status = 'in_progress' THEN 1 
+                             ELSE 2 END,
+                        i.updated_at DESC
+                ''')
         else:
-            cur.execute('''
-                SELECT i.*, u.display_name, u.username,
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
-                FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                ORDER BY 
-                    CASE WHEN i.status = 'new' THEN 0 
-                         WHEN i.status = 'in_progress' THEN 1 
-                         ELSE 2 END,
-                    i.updated_at DESC
-            ''')
-    else:
-        cur = conn.cursor()
-        if status_filter:
-            cur.execute('''
-                SELECT i.*, u.display_name, u.username,
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
-                FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                WHERE i.status = ?
-                ORDER BY 
-                    CASE WHEN i.status = 'new' THEN 0 
-                         WHEN i.status = 'in_progress' THEN 1 
-                         ELSE 2 END,
-                    i.updated_at DESC
-            ''', (status_filter,))
+            cur = conn.cursor()
+            if status_filter:
+                cur.execute('''
+                    SELECT i.*, u.display_name, u.username,
+                           (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                    FROM inquiries i
+                    JOIN users u ON i.user_id = u.id
+                    WHERE i.status = ?
+                    ORDER BY 
+                        CASE WHEN i.status = 'new' THEN 0 
+                             WHEN i.status = 'in_progress' THEN 1 
+                             ELSE 2 END,
+                        i.updated_at DESC
+                ''', (status_filter,))
+            else:
+                cur.execute('''
+                    SELECT i.*, u.display_name, u.username,
+                           (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
+                    FROM inquiries i
+                    JOIN users u ON i.user_id = u.id
+                    ORDER BY 
+                        CASE WHEN i.status = 'new' THEN 0 
+                             WHEN i.status = 'in_progress' THEN 1 
+                             ELSE 2 END,
+                        i.updated_at DESC
+                ''')
+        
+        inquiries = [dict(row) for row in cur.fetchall()]
+        
+        # 新着件数を取得
+        if DATABASE_URL:
+            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
         else:
-            cur.execute('''
-                SELECT i.*, u.display_name, u.username,
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
-                FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                ORDER BY 
-                    CASE WHEN i.status = 'new' THEN 0 
-                         WHEN i.status = 'in_progress' THEN 1 
-                         ELSE 2 END,
-                    i.updated_at DESC
-            ''')
-    
-    inquiries = [dict(row) for row in cur.fetchall()]
-    
-    # 新着件数を取得
-    if DATABASE_URL:
-        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-    else:
-        cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
-    new_count = cur.fetchone()[0]
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/inquiries.html',
-                         inquiries=inquiries,
-                         categories=INQUIRY_CATEGORIES,
-                         statuses=INQUIRY_STATUS,
-                         status_filter=status_filter,
-                         new_count=new_count)
+            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+        new_count = cur.fetchone()[0]
+        
+        cur.close()
+        conn.close()
+        
+        return render_template('admin/inquiries.html',
+                             inquiries=inquiries,
+                             categories=INQUIRY_CATEGORIES,
+                             statuses=INQUIRY_STATUS,
+                             status_filter=status_filter,
+                             new_count=new_count)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash('問い合わせテーブルの初期化中です。しばらくお待ちください。', 'info')
+        return render_template('admin/inquiries.html',
+                             inquiries=[],
+                             categories=INQUIRY_CATEGORIES,
+                             statuses=INQUIRY_STATUS,
+                             status_filter='',
+                             new_count=0)
 
 @app.route('/admin/inquiry/<int:id>')
 @login_required
