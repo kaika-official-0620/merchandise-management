@@ -3004,30 +3004,46 @@ def api_report_download(report_type):
 @app.route('/my-analytics')
 @login_required
 def user_analytics():
-    """ユーザー向け分析ページ"""
+    """ユーザー向け分析ページ
+    
+    管理者ログイン時: 管理者以外のすべてのユーザーの商品を分析
+    一般ユーザーログイン時: 自分自身の商品を分析
+    """
     conn = get_db()
     analytics_data = {}
+    
+    # 管理者かどうかで条件を変更
+    is_admin = current_user.is_admin()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
+        # 管理者の場合: user_id IS NOT NULL（管理者以外の全ユーザー）
+        # 一般ユーザーの場合: user_id = current_user.id
+        if is_admin:
+            user_condition = "user_id IS NOT NULL"
+            user_params = ()
+        else:
+            user_condition = "user_id = %s"
+            user_params = (current_user.id,)
+        
         # 月別売上・利益推移
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 TO_CHAR(sale_date, 'YYYY-MM') as month,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
             ORDER BY month DESC
             LIMIT 12
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
         
         # 価格帯別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 CASE 
                     WHEN sale_price < 10000 THEN '1万円未満'
@@ -3040,14 +3056,14 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY price_range
             ORDER BY MIN(sale_price)
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['price_stats'] = [dict(p) for p in cur.fetchall()]
         
         # ブランド別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COALESCE(brand_name, '(ブランド名なし)') as brand_name,
                 COUNT(*) as count,
@@ -3057,29 +3073,29 @@ def user_analytics():
                     THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY brand_name
             ORDER BY total_profit DESC
             LIMIT 10
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
         
         # 販売タイプ別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COALESCE(sale_type, 'normal') as sale_type,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY sale_type
             ORDER BY count DESC
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
         
         # 総合統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COUNT(*) as total_items,
                 SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -3090,13 +3106,13 @@ def user_analytics():
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
             FROM merchandise 
-            WHERE user_id = %s
-        """, (current_user.id,))
+            WHERE {user_condition}
+        """, user_params)
         analytics_data['summary'] = dict(cur.fetchone() or {})
         
         # KPI用追加データ
         try:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     COUNT(*) as total_items,
                     SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -3108,8 +3124,8 @@ def user_analytics():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
                     COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN sale_date::date - purchase_date::date END), 0) as avg_days_to_sell
                 FROM merchandise 
-                WHERE user_id = %s
-            """, (current_user.id,))
+                WHERE {user_condition}
+            """, user_params)
             analytics_data['kpi'] = dict(cur.fetchone() or {})
         except Exception as e:
             print(f"KPI query error: {e}")
@@ -3117,7 +3133,7 @@ def user_analytics():
         
         # 月別キャッシュフロー
         try:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM') as month,
                     COALESCE(SUM(purchase_price), 0) as purchase_out,
@@ -3127,11 +3143,11 @@ def user_analytics():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
                 FROM merchandise 
-                WHERE user_id = %s AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
+                WHERE {user_condition} AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
                 GROUP BY TO_CHAR(COALESCE(sale_date, purchase_date), 'YYYY-MM')
                 ORDER BY month DESC
                 LIMIT 12
-            """, (current_user.id,))
+            """, user_params)
             analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
         except Exception as e:
             print(f"Cashflow query error: {e}")
@@ -3142,23 +3158,32 @@ def user_analytics():
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
         
+        # 管理者の場合: user_id IS NOT NULL（管理者以外の全ユーザー）
+        # 一般ユーザーの場合: user_id = current_user.id
+        if is_admin:
+            user_condition = "user_id IS NOT NULL"
+            user_params = ()
+        else:
+            user_condition = "user_id = ?"
+            user_params = (current_user.id,)
+        
         # 月別売上・利益推移
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 strftime('%Y-%m', sale_date) as month,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY strftime('%Y-%m', sale_date)
             ORDER BY month DESC
             LIMIT 12
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
         
         # 価格帯別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 CASE 
                     WHEN sale_price < 10000 THEN '1万円未満'
@@ -3171,14 +3196,14 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY price_range
             ORDER BY MIN(sale_price)
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['price_stats'] = [dict(p) for p in cur.fetchall()]
         
         # ブランド別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COALESCE(brand_name, '(ブランド名なし)') as brand_name,
                 COUNT(*) as count,
@@ -3188,29 +3213,29 @@ def user_analytics():
                     THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY brand_name
             ORDER BY total_profit DESC
             LIMIT 10
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
         
         # 販売タイプ別統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COALESCE(sale_type, 'normal') as sale_type,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL
             GROUP BY sale_type
             ORDER BY count DESC
-        """, (current_user.id,))
+        """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
         
         # 総合統計
-        cur.execute("""
+        cur.execute(f"""
             SELECT 
                 COUNT(*) as total_items,
                 SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -3221,13 +3246,13 @@ def user_analytics():
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
                 COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
             FROM merchandise 
-            WHERE user_id = ?
-        """, (current_user.id,))
+            WHERE {user_condition}
+        """, user_params)
         analytics_data['summary'] = dict(cur.fetchone() or {})
         
         # KPI用追加データ
         try:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     COUNT(*) as total_items,
                     SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -3239,8 +3264,8 @@ def user_analytics():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
                     COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
                 FROM merchandise 
-                WHERE user_id = ?
-            """, (current_user.id,))
+                WHERE {user_condition}
+            """, user_params)
             analytics_data['kpi'] = dict(cur.fetchone() or {})
         except Exception as e:
             print(f"KPI query error: {e}")
@@ -3248,7 +3273,7 @@ def user_analytics():
         
         # 月別キャッシュフロー
         try:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     strftime('%Y-%m', COALESCE(sale_date, purchase_date)) as month,
                     COALESCE(SUM(purchase_price), 0) as purchase_out,
@@ -3258,11 +3283,11 @@ def user_analytics():
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost + commission ELSE 0 END), 0) as expenses_out,
                     COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as net_profit
                 FROM merchandise 
-                WHERE user_id = ? AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
+                WHERE {user_condition} AND (purchase_date IS NOT NULL OR sale_date IS NOT NULL)
                 GROUP BY strftime('%Y-%m', COALESCE(sale_date, purchase_date))
                 ORDER BY month DESC
                 LIMIT 12
-            """, (current_user.id,))
+            """, user_params)
             analytics_data['cashflow'] = [dict(c) for c in cur.fetchall()]
         except Exception as e:
             print(f"Cashflow query error: {e}")
@@ -3270,6 +3295,9 @@ def user_analytics():
     
     cur.close()
     conn.close()
+    
+    # 管理者の場合は分析対象がわかるようにフラグを渡す
+    analytics_data['is_admin_view'] = is_admin
     
     return render_template('user_analytics.html', analytics=analytics_data)
 
@@ -4729,6 +4757,214 @@ def admin_analytics():
                          widgets=[dict(w) for w in widgets] if widgets else [],
                          overall_stats=overall_stats,
                          kaika_fee=kaika_fee_data,
+                         date_from=date_from,
+                         date_to=date_to,
+                         **analytics_data)
+
+@app.route('/admin/analytics/kaika')
+@login_required
+@admin_required
+def admin_analytics_kaika():
+    """開花（管理者）商品の分析ページ（user_id = NULL の商品のみ）"""
+    analytics_data = {}
+    overall_stats = {}
+    
+    # 日付フィルター取得
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 日付条件を構築
+            date_condition = ""
+            date_params = []
+            if date_from and date_to:
+                date_condition = " AND sale_date BETWEEN %s AND %s"
+                date_params = [date_from, date_to]
+            elif date_from:
+                date_condition = " AND sale_date >= %s"
+                date_params = [date_from]
+            elif date_to:
+                date_condition = " AND sale_date <= %s"
+                date_params = [date_to]
+            
+            # 管理者商品（user_id IS NULL）の条件
+            user_condition = "user_id IS NULL"
+            
+            # 全体統計
+            query = f"""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+                FROM merchandise
+                WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
+            cur.execute(query, date_params if date_params else None)
+            overall_stats = dict(cur.fetchone() or {})
+            
+            # 月別売上・利益推移
+            cur.execute(f"""
+                SELECT 
+                    TO_CHAR(sale_date, 'YYYY-MM') as month,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 12
+            """, date_params if date_params else None)
+            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+            
+            # ブランド別統計
+            cur.execute(f"""
+                SELECT 
+                    COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
+                    CASE WHEN SUM(sale_price) > 0 
+                        THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                        ELSE 0 END as profit_rate
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY brand_name
+                ORDER BY total_profit DESC
+                LIMIT 10
+            """, date_params if date_params else None)
+            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+            
+            # 販売タイプ別統計
+            cur.execute(f"""
+                SELECT 
+                    COALESCE(sale_type, 'normal') as sale_type,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY sale_type
+                ORDER BY count DESC
+            """, date_params if date_params else None)
+            analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+            
+            # 在庫統計
+            cur.execute(f"""
+                SELECT 
+                    COUNT(*) as unsold_count,
+                    COALESCE(SUM(purchase_price), 0) as inventory_value
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NULL
+            """)
+            analytics_data['inventory'] = dict(cur.fetchone() or {})
+            
+        else:
+            import sqlite3
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            
+            # 日付条件を構築（SQLite用）
+            date_condition = ""
+            date_params = []
+            if date_from and date_to:
+                date_condition = " AND sale_date BETWEEN ? AND ?"
+                date_params = [date_from, date_to]
+            elif date_from:
+                date_condition = " AND sale_date >= ?"
+                date_params = [date_from]
+            elif date_to:
+                date_condition = " AND sale_date <= ?"
+                date_params = [date_to]
+            
+            # 管理者商品（user_id IS NULL）の条件
+            user_condition = "user_id IS NULL"
+            
+            # 全体統計
+            query = f"""
+                SELECT 
+                    COUNT(*) as total_items,
+                    COALESCE(SUM(purchase_price), 0) as total_purchase,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 
+                        sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
+                FROM merchandise
+                WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
+            cur.execute(query, date_params if date_params else ())
+            overall_stats = dict(cur.fetchone() or {})
+            
+            # 月別売上・利益推移
+            cur.execute(f"""
+                SELECT 
+                    strftime('%Y-%m', sale_date) as month,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY strftime('%Y-%m', sale_date)
+                ORDER BY month DESC
+                LIMIT 12
+            """, date_params if date_params else ())
+            analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
+            
+            # ブランド別統計
+            cur.execute(f"""
+                SELECT 
+                    COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
+                    CASE WHEN SUM(sale_price) > 0 
+                        THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                        ELSE 0 END as profit_rate
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY brand_name
+                ORDER BY total_profit DESC
+                LIMIT 10
+            """, date_params if date_params else ())
+            analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+            
+            # 販売タイプ別統計
+            cur.execute(f"""
+                SELECT 
+                    COALESCE(sale_type, 'normal') as sale_type,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY sale_type
+                ORDER BY count DESC
+            """, date_params if date_params else ())
+            analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+            
+            # 在庫統計
+            cur.execute(f"""
+                SELECT 
+                    COUNT(*) as unsold_count,
+                    COALESCE(SUM(purchase_price), 0) as inventory_value
+                FROM merchandise 
+                WHERE {user_condition} AND sale_date IS NULL
+            """)
+            analytics_data['inventory'] = dict(cur.fetchone() or {})
+        
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Admin analytics kaika error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return render_template('admin/analytics_kaika.html',
+                         overall_stats=overall_stats,
                          date_from=date_from,
                          date_to=date_to,
                          **analytics_data)
@@ -7531,24 +7767,10 @@ def admin_user_products():
 @login_required
 @admin_required
 def admin_add_item():
-    """管理者用商品登録（ユーザー指定可能）"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, username, display_name FROM users ORDER BY username")
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT id, username, display_name FROM users ORDER BY username")
-    users = [dict(u) for u in cur.fetchall()]
-    cur.close()
-    conn.close()
-    
+    """管理者用商品登録（管理者商品のみ登録）"""
     if request.method == 'POST':
-        target_user_id = request.form.get('target_user_id')
-        if target_user_id:
-            target_user_id = int(target_user_id)
-        else:
-            target_user_id = None  # 管理者商品として登録
+        # 管理者商品として登録（user_id = None）
+        target_user_id = None
         
         conn = get_db()
         if DATABASE_URL:
@@ -7658,7 +7880,7 @@ def admin_add_item():
         
         return redirect(url_for('admin_items'))
     
-    return render_template('admin/item_form.html', item=None, users=users)
+    return render_template('admin/item_form.html', item=None)
 
 @app.route('/admin/items/<int:id>/transfer', methods=['POST'])
 @login_required

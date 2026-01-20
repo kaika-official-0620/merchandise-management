@@ -140,62 +140,9 @@
                 <label for="brand_name">ブランド名</label>
                 <select id="brand_name" name="brand_name">
                     <option value="">選択してください</option>
-                    <optgroup label="ラグジュアリーブランド">
-                        <option value="Louis Vuitton" {% if item and item.brand_name == 'Louis Vuitton' %}selected{% endif %}>Louis Vuitton（ルイ・ヴィトン）</option>
-                        <option value="Hermes" {% if item and item.brand_name == 'Hermes' %}selected{% endif %}>Hermes（エルメス）</option>
-                        <option value="Chanel" {% if item and item.brand_name == 'Chanel' %}selected{% endif %}>Chanel（シャネル）</option>
-                        <option value="Gucci" {% if item and item.brand_name == 'Gucci' %}selected{% endif %}>Gucci（グッチ）</option>
-                        <option value="Prada" {% if item and item.brand_name == 'Prada' %}selected{% endif %}>Prada（プラダ）</option>
-                        <option value="Dior" {% if item and item.brand_name == 'Dior' %}selected{% endif %}>Dior（ディオール）</option>
-                        <option value="Celine" {% if item and item.brand_name == 'Celine' %}selected{% endif %}>Celine（セリーヌ）</option>
-                        <option value="Bottega Veneta" {% if item and item.brand_name == 'Bottega Veneta' %}selected{% endif %}>Bottega Veneta（ボッテガ・ヴェネタ）</option>
-                        <option value="Balenciaga" {% if item and item.brand_name == 'Balenciaga' %}selected{% endif %}>Balenciaga（バレンシアガ）</option>
-                        <option value="Saint Laurent" {% if item and item.brand_name == 'Saint Laurent' %}selected{% endif %}>Saint Laurent（サンローラン）</option>
-                        <option value="Loewe" {% if item and item.brand_name == 'Loewe' %}selected{% endif %}>Loewe（ロエベ）</option>
-                        <option value="Fendi" {% if item and item.brand_name == 'Fendi' %}selected{% endif %}>Fendi（フェンディ）</option>
-                        <option value="Burberry" {% if item and item.brand_name == 'Burberry' %}selected{% endif %}>Burberry（バーバリー）</option>
-                        <option value="Valentino" {% if item and item.brand_name == 'Valentino' %}selected{% endif %}>Valentino（ヴァレンティノ）</option>
-                        <option value="Givenchy" {% if item and item.brand_name == 'Givenchy' %}selected{% endif %}>Givenchy（ジバンシィ）</option>
-                        <option value="Miu Miu" {% if item and item.brand_name == 'Miu Miu' %}selected{% endif %}>Miu Miu（ミュウミュウ）</option>
-                    </optgroup>
-                    <optgroup label="時計・ジュエリー">
-                        <option value="Rolex" {% if item and item.brand_name == 'Rolex' %}selected{% endif %}>Rolex（ロレックス）</option>
-                        <option value="Cartier" {% if item and item.brand_name == 'Cartier' %}selected{% endif %}>Cartier（カルティエ）</option>
-                        <option value="Omega" {% if item and item.brand_name == 'Omega' %}selected{% endif %}>Omega（オメガ）</option>
-                        <option value="Patek Philippe" {% if item and item.brand_name == 'Patek Philippe' %}selected{% endif %}>Patek Philippe（パテック・フィリップ）</option>
-                        <option value="Audemars Piguet" {% if item and item.brand_name == 'Audemars Piguet' %}selected{% endif %}>Audemars Piguet（オーデマ・ピゲ）</option>
-                        <option value="Tiffany" {% if item and item.brand_name == 'Tiffany' %}selected{% endif %}>Tiffany（ティファニー）</option>
-                        <option value="Bvlgari" {% if item and item.brand_name == 'Bvlgari' %}selected{% endif %}>Bvlgari（ブルガリ）</option>
-                        <option value="Van Cleef" {% if item and item.brand_name == 'Van Cleef' %}selected{% endif %}>Van Cleef（ヴァンクリーフ）</option>
-                    </optgroup>
-                    <optgroup label="スポーツ・ストリート">
-                        <option value="Nike" {% if item and item.brand_name == 'Nike' %}selected{% endif %}>Nike（ナイキ）</option>
-                        <option value="Adidas" {% if item and item.brand_name == 'Adidas' %}selected{% endif %}>Adidas（アディダス）</option>
-                        <option value="Supreme" {% if item and item.brand_name == 'Supreme' %}selected{% endif %}>Supreme（シュプリーム）</option>
-                        <option value="Off-White" {% if item and item.brand_name == 'Off-White' %}selected{% endif %}>Off-White（オフホワイト）</option>
-                        <option value="A BATHING APE" {% if item and item.brand_name == 'A BATHING APE' %}selected{% endif %}>A BATHING APE（ベイプ）</option>
-                        <option value="Jordan" {% if item and item.brand_name == 'Jordan' %}selected{% endif %}>Jordan（ジョーダン）</option>
-                        <option value="New Balance" {% if item and item.brand_name == 'New Balance' %}selected{% endif %}>New Balance（ニューバランス）</option>
-                    </optgroup>
-                    <optgroup label="日本ブランド">
-                        <option value="COMME des GARCONS" {% if item and item.brand_name == 'COMME des GARCONS' %}selected{% endif %}>COMME des GARCONS（コムデギャルソン）</option>
-                        <option value="Yohji Yamamoto" {% if item and item.brand_name == 'Yohji Yamamoto' %}selected{% endif %}>Yohji Yamamoto（ヨウジヤマモト）</option>
-                        <option value="ISSEY MIYAKE" {% if item and item.brand_name == 'ISSEY MIYAKE' %}selected{% endif %}>ISSEY MIYAKE（イッセイミヤケ）</option>
-                        <option value="sacai" {% if item and item.brand_name == 'sacai' %}selected{% endif %}>sacai（サカイ）</option>
-                        <option value="UNDERCOVER" {% if item and item.brand_name == 'UNDERCOVER' %}selected{% endif %}>UNDERCOVER（アンダーカバー）</option>
-                    </optgroup>
-                    <optgroup label="電子機器">
-                        <option value="Apple" {% if item and item.brand_name == 'Apple' %}selected{% endif %}>Apple（アップル）</option>
-                        <option value="Sony" {% if item and item.brand_name == 'Sony' %}selected{% endif %}>Sony（ソニー）</option>
-                        <option value="Nintendo" {% if item and item.brand_name == 'Nintendo' %}selected{% endif %}>Nintendo（任天堂）</option>
-                        <option value="Dyson" {% if item and item.brand_name == 'Dyson' %}selected{% endif %}>Dyson（ダイソン）</option>
-                        <option value="Bose" {% if item and item.brand_name == 'Bose' %}selected{% endif %}>Bose（ボーズ）</option>
-                    </optgroup>
-                    <optgroup label="その他">
-                        <option value="その他" {% if item and item.brand_name == 'その他' %}selected{% endif %}>その他</option>
-                        <option value="ノーブランド" {% if item and item.brand_name == 'ノーブランド' %}selected{% endif %}>ノーブランド</option>
-                    </optgroup>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
+                <input type="hidden" id="current_brand_name" value="{{ item.brand_name if item else '' }}">
             </div>
             
             <div class="form-group">
@@ -208,22 +155,18 @@
                 <label for="item_condition">商品状態</label>
                 <select id="item_condition" name="item_condition">
                     <option value="">選択してください</option>
-                    <option value="N" {% if item and item.item_condition == 'N' %}selected{% endif %}>N：新品</option>
-                    <option value="S" {% if item and item.item_condition == 'S' %}selected{% endif %}>S：新品ではないが傷なし</option>
-                    <option value="A" {% if item and item.item_condition == 'A' %}selected{% endif %}>A：未使用に近い（小さい傷や汚れ）</option>
-                    <option value="AB" {% if item and item.item_condition == 'AB' %}selected{% endif %}>AB：傷・汚れあり（小）</option>
-                    <option value="B" {% if item and item.item_condition == 'B' %}selected{% endif %}>B：傷・汚れあり（大）</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
+                <input type="hidden" id="current_item_condition" value="{{ item.item_condition if item else '' }}">
             </div>
             
             <div class="form-group">
                 <label for="store_name">仕入先</label>
                 <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
                     <option value="">選択してください</option>
-                    <option value="個人" {% if item and item.store_name == '個人' %}selected{% endif %}>個人</option>
-                    <option value="代行サービス" {% if item and item.store_name == '代行サービス' %}selected{% endif %}>代行サービス</option>
-                    <option value="オークション" {% if item and item.store_name == 'オークション' %}selected{% endif %}>オークション</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
+                <input type="hidden" id="current_store_name" value="{{ item.store_name if item else '' }}">
             </div>
             
             <!-- 個人選択時の追加フィールド -->
@@ -232,10 +175,9 @@
                     <label for="supplier_detail">仕入先詳細</label>
                     <select id="supplier_detail" name="supplier_detail">
                         <option value="">選択してください</option>
-                        <option value="業者" {% if item and item.supplier_detail == '業者' %}selected{% endif %}>業者</option>
-                        <option value="クライアント" {% if item and item.supplier_detail == 'クライアント' %}selected{% endif %}>クライアント</option>
-                        <option value="個人顧客" {% if item and item.supplier_detail == '個人顧客' %}selected{% endif %}>個人顧客</option>
+                        <!-- マスターデータから動的に生成 -->
                     </select>
+                    <input type="hidden" id="current_supplier_detail" value="{{ item.supplier_detail if item else '' }}">
                 </div>
                 
                 <div class="form-group">
@@ -271,11 +213,9 @@
                 <label for="payment_method">支払方法</label>
                 <select id="payment_method" name="payment_method">
                     <option value="">選択してください</option>
-                    <option value="現金" {% if item and item.payment_method == '現金' %}selected{% endif %}>現金</option>
-                    <option value="クレジット" {% if item and item.payment_method == 'クレジット' %}selected{% endif %}>クレジット</option>
-                    <option value="PayPay" {% if item and item.payment_method == 'PayPay' %}selected{% endif %}>PayPay</option>
-                    <option value="その他" {% if item and item.payment_method == 'その他' %}selected{% endif %}>その他</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
+                <input type="hidden" id="current_payment_method" value="{{ item.payment_method if item else '' }}">
             </div>
             
             <div class="form-group">
@@ -829,8 +769,133 @@ function setupBrandAutoDetect() {
     }
 }
 
+// マスターデータをロードしてセレクトボックスを生成
+async function loadMasterData() {
+    try {
+        const response = await fetch('/api/master-data?scope=user');
+        const data = await response.json();
+        
+        // ブランド名セレクトボックスを生成
+        const brandSelect = document.getElementById('brand_name');
+        const currentBrand = document.getElementById('current_brand_name').value;
+        brandSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        // カテゴリごとにグループ化
+        const brandsByCategory = {};
+        data.brands.forEach(brand => {
+            const categoryId = brand.category_id || 0;
+            if (!brandsByCategory[categoryId]) {
+                brandsByCategory[categoryId] = [];
+            }
+            brandsByCategory[categoryId].push(brand);
+        });
+        
+        // カテゴリ情報をマッピング
+        const categoryMap = {};
+        data.brand_categories.forEach(cat => {
+            categoryMap[cat.id] = cat.name;
+        });
+        
+        // カテゴリごとにオプショングループを作成
+        for (const [catId, brands] of Object.entries(brandsByCategory)) {
+            const categoryName = categoryMap[catId] || 'その他';
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = categoryName;
+            
+            brands.forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand.value;
+                option.textContent = brand.display_name || brand.value;
+                if (brand.value === currentBrand) {
+                    option.selected = true;
+                }
+                optgroup.appendChild(option);
+            });
+            
+            brandSelect.appendChild(optgroup);
+        }
+        
+        // 商品状態セレクトボックスを生成
+        const conditionSelect = document.getElementById('item_condition');
+        const currentCondition = document.getElementById('current_item_condition').value;
+        conditionSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.conditions.forEach(condition => {
+            const option = document.createElement('option');
+            option.value = condition.value;
+            option.textContent = condition.display_name || condition.value;
+            if (condition.value === currentCondition) {
+                option.selected = true;
+            }
+            conditionSelect.appendChild(option);
+        });
+        
+        // 仕入先セレクトボックスを生成
+        const supplierSelect = document.getElementById('store_name');
+        const currentSupplier = document.getElementById('current_store_name').value;
+        supplierSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.value;
+            option.textContent = supplier.display_name || supplier.value;
+            if (supplier.value === currentSupplier) {
+                option.selected = true;
+            }
+            supplierSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細セレクトボックスを生成
+        const supplierDetailSelect = document.getElementById('supplier_detail');
+        const currentSupplierDetail = document.getElementById('current_supplier_detail').value;
+        supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.supplier_details.forEach(detail => {
+            const option = document.createElement('option');
+            option.value = detail.value;
+            option.textContent = detail.display_name || detail.value;
+            if (detail.value === currentSupplierDetail) {
+                option.selected = true;
+            }
+            supplierDetailSelect.appendChild(option);
+        });
+        
+        // 支払方法セレクトボックスを生成
+        const paymentSelect = document.getElementById('payment_method');
+        const currentPayment = document.getElementById('current_payment_method').value;
+        paymentSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.payment_methods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.value;
+            option.textContent = method.display_name || method.value;
+            if (method.value === currentPayment) {
+                option.selected = true;
+            }
+            paymentSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細の表示状態を更新
+        toggleSupplierDetail();
+        
+        // ブランド自動検出用のキーワードマップを更新
+        window.masterBrandKeywords = {};
+        data.brands.forEach(brand => {
+            if (brand.keywords) {
+                window.masterBrandKeywords[brand.value] = brand.keywords.split(',').map(k => k.trim().toLowerCase());
+            }
+        });
+        
+    } catch (error) {
+        console.error('マスターデータの読み込みに失敗しました:', error);
+    }
+}
+
 // 初期計算
 document.addEventListener('DOMContentLoaded', function() {
+    // マスターデータをロード
+    loadMasterData();
+    
     // ブランド名自動判定の初期化
     setupBrandAutoDetect();
     

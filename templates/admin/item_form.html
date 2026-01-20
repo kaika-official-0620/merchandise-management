@@ -29,18 +29,6 @@
     margin-top: 4px;
 }
 
-.target-user-section {
-    background: #eff6ff;
-    border: 2px solid #3b82f6;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.target-user-section h3 {
-    margin: 0 0 0.75rem 0;
-    color: #1e40af;
-    font-size: 1rem;
-}
 </style>
 
 <div class="page-header">
@@ -50,20 +38,6 @@
 
 
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
-    <!-- 転送先ユーザー選択 -->
-    <div class="target-user-section">
-        <h3>転送先ユーザー（任意）</h3>
-        <div class="form-group" style="margin: 0;">
-            <select id="target_user_id" name="target_user_id">
-                <option value="">管理者商品として登録（後で転送可能）</option>
-                {% for user in users %}
-                <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
-                {% endfor %}
-            </select>
-            <small class="form-help">ユーザーを選択すると、そのユーザーの商品として直接登録されます</small>
-        </div>
-    </div>
-    
     <div class="form-grid">
         <!-- 左カラム: 基本情報 -->
         <div class="form-section">
@@ -83,61 +57,7 @@
                 <label for="brand_name">ブランド名</label>
                 <select id="brand_name" name="brand_name">
                     <option value="">選択してください</option>
-                    <optgroup label="ラグジュアリーブランド">
-                        <option value="Louis Vuitton">Louis Vuitton（ルイ・ヴィトン）</option>
-                        <option value="Hermes">Hermes（エルメス）</option>
-                        <option value="Chanel">Chanel（シャネル）</option>
-                        <option value="Gucci">Gucci（グッチ）</option>
-                        <option value="Prada">Prada（プラダ）</option>
-                        <option value="Dior">Dior（ディオール）</option>
-                        <option value="Celine">Celine（セリーヌ）</option>
-                        <option value="Bottega Veneta">Bottega Veneta（ボッテガ・ヴェネタ）</option>
-                        <option value="Balenciaga">Balenciaga（バレンシアガ）</option>
-                        <option value="Saint Laurent">Saint Laurent（サンローラン）</option>
-                        <option value="Loewe">Loewe（ロエベ）</option>
-                        <option value="Fendi">Fendi（フェンディ）</option>
-                        <option value="Burberry">Burberry（バーバリー）</option>
-                        <option value="Valentino">Valentino（ヴァレンティノ）</option>
-                        <option value="Givenchy">Givenchy（ジバンシィ）</option>
-                        <option value="Miu Miu">Miu Miu（ミュウミュウ）</option>
-                    </optgroup>
-                    <optgroup label="時計・ジュエリー">
-                        <option value="Rolex">Rolex（ロレックス）</option>
-                        <option value="Cartier">Cartier（カルティエ）</option>
-                        <option value="Omega">Omega（オメガ）</option>
-                        <option value="Patek Philippe">Patek Philippe（パテック・フィリップ）</option>
-                        <option value="Audemars Piguet">Audemars Piguet（オーデマ・ピゲ）</option>
-                        <option value="Tiffany">Tiffany（ティファニー）</option>
-                        <option value="Bvlgari">Bvlgari（ブルガリ）</option>
-                        <option value="Van Cleef">Van Cleef（ヴァンクリーフ）</option>
-                    </optgroup>
-                    <optgroup label="スポーツ・ストリート">
-                        <option value="Nike">Nike（ナイキ）</option>
-                        <option value="Adidas">Adidas（アディダス）</option>
-                        <option value="Supreme">Supreme（シュプリーム）</option>
-                        <option value="Off-White">Off-White（オフホワイト）</option>
-                        <option value="A BATHING APE">A BATHING APE（ベイプ）</option>
-                        <option value="Jordan">Jordan（ジョーダン）</option>
-                        <option value="New Balance">New Balance（ニューバランス）</option>
-                    </optgroup>
-                    <optgroup label="日本ブランド">
-                        <option value="COMME des GARCONS">COMME des GARCONS（コムデギャルソン）</option>
-                        <option value="Yohji Yamamoto">Yohji Yamamoto（ヨウジヤマモト）</option>
-                        <option value="ISSEY MIYAKE">ISSEY MIYAKE（イッセイミヤケ）</option>
-                        <option value="sacai">sacai（サカイ）</option>
-                        <option value="UNDERCOVER">UNDERCOVER（アンダーカバー）</option>
-                    </optgroup>
-                    <optgroup label="電子機器">
-                        <option value="Apple">Apple（アップル）</option>
-                        <option value="Sony">Sony（ソニー）</option>
-                        <option value="Nintendo">Nintendo（任天堂）</option>
-                        <option value="Dyson">Dyson（ダイソン）</option>
-                        <option value="Bose">Bose（ボーズ）</option>
-                    </optgroup>
-                    <optgroup label="その他">
-                        <option value="その他">その他</option>
-                        <option value="ノーブランド">ノーブランド</option>
-                    </optgroup>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
             
@@ -150,11 +70,7 @@
                 <label for="item_condition">商品状態</label>
                 <select id="item_condition" name="item_condition">
                     <option value="">選択してください</option>
-                    <option value="N">N：新品</option>
-                    <option value="S">S：新品ではないが傷なし</option>
-                    <option value="A">A：未使用に近い（小さい傷や汚れ）</option>
-                    <option value="AB">AB：傷・汚れあり（小）</option>
-                    <option value="B">B：傷・汚れあり（大）</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
             
@@ -162,9 +78,7 @@
                 <label for="store_name">仕入先</label>
                 <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
                     <option value="">選択してください</option>
-                    <option value="個人">個人</option>
-                    <option value="代行サービス">代行サービス</option>
-                    <option value="オークション">オークション</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
             
@@ -174,9 +88,7 @@
                     <label for="supplier_detail">仕入先詳細</label>
                     <select id="supplier_detail" name="supplier_detail">
                         <option value="">選択してください</option>
-                        <option value="業者">業者</option>
-                        <option value="クライアント">クライアント</option>
-                        <option value="個人顧客">個人顧客</option>
+                        <!-- マスターデータから動的に生成 -->
                     </select>
                 </div>
                 
@@ -202,10 +114,7 @@
                 <label for="payment_method">支払方法</label>
                 <select id="payment_method" name="payment_method">
                     <option value="">選択してください</option>
-                    <option value="現金">現金</option>
-                    <option value="クレジット">クレジット</option>
-                    <option value="PayPay">PayPay</option>
-                    <option value="その他">その他</option>
+                    <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
             
@@ -572,7 +481,104 @@ function toggleSupplierDetail() {
     }
 }
 
+// マスターデータをロードしてセレクトボックスを生成
+async function loadMasterData() {
+    try {
+        const response = await fetch('/api/master-data?scope=admin');
+        const data = await response.json();
+        
+        // ブランド名セレクトボックスを生成
+        const brandSelect = document.getElementById('brand_name');
+        brandSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        // カテゴリごとにグループ化
+        const brandsByCategory = {};
+        data.brands.forEach(brand => {
+            const categoryId = brand.category_id || 0;
+            if (!brandsByCategory[categoryId]) {
+                brandsByCategory[categoryId] = [];
+            }
+            brandsByCategory[categoryId].push(brand);
+        });
+        
+        // カテゴリ情報をマッピング
+        const categoryMap = {};
+        data.brand_categories.forEach(cat => {
+            categoryMap[cat.id] = cat.name;
+        });
+        
+        // カテゴリごとにオプショングループを作成
+        for (const [catId, brands] of Object.entries(brandsByCategory)) {
+            const categoryName = categoryMap[catId] || 'その他';
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = categoryName;
+            
+            brands.forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand.value;
+                option.textContent = brand.display_name || brand.value;
+                optgroup.appendChild(option);
+            });
+            
+            brandSelect.appendChild(optgroup);
+        }
+        
+        // 商品状態セレクトボックスを生成
+        const conditionSelect = document.getElementById('item_condition');
+        conditionSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.conditions.forEach(condition => {
+            const option = document.createElement('option');
+            option.value = condition.value;
+            option.textContent = condition.display_name || condition.value;
+            conditionSelect.appendChild(option);
+        });
+        
+        // 仕入先セレクトボックスを生成
+        const supplierSelect = document.getElementById('store_name');
+        supplierSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.value;
+            option.textContent = supplier.display_name || supplier.value;
+            supplierSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細セレクトボックスを生成
+        const supplierDetailSelect = document.getElementById('supplier_detail');
+        supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.supplier_details.forEach(detail => {
+            const option = document.createElement('option');
+            option.value = detail.value;
+            option.textContent = detail.display_name || detail.value;
+            supplierDetailSelect.appendChild(option);
+        });
+        
+        // 支払方法セレクトボックスを生成
+        const paymentSelect = document.getElementById('payment_method');
+        paymentSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.payment_methods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.value;
+            option.textContent = method.display_name || method.value;
+            paymentSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細の表示状態を更新
+        toggleSupplierDetail();
+        
+    } catch (error) {
+        console.error('マスターデータの読み込みに失敗しました:', error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    // マスターデータをロード
+    loadMasterData();
+    
     updateStatusFields();
     toggleSupplierDetail();
     
