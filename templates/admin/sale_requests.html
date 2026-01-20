@@ -396,6 +396,131 @@
     font-size: 1.1rem;
 }
 
+/* 商品詳細リンク */
+.request-product-name a {
+    color: #1e293b;
+    text-decoration: none;
+}
+
+.request-product-name a:hover {
+    color: #3b82f6;
+    text-decoration: underline;
+}
+
+.btn-detail {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: #e0f2fe;
+    color: #0369a1;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.btn-detail:hover {
+    background: #bae6fd;
+}
+
+/* 画像クリック可能 */
+.request-image {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.request-image:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.qr-thumbnail {
+    display: inline-block;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.qr-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.qr-thumbnail:hover {
+    transform: scale(1.1);
+}
+
+/* 画像拡大モーダル */
+.image-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.image-modal.open {
+    display: flex;
+}
+
+.image-modal-content {
+    max-width: 90%;
+    max-height: 80vh;
+    border-radius: 8px;
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.image-modal-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.image-modal-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.image-modal-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: white;
+    color: #1e293b;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.image-modal-actions a:hover {
+    background: #f1f5f9;
+}
+
 @media (max-width: 768px) {
     .stats-cards {
         grid-template-columns: 1fr;
@@ -457,7 +582,7 @@
                 <span class="request-date">申請日: {{ req.created_at.strftime('%Y/%m/%d %H:%M') if req.created_at else '-' }}</span>
             </div>
             <div class="request-body">
-                <div class="request-image">
+                <div class="request-image" onclick="openImageModal('{{ url_for('static', filename=req.photo_path) if req.photo_path else '' }}', '商品画像: {{ req.product_name or "" }}')" title="クリックで拡大">
                     {% if req.photo_path %}
                     <img src="{{ url_for('static', filename=req.photo_path) }}" alt="">
                     {% else %}
@@ -465,8 +590,11 @@
                     {% endif %}
                 </div>
                 <div class="request-info">
-                    <div class="request-product-name">{{ req.product_name or '商品名なし' }}</div>
+                    <div class="request-product-name">
+                        <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank">{{ req.product_name or '商品名なし' }}</a>
+                    </div>
                     <div class="request-brand">{{ req.brand_name or '-' }}</div>
+                    <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank" class="btn-detail">📋 商品詳細を確認</a>
                     <div class="request-user">申請者: <strong>{{ req.user_display_name or req.username }}</strong></div>
                     <div class="request-prices">
                         <div class="price-item">
@@ -480,9 +608,10 @@
                     </div>
                     {% if req.qr_image_path %}
                     <div class="qr-section">
-                        <a href="{{ url_for('static', filename=req.qr_image_path) }}" target="_blank" class="qr-link">
-                            📱 発送用QRコードを確認
-                        </a>
+                        <span class="qr-thumbnail" onclick="openImageModal('{{ url_for('static', filename=req.qr_image_path) }}', '発送用QRコード')" title="クリックで拡大">
+                            <img src="{{ url_for('static', filename=req.qr_image_path) }}" alt="QR">
+                        </span>
+                        <span style="color: #64748b; font-size: 0.85rem;">📱 発送用QRコード（クリックで拡大）</span>
                     </div>
                     {% endif %}
                     {% if req.status != 'pending' %}
@@ -564,6 +693,16 @@
     </div>
 </div>
 
+<!-- 画像拡大モーダル -->
+<div class="image-modal" id="imageModal">
+    <button class="image-modal-close" onclick="closeImageModal()">&times;</button>
+    <img src="" alt="" class="image-modal-content" id="imageModalImg">
+    <div class="image-modal-actions">
+        <a id="imageDownloadLink" href="" download>💾 画像を保存</a>
+        <a id="imageNewTabLink" href="" target="_blank">🔗 新しいタブで開く</a>
+    </div>
+</div>
+
 <script>
 function openApproveModal(requestId, productName) {
     document.getElementById('approveProductName').textContent = productName;
@@ -581,6 +720,23 @@ function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('open');
 }
 
+// 画像拡大モーダル
+function openImageModal(imageSrc, title) {
+    if (!imageSrc) return;
+    
+    document.getElementById('imageModalImg').src = imageSrc;
+    document.getElementById('imageModalImg').alt = title;
+    document.getElementById('imageDownloadLink').href = imageSrc;
+    document.getElementById('imageNewTabLink').href = imageSrc;
+    document.getElementById('imageModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
 // モーダル外クリックで閉じる
 document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', function(e) {
@@ -588,6 +744,23 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
             this.classList.remove('open');
         }
     });
+});
+
+// 画像モーダルもクリックで閉じる
+document.getElementById('imageModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeImageModal();
+    }
+});
+
+// ESCキーで閉じる
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeImageModal();
+        document.querySelectorAll('.modal-overlay.open').forEach(modal => {
+            modal.classList.remove('open');
+        });
+    }
 });
 </script>
 {% endblock %}
