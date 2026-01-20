@@ -101,12 +101,41 @@
     
     <!-- 公開中の商品一覧 -->
     <div class="items-card">
-        <h2>公開中の商品 <span class="item-count">{{ items|length }}件</span></h2>
+        <h2>公開中の商品 <span class="item-count" id="published-count">{{ items|length }}件</span></h2>
+        
+        <!-- 検索・フィルター -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <input type="text" id="published-search" class="filter-input" placeholder="商品名・ブランドで検索..." onkeyup="filterPublishedItems()">
+                </div>
+                <div class="filter-group">
+                    <select id="published-owner-filter" class="filter-select" onchange="filterPublishedItems()">
+                        <option value="">全ての登録者</option>
+                        {% for user in users %}
+                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="published-bid-filter" class="filter-select" onchange="filterPublishedItems()">
+                        <option value="">入札状態</option>
+                        <option value="has-bid">入札あり</option>
+                        <option value="no-bid">入札なし</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearPublishedFilters()">クリア</button>
+            </div>
+        </div>
         
         {% if items %}
-        <div class="proxy-items-grid">
+        <div class="proxy-items-grid" id="published-items-grid">
             {% for item in items %}
-            <div class="proxy-item-card">
+            <div class="proxy-item-card published-item" 
+                 data-name="{{ (item.product_name or '')|lower }}"
+                 data-brand="{{ (item.brand_name or '')|lower }}"
+                 data-owner="{{ item.owner_name }}"
+                 data-has-bid="{{ 'yes' if item.highest_bid else 'no' }}">
                 <div class="item-photo">
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
@@ -147,12 +176,43 @@
     
     <!-- 商品を追加 -->
     <div class="add-items-card">
-        <h2>商品を追加 <span class="item-count">{{ available_items|length }}件選択可能</span></h2>
+        <h2>商品を追加 <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
+        
+        <!-- 検索・フィルター -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <input type="text" id="available-search" class="filter-input" placeholder="商品名・ブランドで検索..." onkeyup="filterAvailableItems()">
+                </div>
+                <div class="filter-group">
+                    <select id="available-owner-filter" class="filter-select" onchange="filterAvailableItems()">
+                        <option value="">全ての登録者</option>
+                        {% for user in users %}
+                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="available-price-filter" class="filter-select" onchange="filterAvailableItems()">
+                        <option value="">価格帯</option>
+                        <option value="0-10000">〜¥10,000</option>
+                        <option value="10000-50000">¥10,000〜¥50,000</option>
+                        <option value="50000-100000">¥50,000〜¥100,000</option>
+                        <option value="100000-">¥100,000〜</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearAvailableFilters()">クリア</button>
+            </div>
+        </div>
         
         {% if available_items %}
-        <div class="proxy-items-grid">
+        <div class="proxy-items-grid" id="available-items-grid">
             {% for item in available_items %}
-            <div class="proxy-item-card available" id="available-{{ item.id }}">
+            <div class="proxy-item-card available available-item" id="available-{{ item.id }}"
+                 data-name="{{ (item.product_name or '')|lower }}"
+                 data-brand="{{ (item.brand_name or '')|lower }}"
+                 data-owner="{{ item.owner_name }}"
+                 data-price="{{ item.listing_price or 0 }}">
                 <div class="item-photo">
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
@@ -214,6 +274,73 @@
 </div>
 
 <style>
+/* 検索・フィルターセクション */
+.filter-section {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+}
+
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 150px;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filter-select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.filter-row .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .filter-group {
+        min-width: 100%;
+    }
+    
+    .filter-row .btn {
+        width: 100%;
+    }
+}
+
 /* 販売方式選択 */
 .sale-mode-options {
     display: flex;
@@ -782,6 +909,104 @@ function setPublic(isPublic) {
     } else {
         document.querySelector('.toggle-btn.off').classList.add('active');
     }
+}
+
+// 公開中商品のフィルタリング
+function filterPublishedItems() {
+    const searchText = document.getElementById('published-search').value.toLowerCase();
+    const ownerFilter = document.getElementById('published-owner-filter').value;
+    const bidFilter = document.getElementById('published-bid-filter').value;
+    
+    const items = document.querySelectorAll('.published-item');
+    let visibleCount = 0;
+    
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const brand = item.dataset.brand || '';
+        const owner = item.dataset.owner || '';
+        const hasBid = item.dataset.hasBid;
+        
+        let show = true;
+        
+        // テキスト検索
+        if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+            show = false;
+        }
+        
+        // 登録者フィルター
+        if (ownerFilter && owner !== ownerFilter) {
+            show = false;
+        }
+        
+        // 入札状態フィルター
+        if (bidFilter === 'has-bid' && hasBid !== 'yes') {
+            show = false;
+        } else if (bidFilter === 'no-bid' && hasBid !== 'no') {
+            show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    document.getElementById('published-count').textContent = visibleCount + '件';
+}
+
+// 公開中フィルターをクリア
+function clearPublishedFilters() {
+    document.getElementById('published-search').value = '';
+    document.getElementById('published-owner-filter').value = '';
+    document.getElementById('published-bid-filter').value = '';
+    filterPublishedItems();
+}
+
+// 追加可能商品のフィルタリング
+function filterAvailableItems() {
+    const searchText = document.getElementById('available-search').value.toLowerCase();
+    const ownerFilter = document.getElementById('available-owner-filter').value;
+    const priceFilter = document.getElementById('available-price-filter').value;
+    
+    const items = document.querySelectorAll('.available-item');
+    let visibleCount = 0;
+    
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const brand = item.dataset.brand || '';
+        const owner = item.dataset.owner || '';
+        const price = parseInt(item.dataset.price) || 0;
+        
+        let show = true;
+        
+        // テキスト検索
+        if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+            show = false;
+        }
+        
+        // 登録者フィルター
+        if (ownerFilter && owner !== ownerFilter) {
+            show = false;
+        }
+        
+        // 価格帯フィルター
+        if (priceFilter) {
+            const [min, max] = priceFilter.split('-').map(v => v === '' ? null : parseInt(v));
+            if (min !== null && price < min) show = false;
+            if (max !== null && price > max) show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    document.getElementById('available-count').textContent = visibleCount + '件選択可能';
+}
+
+// 追加可能フィルターをクリア
+function clearAvailableFilters() {
+    document.getElementById('available-search').value = '';
+    document.getElementById('available-owner-filter').value = '';
+    document.getElementById('available-price-filter').value = '';
+    filterAvailableItems();
 }
 
 // オークション終了・落札確定
