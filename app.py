@@ -837,6 +837,22 @@ if DATABASE_URL:
             )
         ''')
         
+        # 売却申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sale_requests (
+                id SERIAL PRIMARY KEY,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                sale_price INTEGER NOT NULL,
+                qr_image_path TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id),
+                admin_note TEXT
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1633,6 +1649,22 @@ else:
                 content TEXT NOT NULL,
                 is_admin_reply INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 売却申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sale_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                sale_price INTEGER NOT NULL,
+                qr_image_path TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id),
+                admin_note TEXT
             )
         ''')
         
@@ -14194,6 +14226,259 @@ def get_unread_inquiry_count():
 @app.context_processor
 def inject_inquiry_count():
     return dict(get_unread_inquiry_count=get_unread_inquiry_count)
+
+# ========== 売却申請機能 ==========
+
+# 未処理の売却申請件数を取得
+def get_pending_sale_request_count():
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
+            count = cur.fetchone()['count']
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
+            count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except Exception as e:
+        return 0
+
+# テンプレートで使えるようにコンテキストプロセッサに追加
+@app.context_processor
+def inject_sale_request_count():
+    return dict(get_pending_sale_request_count=get_pending_sale_request_count)
+
+# ユーザー：売却申請送信
+@app.route('/sale-request/submit/<int:item_id>', methods=['POST'])
+@login_required
+def submit_sale_request(item_id):
+    sale_price = request.form.get('sale_price', type=int)
+    qr_image = request.files.get('qr_image')
+    
+    if not sale_price or sale_price <= 0:
+        flash('売上金額を正しく入力してください', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # 商品が存在し、ユーザーのものか確認
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (item_id, current_user.id))
+    else:
+        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (item_id, current_user.id))
+    
+    item = cur.fetchone()
+    if not item:
+        flash('商品が見つかりません', 'error')
+        cur.close()
+        conn.close()
+        return redirect(url_for('index'))
+    
+    # 既に申請中かチェック
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = %s AND status = 'pending'", (item_id,))
+    else:
+        cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = ? AND status = 'pending'", (item_id,))
+    
+    if cur.fetchone():
+        flash('この商品は既に売却申請中です', 'error')
+        cur.close()
+        conn.close()
+        return redirect(url_for('index'))
+    
+    # QR画像の保存
+    qr_image_path = None
+    if qr_image and qr_image.filename:
+        filename = secure_filename(qr_image.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename = timestamp + filename
+        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+        os.makedirs(upload_folder, exist_ok=True)
+        qr_image.save(os.path.join(upload_folder, filename))
+        qr_image_path = 'uploads/qr/' + filename
+    
+    # 売却申請を登録
+    if DATABASE_URL:
+        cur.execute('''
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
+            VALUES (%s, %s, %s, %s, 'pending')
+        ''', (item_id, current_user.id, sale_price, qr_image_path))
+    else:
+        cur.execute('''
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
+            VALUES (?, ?, ?, ?, 'pending')
+        ''', (item_id, current_user.id, sale_price, qr_image_path))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('売却申請を送信しました。管理者の確認をお待ちください。', 'success')
+    return redirect(url_for('index'))
+
+# 管理者：発送商品受信BOX（売却申請一覧）
+@app.route('/admin/sale-requests')
+@login_required
+def admin_sale_requests():
+    if not current_user.is_admin():
+        flash('管理者権限が必要です', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if DATABASE_URL:
+        cur.execute('''
+            SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                   u.username, u.display_name as user_display_name,
+                   p.username as processor_name, p.display_name as processor_display_name
+            FROM sale_requests sr
+            JOIN merchandise m ON sr.merchandise_id = m.id
+            JOIN users u ON sr.user_id = u.id
+            LEFT JOIN users p ON sr.processed_by = p.id
+            ORDER BY 
+                CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
+                sr.created_at DESC
+        ''')
+    else:
+        cur.execute('''
+            SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                   u.username, u.display_name as user_display_name,
+                   p.username as processor_name, p.display_name as processor_display_name
+            FROM sale_requests sr
+            JOIN merchandise m ON sr.merchandise_id = m.id
+            JOIN users u ON sr.user_id = u.id
+            LEFT JOIN users p ON sr.processed_by = p.id
+            ORDER BY 
+                CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
+                sr.created_at DESC
+        ''')
+    
+    requests_list = cur.fetchall()
+    
+    # 統計情報
+    if DATABASE_URL:
+        cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
+        pending_count = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'approved'")
+        approved_count = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'rejected'")
+        rejected_count = cur.fetchone()['count']
+    else:
+        cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
+        pending_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'approved'")
+        approved_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
+        rejected_count = cur.fetchone()[0]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/sale_requests.html', 
+                         requests=requests_list,
+                         pending_count=pending_count,
+                         approved_count=approved_count,
+                         rejected_count=rejected_count)
+
+# 管理者：売却申請承認
+@app.route('/admin/sale-request/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_sale_request(request_id):
+    if not current_user.is_admin():
+        flash('管理者権限が必要です', 'error')
+        return redirect(url_for('index'))
+    
+    admin_note = request.form.get('admin_note', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # 申請情報を取得
+    if DATABASE_URL:
+        cur.execute("SELECT * FROM sale_requests WHERE id = %s", (request_id,))
+    else:
+        cur.execute("SELECT * FROM sale_requests WHERE id = ?", (request_id,))
+    
+    sale_request = cur.fetchone()
+    if not sale_request:
+        flash('申請が見つかりません', 'error')
+        cur.close()
+        conn.close()
+        return redirect(url_for('admin_sale_requests'))
+    
+    # 申請を承認
+    if DATABASE_URL:
+        cur.execute('''
+            UPDATE sale_requests 
+            SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s
+            WHERE id = %s
+        ''', (datetime.now(), current_user.id, admin_note, request_id))
+        
+        # 商品のステータスを売却済みに更新、売上金も更新
+        cur.execute('''
+            UPDATE merchandise 
+            SET status = 'sold', sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
+            WHERE id = %s
+        ''', (sale_request['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request['merchandise_id']))
+    else:
+        cur.execute('''
+            UPDATE sale_requests 
+            SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?
+            WHERE id = ?
+        ''', (datetime.now(), current_user.id, admin_note, request_id))
+        
+        # 商品のステータスを売却済みに更新、売上金も更新
+        cur.execute('''
+            UPDATE merchandise 
+            SET status = 'sold', sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
+            WHERE id = ?
+        ''', (sale_request['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request['merchandise_id']))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('売却申請を承認しました。商品ステータスが売却済みに更新されました。', 'success')
+    return redirect(url_for('admin_sale_requests'))
+
+# 管理者：売却申請却下
+@app.route('/admin/sale-request/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_sale_request(request_id):
+    if not current_user.is_admin():
+        flash('管理者権限が必要です', 'error')
+        return redirect(url_for('index'))
+    
+    admin_note = request.form.get('admin_note', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if DATABASE_URL:
+        cur.execute('''
+            UPDATE sale_requests 
+            SET status = 'rejected', processed_at = %s, processed_by = %s, admin_note = %s
+            WHERE id = %s
+        ''', (datetime.now(), current_user.id, admin_note, request_id))
+    else:
+        cur.execute('''
+            UPDATE sale_requests 
+            SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?
+            WHERE id = ?
+        ''', (datetime.now(), current_user.id, admin_note, request_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('売却申請を却下しました', 'info')
+    return redirect(url_for('admin_sale_requests'))
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ
