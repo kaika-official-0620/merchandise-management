@@ -15175,61 +15175,77 @@ def approve_sale_request(request_id):
     
     admin_note = request.form.get('admin_note', '')
     
-    conn = get_db()
-    
-    # 申請情報を取得
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM sale_requests WHERE id = %s", (request_id,))
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM sale_requests WHERE id = ?", (request_id,))
-    
-    sale_request = cur.fetchone()
-    if not sale_request:
-        flash('申請が見つかりません', 'error')
+    try:
+        conn = get_db()
+        
+        # 申請情報を取得（sale_price, merchandise_idが必要）
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = %s", (request_id,))
+            sale_request = cur.fetchone()
+            cur.close()
+            
+            if not sale_request:
+                flash('申請が見つかりません', 'error')
+                conn.close()
+                return redirect(url_for('admin_sale_requests'))
+            
+            sale_price = sale_request['sale_price']
+            merchandise_id = sale_request['merchandise_id']
+            
+            # 通常のカーソルでUPDATE実行
+            cur = conn.cursor()
+            cur.execute('''
+                UPDATE sale_requests 
+                SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s
+                WHERE id = %s
+            ''', (datetime.now(), current_user.id, admin_note, request_id))
+            
+            # 商品のステータスを売却済みに更新、売上金も更新
+            cur.execute('''
+                UPDATE merchandise 
+                SET status = 'sold', sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
+                WHERE id = %s
+            ''', (sale_price, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
+        else:
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = ?", (request_id,))
+            sale_request = cur.fetchone()
+            
+            if not sale_request:
+                flash('申請が見つかりません', 'error')
+                cur.close()
+                conn.close()
+                return redirect(url_for('admin_sale_requests'))
+            
+            sale_price = sale_request['sale_price']
+            merchandise_id = sale_request['merchandise_id']
+            
+            cur.execute('''
+                UPDATE sale_requests 
+                SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?
+                WHERE id = ?
+            ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, request_id))
+            
+            # 商品のステータスを売却済みに更新、売上金も更新
+            cur.execute('''
+                UPDATE merchandise 
+                SET status = 'sold', sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
+                WHERE id = ?
+            ''', (sale_price, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
+        
+        conn.commit()
         cur.close()
         conn.close()
-        return redirect(url_for('admin_sale_requests'))
-    
-    # dictに変換
-    sale_request_dict = dict(sale_request)
-    
-    # 申請を承認
-    if DATABASE_URL:
-        cur.execute('''
-            UPDATE sale_requests 
-            SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s
-            WHERE id = %s
-        ''', (datetime.now(), current_user.id, admin_note, request_id))
         
-        # 商品のステータスを売却済みに更新、売上金も更新
-        cur.execute('''
-            UPDATE merchandise 
-            SET status = 'sold', sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
-            WHERE id = %s
-        ''', (sale_request_dict['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request_dict['merchandise_id']))
-    else:
-        sale_request_dict = dict(zip([desc[0] for desc in cur.description], sale_request)) if not isinstance(sale_request, dict) else sale_request
-        
-        cur.execute('''
-            UPDATE sale_requests 
-            SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?
-            WHERE id = ?
-        ''', (datetime.now(), current_user.id, admin_note, request_id))
-        
-        # 商品のステータスを売却済みに更新、売上金も更新
-        cur.execute('''
-            UPDATE merchandise 
-            SET status = 'sold', sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
-            WHERE id = ?
-        ''', (sale_request_dict['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request_dict['merchandise_id']))
+        flash('売却申請を承認しました。商品ステータスが売却済みに更新されました。', 'success')
+    except Exception as e:
+        print(f"Error in approve_sale_request: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'承認処理でエラーが発生しました: {str(e)}', 'error')
     
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    flash('売却申請を承認しました。商品ステータスが売却済みに更新されました。', 'success')
     return redirect(url_for('admin_sale_requests'))
 
 # 管理者：売却申請却下
