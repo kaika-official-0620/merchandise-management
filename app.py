@@ -15176,12 +15176,13 @@ def approve_sale_request(request_id):
     admin_note = request.form.get('admin_note', '')
     
     conn = get_db()
-    cur = conn.cursor()
     
     # 申請情報を取得
     if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM sale_requests WHERE id = %s", (request_id,))
     else:
+        cur = conn.cursor()
         cur.execute("SELECT * FROM sale_requests WHERE id = ?", (request_id,))
     
     sale_request = cur.fetchone()
@@ -15190,6 +15191,9 @@ def approve_sale_request(request_id):
         cur.close()
         conn.close()
         return redirect(url_for('admin_sale_requests'))
+    
+    # dictに変換
+    sale_request_dict = dict(sale_request)
     
     # 申請を承認
     if DATABASE_URL:
@@ -15204,8 +15208,10 @@ def approve_sale_request(request_id):
             UPDATE merchandise 
             SET status = 'sold', sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
             WHERE id = %s
-        ''', (sale_request['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request['merchandise_id']))
+        ''', (sale_request_dict['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request_dict['merchandise_id']))
     else:
+        sale_request_dict = dict(zip([desc[0] for desc in cur.description], sale_request)) if not isinstance(sale_request, dict) else sale_request
+        
         cur.execute('''
             UPDATE sale_requests 
             SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?
@@ -15217,7 +15223,7 @@ def approve_sale_request(request_id):
             UPDATE merchandise 
             SET status = 'sold', sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
             WHERE id = ?
-        ''', (sale_request['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request['merchandise_id']))
+        ''', (sale_request_dict['sale_price'], datetime.now().date(), datetime.now(), current_user.id, sale_request_dict['merchandise_id']))
     
     conn.commit()
     cur.close()
@@ -15237,15 +15243,16 @@ def reject_sale_request(request_id):
     admin_note = request.form.get('admin_note', '')
     
     conn = get_db()
-    cur = conn.cursor()
     
     if DATABASE_URL:
+        cur = conn.cursor()
         cur.execute('''
             UPDATE sale_requests 
             SET status = 'rejected', processed_at = %s, processed_by = %s, admin_note = %s
             WHERE id = %s
         ''', (datetime.now(), current_user.id, admin_note, request_id))
     else:
+        cur = conn.cursor()
         cur.execute('''
             UPDATE sale_requests 
             SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?
