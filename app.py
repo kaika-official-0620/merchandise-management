@@ -8079,10 +8079,11 @@ def admin_user_products():
 @login_required
 @admin_required
 def admin_add_item():
-    """管理者用商品登録（管理者商品のみ登録）"""
+    """管理者用商品登録（ユーザー選択可能）"""
     if request.method == 'POST':
-        # 管理者商品として登録（user_id = None）
-        target_user_id = None
+        # ユーザーが選択されている場合はそのユーザーの商品として登録
+        target_user_id_str = request.form.get('target_user_id', '')
+        target_user_id = int(target_user_id_str) if target_user_id_str and target_user_id_str != '' else None
         
         conn = get_db()
         if DATABASE_URL:
@@ -8190,9 +8191,29 @@ def admin_add_item():
             cur.close()
             conn.close()
         
-        return redirect(url_for('admin_items'))
+        # 登録後のリダイレクト先を決定
+        if target_user_id:
+            return redirect(url_for('admin_user_products'))
+        else:
+            return redirect(url_for('admin_items'))
     
-    return render_template('admin/item_form.html', item=None)
+    # GETリクエスト：ユーザー一覧を取得
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
+        users = [dict(u) for u in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
+        users = [dict(zip(['id', 'username', 'display_name', 'role'], row)) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    # URLパラメータからデフォルトのユーザーIDを取得
+    default_user_id = request.args.get('user_id', '')
+    
+    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id)
 
 @app.route('/admin/items/<int:id>/transfer', methods=['POST'])
 @login_required

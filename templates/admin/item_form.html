@@ -43,6 +43,21 @@
         <div class="form-section">
             <h2>基本情報</h2>
             
+            {% if users is defined and users %}
+            <div class="form-group" style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border: 1px solid #bae6fd; margin-bottom: 1.5rem;">
+                <label for="target_user_id" style="color: #0369a1; font-weight: 600;">📋 登録先ユーザー</label>
+                <select id="target_user_id" name="target_user_id" style="margin-top: 0.5rem;">
+                    <option value="">管理者商品として登録（ユーザーなし）</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}>
+                        {{ user.display_name or user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="form-help" style="color: #0369a1;">ユーザーを選択すると、そのユーザーの商品として登録されます</small>
+            </div>
+            {% endif %}
+            
             <div class="form-group">
                 <label for="purchase_date">仕入日</label>
                 <input type="date" id="purchase_date" name="purchase_date">
