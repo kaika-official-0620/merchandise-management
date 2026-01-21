@@ -41,6 +41,17 @@
     {% endif %}
 </div>
 
+<div class="master-setting-indicator" style="background: {% if mode == 'user' %}#ecfdf5{% else %}#fef3c7{% endif %}; border: 1px solid {% if mode == 'user' %}#10b981{% else %}#f59e0b{% endif %}; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+    <span style="font-size: 1.2rem;">{% if mode == 'user' %}📋{% else %}⚙️{% endif %}</span>
+    <span style="color: {% if mode == 'user' %}#065f46{% else %}#92400e{% endif %}; font-weight: 500;">
+        {% if mode == 'user' %}
+        「ユーザー機能 > マスター設定」のデータを使用しています
+        {% else %}
+        「開花管理 > マスター設定」のデータを使用しています
+        {% endif %}
+    </span>
+</div>
+
 
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
     <input type="hidden" name="mode" value="{{ mode or 'admin' }}">
@@ -493,7 +504,10 @@ function toggleSupplierDetail() {
 // マスターデータをロードしてセレクトボックスを生成
 async function loadMasterData() {
     try {
-        const response = await fetch('/api/master-data?scope=admin');
+        // モードに応じてスコープを切り替え（ユーザー商品登録 → user, 管理者商品登録 → admin）
+        const mode = '{{ mode or "admin" }}';
+        const scope = mode === 'user' ? 'user' : 'admin';
+        const response = await fetch(`/api/master-data?scope=${scope}`);
         const data = await response.json();
         
         // ブランド名セレクトボックスを生成
