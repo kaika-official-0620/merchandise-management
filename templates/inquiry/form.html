@@ -7,7 +7,7 @@
 </div>
 
 <div class="inquiry-form-container">
-    <form method="POST" class="inquiry-form">
+    <form method="POST" class="inquiry-form" enctype="multipart/form-data">
         <div class="form-group">
             <label for="category">カテゴリ</label>
             <select id="category" name="category" class="form-control">
@@ -27,6 +27,23 @@
             <label for="content">内容 <span class="required">*</span></label>
             <textarea id="content" name="content" class="form-control" rows="8" required
                       placeholder="お問い合わせ内容を詳しくご記入ください"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="image">📷 画像添付（任意）</label>
+            <div class="image-upload-area" id="imageUploadArea">
+                <input type="file" id="image" name="image" accept="image/*" class="image-input" onchange="previewImage(this)">
+                <div class="upload-placeholder" id="uploadPlaceholder">
+                    <span class="upload-icon">📁</span>
+                    <span class="upload-text">クリックまたはドラッグ&ドロップで画像を選択</span>
+                    <span class="upload-hint">PNG, JPG, GIF（最大5MB）</span>
+                </div>
+                <div class="image-preview" id="imagePreview" style="display: none;">
+                    <img id="previewImg" src="" alt="プレビュー">
+                    <button type="button" class="remove-image" onclick="removeImage()">✕</button>
+                </div>
+            </div>
+            <small class="form-help">スクリーンショットやエラー画面など、問い合わせに関連する画像があれば添付してください</small>
         </div>
         
         <div class="form-actions">
@@ -124,5 +141,154 @@ textarea.form-control {
 .btn-secondary:hover {
     background: #e2e8f0;
 }
+
+/* 画像アップロードエリア */
+.image-upload-area {
+    position: relative;
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f9fafb;
+}
+
+.image-upload-area:hover {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.image-upload-area.dragover {
+    border-color: #2563eb;
+    background: #dbeafe;
+}
+
+.image-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.upload-icon {
+    font-size: 2rem;
+}
+
+.upload-text {
+    font-size: 0.95rem;
+    color: #374151;
+}
+
+.upload-hint {
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+.image-preview {
+    position: relative;
+    display: inline-block;
+}
+
+.image-preview img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.remove-image {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    border: 2px solid white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.remove-image:hover {
+    background: #dc2626;
+}
+
+.form-help {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
 </style>
+
+<script>
+function previewImage(input) {
+    const preview = document.getElementById('imagePreview');
+    const placeholder = document.getElementById('uploadPlaceholder');
+    const previewImg = document.getElementById('previewImg');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.style.display = 'inline-block';
+            placeholder.style.display = 'none';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function removeImage() {
+    const input = document.getElementById('image');
+    const preview = document.getElementById('imagePreview');
+    const placeholder = document.getElementById('uploadPlaceholder');
+    
+    input.value = '';
+    preview.style.display = 'none';
+    placeholder.style.display = 'flex';
+}
+
+// ドラッグ&ドロップ対応
+const uploadArea = document.getElementById('imageUploadArea');
+
+uploadArea.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const input = document.getElementById('image');
+        input.files = files;
+        previewImage(input);
+    }
+});
+</script>
 {% endblock %}

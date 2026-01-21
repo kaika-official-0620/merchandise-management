@@ -50,6 +50,9 @@
                     <td>
                         <a href="{{ url_for('admin_inquiry_view', id=inquiry.id) }}" class="inquiry-link">
                             {{ inquiry.title }}
+                            {% if inquiry.image_path %}
+                            <span class="attachment-icon" title="画像添付あり">📷</span>
+                            {% endif %}
                         </a>
                     </td>
                     <td>{{ inquiry.display_name or inquiry.username }}</td>

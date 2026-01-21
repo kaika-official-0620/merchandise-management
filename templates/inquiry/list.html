@@ -20,6 +20,9 @@
             </div>
             <div class="inquiry-title">
                 {{ inquiry.title }}
+                {% if inquiry.image_path %}
+                <span class="attachment-icon" title="画像添付あり">📷</span>
+                {% endif %}
                 {% if inquiry.unread_replies and inquiry.unread_replies > 0 %}
                 <span class="unread-badge">{{ inquiry.unread_replies }}件の返信</span>
                 {% endif %}
@@ -126,6 +129,11 @@
     color: white;
     border-radius: 10px;
     font-weight: 500;
+}
+
+.attachment-icon {
+    font-size: 0.9rem;
+    opacity: 0.7;
 }
 
 .inquiry-meta {

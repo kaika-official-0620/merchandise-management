@@ -843,11 +843,18 @@ if DATABASE_URL:
                 category VARCHAR(50) DEFAULT 'general',
                 title VARCHAR(200) NOT NULL,
                 content TEXT NOT NULL,
+                image_path TEXT,
                 status VARCHAR(20) DEFAULT 'new',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # 既存テーブルにimage_pathカラムを追加
+        try:
+            cur.execute("ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS image_path TEXT")
+        except:
+            pass
         
         # 問い合わせ返信テーブル
         cur.execute('''
@@ -1682,11 +1689,18 @@ else:
                 category TEXT DEFAULT 'general',
                 title TEXT NOT NULL,
                 content TEXT NOT NULL,
+                image_path TEXT,
                 status TEXT DEFAULT 'new',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # 既存テーブルにimage_pathカラムを追加
+        try:
+            cur.execute("ALTER TABLE inquiries ADD COLUMN image_path TEXT")
+        except:
+            pass
         
         # 問い合わせ返信テーブル
         cur.execute('''
@@ -14432,19 +14446,33 @@ def inquiry_new():
             flash('タイトルと内容を入力してください', 'error')
             return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
         
+        # 画像アップロード処理
+        image_path = None
+        if 'image' in request.files:
+            image = request.files['image']
+            if image and image.filename:
+                # ファイル名をセキュアに
+                filename = secure_filename(f"inquiry_{int(time.time())}_{image.filename}")
+                # inquiries用のフォルダを作成
+                upload_dir = os.path.join(app.static_folder, 'uploads', 'inquiries')
+                os.makedirs(upload_dir, exist_ok=True)
+                # ファイルを保存
+                image.save(os.path.join(upload_dir, filename))
+                image_path = f'uploads/inquiries/{filename}'
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO inquiries (user_id, category, title, content)
-                VALUES (%s, %s, %s, %s)
-            ''', (current_user.id, category, title, content))
+                INSERT INTO inquiries (user_id, category, title, content, image_path)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (current_user.id, category, title, content, image_path))
         else:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO inquiries (user_id, category, title, content)
-                VALUES (?, ?, ?, ?)
-            ''', (current_user.id, category, title, content))
+                INSERT INTO inquiries (user_id, category, title, content, image_path)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (current_user.id, category, title, content, image_path))
         
         conn.commit()
         cur.close()
