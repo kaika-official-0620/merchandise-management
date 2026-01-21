@@ -271,6 +271,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # notesカラムを追加（備考・メモ）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS notes TEXT")
+        except:
+            pass
+        
         # 顧客テーブル（user_id追加）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS customers (
@@ -1107,6 +1113,12 @@ else:
         # updated_atカラムを追加（最終更新日時）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN updated_at TIMESTAMP")
+        except:
+            pass
+        
+        # notesカラムを追加（備考・メモ）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN notes TEXT")
         except:
             pass
         
