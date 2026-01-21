@@ -32,29 +32,45 @@
 </style>
 
 <div class="page-header">
-    <h1>管理者商品登録</h1>
-    <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">← 商品一覧に戻る</a>
+    {% if mode == 'user' %}
+    <h1>👤 ユーザー商品登録</h1>
+    <a href="{{ url_for('admin_user_products') }}" class="btn btn-secondary">← ユーザー商品一覧に戻る</a>
+    {% else %}
+    <h1>🏢 管理者商品登録</h1>
+    <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">← 管理者商品一覧に戻る</a>
+    {% endif %}
 </div>
 
 
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
+    <input type="hidden" name="mode" value="{{ mode or 'admin' }}">
+    
     <div class="form-grid">
         <!-- 左カラム: 基本情報 -->
         <div class="form-section">
             <h2>基本情報</h2>
             
-            {% if users is defined and users %}
-            <div class="form-group" style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border: 1px solid #bae6fd; margin-bottom: 1.5rem;">
-                <label for="target_user_id" style="color: #0369a1; font-weight: 600;">📋 登録先ユーザー</label>
-                <select id="target_user_id" name="target_user_id" style="margin-top: 0.5rem;">
-                    <option value="">管理者商品として登録（ユーザーなし）</option>
+            {% if mode == 'user' %}
+            <!-- ユーザーモード：ユーザー選択必須 -->
+            <div class="form-group" style="background: #ecfdf5; padding: 1rem; border-radius: 8px; border: 2px solid #10b981; margin-bottom: 1.5rem;">
+                <label for="target_user_id" style="color: #065f46; font-weight: 600;">👤 登録先ユーザー <span style="color: #ef4444;">*必須</span></label>
+                <select id="target_user_id" name="target_user_id" required style="margin-top: 0.5rem;">
+                    <option value="">-- ユーザーを選択してください --</option>
                     {% for user in users %}
                     <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}>
                         {{ user.display_name or user.username }}
                     </option>
                     {% endfor %}
                 </select>
-                <small class="form-help" style="color: #0369a1;">ユーザーを選択すると、そのユーザーの商品として登録されます</small>
+                <small class="form-help" style="color: #065f46;">この商品は選択したユーザーの商品として登録されます</small>
+            </div>
+            {% else %}
+            <!-- 管理者モード：お知らせ表示 -->
+            <div class="form-group" style="background: #fef3c7; padding: 1rem; border-radius: 8px; border: 1px solid #f59e0b; margin-bottom: 1.5rem;">
+                <p style="color: #92400e; margin: 0; font-weight: 500;">
+                    🏢 この商品は<strong>管理者商品</strong>として登録されます
+                </p>
+                <small style="color: #92400e;">ユーザーの商品を登録する場合は「ユーザー商品一覧」から行ってください</small>
             </div>
             {% endif %}
             

@@ -8079,11 +8079,24 @@ def admin_user_products():
 @login_required
 @admin_required
 def admin_add_item():
-    """管理者用商品登録（ユーザー選択可能）"""
+    """管理者用商品登録（モードによりユーザー/管理者商品を分離）"""
+    # モード取得: 'user' = ユーザー商品登録, 'admin' = 管理者商品登録
+    mode = request.args.get('mode', 'admin')
+    
     if request.method == 'POST':
-        # ユーザーが選択されている場合はそのユーザーの商品として登録
-        target_user_id_str = request.form.get('target_user_id', '')
-        target_user_id = int(target_user_id_str) if target_user_id_str and target_user_id_str != '' else None
+        # フォームからモードを取得
+        form_mode = request.form.get('mode', 'admin')
+        
+        # ユーザーモードの場合、ユーザー選択必須
+        if form_mode == 'user':
+            target_user_id_str = request.form.get('target_user_id', '')
+            if not target_user_id_str:
+                flash('ユーザーを選択してください', 'error')
+                return redirect(url_for('admin_add_item', mode='user'))
+            target_user_id = int(target_user_id_str)
+        else:
+            # 管理者モードの場合、ユーザーなし
+            target_user_id = None
         
         conn = get_db()
         if DATABASE_URL:
@@ -8197,23 +8210,25 @@ def admin_add_item():
         else:
             return redirect(url_for('admin_items'))
     
-    # GETリクエスト：ユーザー一覧を取得
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
-        users = [dict(u) for u in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
-        users = [dict(zip(['id', 'username', 'display_name', 'role'], row)) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
+    # GETリクエスト：ユーザー一覧を取得（ユーザーモードの場合のみ必要）
+    users = []
+    if mode == 'user':
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
+            users = [dict(u) for u in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
+            users = [dict(zip(['id', 'username', 'display_name', 'role'], row)) for row in cur.fetchall()]
+        cur.close()
+        conn.close()
     
     # URLパラメータからデフォルトのユーザーIDを取得
     default_user_id = request.args.get('user_id', '')
     
-    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id)
+    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id, mode=mode)
 
 @app.route('/admin/items/<int:id>/transfer', methods=['POST'])
 @login_required
