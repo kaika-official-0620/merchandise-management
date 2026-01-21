@@ -136,6 +136,12 @@
                     </a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
+                        長期在庫商品
+                        {% if get_long_term_item_count() > 0 %}
+                        <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
+                        {% endif %}
+                    </a>
                     {% endif %}
                     <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                 </div>

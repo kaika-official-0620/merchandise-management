@@ -152,6 +152,7 @@ if DATABASE_URL:
                 user_id INTEGER REFERENCES users(id),
                 merchandise_id INTEGER REFERENCES merchandise(id),
                 disposal_type VARCHAR(30) NOT NULL,
+                reason VARCHAR(30) DEFAULT 'overdue',
                 shipping_address TEXT,
                 shipping_name TEXT,
                 shipping_phone TEXT,
@@ -162,6 +163,12 @@ if DATABASE_URL:
                 processed_by INTEGER REFERENCES users(id)
             )
         ''')
+        
+        # reasonカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN IF NOT EXISTS reason VARCHAR(30) DEFAULT 'overdue'")
+        except:
+            pass
         
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
@@ -984,6 +991,7 @@ else:
                 user_id INTEGER REFERENCES users(id),
                 merchandise_id INTEGER REFERENCES merchandise(id),
                 disposal_type TEXT NOT NULL,
+                reason TEXT DEFAULT 'overdue',
                 shipping_address TEXT,
                 shipping_name TEXT,
                 shipping_phone TEXT,
@@ -994,6 +1002,12 @@ else:
                 processed_by INTEGER REFERENCES users(id)
             )
         ''')
+        
+        # reasonカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN reason TEXT DEFAULT 'overdue'")
+        except:
+            pass
         
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
@@ -12461,6 +12475,130 @@ def check_and_transfer_overdue_items():
     print(f"[{datetime.now()}] Overdue items check completed. Transferred {transferred_count} items from {len(overdue_users)} users.")
 
 
+def check_and_transfer_long_term_items():
+    """5ヶ月以上経過した長期在庫商品を管理者に自動移動"""
+    print(f"[{datetime.now()}] Running long-term items check...")
+    
+    conn = get_db()
+    
+    # 150日（約5ヶ月）以上経過
+    five_months_ago = datetime.now() - timedelta(days=150)
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # オーナーのIDを取得
+        cur.execute("SELECT id FROM users WHERE role = 'owner' LIMIT 1")
+        owner = cur.fetchone()
+        owner_id = owner['id'] if owner else 1
+        
+        # 5ヶ月以上経過した未売却の一般ユーザー商品を取得
+        cur.execute("""
+            SELECT m.id, m.user_id, m.product_name, u.display_name, u.username, u.line_user_id
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.sale_date IS NULL
+              AND m.created_at <= %s
+              AND u.role = 'user'
+        """, (five_months_ago,))
+        long_term_items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        
+        # オーナーのIDを取得
+        cur.execute("SELECT id FROM users WHERE role = 'owner' LIMIT 1")
+        owner = cur.fetchone()
+        owner_id = owner[0] if owner else 1
+        
+        cur.execute("""
+            SELECT m.id, m.user_id, m.product_name, u.display_name, u.username, u.line_user_id
+            FROM merchandise m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.sale_date IS NULL
+              AND m.created_at <= ?
+              AND u.role = 'user'
+        """, (five_months_ago.strftime('%Y-%m-%d'),))
+        
+        columns = ['id', 'user_id', 'product_name', 'display_name', 'username', 'line_user_id']
+        long_term_items = [dict(zip(columns, row)) for row in cur.fetchall()]
+    
+    if not long_term_items:
+        print(f"[{datetime.now()}] No long-term items to transfer.")
+        cur.close()
+        conn.close()
+        return
+    
+    # ユーザーごとにグループ化
+    users_items = {}
+    for item in long_term_items:
+        user_id = item['user_id']
+        if user_id not in users_items:
+            users_items[user_id] = {
+                'display_name': item.get('display_name') or item.get('username') or 'ユーザー',
+                'line_user_id': item.get('line_user_id'),
+                'items': []
+            }
+        users_items[user_id]['items'].append(item)
+    
+    transferred_count = 0
+    
+    for user_id, user_data in users_items.items():
+        items = user_data['items']
+        display_name = user_data['display_name']
+        line_user_id = user_data['line_user_id']
+        
+        # 商品を管理者に移動
+        item_ids = [item['id'] for item in items]
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE merchandise 
+                SET user_id = %s, 
+                    notes = COALESCE(notes, '') || '[長期在庫自動移管] ' || %s || 'さんから移管 (' || to_char(NOW(), 'YYYY/MM/DD') || ') '
+                WHERE id = ANY(%s)
+            """, (owner_id, display_name, item_ids))
+        else:
+            for item_id in item_ids:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET user_id = ?,
+                        notes = COALESCE(notes, '') || '[長期在庫自動移管] ' || ? || 'さんから移管 (' || date('now') || ') '
+                    WHERE id = ?
+                """, (owner_id, display_name, item_id))
+        
+        transferred_count += len(items)
+        
+        # LINEで通知
+        if line_user_id:
+            try:
+                item_names = [item.get('product_name', '商品') for item in items[:5]]
+                items_text = '\n'.join([f'・{name}' for name in item_names])
+                if len(items) > 5:
+                    items_text += f'\n...他{len(items) - 5}件'
+                
+                message = f"""【長期在庫商品の自動移管のお知らせ】
+
+{display_name}様
+
+登録から5ヶ月以上経過した商品が管理者へ移管されました。
+
+移管商品（{len(items)}件）:
+{items_text}
+
+今後の商品の取り扱いについては、管理者にお問い合わせください。"""
+                
+                send_line_push(line_user_id, message)
+            except Exception as e:
+                print(f"LINE notification failed for user {user_id}: {e}")
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    print(f"[{datetime.now()}] Long-term items check completed. Transferred {transferred_count} items from {len(users_items)} users.")
+
+
 # ===================
 # 未払いユーザー向け商品処分
 # ===================
@@ -12650,6 +12788,209 @@ def submit_disposal_request():
         conn.close()
     
     return redirect(url_for('disposal_options'))
+
+
+@app.route('/long-term-items')
+@login_required
+def long_term_items():
+    """長期在庫商品（3ヶ月以上経過）の一覧・処分オプションページ"""
+    conn = get_db()
+    
+    # 3ヶ月前の日付を計算
+    three_months_ago = datetime.now() - timedelta(days=90)
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 3ヶ月以上経過した未売却商品を取得
+        cur.execute("""
+            SELECT m.*, 
+                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                   EXTRACT(DAY FROM (CURRENT_TIMESTAMP - m.created_at)) as days_since_created
+            FROM merchandise m
+            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+            WHERE m.user_id = %s 
+              AND m.sale_date IS NULL
+              AND m.created_at <= %s
+            ORDER BY m.created_at ASC
+        """, (current_user.id, three_months_ago))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.row_factory = sqlite3.Row
+        
+        # 3ヶ月以上経過した未売却商品を取得
+        cur.execute("""
+            SELECT m.*, 
+                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                   CAST((julianday('now') - julianday(m.created_at)) AS INTEGER) as days_since_created
+            FROM merchandise m
+            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+            WHERE m.user_id = ? 
+              AND m.sale_date IS NULL
+              AND m.created_at <= ?
+            ORDER BY m.created_at ASC
+        """, (current_user.id, three_months_ago.strftime('%Y-%m-%d')))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    # 各商品の経過日数を計算
+    for item in items:
+        if item.get('created_at'):
+            created_at = item['created_at']
+            if isinstance(created_at, str):
+                created_at = datetime.strptime(created_at[:19], '%Y-%m-%d %H:%M:%S')
+            days = (datetime.now() - created_at).days
+            item['days_since_created'] = days
+            item['months_since_created'] = days // 30
+    
+    return render_template('long_term_items.html', items=items)
+
+
+@app.route('/long-term-disposal-request', methods=['POST'])
+@login_required
+def submit_long_term_disposal_request():
+    """長期在庫商品の処分申請を送信"""
+    disposal_type = request.form.get('disposal_type')
+    merchandise_ids = request.form.getlist('merchandise_ids')
+    shipping_address = request.form.get('shipping_address', '')
+    shipping_name = request.form.get('shipping_name', '')
+    shipping_phone = request.form.get('shipping_phone', '')
+    
+    if not disposal_type or not merchandise_ids:
+        flash('処分方法と商品を選択してください', 'error')
+        return redirect(url_for('long_term_items'))
+    
+    if disposal_type not in ['auction', 'liquidation', 'shipping']:
+        flash('無効な処分方法です', 'error')
+        return redirect(url_for('long_term_items'))
+    
+    # 郵送の場合は住所必須
+    if disposal_type == 'shipping' and not shipping_address:
+        flash('郵送先住所を入力してください', 'error')
+        return redirect(url_for('long_term_items'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        for merchandise_id in merchandise_ids:
+            # 商品がユーザーのものか確認
+            if DATABASE_URL:
+                cur.execute("SELECT id FROM merchandise WHERE id = %s AND user_id = %s", 
+                           (merchandise_id, current_user.id))
+            else:
+                cur.execute("SELECT id FROM merchandise WHERE id = ? AND user_id = ?", 
+                           (merchandise_id, current_user.id))
+            
+            if cur.fetchone():
+                # 既存の申請を確認
+                if DATABASE_URL:
+                    cur.execute("""
+                        SELECT id FROM item_disposal_requests 
+                        WHERE merchandise_id = %s AND status = 'pending' AND reason = 'long_term'
+                    """, (merchandise_id,))
+                else:
+                    cur.execute("""
+                        SELECT id FROM item_disposal_requests 
+                        WHERE merchandise_id = ? AND status = 'pending' AND reason = 'long_term'
+                    """, (merchandise_id,))
+                
+                existing = cur.fetchone()
+                
+                if existing:
+                    # 既存の申請を更新
+                    if DATABASE_URL:
+                        cur.execute("""
+                            UPDATE item_disposal_requests 
+                            SET disposal_type = %s, shipping_address = %s, 
+                                shipping_name = %s, shipping_phone = %s
+                            WHERE id = %s
+                        """, (disposal_type, shipping_address, shipping_name, shipping_phone, existing[0]))
+                    else:
+                        cur.execute("""
+                            UPDATE item_disposal_requests 
+                            SET disposal_type = ?, shipping_address = ?, 
+                                shipping_name = ?, shipping_phone = ?
+                            WHERE id = ?
+                        """, (disposal_type, shipping_address, shipping_name, shipping_phone, existing[0]))
+                else:
+                    # 新規申請を作成（reason='long_term'）
+                    if DATABASE_URL:
+                        cur.execute("""
+                            INSERT INTO item_disposal_requests 
+                            (user_id, merchandise_id, disposal_type, reason, shipping_address, shipping_name, shipping_phone)
+                            VALUES (%s, %s, %s, 'long_term', %s, %s, %s)
+                        """, (current_user.id, merchandise_id, disposal_type, 
+                              shipping_address, shipping_name, shipping_phone))
+                    else:
+                        cur.execute("""
+                            INSERT INTO item_disposal_requests 
+                            (user_id, merchandise_id, disposal_type, reason, shipping_address, shipping_name, shipping_phone)
+                            VALUES (?, ?, ?, 'long_term', ?, ?, ?)
+                        """, (current_user.id, merchandise_id, disposal_type, 
+                              shipping_address, shipping_name, shipping_phone))
+        
+        conn.commit()
+        
+        disposal_type_names = {
+            'auction': 'オークション販売',
+            'liquidation': '在庫処分',
+            'shipping': '受け取り郵送'
+        }
+        flash(f'{len(merchandise_ids)}件の商品を「{disposal_type_names.get(disposal_type)}」で申請しました', 'success')
+    except Exception as e:
+        flash(f'申請エラー: {str(e)}', 'error')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('long_term_items'))
+
+
+def get_long_term_item_count():
+    """3ヶ月以上経過した未処理の長期在庫商品数を取得"""
+    if not current_user.is_authenticated:
+        return 0
+    
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        three_months_ago = datetime.now() - timedelta(days=90)
+        
+        if DATABASE_URL:
+            cur.execute("""
+                SELECT COUNT(*) FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.created_at <= %s
+                  AND dr.id IS NULL
+            """, (current_user.id, three_months_ago))
+        else:
+            cur.execute("""
+                SELECT COUNT(*) FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = ? 
+                  AND m.sale_date IS NULL
+                  AND m.created_at <= ?
+                  AND dr.id IS NULL
+            """, (current_user.id, three_months_ago.strftime('%Y-%m-%d')))
+        
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except:
+        return 0
+
+
+@app.context_processor
+def inject_long_term_item_count():
+    return dict(get_long_term_item_count=get_long_term_item_count)
 
 
 @app.route('/admin/disposal-requests')
@@ -13849,6 +14190,15 @@ def init_scheduler():
         CronTrigger(hour=3, minute=0, timezone='Asia/Tokyo'),
         id='overdue_items_transfer',
         name='未払い商品自動移動',
+        replace_existing=True
+    )
+    
+    # 長期在庫商品の自動移動（毎日午前4時に実行）
+    scheduler.add_job(
+        check_and_transfer_long_term_items,
+        CronTrigger(hour=4, minute=0, timezone='Asia/Tokyo'),
+        id='long_term_items_transfer',
+        name='長期在庫商品自動移動',
         replace_existing=True
     )
     

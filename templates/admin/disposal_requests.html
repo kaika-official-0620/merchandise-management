@@ -124,6 +124,24 @@
     color: #991b1b;
 }
 
+.reason-badge {
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+.reason-badge.long-term {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.reason-badge.overdue {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
 .disposal-type-badge {
     padding: 0.35rem 0.75rem;
     border-radius: 20px;
@@ -384,6 +402,11 @@
                         {% elif req.status == 'processing' %}🔄 処理中
                         {% elif req.status == 'completed' %}✅ 完了
                         {% else %}❌ 却下
+                        {% endif %}
+                    </span>
+                    <span class="reason-badge {% if req.reason == 'long_term' %}long-term{% else %}overdue{% endif %}">
+                        {% if req.reason == 'long_term' %}📦 長期在庫
+                        {% else %}💳 月謝未払い
                         {% endif %}
                     </span>
                     <span class="disposal-type-badge {{ req.disposal_type }}">
