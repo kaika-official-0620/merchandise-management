@@ -6984,89 +6984,150 @@ def user_master_delete(table_name, id):
 @login_required
 @admin_required
 def user_master_settings_init():
-    """ユーザー機能用マスターデータの初期登録"""
+    """ユーザー機能用マスターデータの初期登録（管理者設定からコピー）"""
     conn = get_db()
-    scope = 'user'
-    
-    # デフォルトデータ（ユーザー向け）
-    default_brand_categories = [
-        ('ラグジュアリーブランド', 1),
-        ('時計・ジュエリー', 2),
-        ('スポーツ・ストリート', 3),
-        ('日本ブランド', 4),
-        ('電子機器', 5),
-        ('その他', 6)
-    ]
-    
-    default_suppliers = [
-        ('店舗仕入', '店舗仕入', 1),
-        ('オンライン', 'オンライン仕入', 2),
-        ('卸業者', '卸業者', 3),
-        ('その他', 'その他', 4)
-    ]
-    
-    default_conditions = [
-        ('N', 'N：新品・未使用', '新品、未開封、タグ付き', 1),
-        ('S', 'S：未使用に近い', '使用回数1-2回、ほぼ新品', 2),
-        ('A', 'A：目立った傷汚れなし', '使用感はあるが状態良好', 3),
-        ('AB', 'AB：やや傷汚れあり', '若干の使用感あり', 4),
-        ('B', 'B：傷汚れあり', '使用感や傷が目立つ', 5)
-    ]
-    
-    default_payment_methods = [
-        ('現金', '現金', 1),
-        ('クレジットカード', 'クレジットカード', 2),
-        ('その他', 'その他', 3)
-    ]
-    
-    default_supplier_details = [
-        ('セカンドストリート', 'セカンドストリート', 1),
-        ('トレジャーファクトリー', 'トレジャーファクトリー', 2),
-        ('メルカリ', 'メルカリ', 3),
-        ('ヤフオク', 'ヤフオク', 4),
-        ('その他', 'その他', 5)
-    ]
+    target_scope = 'user'
+    source_scope = 'admin'
     
     try:
         if DATABASE_URL:
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            for name, order in default_brand_categories:
-                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (%s, %s, %s)", (name, order, scope))
+            # 1. ブランドカテゴリをコピー（IDマッピング用に保持）
+            cur.execute("SELECT * FROM master_brand_categories WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_categories = cur.fetchall()
+            category_id_map = {}  # admin_id -> user_id
             
-            for value, display_name, order in default_suppliers:
-                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+            for cat in admin_categories:
+                cur.execute("""
+                    INSERT INTO master_brand_categories (name, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s) RETURNING id
+                """, (cat['name'], cat['display_order'], cat['is_active'], target_scope))
+                new_id = cur.fetchone()['id']
+                category_id_map[cat['id']] = new_id
             
-            for value, display_name, description, order in default_conditions:
-                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (%s, %s, %s, %s, %s)", (value, display_name, description, order, scope))
+            # 2. ブランド名をコピー（カテゴリIDを変換）
+            cur.execute("SELECT * FROM master_brands WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_brands = cur.fetchall()
             
-            for value, display_name, order in default_payment_methods:
-                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+            for brand in admin_brands:
+                new_category_id = category_id_map.get(brand['category_id']) if brand['category_id'] else None
+                cur.execute("""
+                    INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (new_category_id, brand['value'], brand['display_name'], brand['keywords'], brand['display_order'], brand['is_active'], target_scope))
             
-            for value, display_name, order in default_supplier_details:
-                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (%s, %s, %s, %s)", (value, display_name, order, scope))
+            # 3. 仕入先をコピー
+            cur.execute("SELECT * FROM master_suppliers WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_suppliers = cur.fetchall()
+            
+            for item in admin_suppliers:
+                cur.execute("""
+                    INSERT INTO master_suppliers (value, display_name, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
+            
+            # 4. 商品状態をコピー
+            cur.execute("SELECT * FROM master_conditions WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_conditions = cur.fetchall()
+            
+            for item in admin_conditions:
+                cur.execute("""
+                    INSERT INTO master_conditions (value, display_name, description, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (item['value'], item['display_name'], item.get('description', ''), item['display_order'], item['is_active'], target_scope))
+            
+            # 5. 支払方法をコピー
+            cur.execute("SELECT * FROM master_payment_methods WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_payment_methods = cur.fetchall()
+            
+            for item in admin_payment_methods:
+                cur.execute("""
+                    INSERT INTO master_payment_methods (value, display_name, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
+            
+            # 6. 仕入先詳細をコピー
+            cur.execute("SELECT * FROM master_supplier_details WHERE scope = %s OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_supplier_details = cur.fetchall()
+            
+            for item in admin_supplier_details:
+                cur.execute("""
+                    INSERT INTO master_supplier_details (value, display_name, display_order, is_active, scope)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
         else:
             cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
             
-            for name, order in default_brand_categories:
-                cur.execute("INSERT INTO master_brand_categories (name, display_order, scope) VALUES (?, ?, ?)", (name, order, scope))
+            # 1. ブランドカテゴリをコピー
+            cur.execute("SELECT * FROM master_brand_categories WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_categories = [dict(row) for row in cur.fetchall()]
+            category_id_map = {}
             
-            for value, display_name, order in default_suppliers:
-                cur.execute("INSERT INTO master_suppliers (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+            for cat in admin_categories:
+                cur.execute("""
+                    INSERT INTO master_brand_categories (name, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?)
+                """, (cat['name'], cat['display_order'], cat['is_active'], target_scope))
+                new_id = cur.lastrowid
+                category_id_map[cat['id']] = new_id
             
-            for value, display_name, description, order in default_conditions:
-                cur.execute("INSERT INTO master_conditions (value, display_name, description, display_order, scope) VALUES (?, ?, ?, ?, ?)", (value, display_name, description, order, scope))
+            # 2. ブランド名をコピー
+            cur.execute("SELECT * FROM master_brands WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_brands = [dict(row) for row in cur.fetchall()]
             
-            for value, display_name, order in default_payment_methods:
-                cur.execute("INSERT INTO master_payment_methods (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+            for brand in admin_brands:
+                new_category_id = category_id_map.get(brand['category_id']) if brand['category_id'] else None
+                cur.execute("""
+                    INSERT INTO master_brands (category_id, value, display_name, keywords, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (new_category_id, brand['value'], brand['display_name'], brand['keywords'], brand['display_order'], brand['is_active'], target_scope))
             
-            for value, display_name, order in default_supplier_details:
-                cur.execute("INSERT INTO master_supplier_details (value, display_name, display_order, scope) VALUES (?, ?, ?, ?)", (value, display_name, order, scope))
+            # 3. 仕入先をコピー
+            cur.execute("SELECT * FROM master_suppliers WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_suppliers = [dict(row) for row in cur.fetchall()]
+            
+            for item in admin_suppliers:
+                cur.execute("""
+                    INSERT INTO master_suppliers (value, display_name, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
+            
+            # 4. 商品状態をコピー
+            cur.execute("SELECT * FROM master_conditions WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_conditions = [dict(row) for row in cur.fetchall()]
+            
+            for item in admin_conditions:
+                cur.execute("""
+                    INSERT INTO master_conditions (value, display_name, description, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (item['value'], item['display_name'], item.get('description', ''), item['display_order'], item['is_active'], target_scope))
+            
+            # 5. 支払方法をコピー
+            cur.execute("SELECT * FROM master_payment_methods WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_payment_methods = [dict(row) for row in cur.fetchall()]
+            
+            for item in admin_payment_methods:
+                cur.execute("""
+                    INSERT INTO master_payment_methods (value, display_name, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
+            
+            # 6. 仕入先詳細をコピー
+            cur.execute("SELECT * FROM master_supplier_details WHERE scope = ? OR scope IS NULL ORDER BY display_order, id", (source_scope,))
+            admin_supplier_details = [dict(row) for row in cur.fetchall()]
+            
+            for item in admin_supplier_details:
+                cur.execute("""
+                    INSERT INTO master_supplier_details (value, display_name, display_order, is_active, scope)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (item['value'], item['display_name'], item['display_order'], item['is_active'], target_scope))
         
         conn.commit()
         cur.close()
         conn.close()
-        flash('ユーザー機能用の初期データを登録しました', 'success')
+        flash('管理者用マスター設定をユーザー機能用にコピーしました', 'success')
     except Exception as e:
         print(f"User master init error: {e}")
         flash(f'初期データ登録エラー: {str(e)}', 'error')

@@ -286,9 +286,15 @@
 
 {% if not brands and not suppliers and not conditions %}
 <div class="init-section">
-    <p>ユーザー機能用のマスターデータが登録されていません。初期データを登録しますか？</p>
+    <p>ユーザー機能用のマスターデータが登録されていません。</p>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+        「開花管理 > マスター設定」のデータをコピーして初期化できます。<br>
+        コピー後は独立して編集できます。
+    </p>
     <form action="{{ url_for('user_master_settings_init') }}" method="POST" style="display: inline;">
-        <button type="submit" class="btn btn-primary">初期データを登録</button>
+        <button type="submit" class="btn btn-primary" onclick="return confirm('管理者用マスター設定のデータをユーザー機能用にコピーしますか？\\n\\nコピー後は独立して管理できます。')">
+            📋 管理者設定からコピーして初期化
+        </button>
     </form>
 </div>
 {% endif %}
