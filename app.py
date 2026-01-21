@@ -15204,7 +15204,7 @@ def approve_sale_request(request_id):
             # 商品のステータスを売却済みに更新、売上金も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET status = 'sold', sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
+                SET is_listed = TRUE, sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
                 WHERE id = %s
             ''', (sale_price, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
         else:
@@ -15231,7 +15231,7 @@ def approve_sale_request(request_id):
             # 商品のステータスを売却済みに更新、売上金も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET status = 'sold', sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
+                SET is_listed = 1, sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
                 WHERE id = ?
             ''', (sale_price, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
