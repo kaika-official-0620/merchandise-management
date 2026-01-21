@@ -180,24 +180,6 @@
                 <input type="date" id="listing_date" name="listing_date">
             </div>
             
-            <!-- 出品中時のみ表示 - 出品サービス選択 -->
-            <div id="listing-service-group" style="display: none;">
-                <div class="form-group">
-                    <label>出品サービス（複数選択可）</label>
-                    <div class="sale-type-checkboxes listing-services">
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="listing_service[]" value="wholesale">
-                            <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="listing_service[]" value="multi_listing">
-                            <span class="sale-type-label">同時出品サービス（手数料3%）</span>
-                        </label>
-                    </div>
-                    <small class="form-help">売却時に適用される手数料サービスを事前に選択できます</small>
-                </div>
-            </div>
-            
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
@@ -209,13 +191,15 @@
                 <div class="form-group">
                     <label>販売タイプ（複数選択可）</label>
                     <div class="sale-type-checkboxes">
-                        <label class="sale-type-option">
-                            <input type="checkbox" name="sale_type[]" value="normal" checked>
-                            <span class="sale-type-label">通常（手数料10%）</span>
+                        <!-- 撮影梱包等代行は固定（常にチェック、変更不可） -->
+                        <label class="sale-type-option fixed-option">
+                            <input type="checkbox" name="sale_type[]" value="photo_packing" checked disabled>
+                            <input type="hidden" name="sale_type[]" value="photo_packing">
+                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）<span class="fixed-badge">固定</span></span>
                         </label>
                         <label class="sale-type-option">
-                            <input type="checkbox" name="sale_type[]" value="photo_packing">
-                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
+                            <input type="checkbox" name="sale_type[]" value="normal">
+                            <span class="sale-type-label">通常（手数料10%）<span class="sale-type-note">※メルカリ・ラクマ・ヤフオクなど</span></span>
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="wholesale">
@@ -230,7 +214,8 @@
                             <span class="sale-type-label">オークション流し（手数料5%）</span>
                         </label>
                     </div>
-                    <input type="hidden" id="sale_type" name="sale_type" value="normal">
+                    <small class="form-help">販売タイプを選択してください。撮影梱包等代行は必須です。</small>
+                    <input type="hidden" id="sale_type" name="sale_type" value="photo_packing">
                 </div>
                 
                 <div class="form-group">
@@ -320,33 +305,45 @@
     font-weight: 600;
 }
 
-/* 出品サービス選択 */
-.listing-services {
-    border: 2px solid #22c55e;
-    background: #f0fdf4 !important;
-}
-
-.listing-services .sale-type-option {
-    background: white;
-}
-
-.listing-services .sale-type-option:hover {
-    border-color: #22c55e;
-    background: #dcfce7;
-}
-
-.listing-services .sale-type-option input[type="checkbox"] {
-    accent-color: #22c55e;
-}
-
-.listing-services .sale-type-option input[type="checkbox"]:checked + .sale-type-label {
-    color: #15803d;
-    font-weight: 600;
-}
-
 .sale-type-label {
     font-size: 0.9rem;
     color: #374151;
+}
+
+.sale-type-note {
+    display: block;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 2px;
+    font-weight: normal;
+}
+
+/* 固定項目のスタイル */
+.sale-type-option.fixed-option {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    cursor: default;
+}
+
+.sale-type-option.fixed-option input[type="checkbox"]:disabled {
+    accent-color: #10b981;
+    opacity: 1;
+}
+
+.sale-type-option.fixed-option .sale-type-label {
+    color: #065f46;
+    font-weight: 600;
+}
+
+.fixed-badge {
+    display: inline-block;
+    background: #10b981;
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
 }
 </style>
 
@@ -383,9 +380,13 @@ const saleTypeRules = {
 
 // チェックボックスの選択状況をhiddenフィールドに反映
 function updateSaleTypeValue() {
-    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked');
+    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked:not(:disabled)');
     const values = Array.from(checkboxes).map(cb => cb.value);
-    document.getElementById('sale_type').value = values.join(',') || 'normal';
+    // photo_packingは常に含める（固定）
+    if (!values.includes('photo_packing')) {
+        values.unshift('photo_packing');
+    }
+    document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
     
     if (autoCalculateCommission) {
         calculateCommission();
@@ -408,7 +409,7 @@ function calculateCommission() {
     if (!autoCalculateCommission) return;
     
     const saleTypeValue = document.getElementById('sale_type').value;
-    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['normal'];
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     
     let totalCommission = 0;
@@ -460,7 +461,6 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
 function updateStatusFields() {
     const status = document.getElementById('item_status').value;
     const listingDateGroup = document.getElementById('listing-date-group');
-    const listingServiceGroup = document.getElementById('listing-service-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
     
@@ -470,35 +470,13 @@ function updateStatusFields() {
         listingDateGroup.style.display = 'none';
     }
     
-    // 出品サービス選択：出品中のみ表示
-    if (status === 'listed') {
-        listingServiceGroup.style.display = 'block';
-    } else {
-        listingServiceGroup.style.display = 'none';
-    }
-    
     if (status === 'sold') {
         saleDateGroup.style.display = 'block';
         soldFields.style.display = 'block';
-        
-        // 出品中で選択したサービスを売却時の販売タイプに引き継ぎ
-        syncListingServiceToSaleType();
     } else {
         saleDateGroup.style.display = 'none';
         soldFields.style.display = 'none';
     }
-}
-
-// 出品サービスの選択を販売タイプに同期
-function syncListingServiceToSaleType() {
-    const listingServices = document.querySelectorAll('input[name="listing_service[]"]:checked');
-    listingServices.forEach(service => {
-        const saleTypeCheckbox = document.querySelector(`input[name="sale_type[]"][value="${service.value}"]`);
-        if (saleTypeCheckbox && !saleTypeCheckbox.checked) {
-            saleTypeCheckbox.checked = true;
-        }
-    });
-    updateSaleTypeValue();
 }
 
 function toggleSupplierDetail() {
@@ -612,18 +590,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     updateStatusFields();
     toggleSupplierDetail();
-    
-    // 出品サービスのチェックボックスにイベントリスナーを設定
-    document.querySelectorAll('input[name="listing_service[]"]').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            // 対応する販売タイプのチェックボックスも同期
-            const saleTypeCheckbox = document.querySelector(`input[name="sale_type[]"][value="${this.value}"]`);
-            if (saleTypeCheckbox) {
-                saleTypeCheckbox.checked = this.checked;
-            }
-            updateSaleTypeValue();
-        });
-    });
     
     // 画像リサイズ処理
     const MAX_WIDTH = 1200;
