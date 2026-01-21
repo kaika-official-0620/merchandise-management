@@ -3909,10 +3909,18 @@ def view_item(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+        # 管理者はすべての商品を閲覧可能
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM merchandise WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+        # 管理者はすべての商品を閲覧可能
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM merchandise WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
     
     item = cur.fetchone()
     cur.close()
