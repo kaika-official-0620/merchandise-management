@@ -14999,14 +14999,12 @@ def inject_inquiry_count():
 def get_pending_sale_request_count():
     try:
         conn = get_db()
+        cur = conn.cursor()
         if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
-            count = cur.fetchone()['count']
-        else:
-            cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
-            count = cur.fetchone()[0]
+        else:
+            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
+        count = cur.fetchone()[0]
         cur.close()
         conn.close()
         return count
