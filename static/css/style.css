@@ -1984,6 +1984,14 @@ body.sidebar-open {
     background: #dc2626;
 }
 
+.payment-warning-banner .warning-link.disposal-link {
+    background: #f59e0b;
+}
+
+.payment-warning-banner .warning-link.disposal-link:hover {
+    background: #d97706;
+}
+
 @media (max-width: 768px) {
     .payment-warning-banner {
         flex-direction: column;
@@ -1995,4 +2003,101 @@ body.sidebar-open {
     .payment-warning-banner .warning-text {
         font-size: 0.8rem;
     }
+}
+
+/* ========== 未払いユーザー強調表示 ========== */
+.row-unpaid {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
+    border-left: 4px solid #ef4444 !important;
+}
+
+.row-unpaid td {
+    color: #991b1b;
+}
+
+.row-overdue-warning {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
+    border-left: 4px solid #f59e0b !important;
+}
+
+.row-overdue-danger {
+    background: linear-gradient(135deg, #fff1f2 0%, #fecdd3 100%) !important;
+    border-left: 4px solid #f43f5e !important;
+    animation: pulse-warning 2s infinite;
+}
+
+.row-overdue-critical {
+    background: linear-gradient(135deg, #fef2f2 0%, #fca5a5 100%) !important;
+    border-left: 4px solid #dc2626 !important;
+    animation: pulse-critical 1s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+@keyframes pulse-critical {
+    0%, 100% { opacity: 1; background-color: #fef2f2; }
+    50% { opacity: 0.9; background-color: #fecaca; }
+}
+
+/* 未払い期間バッジ */
+.overdue-period {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.overdue-period.info {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.overdue-period.warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.overdue-period.danger {
+    background: #fecdd3;
+    color: #be123c;
+}
+
+.overdue-period.critical {
+    background: #ef4444;
+    color: white;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* 強制移管対象バッジ */
+.badge-critical {
+    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+    animation: pulse-badge 1.5s infinite;
+}
+
+.badge-danger {
+    background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
 }

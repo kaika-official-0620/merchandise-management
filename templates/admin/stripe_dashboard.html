@@ -103,6 +103,7 @@
                     <th>総数</th>
                     <th>月額利用料</th>
                     <th>サブスク状況</th>
+                    <th>未払い期間</th>
                     <th>最終支払日</th>
                     <th>次回引落日</th>
                     <th>操作</th>
@@ -110,11 +111,16 @@
             </thead>
             <tbody>
                 {% for user in users %}
-                <tr class="{% if not user.stripe_subscription_id %}row-no-sub{% elif user.subscription_status != 'active' %}row-unpaid{% endif %}" data-user-id="{{ user.id }}">
+                <tr class="{% if not user.stripe_subscription_id %}row-no-sub{% elif user.subscription_status == 'past_due' %}row-unpaid {% if user.overdue_months >= 4 %}row-overdue-critical{% elif user.overdue_months >= 3 %}row-overdue-danger{% elif user.overdue_months >= 1 %}row-overdue-warning{% endif %}{% elif user.subscription_status != 'active' %}row-unpaid{% endif %}" data-user-id="{{ user.id }}">
                     <td>
                         <strong>{{ user.display_name or user.username }}</strong>
                         {% if user.role == 'admin' %}
                         <span class="badge badge-admin">管理者</span>
+                        {% endif %}
+                        {% if user.overdue_months >= 4 %}
+                        <span class="badge badge-critical">⚠️ 強制移管対象</span>
+                        {% elif user.overdue_months >= 3 %}
+                        <span class="badge badge-danger">要処分選択</span>
                         {% endif %}
                     </td>
                     <td>{{ user.email }}</td>
@@ -138,6 +144,16 @@
                         <span class="status-badge status-canceled">解約済み</span>
                         {% else %}
                         <span class="status-badge status-inactive">{{ user.subscription_status or '不明' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.subscription_status == 'past_due' and user.overdue_days > 0 %}
+                        <span class="overdue-period {% if user.overdue_months >= 4 %}critical{% elif user.overdue_months >= 3 %}danger{% elif user.overdue_months >= 1 %}warning{% else %}info{% endif %}">
+                            {{ user.overdue_days }}日
+                            {% if user.overdue_months >= 1 %}({{ user.overdue_months }}ヶ月){% endif %}
+                        </span>
+                        {% else %}
+                        -
                         {% endif %}
                     </td>
                     <td>{{ user.last_payment_date.strftime('%Y-%m-%d') if user.last_payment_date else '-' }}</td>
@@ -175,7 +191,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="text-center text-muted">ユーザーがいません</td>
+                    <td colspan="10" class="text-center text-muted">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
             </tbody>

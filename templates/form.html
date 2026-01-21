@@ -349,6 +349,11 @@ input:disabled, select:disabled, textarea:disabled {
                             <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）<span class="fixed-badge">固定</span></span>
                         </label>
                         <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="normal"
+                                   {% if item and 'normal' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">通常（手数料10%）<span class="sale-type-note">※メルカリ・ラクマ・ヤフオクなど</span></span>
+                        </label>
+                        <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="wholesale"
                                    {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}>
                             <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
@@ -466,6 +471,14 @@ input:disabled, select:disabled, textarea:disabled {
     color: #374151;
 }
 
+.sale-type-note {
+    display: block;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 2px;
+    font-weight: normal;
+}
+
 .sale-type-option.fixed-option {
     background: #ecfdf5;
     border: 1px solid #a7f3d0;
@@ -515,6 +528,12 @@ const saleTypeRules = {
         hint: (price) => price >= 25000 ? '撮影梱包: 売上金の2%（25,000円以上）' : '撮影梱包: 500円（25,000円未満）',
         shippingHint: '',
         isFixed: true  // 固定費用
+    },
+    'normal': {
+        name: '通常',
+        calculate: (price) => Math.floor(price * 0.10),
+        hint: '通常: 売上金の10%（メルカリ・ラクマ・ヤフオク等）',
+        shippingHint: ''
     },
     'wholesale': {
         name: '業者卸販売',

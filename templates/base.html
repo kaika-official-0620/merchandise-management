@@ -46,6 +46,7 @@
         <span class="warning-icon">⚠️</span>
         <span class="warning-text">月謝のお支払いが確認できておりません。お早めにお支払いをお願いいたします。</span>
         <a href="{{ url_for('profile') }}" class="warning-link">決済情報を確認</a>
+        <a href="{{ url_for('disposal_options') }}" class="warning-link disposal-link">📦 商品処分オプション</a>
     </div>
     {% endif %}
     
@@ -171,16 +172,22 @@
             {% if current_user.is_admin() %}
             <!-- 機能（ユーザー機能用） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard', 'admin_disposal_requests'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
                     機能
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard', 'admin_disposal_requests'] or 'line' in request.endpoint %}open{% endif %}">
                     <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">お知らせ</a>
                     {% if current_user.is_owner() %}
                     <a href="{{ url_for('admin_line_dashboard') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
                     {% endif %}
                     <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
+                    <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
+                        商品処分申請
+                        {% if get_pending_disposal_count() > 0 %}
+                        <span class="menu-badge">{{ get_pending_disposal_count() }}</span>
+                        {% endif %}
+                    </a>
                 </div>
             </div>
             

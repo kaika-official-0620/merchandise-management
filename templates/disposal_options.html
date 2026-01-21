@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+{% block title %}商品処分オプション - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.disposal-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.warning-banner {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 2px solid #ef4444;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.warning-banner h2 {
+    color: #991b1b;
+    margin: 0 0 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.warning-banner p {
+    color: #7f1d1d;
+    margin: 0.5rem 0;
+}
+
+.overdue-info {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed #fca5a5;
+}
+
+.overdue-stat {
+    text-align: center;
+}
+
+.overdue-stat .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #dc2626;
+}
+
+.overdue-stat .label {
+    font-size: 0.85rem;
+    color: #7f1d1d;
+}
+
+.disposal-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.disposal-option {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.disposal-option:hover {
+    border-color: #3b82f6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.disposal-option.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.disposal-option input[type="radio"] {
+    display: none;
+}
+
+.disposal-option .option-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.disposal-option .option-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+
+.disposal-option .option-desc {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.disposal-option .option-note {
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    background: #fef3c7;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: #92400e;
+}
+
+/* 郵送先情報フォーム */
+.shipping-form {
+    display: none;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.shipping-form.show {
+    display: block;
+}
+
+.shipping-form h3 {
+    margin: 0 0 1rem;
+    color: #1e293b;
+}
+
+.shipping-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.shipping-form label {
+    display: block;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.shipping-form input,
+.shipping-form textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.shipping-warning {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.shipping-warning strong {
+    color: #92400e;
+}
+
+/* 商品一覧 */
+.items-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.items-section h3 {
+    margin: 0 0 1rem;
+    color: #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.select-all-btn {
+    font-size: 0.85rem;
+    color: #3b82f6;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+.item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.item-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.item-row:hover {
+    background: #f8fafc;
+}
+
+.item-row.selected {
+    background: #eff6ff;
+    border-color: #3b82f6;
+}
+
+.item-row.has-request {
+    background: #f0fdf4;
+    border-color: #22c55e;
+}
+
+.item-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.item-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: #f1f5f9;
+}
+
+.item-info {
+    flex: 1;
+}
+
+.item-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.item-brand {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.item-price {
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+.item-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.item-status.pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.item-status.processing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* 送信ボタン */
+.submit-section {
+    text-align: center;
+}
+
+.submit-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    border: none;
+    padding: 1rem 3rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.submit-btn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* 説明セクション */
+.info-section {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.info-section h3 {
+    color: #0369a1;
+    margin: 0 0 1rem;
+}
+
+.info-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.info-list li {
+    margin-bottom: 0.75rem;
+    color: #0c4a6e;
+}
+
+.info-list strong {
+    color: #0369a1;
+}
+
+@media (max-width: 768px) {
+    .disposal-options {
+        grid-template-columns: 1fr;
+    }
+    
+    .overdue-info {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .item-row {
+        flex-wrap: wrap;
+    }
+    
+    .item-image {
+        width: 50px;
+        height: 50px;
+    }
+}
+</style>
+
+<div class="page-header">
+    <h1>⚠️ 商品処分オプション</h1>
+</div>
+
+<div class="disposal-container">
+    <!-- 警告バナー -->
+    <div class="warning-banner">
+        <h2>⚠️ 月謝のお支払いが確認できておりません</h2>
+        <p>お支払いが {{ overdue_days }} 日間確認できておりません。</p>
+        <p>以下の選択肢から、お手持ちの商品の処分方法をお選びください。</p>
+        
+        <div class="overdue-info">
+            <div class="overdue-stat">
+                <div class="value">{{ overdue_days }}</div>
+                <div class="label">未払い日数</div>
+            </div>
+            <div class="overdue-stat">
+                <div class="value">{{ overdue_months }}</div>
+                <div class="label">ヶ月経過</div>
+            </div>
+            <div class="overdue-stat">
+                <div class="value">{{ items|length }}</div>
+                <div class="label">在庫商品数</div>
+            </div>
+        </div>
+        
+        {% if overdue_months >= 3 %}
+        <p style="margin-top: 1rem; font-weight: 600; color: #dc2626;">
+            ⚠️ 4ヶ月以上経過すると、商品は自動的に管理者へ移管されます。
+            お早めに処分方法をご選択ください。
+        </p>
+        {% endif %}
+    </div>
+    
+    <!-- 説明セクション -->
+    <div class="info-section">
+        <h3>📋 処分方法について</h3>
+        <ul class="info-list">
+            <li><strong>オークション販売</strong>：弊社が代行してオークションサイトで販売します。売上金から手数料を差し引いた金額をお振込みします。</li>
+            <li><strong>在庫処分</strong>：弊社にて在庫として引き取ります。買取価格をお振込みします。</li>
+            <li><strong>受け取り郵送</strong>：ご指定の住所に商品をお送りします。<strong style="color: #dc2626;">※送料はお客様ご負担となります。</strong></li>
+        </ul>
+    </div>
+    
+    <form method="POST" action="{{ url_for('submit_disposal_request') }}" id="disposalForm">
+        <!-- 処分方法選択 -->
+        <div class="disposal-options">
+            <label class="disposal-option" onclick="selectOption('auction')">
+                <input type="radio" name="disposal_type" value="auction">
+                <div class="option-icon">🏷️</div>
+                <div class="option-title">オークション販売</div>
+                <div class="option-desc">弊社が代行して販売し、売上金をお振込み</div>
+            </label>
+            
+            <label class="disposal-option" onclick="selectOption('liquidation')">
+                <input type="radio" name="disposal_type" value="liquidation">
+                <div class="option-icon">📦</div>
+                <div class="option-title">在庫処分</div>
+                <div class="option-desc">弊社にて買取し、買取金額をお振込み</div>
+            </label>
+            
+            <label class="disposal-option" onclick="selectOption('shipping')">
+                <input type="radio" name="disposal_type" value="shipping">
+                <div class="option-icon">🚚</div>
+                <div class="option-title">受け取り郵送</div>
+                <div class="option-desc">ご指定の住所に商品をお送り</div>
+                <div class="option-note">⚠️ 送料はお客様ご負担</div>
+            </label>
+        </div>
+        
+        <!-- 郵送先情報 -->
+        <div class="shipping-form" id="shippingForm">
+            <h3>📬 郵送先情報</h3>
+            
+            <div class="shipping-warning">
+                <strong>⚠️ 送料について</strong><br>
+                送料はお客様のご負担となります。商品到着時に着払いにてお受け取りください。
+                大型商品や複数商品の場合、送料が高額になる場合がございます。
+            </div>
+            
+            <div class="form-group">
+                <label for="shipping_name">お名前 <span style="color: #ef4444;">*</span></label>
+                <input type="text" name="shipping_name" id="shipping_name" placeholder="山田 太郎">
+            </div>
+            
+            <div class="form-group">
+                <label for="shipping_phone">電話番号 <span style="color: #ef4444;">*</span></label>
+                <input type="tel" name="shipping_phone" id="shipping_phone" placeholder="090-1234-5678">
+            </div>
+            
+            <div class="form-group">
+                <label for="shipping_address">郵送先住所 <span style="color: #ef4444;">*</span></label>
+                <textarea name="shipping_address" id="shipping_address" rows="3" 
+                          placeholder="〒123-4567&#10;東京都渋谷区○○1-2-3&#10;○○マンション101号室"></textarea>
+            </div>
+        </div>
+        
+        <!-- 商品一覧 -->
+        <div class="items-section">
+            <h3>
+                📦 処分対象の商品を選択
+                <button type="button" class="select-all-btn" onclick="toggleSelectAll()">
+                    全て選択 / 解除
+                </button>
+            </h3>
+            
+            {% if items %}
+            <div class="item-list">
+                {% for item in items %}
+                <div class="item-row {% if item.disposal_request_id %}has-request{% endif %}" 
+                     onclick="toggleItem(this, {{ item.id }})">
+                    <input type="checkbox" name="merchandise_ids[]" value="{{ item.id }}" 
+                           class="item-checkbox" {% if item.disposal_request_id %}checked{% endif %}>
+                    
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="" class="item-image">
+                    {% else %}
+                    <div class="item-image" style="display: flex; align-items: center; justify-content: center; color: #94a3b8;">📷</div>
+                    {% endif %}
+                    
+                    <div class="item-info">
+                        <div class="item-name">{{ item.product_name }}</div>
+                        <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    </div>
+                    
+                    <div class="item-price">¥{{ "{:,}".format(item.purchase_price or 0) }}</div>
+                    
+                    {% if item.disposal_status == 'pending' %}
+                    <span class="item-status pending">申請中: {{ {'auction': 'オークション', 'liquidation': '在庫処分', 'shipping': '郵送'}[item.disposal_type] }}</span>
+                    {% elif item.disposal_status == 'processing' %}
+                    <span class="item-status processing">処理中</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="text-align: center; color: #64748b; padding: 2rem;">
+                在庫商品がありません
+            </p>
+            {% endif %}
+        </div>
+        
+        <!-- 送信ボタン -->
+        <div class="submit-section">
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                処分方法を申請する
+            </button>
+            <p style="margin-top: 0.75rem; font-size: 0.85rem; color: #64748b;">
+                ※ 申請後、管理者が確認し処理を行います
+            </p>
+        </div>
+    </form>
+</div>
+
+<script>
+function selectOption(type) {
+    document.querySelectorAll('.disposal-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    
+    event.currentTarget.classList.add('selected');
+    document.querySelector(`input[value="${type}"]`).checked = true;
+    
+    // 郵送の場合は住所フォームを表示
+    const shippingForm = document.getElementById('shippingForm');
+    if (type === 'shipping') {
+        shippingForm.classList.add('show');
+    } else {
+        shippingForm.classList.remove('show');
+    }
+    
+    updateSubmitButton();
+}
+
+function toggleItem(row, itemId) {
+    const checkbox = row.querySelector('.item-checkbox');
+    checkbox.checked = !checkbox.checked;
+    row.classList.toggle('selected', checkbox.checked);
+    updateSubmitButton();
+}
+
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+        cb.closest('.item-row').classList.toggle('selected', !allChecked);
+    });
+    
+    updateSubmitButton();
+}
+
+function updateSubmitButton() {
+    const selectedType = document.querySelector('input[name="disposal_type"]:checked');
+    const selectedItems = document.querySelectorAll('.item-checkbox:checked');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    let valid = selectedType && selectedItems.length > 0;
+    
+    // 郵送の場合は住所必須
+    if (valid && selectedType.value === 'shipping') {
+        const address = document.getElementById('shipping_address').value.trim();
+        const name = document.getElementById('shipping_name').value.trim();
+        const phone = document.getElementById('shipping_phone').value.trim();
+        valid = address && name && phone;
+    }
+    
+    submitBtn.disabled = !valid;
+}
+
+// フォーム入力時にボタン状態を更新
+document.getElementById('shipping_address')?.addEventListener('input', updateSubmitButton);
+document.getElementById('shipping_name')?.addEventListener('input', updateSubmitButton);
+document.getElementById('shipping_phone')?.addEventListener('input', updateSubmitButton);
+
+// 初期化
+document.querySelectorAll('.item-row.has-request').forEach(row => {
+    row.classList.add('selected');
+});
+</script>
+{% endblock %}

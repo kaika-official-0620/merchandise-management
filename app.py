@@ -133,6 +133,30 @@ if DATABASE_URL:
         except:
             pass
         
+        # 未払い開始日カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS overdue_since TIMESTAMP")
+        except:
+            pass
+        
+        # 商品処分申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS item_disposal_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                merchandise_id INTEGER REFERENCES merchandise(id),
+                disposal_type VARCHAR(30) NOT NULL,
+                shipping_address TEXT,
+                shipping_name TEXT,
+                shipping_phone TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
             cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
@@ -927,6 +951,30 @@ else:
             cur.execute("ALTER TABLE users ADD COLUMN proxy_service_budget INTEGER DEFAULT 0")
         except:
             pass
+        
+        # 未払い開始日カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN overdue_since TIMESTAMP")
+        except:
+            pass
+        
+        # 商品処分申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS item_disposal_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                merchandise_id INTEGER REFERENCES merchandise(id),
+                disposal_type TEXT NOT NULL,
+                shipping_address TEXT,
+                shipping_name TEXT,
+                shipping_phone TEXT,
+                status TEXT DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id)
+            )
+        ''')
         
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
@@ -12136,6 +12184,392 @@ def run_scheduled_line_messages():
     cur.close()
     conn.close()
 
+
+def check_and_transfer_overdue_items():
+    """4ヶ月以上未払いのユーザーの商品を管理者に自動移動"""
+    print(f"[{datetime.now()}] Running overdue items check...")
+    
+    conn = get_db()
+    
+    # 120日（約4ヶ月）以上未払いのユーザーを取得
+    four_months_ago = datetime.now() - timedelta(days=120)
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 4ヶ月以上未払いのユーザーを取得
+        cur.execute("""
+            SELECT id, display_name, username, line_user_id, email 
+            FROM users 
+            WHERE subscription_status = 'past_due' 
+              AND overdue_since IS NOT NULL 
+              AND overdue_since <= %s
+        """, (four_months_ago,))
+        overdue_users = [dict(row) for row in cur.fetchall()]
+        
+        # オーナーのIDを取得
+        cur.execute("SELECT id FROM users WHERE role = 'owner' LIMIT 1")
+        owner = cur.fetchone()
+        owner_id = owner['id'] if owner else 1
+    else:
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, display_name, username, line_user_id, email 
+            FROM users 
+            WHERE subscription_status = 'past_due' 
+              AND overdue_since IS NOT NULL 
+              AND overdue_since <= ?
+        """, (four_months_ago.strftime('%Y-%m-%d %H:%M:%S'),))
+        
+        columns = ['id', 'display_name', 'username', 'line_user_id', 'email']
+        overdue_users = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        cur.execute("SELECT id FROM users WHERE role = 'owner' LIMIT 1")
+        owner = cur.fetchone()
+        owner_id = owner[0] if owner else 1
+    
+    transferred_count = 0
+    
+    for user in overdue_users:
+        user_id = user['id']
+        display_name = user.get('display_name') or user.get('username') or 'ユーザー'
+        line_user_id = user.get('line_user_id')
+        
+        # 移動対象の商品数を取得
+        if DATABASE_URL:
+            cur.execute("""
+                SELECT COUNT(*) as count FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NULL
+            """, (user_id,))
+            item_count = cur.fetchone()['count']
+        else:
+            cur.execute("""
+                SELECT COUNT(*) FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NULL
+            """, (user_id,))
+            item_count = cur.fetchone()[0]
+        
+        if item_count > 0:
+            # 商品を管理者に移動
+            transfer_note = f'[自動移管 {datetime.now().strftime("%Y/%m/%d")}] {display_name}様から未払い4ヶ月超過により移管'
+            
+            if DATABASE_URL:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET user_id = %s, 
+                        notes = COALESCE(notes, '') || E'\\n' || %s
+                    WHERE user_id = %s AND sale_date IS NULL
+                """, (owner_id, transfer_note, user_id))
+            else:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET user_id = ?, 
+                        notes = COALESCE(notes, '') || char(10) || ?
+                    WHERE user_id = ? AND sale_date IS NULL
+                """, (owner_id, transfer_note, user_id))
+            
+            transferred_count += item_count
+            
+            # LINE通知を送信
+            if line_user_id:
+                message = f"""⚠️ 商品の自動移管完了のお知らせ
+
+{display_name}様
+
+4ヶ月以上の未払いにより、お客様の在庫商品（{item_count}点）は管理者へ移管されました。
+
+移管された商品は、弊社にて適切に処理いたします。
+
+ご不明点がございましたら、お問い合わせください。"""
+                try:
+                    send_line_push(line_user_id, message)
+                except Exception as e:
+                    print(f"LINE notification error for user {user_id}: {e}")
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    print(f"[{datetime.now()}] Overdue items check completed. Transferred {transferred_count} items from {len(overdue_users)} users.")
+
+
+# ===================
+# 未払いユーザー向け商品処分
+# ===================
+
+@app.route('/disposal-options')
+@login_required
+def disposal_options():
+    """未払いユーザー向け商品処分オプションページ"""
+    # 支払い遅延中のユーザーのみアクセス可能
+    if current_user.subscription_status != 'past_due':
+        flash('このページにアクセスする権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 未払い期間を取得
+        cur.execute("""
+            SELECT overdue_since FROM users WHERE id = %s
+        """, (current_user.id,))
+        user_info = cur.fetchone()
+        
+        # ユーザーの商品一覧を取得
+        cur.execute("""
+            SELECT m.*, 
+                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
+            FROM merchandise m
+            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
+            WHERE m.user_id = %s AND m.sale_date IS NULL
+            ORDER BY m.created_at DESC
+        """, (current_user.id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        
+        # 未払い期間を取得
+        cur.execute("""
+            SELECT overdue_since FROM users WHERE id = ?
+        """, (current_user.id,))
+        user_info = cur.fetchone()
+        user_info = {'overdue_since': user_info[0]} if user_info else {}
+        
+        # ユーザーの商品一覧を取得
+        cur.execute("""
+            SELECT m.*, 
+                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
+            FROM merchandise m
+            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
+            WHERE m.user_id = ? AND m.sale_date IS NULL
+            ORDER BY m.created_at DESC
+        """, (current_user.id,))
+        items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    # 未払い期間を計算
+    overdue_since = user_info.get('overdue_since') if user_info else None
+    overdue_days = 0
+    overdue_months = 0
+    
+    if overdue_since:
+        if isinstance(overdue_since, str):
+            try:
+                overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S')
+            except:
+                try:
+                    overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S.%f')
+                except:
+                    overdue_since = None
+        
+        if overdue_since:
+            overdue_days = (datetime.now() - overdue_since).days
+            overdue_months = overdue_days // 30
+    
+    return render_template('disposal_options.html',
+                           items=items,
+                           overdue_days=overdue_days,
+                           overdue_months=overdue_months,
+                           overdue_since=overdue_since)
+
+
+@app.route('/disposal-request', methods=['POST'])
+@login_required
+def submit_disposal_request():
+    """商品処分申請を送信"""
+    if current_user.subscription_status != 'past_due':
+        return jsonify({'success': False, 'error': 'アクセス権限がありません'}), 403
+    
+    disposal_type = request.form.get('disposal_type')
+    merchandise_ids = request.form.getlist('merchandise_ids[]')
+    shipping_address = request.form.get('shipping_address', '')
+    shipping_name = request.form.get('shipping_name', '')
+    shipping_phone = request.form.get('shipping_phone', '')
+    
+    if not disposal_type or not merchandise_ids:
+        flash('処分方法と商品を選択してください', 'error')
+        return redirect(url_for('disposal_options'))
+    
+    if disposal_type not in ['auction', 'liquidation', 'shipping']:
+        flash('無効な処分方法です', 'error')
+        return redirect(url_for('disposal_options'))
+    
+    # 郵送の場合は住所必須
+    if disposal_type == 'shipping' and not shipping_address:
+        flash('郵送先住所を入力してください', 'error')
+        return redirect(url_for('disposal_options'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        for merchandise_id in merchandise_ids:
+            # 商品がユーザーのものか確認
+            if DATABASE_URL:
+                cur.execute("SELECT id FROM merchandise WHERE id = %s AND user_id = %s", 
+                           (merchandise_id, current_user.id))
+            else:
+                cur.execute("SELECT id FROM merchandise WHERE id = ? AND user_id = ?", 
+                           (merchandise_id, current_user.id))
+            
+            if cur.fetchone():
+                # 既存の申請を確認
+                if DATABASE_URL:
+                    cur.execute("""
+                        SELECT id FROM item_disposal_requests 
+                        WHERE merchandise_id = %s AND status = 'pending'
+                    """, (merchandise_id,))
+                else:
+                    cur.execute("""
+                        SELECT id FROM item_disposal_requests 
+                        WHERE merchandise_id = ? AND status = 'pending'
+                    """, (merchandise_id,))
+                
+                existing = cur.fetchone()
+                
+                if existing:
+                    # 既存の申請を更新
+                    if DATABASE_URL:
+                        cur.execute("""
+                            UPDATE item_disposal_requests 
+                            SET disposal_type = %s, shipping_address = %s, 
+                                shipping_name = %s, shipping_phone = %s
+                            WHERE id = %s
+                        """, (disposal_type, shipping_address, shipping_name, shipping_phone, existing[0]))
+                    else:
+                        cur.execute("""
+                            UPDATE item_disposal_requests 
+                            SET disposal_type = ?, shipping_address = ?, 
+                                shipping_name = ?, shipping_phone = ?
+                            WHERE id = ?
+                        """, (disposal_type, shipping_address, shipping_name, shipping_phone, existing[0]))
+                else:
+                    # 新規申請を作成
+                    if DATABASE_URL:
+                        cur.execute("""
+                            INSERT INTO item_disposal_requests 
+                            (user_id, merchandise_id, disposal_type, shipping_address, shipping_name, shipping_phone)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (current_user.id, merchandise_id, disposal_type, 
+                              shipping_address, shipping_name, shipping_phone))
+                    else:
+                        cur.execute("""
+                            INSERT INTO item_disposal_requests 
+                            (user_id, merchandise_id, disposal_type, shipping_address, shipping_name, shipping_phone)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (current_user.id, merchandise_id, disposal_type, 
+                              shipping_address, shipping_name, shipping_phone))
+        
+        conn.commit()
+        
+        disposal_type_names = {
+            'auction': 'オークション販売',
+            'liquidation': '在庫処分',
+            'shipping': '受け取り郵送'
+        }
+        flash(f'{len(merchandise_ids)}件の商品を「{disposal_type_names.get(disposal_type)}」で申請しました', 'success')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('disposal_options'))
+
+
+@app.route('/admin/disposal-requests')
+@login_required
+@admin_required
+def admin_disposal_requests():
+    """管理者向け商品処分申請一覧"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                   u.display_name, u.username, u.email
+            FROM item_disposal_requests dr
+            JOIN merchandise m ON dr.merchandise_id = m.id
+            JOIN users u ON dr.user_id = u.id
+            ORDER BY dr.created_at DESC
+        """)
+        requests = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                   u.display_name, u.username, u.email
+            FROM item_disposal_requests dr
+            JOIN merchandise m ON dr.merchandise_id = m.id
+            JOIN users u ON dr.user_id = u.id
+            ORDER BY dr.created_at DESC
+        """)
+        columns = [desc[0] for desc in cur.description]
+        requests = [dict(zip(columns, row)) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    # 統計
+    pending_count = len([r for r in requests if r['status'] == 'pending'])
+    processing_count = len([r for r in requests if r['status'] == 'processing'])
+    completed_count = len([r for r in requests if r['status'] == 'completed'])
+    
+    return render_template('admin/disposal_requests.html',
+                           requests=requests,
+                           pending_count=pending_count,
+                           processing_count=processing_count,
+                           completed_count=completed_count)
+
+
+@app.route('/admin/disposal-request/<int:request_id>/process', methods=['POST'])
+@login_required
+@admin_required
+def process_disposal_request(request_id):
+    """商品処分申請を処理"""
+    action = request.form.get('action')  # processing, completed, rejected
+    admin_note = request.form.get('admin_note', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if DATABASE_URL:
+        cur.execute("""
+            UPDATE item_disposal_requests 
+            SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
+            WHERE id = %s
+        """, (action, admin_note, current_user.id, request_id))
+    else:
+        cur.execute("""
+            UPDATE item_disposal_requests 
+            SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
+            WHERE id = ?
+        """, (action, admin_note, current_user.id, request_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    action_names = {
+        'processing': '処理中に変更',
+        'completed': '完了',
+        'rejected': '却下'
+    }
+    flash(f'申請を{action_names.get(action, action)}しました', 'success')
+    return redirect(url_for('admin_disposal_requests'))
+
+
 # ===================
 # Stripe決済連携
 # ===================
@@ -12154,12 +12588,13 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
+                   u.overdue_since,
                    COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
             LEFT JOIN merchandise m ON u.id = m.user_id
             WHERE u.role != 'owner'
-            GROUP BY u.id
+            GROUP BY u.id, u.overdue_since
             ORDER BY u.display_name
         """)
         users = cur.fetchall()
@@ -12170,6 +12605,7 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
+                   u.overdue_since,
                    COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
@@ -12180,10 +12616,34 @@ def admin_stripe_dashboard():
         """)
         users = [dict(row) for row in cur.fetchall()]
     
-    # 月額利用料を計算（当月の登録件数ベース）
+    # 月額利用料を計算（当月の登録件数ベース）+ 未払い期間を計算
     for user in users:
         item_count = user.get('item_count', 0) or 0
         user['monthly_fee'] = get_monthly_fee(item_count)
+        
+        # 未払い期間を計算
+        if user.get('overdue_since'):
+            overdue_since = user['overdue_since']
+            if isinstance(overdue_since, str):
+                from datetime import datetime
+                try:
+                    overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S')
+                except:
+                    try:
+                        overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S.%f')
+                    except:
+                        overdue_since = None
+            
+            if overdue_since:
+                days_overdue = (datetime.now() - overdue_since).days
+                user['overdue_days'] = days_overdue
+                user['overdue_months'] = days_overdue // 30
+            else:
+                user['overdue_days'] = 0
+                user['overdue_months'] = 0
+        else:
+            user['overdue_days'] = 0
+            user['overdue_months'] = 0
     
     cur.close()
     conn.close()
@@ -12705,18 +13165,79 @@ def stripe_webhook():
         
         if subscription_id:
             conn = get_db()
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor) if DATABASE_URL else conn.cursor()
             
+            # ユーザー情報を取得
             if DATABASE_URL:
                 cur.execute("""
-                    UPDATE users SET subscription_status = 'past_due'
-                    WHERE stripe_subscription_id = %s
+                    SELECT id, display_name, username, line_user_id, email, overdue_since 
+                    FROM users WHERE stripe_subscription_id = %s
                 """, (subscription_id,))
             else:
                 cur.execute("""
-                    UPDATE users SET subscription_status = 'past_due'
-                    WHERE stripe_subscription_id = ?
+                    SELECT id, display_name, username, line_user_id, email, overdue_since 
+                    FROM users WHERE stripe_subscription_id = ?
                 """, (subscription_id,))
+            
+            user = cur.fetchone()
+            
+            if user:
+                user_dict = dict(user) if DATABASE_URL else {
+                    'id': user[0], 'display_name': user[1], 'username': user[2],
+                    'line_user_id': user[3], 'email': user[4], 'overdue_since': user[5]
+                }
+                
+                # 未払い開始日を記録（初回のみ）
+                if DATABASE_URL:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'past_due',
+                            overdue_since = COALESCE(overdue_since, CURRENT_TIMESTAMP)
+                        WHERE stripe_subscription_id = %s
+                    """, (subscription_id,))
+                else:
+                    cur.execute("""
+                        UPDATE users 
+                        SET subscription_status = 'past_due',
+                            overdue_since = COALESCE(overdue_since, CURRENT_TIMESTAMP)
+                        WHERE stripe_subscription_id = ?
+                    """, (subscription_id,))
+                
+                # LINE通知送信
+                line_user_id = user_dict.get('line_user_id')
+                display_name = user_dict.get('display_name') or user_dict.get('username') or 'ユーザー'
+                
+                if line_user_id:
+                    message = f"""⚠️ 月謝のお支払いが確認できませんでした
+
+{display_name}様
+
+今月の月謝のお支払いが確認できませんでした。
+お早めにお支払いをお願いいたします。
+
+━━━━━━━━━━━━━━━━━
+【重要なお知らせ】
+━━━━━━━━━━━━━━━━━
+・3ヶ月間未払いが続くと、商品の処分手続きが必要になります
+・4ヶ月以上経過すると、商品は自動的に管理者へ移管されます
+
+ご不明点がございましたらお問い合わせください。"""
+                    try:
+                        send_line_push(line_user_id, message)
+                    except Exception as e:
+                        print(f"LINE notification error: {e}")
+            else:
+                # ユーザーが見つからない場合は従来の処理
+                if DATABASE_URL:
+                    cur.execute("""
+                        UPDATE users SET subscription_status = 'past_due'
+                        WHERE stripe_subscription_id = %s
+                    """, (subscription_id,))
+                else:
+                    cur.execute("""
+                        UPDATE users SET subscription_status = 'past_due'
+                        WHERE stripe_subscription_id = ?
+                    """, (subscription_id,))
             
             conn.commit()
             cur.close()
@@ -13156,9 +13677,19 @@ def init_scheduler():
         replace_existing=True
     )
     
+    # 未払い商品の自動移動（毎日午前3時に実行）
+    scheduler.add_job(
+        check_and_transfer_overdue_items,
+        CronTrigger(hour=3, minute=0, timezone='Asia/Tokyo'),
+        id='overdue_items_transfer',
+        name='未払い商品自動移動',
+        replace_existing=True
+    )
+    
     scheduler.start()
     print(f"[{datetime.now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
     print(f"[{datetime.now()}] Scheduler started: LINE scheduled messages will be checked every minute")
+    print(f"[{datetime.now()}] Scheduler started: Overdue items check will run daily at 03:00 JST")
 
 # =============================================
 # 買取承諾書（ユーザー向け）
@@ -14249,10 +14780,38 @@ def get_unread_inquiry_count():
         # テーブルが存在しない場合など
         return 0
 
+
+# 未処理商品処分申請件数を取得するヘルパー関数
+def get_pending_disposal_count():
+    """管理者向け：未処理の商品処分申請件数を取得"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return 0
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM item_disposal_requests WHERE status = 'pending'")
+            count = cur.fetchone()[0]
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM item_disposal_requests WHERE status = 'pending'")
+            count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except Exception as e:
+        # テーブルが存在しない場合など
+        return 0
+
+
 # テンプレートで使えるようにコンテキストプロセッサに追加
 @app.context_processor
 def inject_inquiry_count():
-    return dict(get_unread_inquiry_count=get_unread_inquiry_count)
+    return dict(
+        get_unread_inquiry_count=get_unread_inquiry_count,
+        get_pending_disposal_count=get_pending_disposal_count
+    )
 
 # ========== 売却申請機能 ==========
 
