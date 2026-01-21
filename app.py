@@ -133,6 +133,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # 月謝免除フラグカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS tuition_exempt BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+        
         # 未払い開始日カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS overdue_since TIMESTAMP")
@@ -956,6 +962,12 @@ else:
         # 代行仕入れサービス利用可能金額カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN proxy_service_budget INTEGER DEFAULT 0")
+        except:
+            pass
+        
+        # 月謝免除フラグカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN tuition_exempt INTEGER DEFAULT 0")
         except:
             pass
         
@@ -4427,6 +4439,40 @@ def admin_set_role(id, role):
     flash(f'権限を「{role_names.get(new_role, new_role)}」に変更しました', 'success')
     return redirect(url_for('admin_users'))
 
+@app.route('/admin/users/<int:id>/toggle_tuition_exempt')
+@login_required
+@permission_required('users')
+def toggle_tuition_exempt(id):
+    """月謝免除を切り替え"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT tuition_exempt FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        if user:
+            current_exempt = user.get('tuition_exempt', False) or False
+            new_exempt = not current_exempt
+            cur.execute("UPDATE users SET tuition_exempt = %s WHERE id = %s", (new_exempt, id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT tuition_exempt FROM users WHERE id = ?", (id,))
+        result = cur.fetchone()
+        if result:
+            current_exempt = bool(result[0]) if result[0] else False
+            new_exempt = not current_exempt
+            cur.execute("UPDATE users SET tuition_exempt = ? WHERE id = ?", (1 if new_exempt else 0, id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    if new_exempt:
+        flash('月謝免除に設定しました', 'success')
+    else:
+        flash('月謝免除を解除しました', 'info')
+    
+    return redirect(url_for('admin_users'))
+
 @app.route('/admin/users/<int:id>/delete')
 @login_required
 @permission_required('users')
@@ -4526,6 +4572,7 @@ def admin_edit_user(id):
         role = request.form.get('role', 'user')
         new_password = request.form.get('new_password')
         proxy_service_budget = request.form.get('proxy_service_budget', 0)
+        tuition_exempt = request.form.get('tuition_exempt') == '1'
         
         # 金額をint変換
         try:
@@ -4550,25 +4597,25 @@ def admin_edit_user(id):
             if new_password and len(new_password) >= 6:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s, proxy_service_budget = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, tuition_exempt, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?, proxy_service_budget = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, id))
+                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
             else:
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s, proxy_service_budget = %s
+                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, id))
+                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, tuition_exempt, id))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?, proxy_service_budget = ?
+                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, id))
+                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
             
             conn.commit()
             flash('ユーザー情報を更新しました', 'success')

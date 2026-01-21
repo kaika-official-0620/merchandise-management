@@ -18,6 +18,7 @@
                     <th>表示名</th>
                     <th>メール</th>
                     <th>権限</th>
+                    <th>月謝免除</th>
                     <th>当月商品数<br><small style="font-weight:normal;color:#64748b;">月末締め</small></th>
                     <th>月額利用料</th>
                     <th>開花手数料<br><small style="font-weight:normal;color:#64748b;">累計</small></th>
@@ -43,6 +44,21 @@
                         {% endif %}
                         {% else %}
                         <span class="badge badge-user">ユーザー</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if user.role == 'user' %}
+                        <a href="{{ url_for('toggle_tuition_exempt', id=user.id) }}" 
+                           class="tuition-toggle {% if user.tuition_exempt %}exempt{% endif %}"
+                           onclick="return confirm('月謝免除設定を変更しますか？')">
+                            {% if user.tuition_exempt %}
+                            <span class="toggle-on">免除中</span>
+                            {% else %}
+                            <span class="toggle-off">通常</span>
+                            {% endif %}
+                        </a>
+                        {% else %}
+                        <span class="exempt-na">-</span>
                         {% endif %}
                     </td>
                     <td class="text-center">
@@ -93,7 +109,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="11" class="empty-cell">ユーザーがいません</td>
+                    <td colspan="12" class="empty-cell">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -266,6 +282,46 @@
 
 .role-menu a:last-child {
     border-radius: 0 0 6px 6px;
+}
+
+/* 月謝免除トグル */
+.tuition-toggle {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.tuition-toggle .toggle-off {
+    background: #f1f5f9;
+    color: #64748b;
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.tuition-toggle .toggle-on {
+    background: #10b981;
+    color: white;
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.tuition-toggle:hover .toggle-off {
+    background: #e2e8f0;
+}
+
+.tuition-toggle:hover .toggle-on {
+    background: #059669;
+}
+
+.exempt-na {
+    color: #94a3b8;
 }
 </style>
 

@@ -74,6 +74,18 @@
             </div>
         </div>
         
+        <div class="form-section tuition-section" id="tuition-section">
+            <h2>月謝設定</h2>
+            <div class="form-group">
+                <label class="checkbox-label tuition-exempt-label">
+                    <input type="checkbox" name="tuition_exempt" value="1"
+                           {% if user and user.tuition_exempt %}checked{% endif %}>
+                    <span>月謝免除にする</span>
+                </label>
+                <small>チェックすると、このユーザーは月謝の支払いが不要になります</small>
+            </div>
+        </div>
+        
         <div class="form-section">
             <h2>代行仕入れサービス</h2>
             <div class="form-group">
@@ -173,6 +185,22 @@
 .budget-input {
     border-radius: 0 6px 6px 0 !important;
     font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.tuition-exempt-label {
+    background: #ecfdf5 !important;
+    border: 2px solid #10b981;
+    border-radius: 8px;
+    padding: 12px 16px !important;
+}
+
+.tuition-exempt-label:hover {
+    background: #d1fae5 !important;
+}
+
+.tuition-exempt-label input[type="checkbox"]:checked + span {
+    color: #059669;
     font-weight: 600;
 }
 </style>
