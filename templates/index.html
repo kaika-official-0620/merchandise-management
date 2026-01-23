@@ -755,54 +755,21 @@
 
 /* スマホ（768px以下）*/
 @media (max-width: 768px) {
-    /* テーブルを横スクロール可能に */
+    /* PCのテーブルを非表示 */
     .table-container {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin: 0 -10px;
-        padding: 0 10px;
-    }
-    
-    .table-scroll {
-        min-width: 900px;
-    }
-    
-    .data-table {
-        font-size: 0.8rem;
-    }
-    
-    .data-table th,
-    .data-table td {
-        padding: 8px 6px;
-        white-space: nowrap;
-    }
-    
-    .data-table th {
-        font-size: 0.75rem;
-    }
-    
-    .table-thumb {
-        width: 40px;
-        height: 40px;
-    }
-    
-    .no-thumb {
-        width: 40px;
-        height: 40px;
-        font-size: 0.7rem;
-    }
-    
-    .desktop-only {
         display: none;
     }
     
-    /* カードを非表示（テーブル表示優先） */
+    /* スマホ用カード表示を有効化 */
     .mobile-cards {
-        display: none;
+        display: block;
     }
     
     .mobile-only {
+        display: block;
+    }
+    
+    .desktop-only {
         display: none;
     }
     
@@ -815,16 +782,6 @@
     
     .filter-buttons {
         flex-wrap: nowrap;
-    }
-    
-    /* スクロールヒント */
-    .table-container::after {
-        content: '← 横スクロールできます →';
-        display: block;
-        text-align: center;
-        font-size: 0.7rem;
-        color: #94a3b8;
-        padding: 8px 0 4px;
     }
 }
 

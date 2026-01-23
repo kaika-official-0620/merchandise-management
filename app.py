@@ -3728,10 +3728,18 @@ def edit_item(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
+        # 管理者/オーナーは全商品編集可能、一般ユーザーは自分の商品のみ
+        if current_user.is_admin() or current_user.is_owner():
+            cur.execute("SELECT * FROM merchandise WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE id = %s AND user_id = %s", (id, current_user.id))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
+        # 管理者/オーナーは全商品編集可能、一般ユーザーは自分の商品のみ
+        if current_user.is_admin() or current_user.is_owner():
+            cur.execute("SELECT * FROM merchandise WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
     
     item = cur.fetchone()
     if not item:
@@ -7699,7 +7707,7 @@ def import_backup():
                 except Exception as e:
                     print(f"User import error: {e}")
         
-        # ユーザーIDマッピングを取得
+        # ユーザーIDマッピングを取得（username → 新user_id）
         user_id_map = {}
         if DATABASE_URL:
             cur.execute("SELECT id, username FROM users")
@@ -7710,14 +7718,37 @@ def import_backup():
             for row in cur.fetchall():
                 user_id_map[row['username']] = row['id']
         
+        # バックアップの旧user_id → usernameマッピングを作成
+        old_user_id_to_username = {}
+        if 'users' in backup_data:
+            for u in backup_data['users']:
+                old_id = u.get('id')
+                username = u.get('username')
+                if old_id is not None and username:
+                    old_user_id_to_username[old_id] = username
+        
+        def resolve_user_id(old_user_id):
+            """旧user_idを新しい環境のuser_idに変換"""
+            if old_user_id is None:
+                return current_user.id
+            # 旧user_id → username → 新user_id の変換
+            if old_user_id in old_user_id_to_username:
+                username = old_user_id_to_username[old_user_id]
+                if username in user_id_map:
+                    return user_id_map[username]
+            # マッピングが見つからない場合は現在のユーザーIDを使用
+            return current_user.id
+        
         # 商品をインポート
         for item in backup_data.get('merchandise', []):
             try:
-                # user_idを解決
-                user_id = item.get('user_id')
-                if 'username' in backup_data and not 'users' in backup_data:
+                # user_idを解決（旧環境のIDを新環境のIDにマッピング）
+                old_user_id = item.get('user_id')
+                if 'username' in backup_data and 'users' not in backup_data:
                     # ユーザー個別バックアップの場合、現在のユーザーIDを使用
                     user_id = current_user.id
+                else:
+                    user_id = resolve_user_id(old_user_id)
                 
                 if DATABASE_URL:
                     cur.execute('''
@@ -7782,9 +7813,12 @@ def import_backup():
         # 顧客をインポート
         for customer in backup_data.get('customers', []):
             try:
-                user_id = customer.get('user_id')
-                if 'username' in backup_data and not 'users' in backup_data:
+                # user_idを解決（旧環境のIDを新環境のIDにマッピング）
+                old_user_id = customer.get('user_id')
+                if 'username' in backup_data and 'users' not in backup_data:
                     user_id = current_user.id
+                else:
+                    user_id = resolve_user_id(old_user_id)
                 
                 if DATABASE_URL:
                     cur.execute('''
