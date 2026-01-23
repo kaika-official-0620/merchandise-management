@@ -8016,12 +8016,12 @@ def admin_items():
             admin_users = cur.fetchall()
             admin_user_ids = [u['id'] for u in admin_users]
             
-            # 管理者/オーナーの商品のみ取得
+            # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
             if admin_user_ids:
                 placeholders = ','.join(['%s'] * len(admin_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", admin_user_ids)
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
             else:
-                cur.execute("SELECT * FROM merchandise WHERE 1=0")
+                cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
@@ -8051,12 +8051,12 @@ def admin_items():
             admin_users = cur.fetchall()
             admin_user_ids = [u['id'] for u in admin_users]
             
-            # 管理者/オーナーの商品のみ取得
+            # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
             if admin_user_ids:
                 placeholders = ','.join(['?'] * len(admin_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", admin_user_ids)
+                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
             else:
-                cur.execute("SELECT * FROM merchandise WHERE 1=0")
+                cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
