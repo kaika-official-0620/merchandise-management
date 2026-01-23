@@ -120,6 +120,35 @@
     align-items: center;
 }
 
+.card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.card-actions .btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+}
+
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell .btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    margin-right: 4px;
+}
+
+.btn-edit {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-edit:hover {
+    background: #2563eb;
+}
+
 .badge {
     padding: 4px 8px;
     border-radius: 4px;
@@ -174,6 +203,7 @@
                 <th>売上金</th>
                 <th>利益</th>
                 <th>状態</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody>
@@ -211,10 +241,14 @@
                     <span class="badge badge-pending">未出品</span>
                     {% endif %}
                 </td>
+                <td class="action-cell">
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="10" class="empty-cell">商品がありません</td>
+                <td colspan="11" class="empty-cell">商品がありません</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -260,16 +294,15 @@
             </div>
         </div>
         <div class="card-footer">
+            <div class="card-actions">
+                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+            </div>
             {% if item.sale_date %}
-            <span class="card-info-value {% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                利益: ¥{{ "{:,}".format(item.profit) }}
-            </span>
             <span class="badge badge-sold">売却済</span>
             {% elif item.is_listed %}
-            <span class="card-info-value">-</span>
             <span class="badge badge-listed">出品中</span>
             {% else %}
-            <span class="card-info-value">-</span>
             <span class="badge badge-pending">未出品</span>
             {% endif %}
         </div>

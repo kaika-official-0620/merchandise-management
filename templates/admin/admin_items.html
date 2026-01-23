@@ -625,6 +625,20 @@
     padding: 6px 12px;
     font-size: 0.75rem;
 }
+
+.admin-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-edit {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-edit:hover {
+    background: #2563eb;
+}
 </style>
 
 <div class="page-header">
@@ -846,6 +860,8 @@
                         {% endif %}
                     </td>
                     <td class="action-cell">
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                         <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
                     </td>
                 </tr>
@@ -924,7 +940,11 @@
             {% else %}
             <span class="status-badge unlisted">未出品</span>
             {% endif %}
-            <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+            <div class="admin-card-actions">
+                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+            </div>
         </div>
     </div>
     {% else %}
