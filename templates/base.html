@@ -530,7 +530,7 @@
                 
                 <!-- 目標利益率から逆算機能 -->
                 <div class="calc-reverse-section" style="border-top: 2px solid #f59e0b; padding-top: 1.5rem; margin-top: 1.5rem;">
-                    <h3 style="color: #f59e0b;">📊 目標利益率から売上を逆算</h3>
+                    <h3 style="color: #f59e0b;">目標利益率から売上を逆算</h3>
                     <div class="calc-input-grid">
                         <div class="calc-input-row full-width">
                             <label>媒体手数料</label>
@@ -853,16 +853,137 @@
     }
     
     @media (max-width: 600px) {
+        /* モーダル全体を全画面に */
         .profit-calc-content {
-            width: 95%;
-            max-height: 95vh;
+            width: 100%;
+            max-width: 100%;
+            max-height: 100vh;
+            border-radius: 0;
         }
+        .profit-calc-header {
+            border-radius: 0;
+            padding: 12px 16px;
+        }
+        .profit-calc-header h2 {
+            font-size: 1rem;
+        }
+        .profit-calc-body {
+            padding: 12px;
+        }
+        .profit-calc-body h3 {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+        }
+        
+        /* 計算式セクション */
+        .calc-formula-section {
+            margin-bottom: 16px;
+        }
+        .formula-box {
+            padding: 10px;
+        }
+        .formula-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            padding: 6px 0;
+            font-size: 0.85rem;
+        }
+        .formula-label {
+            font-size: 0.8rem;
+        }
+        .formula-eq {
+            display: none;
+        }
+        .formula-value {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        
+        /* 入力セクション */
+        .calc-input-section,
+        .calc-reverse-section {
+            margin-bottom: 16px;
+        }
+        
+        /* 入力行を縦並びに */
         .calc-input-row {
-            grid-template-columns: 100px 1fr 30px;
-            gap: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+            position: relative;
         }
         .calc-input-row label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        .calc-input-row.full-width {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 入力欄とセレクトボックス */
+        .calc-input-row input {
+            width: 100%;
+            max-width: 100%;
+            font-size: 0.9rem;
+            padding: 8px 10px;
+            padding-right: 30px;
+            box-sizing: border-box;
+        }
+        .calc-select {
+            width: 100%;
+            max-width: 100%;
             font-size: 0.8rem;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        
+        /* 単位（円、%）を右寄せ */
+        .input-unit {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            font-size: 0.8rem;
+        }
+        
+        /* チェックボックスの長いテキストを折り返し */
+        .calc-checkbox-row {
+            padding: 6px 0;
+        }
+        .calc-checkbox-label {
+            align-items: flex-start;
+        }
+        .calc-checkbox-label input[type="checkbox"] {
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .calc-checkbox-label span {
+            font-size: 0.7rem;
+            line-height: 1.4;
+        }
+        
+        /* 送料無料の注記 */
+        .calc-shipping-note {
+            padding: 6px 8px;
+            font-size: 0.7rem;
+        }
+        
+        /* 結果セクション */
+        .calc-result-grid {
+            padding: 8px;
+        }
+        .calc-result-row {
+            padding: 8px 10px;
+        }
+        .result-label {
+            font-size: 0.8rem;
+        }
+        .result-value {
+            font-size: 0.95rem;
         }
     }
     
