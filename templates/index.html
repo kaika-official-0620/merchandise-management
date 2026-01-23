@@ -35,6 +35,15 @@
     color: #1e293b;
 }
 
+/* PC用は通常表示、スマホ用は省略表示 */
+.stats-value .short-value {
+    display: none;
+}
+
+.stats-value .full-value {
+    display: inline;
+}
+
 .stats-profit .stats-value {
     color: #10b981;
 }
@@ -60,30 +69,33 @@
 @media (max-width: 768px) {
     .stats-summary {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.4rem;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.3rem;
     }
     
     .stats-item {
         min-width: 0;
-        padding: 0.5rem;
+        padding: 0.4rem 0.3rem;
     }
     
     .stats-label {
-        font-size: 0.65rem;
+        font-size: 0.6rem;
+        letter-spacing: -0.5px;
     }
     
     .stats-value {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
+        letter-spacing: -0.5px;
+        word-break: break-all;
     }
     
-    /* 5つ目は下段中央に配置 */
-    .stats-item:nth-child(4) {
-        grid-column: 1;
+    /* PC用の値を隠してスマホ用を表示 */
+    .stats-value .full-value {
+        display: none;
     }
     
-    .stats-item:nth-child(5) {
-        grid-column: 2;
+    .stats-value .short-value {
+        display: inline;
     }
 }
 
@@ -743,25 +755,55 @@
 
 /* スマホ（768px以下）*/
 @media (max-width: 768px) {
-    /* テーブルを非表示 */
+    /* テーブルを横スクロール可能に */
     .table-container {
-        display: none;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -10px;
+        padding: 0 10px;
+    }
+    
+    .table-scroll {
+        min-width: 900px;
+    }
+    
+    .data-table {
+        font-size: 0.8rem;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 8px 6px;
+        white-space: nowrap;
+    }
+    
+    .data-table th {
+        font-size: 0.75rem;
+    }
+    
+    .table-thumb {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .no-thumb {
+        width: 40px;
+        height: 40px;
+        font-size: 0.7rem;
     }
     
     .desktop-only {
         display: none;
     }
     
-    /* カードを表示 */
+    /* カードを非表示（テーブル表示優先） */
     .mobile-cards {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        padding: 10px 0;
+        display: none;
     }
     
     .mobile-only {
-        display: flex;
+        display: none;
     }
     
     /* フィルターバーを横スクロール可能に */
@@ -773,6 +815,16 @@
     
     .filter-buttons {
         flex-wrap: nowrap;
+    }
+    
+    /* スクロールヒント */
+    .table-container::after {
+        content: '← 横スクロールできます →';
+        display: block;
+        text-align: center;
+        font-size: 0.7rem;
+        color: #94a3b8;
+        padding: 8px 0 4px;
     }
 }
 
@@ -1295,7 +1347,7 @@
 <!-- 統計サマリー -->
 <div class="stats-summary">
     <div class="stats-item">
-        <span class="stats-label">総登録数</span>
+        <span class="stats-label">総登録</span>
         <span class="stats-value">{{ stats.total_items or 0 }}</span>
     </div>
     <div class="stats-item">
@@ -1303,20 +1355,32 @@
         <span class="stats-value">{{ stats.sold_count or 0 }}</span>
     </div>
     <div class="stats-item">
-        <span class="stats-label">総仕入額</span>
-        <span class="stats-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+        <span class="stats-label">総仕入</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+            <span class="short-value">{% if (stats.total_purchase or 0) >= 100000000 %}¥{{ "%.1f"|format((stats.total_purchase or 0) / 100000000) }}億{% elif (stats.total_purchase or 0) >= 10000 %}¥{{ "%.1f"|format((stats.total_purchase or 0) / 10000) }}万{% else %}¥{{ "{:,}".format(stats.total_purchase or 0) }}{% endif %}</span>
+        </span>
     </div>
     <div class="stats-item stats-inventory">
-        <span class="stats-label">保管金額</span>
-        <span class="stats-value">¥{{ "{:,}".format(stats.inventory_value or 0) }}</span>
+        <span class="stats-label">保管額</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.inventory_value or 0) }}</span>
+            <span class="short-value">{% if (stats.inventory_value or 0) >= 100000000 %}¥{{ "%.1f"|format((stats.inventory_value or 0) / 100000000) }}億{% elif (stats.inventory_value or 0) >= 10000 %}¥{{ "%.1f"|format((stats.inventory_value or 0) / 10000) }}万{% else %}¥{{ "{:,}".format(stats.inventory_value or 0) }}{% endif %}</span>
+        </span>
     </div>
     <div class="stats-item">
         <span class="stats-label">総売上</span>
-        <span class="stats-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
+            <span class="short-value">{% if (stats.total_sales or 0) >= 100000000 %}¥{{ "%.1f"|format((stats.total_sales or 0) / 100000000) }}億{% elif (stats.total_sales or 0) >= 10000 %}¥{{ "%.1f"|format((stats.total_sales or 0) / 10000) }}万{% else %}¥{{ "{:,}".format(stats.total_sales or 0) }}{% endif %}</span>
+        </span>
     </div>
     <div class="stats-item {% if (stats.total_profit or 0) >= 0 %}stats-profit{% else %}stats-loss{% endif %}">
         <span class="stats-label">総利益</span>
-        <span class="stats-value">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
+            <span class="short-value">{% if (stats.total_profit or 0) >= 100000000 or (stats.total_profit or 0) <= -100000000 %}¥{{ "%.1f"|format((stats.total_profit or 0) / 100000000) }}億{% elif (stats.total_profit or 0) >= 10000 or (stats.total_profit or 0) <= -10000 %}¥{{ "%.1f"|format((stats.total_profit or 0) / 10000) }}万{% else %}¥{{ "{:,}".format(stats.total_profit or 0) }}{% endif %}</span>
+        </span>
     </div>
 </div>
 

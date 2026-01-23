@@ -146,6 +146,147 @@ input:disabled, select:disabled, textarea:disabled {
     font-weight: normal;
     margin-left: 4px;
 }
+
+/* 目標利益率からの逆算セクション */
+.reverse-calc-section {
+    margin-top: 24px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #7dd3fc;
+    border-radius: 12px;
+}
+
+.reverse-calc-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 1rem;
+    color: #0369a1;
+    font-weight: 600;
+}
+
+.reverse-calc-inputs {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.reverse-calc-inputs .form-group {
+    flex: 1;
+    min-width: 150px;
+    margin-bottom: 0;
+}
+
+.reverse-calc-inputs input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #7dd3fc;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.reverse-calc-inputs input:focus {
+    outline: none;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+.btn-calc {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-calc:hover {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.reverse-calc-results {
+    margin-top: 16px;
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0f2fe;
+}
+
+.calc-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.calc-result-item:last-of-type {
+    border-bottom: none;
+}
+
+.calc-result-label {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.calc-result-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.calc-result-value.profit-positive {
+    color: #10b981;
+}
+
+.btn-apply {
+    width: 100%;
+    margin-top: 12px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-apply:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+@media (max-width: 768px) {
+    .reverse-calc-inputs {
+        flex-direction: column;
+    }
+    
+    .reverse-calc-inputs .form-group {
+        width: 100%;
+    }
+    
+    .btn-calc {
+        width: 100%;
+    }
+    
+    .reverse-calc-section {
+        padding: 12px;
+    }
+    
+    .reverse-calc-section h3 {
+        font-size: 0.9rem;
+    }
+    
+    .calc-result-value {
+        font-size: 1rem;
+    }
+}
 </style>
 
 {% set basic_readonly = not current_user.is_owner() and item %}
@@ -412,6 +553,38 @@ input:disabled, select:disabled, textarea:disabled {
                     <div class="calculated-value" id="actual_profit">¥0</div>
                 </div>
             </div>
+            
+            <!-- 目標利益率からの逆算 -->
+            <div class="reverse-calc-section">
+                <h3>📊 目標利益率から逆算</h3>
+                <div class="reverse-calc-inputs">
+                    <div class="form-group">
+                        <label for="target_profit_rate">目標利益率（%）</label>
+                        <input type="number" id="target_profit_rate" placeholder="例: 20" min="0" max="100" step="0.1">
+                        <small class="form-help">仕入額に対する利益率を入力</small>
+                    </div>
+                    <button type="button" class="btn btn-calc" onclick="calculateRequiredPrice()">
+                        🔄 逆算する
+                    </button>
+                </div>
+                <div class="reverse-calc-results" id="reverseCalcResults" style="display: none;">
+                    <div class="calc-result-item">
+                        <span class="calc-result-label">必要販売価格</span>
+                        <span class="calc-result-value" id="required_price">¥0</span>
+                    </div>
+                    <div class="calc-result-item">
+                        <span class="calc-result-label">想定利益</span>
+                        <span class="calc-result-value profit-positive" id="expected_profit">¥0</span>
+                    </div>
+                    <div class="calc-result-item">
+                        <span class="calc-result-label">想定手数料</span>
+                        <span class="calc-result-value" id="expected_commission">¥0</span>
+                    </div>
+                    <button type="button" class="btn btn-apply" onclick="applyCalculatedPrice()">
+                        ✅ この価格を適用
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -656,6 +829,120 @@ document.getElementById('commission').addEventListener('input', function() {
     autoCalculateCommission = false;
     calculateProfit();
 });
+
+// 目標利益率からの逆算
+function calculateRequiredPrice() {
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
+    const targetProfitRate = parseFloat(document.getElementById('target_profit_rate').value) || 0;
+    
+    if (purchasePrice === 0) {
+        alert('仕入額を入力してください');
+        return;
+    }
+    
+    if (targetProfitRate <= 0) {
+        alert('目標利益率を入力してください（0より大きい値）');
+        return;
+    }
+    
+    // 目標利益額を計算
+    const targetProfit = Math.ceil(purchasePrice * (targetProfitRate / 100));
+    
+    // 選択されている販売タイプから手数料率を取得
+    const saleTypeValue = document.getElementById('sale_type').value;
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
+    
+    // 手数料率の合計を計算（簡易計算のため、比例する手数料のみ）
+    let totalRatePercent = 0;
+    let fixedCommission = 0;
+    
+    selectedTypes.forEach(saleType => {
+        switch(saleType) {
+            case 'photo_packing':
+                // 撮影梱包は売上によって変動するので、後で計算
+                break;
+            case 'normal':
+                totalRatePercent += 10;
+                break;
+            case 'wholesale':
+                totalRatePercent += 10;
+                break;
+            case 'multi_listing':
+                totalRatePercent += 3;
+                break;
+            case 'auction':
+                totalRatePercent += 5;
+                break;
+        }
+    });
+    
+    const totalRate = totalRatePercent / 100;
+    
+    // 必要販売価格を逆算
+    // 売上 = (仕入 + 目標利益 + 送料 + 固定手数料) / (1 - 手数料率)
+    let requiredPrice;
+    if (totalRate >= 1) {
+        alert('手数料率が高すぎます');
+        return;
+    }
+    
+    // まず仮の売上を計算（撮影梱包の手数料を除く）
+    const baseAmount = purchasePrice + targetProfit + shippingCost;
+    requiredPrice = Math.ceil(baseAmount / (1 - totalRate));
+    
+    // 撮影梱包の手数料を追加（photo_packingが含まれている場合）
+    if (selectedTypes.includes('photo_packing')) {
+        const photoPackingFee = requiredPrice >= 25000 ? Math.floor(requiredPrice * 0.02) : 500;
+        // 撮影梱包手数料分を加算して再計算
+        requiredPrice = Math.ceil((baseAmount + photoPackingFee) / (1 - totalRate));
+        // 再計算後の撮影梱包手数料
+        fixedCommission = requiredPrice >= 25000 ? Math.floor(requiredPrice * 0.02) : 500;
+    }
+    
+    // 想定手数料を計算
+    let expectedCommission = fixedCommission + Math.floor(requiredPrice * totalRate);
+    
+    // 想定利益を計算
+    const expectedProfit = requiredPrice - purchasePrice - shippingCost - expectedCommission;
+    
+    // 結果を表示
+    document.getElementById('required_price').textContent = '¥' + requiredPrice.toLocaleString();
+    document.getElementById('expected_profit').textContent = '¥' + expectedProfit.toLocaleString();
+    document.getElementById('expected_commission').textContent = '¥' + expectedCommission.toLocaleString();
+    
+    // 利益がプラスかマイナスかでスタイルを変更
+    const profitEl = document.getElementById('expected_profit');
+    profitEl.className = 'calc-result-value ' + (expectedProfit >= 0 ? 'profit-positive' : 'profit-negative');
+    
+    // 結果セクションを表示
+    document.getElementById('reverseCalcResults').style.display = 'block';
+    
+    // 計算された価格を一時保存
+    window.calculatedPrice = requiredPrice;
+    window.calculatedCommission = expectedCommission;
+}
+
+// 計算された価格を適用
+function applyCalculatedPrice() {
+    if (window.calculatedPrice) {
+        document.getElementById('sale_price').value = window.calculatedPrice;
+        document.getElementById('commission').value = window.calculatedCommission;
+        autoCalculateCommission = false;
+        calculateProfit();
+        
+        // 視覚的なフィードバック
+        const salePriceInput = document.getElementById('sale_price');
+        salePriceInput.style.transition = 'background-color 0.3s';
+        salePriceInput.style.backgroundColor = '#d1fae5';
+        setTimeout(() => {
+            salePriceInput.style.backgroundColor = '';
+        }, 1500);
+        
+        // 適用完了メッセージ
+        alert('販売価格を ¥' + window.calculatedPrice.toLocaleString() + ' に設定しました');
+    }
+}
 
 // 売上金以外の数値フィールドの変更時に利益を再計算
 document.querySelectorAll('input[type="number"]').forEach(input => {
