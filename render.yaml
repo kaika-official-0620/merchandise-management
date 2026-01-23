@@ -2,8 +2,16 @@ services:
   - type: web
     name: merchandise-management
     env: python
+    plan: standard  # Standardプラン
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --preload --timeout 120
+    
+    # 永続ディスク設定（画像保存用）
+    disk:
+      name: uploads-storage
+      mountPath: /opt/render/project/src/static/uploads
+      sizeGB: 200  # 200GB
+    
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -11,5 +19,13 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: RENDER
+        value: "true"
+
+databases:
+  - name: merchandise-db
+    plan: basic-1gb  # Basic 1GB プラン
+    databaseName: merchandise
+    user: merchandise_user
 
 

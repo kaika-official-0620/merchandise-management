@@ -57,7 +57,13 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'ログインが必要です'
 
 # ファイルアップロード設定
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+# Render.com環境では永続ディスクのマウントポイントを使用
+if os.environ.get('RENDER'):
+    UPLOAD_FOLDER = '/opt/render/project/src/static/uploads'
+else:
+    # ローカル環境
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
@@ -5699,31 +5705,29 @@ def admin_proxy_service_finalize():
                 ))
                 new_item_id = cur.fetchone()['id']
                 
-                # 3. 計算書（仕切押し書として）を自動作成（送信待ち）
+                # 3. 計算書を自動作成（送信待ち）
                 doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
                 cur.execute("""
-                    INSERT INTO shikiriosho (
-                        document_no, sender_id, recipient_id, recipient_name,
-                        issue_date, subtotal, tax_amount, total_amount,
-                        tax_rate, notes, status
+                    INSERT INTO user_keisan (
+                        document_no, user_id, issue_date, recipient_name,
+                        subject, total_amount, notes, status
                     ) VALUES (
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s
                     ) RETURNING id
                 """, (
-                    doc_no, current_user.id, winner_user_id, winner_name,
-                    today, winning_bid, 0, winning_bid,
-                    0, f'代行仕入れサービス落札 - 商品ID: {original_id}', 'draft'
+                    doc_no, winner_user_id, today, winner_name,
+                    '代行仕入れサービス落札', winning_bid,
+                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}', 'draft'
                 ))
-                shikiriosho_id = cur.fetchone()['id']
+                keisan_id = cur.fetchone()['id']
                 
                 # 計算書明細を追加
                 cur.execute("""
-                    INSERT INTO shikiriosho_items (
-                        shikiriosho_id, item_no, product_name, quantity, unit_price, amount
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, quantity, unit_price, amount
                     ) VALUES (%s, %s, %s, %s, %s, %s)
-                """, (shikiriosho_id, 1, item.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                """, (keisan_id, 1, item.get('product_name', '商品'), 1, winning_bid, winning_bid))
                 
                 finalized_count += 1
         
@@ -5783,31 +5787,29 @@ def admin_proxy_service_finalize():
                 ))
                 new_item_id = cur.lastrowid
                 
-                # 3. 計算書（仕切押し書として）を自動作成（送信待ち）
+                # 3. 計算書を自動作成（送信待ち）
                 doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
                 cur.execute("""
-                    INSERT INTO shikiriosho (
-                        document_no, sender_id, recipient_id, recipient_name,
-                        issue_date, subtotal, tax_amount, total_amount,
-                        tax_rate, notes, status
+                    INSERT INTO user_keisan (
+                        document_no, user_id, issue_date, recipient_name,
+                        subject, total_amount, notes, status
                     ) VALUES (
                         ?, ?, ?, ?,
-                        ?, ?, ?, ?,
-                        ?, ?, ?
+                        ?, ?, ?, ?
                     )
                 """, (
-                    doc_no, current_user.id, winner_user_id, winner_name,
-                    today, winning_bid, 0, winning_bid,
-                    0, f'代行仕入れサービス落札 - 商品ID: {original_id}', 'draft'
+                    doc_no, winner_user_id, today, winner_name,
+                    '代行仕入れサービス落札', winning_bid,
+                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}', 'draft'
                 ))
-                shikiriosho_id = cur.lastrowid
+                keisan_id = cur.lastrowid
                 
                 # 計算書明細を追加
                 cur.execute("""
-                    INSERT INTO shikiriosho_items (
-                        shikiriosho_id, item_no, product_name, quantity, unit_price, amount
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, quantity, unit_price, amount
                     ) VALUES (?, ?, ?, ?, ?, ?)
-                """, (shikiriosho_id, 1, item_dict.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                """, (keisan_id, 1, item_dict.get('product_name', '商品'), 1, winning_bid, winning_bid))
                 
                 finalized_count += 1
         
