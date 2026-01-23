@@ -2116,7 +2116,14 @@ def login():
             flash(f'ようこそ、{user_obj.display_name}さん！', 'success')
             
             next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
+            if next_page:
+                return redirect(next_page)
+            
+            # 管理者/オーナーの場合は管理者用商品一覧へ、一般ユーザーはダッシュボードへ
+            if user['role'] in ['admin', 'owner']:
+                return redirect(url_for('admin_user_products'))
+            else:
+                return redirect(url_for('index'))
         else:
             flash('ユーザー名またはパスワードが正しくありません', 'error')
         
