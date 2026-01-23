@@ -2,12 +2,164 @@
 {% block title %}{{ user.display_name or user.username }}の商品一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+<style>
+/* モバイル用カード表示 */
+.mobile-cards {
+    display: none;
+}
+
+.item-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.item-card.card-sold {
+    opacity: 0.7;
+    background: #f8f8f8;
+}
+
+.card-header {
+    display: flex;
+    padding: 12px;
+    gap: 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.card-photo {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+}
+
+.card-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.card-photo .no-photo {
+    width: 100%;
+    height: 100%;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+
+.card-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-id {
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+.card-title h3 {
+    margin: 4px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-store {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.card-body {
+    padding: 12px;
+}
+
+.card-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.card-info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-info-label {
+    font-size: 0.65rem;
+    color: #94a3b8;
+}
+
+.card-info-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.card-info-value.profit-positive {
+    color: #10b981;
+}
+
+.card-info-value.profit-negative {
+    color: #ef4444;
+}
+
+.card-footer {
+    padding: 8px 12px;
+    background: #f8fafc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.badge-sold {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.badge-listed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.badge-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* スマホ（768px以下）*/
+@media (max-width: 768px) {
+    .admin-table-container {
+        display: none;
+    }
+    
+    .mobile-cards {
+        display: block;
+    }
+}
+</style>
+
 <div class="page-header">
     <h1>{{ user.display_name or user.username }}の商品一覧</h1>
     <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">← ユーザー一覧に戻る</a>
 </div>
 
-
+<!-- PC用テーブル表示 -->
 <div class="admin-table-container">
     <table class="admin-table">
         <thead>
@@ -67,6 +219,68 @@
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<!-- スマホ用カード表示 -->
+<div class="mobile-cards">
+    {% for item in items %}
+    <div class="item-card {% if item.sale_date %}card-sold{% endif %}">
+        <div class="card-header">
+            <div class="card-photo">
+                {% if item.photo_path %}
+                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% else %}
+                <div class="no-photo">-</div>
+                {% endif %}
+            </div>
+            <div class="card-title">
+                <span class="card-id">#{{ item.id }}</span>
+                <h3>{{ item.product_name or '-' }}</h3>
+                <span class="card-store">{{ item.store_name or '-' }}</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="card-info-grid">
+                <div class="card-info-item">
+                    <span class="card-info-label">仕入日</span>
+                    <span class="card-info-value">{{ item.purchase_date or '-' }}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">仕入額</span>
+                    <span class="card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">出品価格</span>
+                    <span class="card-info-value">¥{{ "{:,}".format(item.listing_price or 0) }}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">売上金</span>
+                    <span class="card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            {% if item.sale_date %}
+            <span class="card-info-value {% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                利益: ¥{{ "{:,}".format(item.profit) }}
+            </span>
+            <span class="badge badge-sold">売却済</span>
+            {% elif item.is_listed %}
+            <span class="card-info-value">-</span>
+            <span class="badge badge-listed">出品中</span>
+            {% else %}
+            <span class="card-info-value">-</span>
+            <span class="badge badge-pending">未出品</span>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="item-card">
+        <div class="card-body" style="text-align: center; padding: 2rem;">
+            商品がありません
+        </div>
+    </div>
+    {% endfor %}
 </div>
 {% endblock %}
 
