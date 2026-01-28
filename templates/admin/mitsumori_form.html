@@ -59,6 +59,18 @@
             <label for="subject">件名 *</label>
             <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if mitsumori else '' }}" required placeholder="〇〇に関する見積依頼" class="form-control">
         </div>
+        <div class="product-selector">
+            <label>登録商品から追加：</label>
+            <select id="product-filter" class="form-control" style="max-width: 150px;">
+                <option value="">すべて</option>
+                <option value="sold">売却済みのみ</option>
+                <option value="inventory">在庫のみ</option>
+            </select>
+            <select id="product-select" class="form-control">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
         <div class="table-responsive">
             <table class="items-table" id="items-table">
                 <thead>
@@ -259,31 +271,123 @@
 .btn-primary:hover { background: #2563eb; }
 .btn-secondary { background: #6c757d; color: white; }
 .btn-danger { background: #dc3545; color: white; }
+.btn-info { background: #17a2b8; color: white; }
 .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+    min-width: 200px;
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const itemsBody = document.getElementById('items-body');
     const addRowBtn = document.getElementById('add-row');
+    const productSelect = document.getElementById('product-select');
+    const productFilter = document.getElementById('product-filter');
+    const addProductBtn = document.getElementById('add-product-btn');
     
-    // 行を追加
-    function addRow() {
+    let products = [];
+    
+    // 商品一覧を取得
+    async function loadProducts() {
+        try {
+            let url = '/api/admin/products';
+            const params = new URLSearchParams();
+            
+            // フィルター条件を追加
+            const filterValue = productFilter.value;
+            if (filterValue === 'sold') {
+                params.append('sold_only', '1');
+            } else if (filterValue === 'inventory') {
+                params.append('inventory_only', '1');
+            }
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            const response = await fetch(url);
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    }
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+            const soldLabel = product.sale_date ? ' [売却済]' : '';
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}${soldLabel}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // フィルター変更時に商品一覧を更新
+    productFilter.addEventListener('change', function() {
+        loadProducts();
+    });
+    
+    // 初期ロード
+    loadProducts();
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+        
+        addRowWithData(product.product_name, 1, '個', price);
+        productSelect.value = '';
+    });
+    
+    // 行を追加（データ付き）
+    function addRowWithData(name = '', qty = 1, unit = '個', price = 0) {
         const rowCount = itemsBody.querySelectorAll('.item-row').length;
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
             <td class="item-no">${rowCount + 1}</td>
-            <td><input type="text" name="item_name[]" class="form-control"></td>
-            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
-            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
-            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" value="0"></td>
-            <td class="row-amount">¥0</td>
+            <td><input type="text" name="item_name[]" value="${name}" class="form-control"></td>
+            <td><input type="number" name="quantity[]" value="${qty}" class="form-control calc-input" min="1"></td>
+            <td><input type="text" name="unit[]" value="${unit}" class="form-control" placeholder="個"></td>
+            <td><input type="number" name="unit_price[]" value="${price}" class="form-control calc-input" min="0"></td>
+            <td class="row-amount">¥${(qty * price).toLocaleString()}</td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
         `;
         itemsBody.appendChild(newRow);
         attachRowEvents(newRow);
         renumberRows();
+        calculateTotals();
+    }
+    
+    // 行を追加
+    function addRow() {
+        addRowWithData('', 1, '個', 0);
     }
     
     addRowBtn.addEventListener('click', addRow);

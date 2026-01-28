@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{% if shikiriosho %}請求書編集{% else %}請求書作成{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if shikiriosho %}精算書編集{% else %}精算書作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>{% if shikiriosho %}請求書編集{% else %}請求書作成{% endif %}</h1>
+    <h1>{% if shikiriosho %}精算書編集{% else %}精算書作成{% endif %}</h1>
     <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
@@ -68,6 +68,11 @@
         <h3>明細</h3>
         <div class="product-selector">
             <label>登録商品から追加：</label>
+            <select id="product-filter" class="form-control" style="max-width: 150px;">
+                <option value="">すべて</option>
+                <option value="sold">売却済みのみ</option>
+                <option value="inventory">在庫のみ</option>
+            </select>
             <select id="product-select" class="form-control">
                 <option value="">-- 商品を選択 --</option>
             </select>
@@ -319,6 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addRowBtn = document.getElementById('add-row');
     const taxRateSelect = document.getElementById('tax_rate');
     const productSelect = document.getElementById('product-select');
+    const productFilter = document.getElementById('product-filter');
     const addProductBtn = document.getElementById('add-product-btn');
     const recipientSelect = document.getElementById('recipient_id');
     
@@ -328,9 +334,24 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadProducts(userId) {
         try {
             let url = '/api/admin/products';
+            const params = new URLSearchParams();
+            
             if (userId) {
-                url += '?user_id=' + userId;
+                params.append('user_id', userId);
             }
+            
+            // フィルター条件を追加
+            const filterValue = productFilter.value;
+            if (filterValue === 'sold') {
+                params.append('sold_only', '1');
+            } else if (filterValue === 'inventory') {
+                params.append('inventory_only', '1');
+            }
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
             const response = await fetch(url);
             products = await response.json();
             updateProductSelect();
@@ -343,13 +364,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateProductSelect() {
         productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
         products.forEach(product => {
-            const price = product.listing_price || product.purchase_price || 0;
+            const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+            const soldLabel = product.sale_date ? ' [売却済]' : '';
             const option = document.createElement('option');
             option.value = JSON.stringify(product);
-            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}`;
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}${soldLabel}`;
             productSelect.appendChild(option);
         });
     }
+    
+    // フィルター変更時に商品一覧を更新
+    productFilter.addEventListener('change', function() {
+        loadProducts(recipientSelect ? recipientSelect.value : null);
+    });
     
     // 宛先変更時に商品一覧を更新
     if (recipientSelect) {

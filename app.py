@@ -30,15 +30,20 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 # Stripe料金プラン（Price ID）- 各月額料金に対応
 # Stripeダッシュボードで作成したPriceのIDを設定
 STRIPE_PRICE_IDS = {
-    2500: os.environ.get('STRIPE_PRICE_2500', ''),    # ¥2,500/月 (0-49件)
-    5000: os.environ.get('STRIPE_PRICE_5000', ''),    # ¥5,000/月 (50-99件)
-    10000: os.environ.get('STRIPE_PRICE_10000', ''),  # ¥10,000/月 (100-149件)
-    20000: os.environ.get('STRIPE_PRICE_20000', ''),  # ¥20,000/月 (150-199件)
-    30000: os.environ.get('STRIPE_PRICE_30000', ''),  # ¥30,000/月 (200件以上)
+    2500: os.environ.get('STRIPE_PRICE_2500', ''),    # ¥2,500/月 (0-20件)
+    5000: os.environ.get('STRIPE_PRICE_5000', ''),    # ¥5,000/月 (21-50件)
+    10000: os.environ.get('STRIPE_PRICE_10000', ''),  # ¥10,000/月 (51-100件)
+    20000: os.environ.get('STRIPE_PRICE_20000', ''),  # ¥20,000/月 (101-200件)
+    30000: os.environ.get('STRIPE_PRICE_30000', ''),  # ¥30,000/月 (201-300件、300件超は要相談)
 }
 
 if STRIPE_ENABLED and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
+
+# Google Drive API設定
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_DRIVE_ENABLED = bool(GOOGLE_API_KEY and GOOGLE_CLIENT_ID)
 
 # APScheduler（月末自動処理用）
 try:
@@ -248,6 +253,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # kaika_product_codeカラムを追加（開花商品番号）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS kaika_product_code VARCHAR(100)")
+        except:
+            pass
+        
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS supplier_detail VARCHAR(50)")
@@ -347,7 +358,7 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
-        # 請求書テーブル
+        # 精算書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id SERIAL PRIMARY KEY,
@@ -369,7 +380,7 @@ if DATABASE_URL:
             )
         ''')
         
-        # 請求書明細テーブル
+        # 精算書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id SERIAL PRIMARY KEY,
@@ -1093,6 +1104,12 @@ else:
         except:
             pass
         
+        # kaika_product_codeカラムを追加（開花商品番号）
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN kaika_product_code TEXT")
+        except:
+            pass
+        
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN supplier_detail TEXT")
@@ -1191,7 +1208,7 @@ else:
                 VALUES (?, ?, ?, ?)
             ''', widget)
         
-        # 請求書テーブル
+        # 精算書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1213,7 +1230,7 @@ else:
             )
         ''')
         
-        # 請求書明細テーブル
+        # 精算書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1791,7 +1808,7 @@ class User(UserMixin):
     # 管理者が設定可能な権限一覧
     ADMIN_PERMISSION_OPTIONS = {
         'users': 'ユーザー管理',
-        'shikiriosho': '請求書管理',
+        'shikiriosho': '精算書管理',
         'invoices': '買取明細書管理',
         'announcements': 'お知らせ管理',
         'analytics': '分析',
@@ -2228,16 +2245,16 @@ def profile():
     
     # 月額利用料を計算
     item_count = user_info.get('item_count', 0) if user_info else 0
-    if item_count < 50:
+    if item_count <= 20:
         monthly_fee = 2500
-    elif item_count < 100:
+    elif item_count <= 50:
         monthly_fee = 5000
-    elif item_count < 150:
+    elif item_count <= 100:
         monthly_fee = 10000
-    elif item_count < 200:
+    elif item_count <= 200:
         monthly_fee = 20000
     else:
-        monthly_fee = 30000
+        monthly_fee = 30000  # 300件超は要相談
     
     total_item_count = user_info.get('total_item_count', 0) if user_info else 0
     
@@ -3602,7 +3619,11 @@ def add_item():
         additional_photos = []
         
         # メイン写真（1枚目）
-        if 'photo' in request.files:
+        # Googleドライブからの画像を優先
+        google_drive_photo_path = request.form.get('google_drive_photo_path')
+        if google_drive_photo_path:
+            photo_path = google_drive_photo_path
+        elif 'photo' in request.files:
             file = request.files['photo']
             if file and file.filename and allowed_file(file.filename):
                 filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
@@ -3610,6 +3631,15 @@ def add_item():
                 photo_path = f'uploads/{filename}'
         
         # 追加写真（2-20枚目）
+        # Googleドライブからの追加画像
+        google_drive_additional = request.form.get('google_drive_additional_paths')
+        if google_drive_additional:
+            try:
+                google_photos = json.loads(google_drive_additional)
+                additional_photos.extend(google_photos)
+            except json.JSONDecodeError:
+                pass
+        
         if 'additional_photos' in request.files:
             files = request.files.getlist('additional_photos')
             for i, file in enumerate(files[:19]):  # 最大19枚まで（合計20枚）
@@ -3645,18 +3675,19 @@ def add_item():
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
                     supplier_detail, id_document_path, consent_form_path,
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
+                request.form.get('kaika_product_code'),
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -3682,18 +3713,19 @@ def add_item():
         else:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, model_number, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
                     supplier_detail, id_document_path, consent_form_path,
                     purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
+                request.form.get('kaika_product_code'),
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -3819,6 +3851,7 @@ def edit_item(id):
             # 基本情報はフォームから取得
             new_purchase_date = request.form.get('purchase_date') or None
             new_product_name = request.form.get('product_name')
+            new_kaika_product_code = request.form.get('kaika_product_code')
             new_brand_name = request.form.get('brand_name')
             new_model_number = request.form.get('model_number')
             new_item_condition = request.form.get('item_condition')
@@ -3834,6 +3867,7 @@ def edit_item(id):
             consent_form_path = item.get('consent_form_path')
             new_purchase_date = item['purchase_date']
             new_product_name = item['product_name']
+            new_kaika_product_code = item.get('kaika_product_code')
             new_brand_name = item['brand_name']
             new_model_number = item.get('model_number')
             new_item_condition = item['item_condition']
@@ -3848,7 +3882,7 @@ def edit_item(id):
         if DATABASE_URL:
             cur.execute('''
                 UPDATE merchandise SET 
-                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                     supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
                     purchase_price = %s, payment_method = %s, listing_price = %s, 
                     expected_shipping = %s, expected_commission = %s,
@@ -3861,6 +3895,7 @@ def edit_item(id):
                 photo_path,
                 additional_photos_json,
                 new_product_name,
+                new_kaika_product_code,
                 new_brand_name,
                 new_model_number,
                 new_item_condition,
@@ -3888,7 +3923,7 @@ def edit_item(id):
         else:
             cur.execute('''
                 UPDATE merchandise SET 
-                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                     supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
                     purchase_price = ?, payment_method = ?, listing_price = ?, 
                     expected_shipping = ?, expected_commission = ?,
@@ -3901,6 +3936,7 @@ def edit_item(id):
                 photo_path,
                 additional_photos_json,
                 new_product_name,
+                new_kaika_product_code,
                 new_brand_name,
                 new_model_number,
                 new_item_condition,
@@ -6493,9 +6529,9 @@ def admin_master_settings_init():
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
                 ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
                 ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
-                ('invoice_default_tax_rate', '10', 'number', 'invoice', '請求書デフォルト消費税率（%）', 1),
-                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '請求書デフォルト支払期限', 2),
-                ('invoice_default_notes', '', 'textarea', 'invoice', '請求書デフォルト備考', 3),
+                ('invoice_default_tax_rate', '10', 'number', 'invoice', '精算書デフォルト消費税率（%）', 1),
+                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '精算書デフォルト支払期限', 2),
+                ('invoice_default_notes', '', 'textarea', 'invoice', '精算書デフォルト備考', 3),
                 ('mitsumori_default_valid_days', '30', 'number', 'mitsumori', '見積依頼書デフォルト有効期限（日）', 1),
                 ('mitsumori_default_notes', '', 'textarea', 'mitsumori', '見積依頼書デフォルト備考', 2),
                 ('keisan_default_tax_rate', '10', 'number', 'keisan', '計算書デフォルト消費税率（%）', 1),
@@ -6565,9 +6601,9 @@ def admin_master_settings_init():
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
                 ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
                 ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
-                ('invoice_default_tax_rate', '10', 'number', 'invoice', '請求書デフォルト消費税率（%）', 1),
-                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '請求書デフォルト支払期限', 2),
-                ('invoice_default_notes', '', 'textarea', 'invoice', '請求書デフォルト備考', 3),
+                ('invoice_default_tax_rate', '10', 'number', 'invoice', '精算書デフォルト消費税率（%）', 1),
+                ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '精算書デフォルト支払期限', 2),
+                ('invoice_default_notes', '', 'textarea', 'invoice', '精算書デフォルト備考', 3),
                 ('mitsumori_default_valid_days', '30', 'number', 'mitsumori', '見積依頼書デフォルト有効期限（日）', 1),
                 ('mitsumori_default_notes', '', 'textarea', 'mitsumori', '見積依頼書デフォルト備考', 2),
                 ('keisan_default_tax_rate', '10', 'number', 'keisan', '計算書デフォルト消費税率（%）', 1),
@@ -8707,11 +8743,11 @@ def admin_toggle_announcement(id):
     return redirect(url_for('admin_announcements'))
 
 # ===================
-# 請求書管理（管理者用）
+# 精算書管理（管理者用）
 # ===================
 
 def generate_document_no():
-    """請求書番号を生成"""
+    """精算書番号を生成"""
     now = datetime.now()
     conn = get_db()
     if DATABASE_URL:
@@ -8734,7 +8770,7 @@ def generate_document_no():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_list():
-    """請求書一覧（管理者用）"""
+    """精算書一覧（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -8763,7 +8799,7 @@ def admin_shikiriosho_list():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_add():
-    """請求書作成（管理者用）"""
+    """精算書作成（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -8777,7 +8813,7 @@ def admin_shikiriosho_add():
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得（請求書形式）
+        # 明細データ取得（精算書形式）
         item_names = request.form.getlist('item_name[]')
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
@@ -8848,9 +8884,9 @@ def admin_shikiriosho_add():
         conn.close()
         
         if status == 'sent':
-            flash(f'請求書 {document_no} を作成・送信しました', 'success')
+            flash(f'精算書 {document_no} を作成・送信しました', 'success')
         else:
-            flash(f'請求書 {document_no} を下書き保存しました', 'success')
+            flash(f'精算書 {document_no} を下書き保存しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
     # ユーザー一覧取得
@@ -8874,7 +8910,7 @@ def admin_shikiriosho_add():
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_edit(id):
-    """請求書編集（管理者用）"""
+    """精算書編集（管理者用）"""
     conn = get_db()
     
     if request.method == 'POST':
@@ -8888,7 +8924,7 @@ def admin_shikiriosho_edit(id):
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
         
-        # 明細データ取得（請求書形式）
+        # 明細データ取得（精算書形式）
         item_names = request.form.getlist('item_name[]')
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
@@ -8960,10 +8996,10 @@ def admin_shikiriosho_edit(id):
         cur.close()
         conn.close()
         
-        flash('請求書を更新しました', 'success')
+        flash('精算書を更新しました', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
     
-    # 請求書データ取得
+    # 精算書データ取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
@@ -8987,7 +9023,7 @@ def admin_shikiriosho_edit(id):
     conn.close()
     
     if not shikiriosho:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_form.html', 
@@ -9000,7 +9036,7 @@ def admin_shikiriosho_edit(id):
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_delete(id):
-    """請求書削除（管理者用）"""
+    """精算書削除（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -9015,14 +9051,14 @@ def admin_shikiriosho_delete(id):
     cur.close()
     conn.close()
     
-    flash('請求書を削除しました', 'success')
+    flash('精算書を削除しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/send/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_send(id):
-    """請求書を送信（ステータスを'sent'に変更）"""
+    """精算書を送信（ステータスを'sent'に変更）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -9035,14 +9071,14 @@ def admin_shikiriosho_send(id):
     cur.close()
     conn.close()
     
-    flash('請求書を送信しました', 'success')
+    flash('精算書を送信しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/view/<int:id>')
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_view(id):
-    """請求書詳細（管理者用）"""
+    """精算書詳細（管理者用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -9075,13 +9111,13 @@ def admin_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('admin_shikiriosho_list'))
     
     return render_template('admin/shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
 
 # ===================
-# 請求書（ユーザー用）
+# 精算書（ユーザー用）
 # ===================
 
 # ===================
@@ -9279,7 +9315,7 @@ def service_document_pdf(id):
 @app.route('/shikiriosho')
 @login_required
 def user_shikiriosho_list():
-    """受信した請求書一覧（ユーザー用）"""
+    """受信した精算書一覧（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -9309,7 +9345,7 @@ def user_shikiriosho_list():
 @app.route('/shikiriosho/view/<int:id>')
 @login_required
 def user_shikiriosho_view(id):
-    """請求書詳細（ユーザー用）"""
+    """精算書詳細（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -9347,7 +9383,7 @@ def user_shikiriosho_view(id):
     conn.close()
     
     if not shikiriosho:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     return render_template('shikiriosho_view.html', shikiriosho=shikiriosho, items=items)
@@ -9355,7 +9391,7 @@ def user_shikiriosho_view(id):
 @app.route('/shikiriosho/download/<int:id>')
 @login_required
 def user_shikiriosho_download(id):
-    """請求書CSVダウンロード（ユーザー用）"""
+    """精算書CSVダウンロード（ユーザー用）"""
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -9378,7 +9414,7 @@ def user_shikiriosho_download(id):
     conn.close()
     
     if not shikiriosho:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('user_shikiriosho_list'))
     
     # CSV作成
@@ -9388,7 +9424,7 @@ def user_shikiriosho_download(id):
     # ヘッダー情報
     writer.writerow(['株式会社開花'])
     writer.writerow([''])
-    writer.writerow(['請求書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
+    writer.writerow(['精算書番号', shikiriosho['document_no'], '', '', '発行日', shikiriosho['issue_date']])
     writer.writerow([''])
     writer.writerow(['宛先', shikiriosho['recipient_name'] or ''])
     writer.writerow([''])
@@ -9426,12 +9462,12 @@ def user_shikiriosho_download(id):
         io.BytesIO(csv_content.encode('utf-8')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"請求書_{shikiriosho['document_no']}.csv"
+        download_name=f"精算書_{shikiriosho['document_no']}.csv"
     )
 
-# 未読請求書数を取得するヘルパー関数
+# 未読精算書数を取得するヘルパー関数
 def get_unread_shikiriosho_count(user_id):
-    """未読請求書数を取得"""
+    """未読精算書数を取得"""
     try:
         conn = get_db()
         if DATABASE_URL:
@@ -9456,7 +9492,7 @@ def get_unread_shikiriosho_count(user_id):
     except Exception:
         return 0
 
-# テンプレートに未読請求書数を渡す
+# テンプレートに未読精算書数を渡す
 @app.context_processor
 def inject_unread_shikiriosho():
     try:
@@ -10676,7 +10712,7 @@ def admin_invoice_view(id):
 @login_required
 @permission_required('invoices')
 def admin_invoice_approve(id):
-    """買取明細書承認（管理者用）- 承認時に請求書を自動作成"""
+    """買取明細書承認（管理者用）- 承認時に精算書を自動作成"""
     
     now = datetime.now()
     today = now.strftime('%Y-%m-%d')
@@ -10696,7 +10732,7 @@ def admin_invoice_approve(id):
                 conn.close()
                 return redirect(url_for('admin_invoice_list'))
             
-            # 請求書番号を生成（同じ接続内で）
+            # 精算書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) as count FROM shikiriosho WHERE issue_date >= %s", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
@@ -10715,7 +10751,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 請求書を作成（下書き状態）
+            # 精算書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -10737,9 +10773,9 @@ def admin_invoice_approve(id):
             shikiriosho_id = result['id'] if result else None
             
             if not shikiriosho_id:
-                raise Exception("請求書の作成に失敗しました")
+                raise Exception("精算書の作成に失敗しました")
             
-            # 買取明細書明細を取得して請求書明細を作成
+            # 買取明細書明細を取得して精算書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -10772,7 +10808,7 @@ def admin_invoice_approve(id):
                 return redirect(url_for('admin_invoice_list'))
             invoice = dict(invoice_row)
             
-            # 請求書番号を生成（同じ接続内で）
+            # 精算書番号を生成（同じ接続内で）
             cur.execute("SELECT COUNT(*) FROM shikiriosho WHERE issue_date >= ?", 
                        (now.strftime('%Y-%m-01'),))
             result = cur.fetchone()
@@ -10791,7 +10827,7 @@ def admin_invoice_approve(id):
             subtotal = invoice.get('subtotal') or 0
             total = invoice.get('total_amount') or 0
             
-            # 請求書を作成（下書き状態）
+            # 精算書を作成（下書き状態）
             cur.execute("""
                 INSERT INTO shikiriosho (document_no, sender_id, recipient_id, recipient_name, 
                     issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
@@ -10810,7 +10846,7 @@ def admin_invoice_approve(id):
             ))
             shikiriosho_id = cur.lastrowid
             
-            # 買取明細書明細を取得して請求書明細を作成
+            # 買取明細書明細を取得して精算書明細を作成
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
             items = cur.fetchall()
             
@@ -10835,7 +10871,7 @@ def admin_invoice_approve(id):
         cur.close()
         conn.close()
         
-        flash(f'買取明細書を承認し、請求書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
+        flash(f'買取明細書を承認し、精算書（{shikiriosho_no}）を下書きとして作成しました。内容を確認して送信してください。', 'success')
         return redirect(url_for('admin_shikiriosho_list'))
         
     except Exception as e:
@@ -10965,30 +11001,119 @@ def invoice_download(id):
     )
 
 # ===================
+# Google Drive連携API
+# ===================
+
+@app.route('/api/google-drive/config')
+@login_required
+def api_google_drive_config():
+    """Google Drive API設定を返す"""
+    return jsonify({
+        'enabled': GOOGLE_DRIVE_ENABLED,
+        'apiKey': GOOGLE_API_KEY,
+        'clientId': GOOGLE_CLIENT_ID
+    })
+
+@app.route('/api/google-drive/download', methods=['POST'])
+@login_required
+def api_google_drive_download():
+    """Google Driveから画像をダウンロードしてサーバーに保存"""
+    import requests
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'データがありません'}), 400
+    
+    file_id = data.get('fileId')
+    file_name = data.get('fileName', 'image.jpg')
+    access_token = data.get('accessToken')
+    
+    if not file_id or not access_token:
+        return jsonify({'success': False, 'error': 'ファイルIDまたはアクセストークンがありません'}), 400
+    
+    try:
+        # Google Drive APIから画像をダウンロード
+        download_url = f'https://www.googleapis.com/drive/v3/files/{file_id}?alt=media'
+        headers = {'Authorization': f'Bearer {access_token}'}
+        
+        response = requests.get(download_url, headers=headers, timeout=30)
+        
+        if response.status_code != 200:
+            return jsonify({'success': False, 'error': f'ダウンロードエラー: {response.status_code}'}), 400
+        
+        # ファイル名を安全な形式に変換
+        safe_filename = secure_filename(file_name)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        final_filename = f'{timestamp}_{safe_filename}'
+        
+        # uploadsフォルダに保存
+        save_path = os.path.join(app.config['UPLOAD_FOLDER'], final_filename)
+        with open(save_path, 'wb') as f:
+            f.write(response.content)
+        
+        return jsonify({
+            'success': True,
+            'filePath': f'uploads/{final_filename}',
+            'fileName': final_filename
+        })
+        
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'ダウンロードがタイムアウトしました'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ===================
 # 商品選択API
 # ===================
 
 @app.route('/api/products')
 @login_required
 def api_get_products():
-    """ユーザーの商品一覧をJSON形式で取得"""
+    """ユーザーの商品一覧をJSON形式で取得
+    パラメータ:
+    - sold_only=1: 売却済み商品のみ
+    - inventory_only=1: 在庫（未売却）商品のみ
+    """
+    sold_only = request.args.get('sold_only')
+    inventory_only = request.args.get('inventory_only')
+    
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, is_shipped
+        
+        # フィルター条件を構築
+        where_clause = "WHERE user_id = %s"
+        params = [current_user.id]
+        
+        if sold_only == '1':
+            where_clause += " AND sale_date IS NOT NULL"
+        elif inventory_only == '1':
+            where_clause += " AND sale_date IS NULL"
+        
+        cur.execute(f"""
+            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
             FROM merchandise 
-            WHERE user_id = %s
+            {where_clause}
             ORDER BY created_at DESC
-        """, (current_user.id,))
+        """, params)
     else:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, is_shipped
+        
+        # フィルター条件を構築
+        where_clause = "WHERE user_id = ?"
+        params = [current_user.id]
+        
+        if sold_only == '1':
+            where_clause += " AND sale_date IS NOT NULL"
+        elif inventory_only == '1':
+            where_clause += " AND sale_date IS NULL"
+        
+        cur.execute(f"""
+            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
             FROM merchandise 
-            WHERE user_id = ?
+            {where_clause}
             ORDER BY created_at DESC
-        """, (current_user.id,))
+        """, params)
     
     products = [dict(row) for row in cur.fetchall()]
     cur.close()
@@ -11000,46 +11125,88 @@ def api_get_products():
 @login_required
 @admin_required
 def api_get_all_products():
-    """全商品一覧をJSON形式で取得（管理者用）"""
+    """全商品一覧をJSON形式で取得（管理者用）
+    パラメータ:
+    - user_id: ユーザーIDで絞り込み
+    - sold_only=1: 売却済み商品のみ
+    - inventory_only=1: 在庫（未売却）商品のみ
+    """
     user_id = request.args.get('user_id')
+    sold_only = request.args.get('sold_only')
+    inventory_only = request.args.get('inventory_only')
+    
     conn = get_db()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # フィルター条件を構築
+        where_conditions = []
+        params = []
+        
         if user_id:
-            cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+            where_conditions.append("m.user_id = %s")
+            params.append(user_id)
+        
+        if sold_only == '1':
+            where_conditions.append("m.sale_date IS NOT NULL")
+        elif inventory_only == '1':
+            where_conditions.append("m.sale_date IS NULL")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        if params:
+            cur.execute(f"""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
-                WHERE m.user_id = %s
+                {where_clause}
                 ORDER BY m.created_at DESC
-            """, (user_id,))
+            """, params)
         else:
-            cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+            cur.execute(f"""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
+                {where_clause}
                 ORDER BY m.created_at DESC
             """)
     else:
         cur = conn.cursor()
+        
+        # フィルター条件を構築
+        where_conditions = []
+        params = []
+        
         if user_id:
-            cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+            where_conditions.append("m.user_id = ?")
+            params.append(user_id)
+        
+        if sold_only == '1':
+            where_conditions.append("m.sale_date IS NOT NULL")
+        elif inventory_only == '1':
+            where_conditions.append("m.sale_date IS NULL")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        if params:
+            cur.execute(f"""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
-                WHERE m.user_id = ?
+                {where_clause}
                 ORDER BY m.created_at DESC
-            """, (user_id,))
+            """, params)
         else:
-            cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.is_shipped,
+            cur.execute(f"""
+                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
+                {where_clause}
                 ORDER BY m.created_at DESC
             """)
     
@@ -11056,7 +11223,7 @@ def api_get_all_products():
 @app.route('/shikiriosho/pdf/<int:id>')
 @login_required
 def shikiriosho_pdf(id):
-    """請求書PDF出力"""
+    """精算書PDF出力"""
     conn = get_db()
     
     # 権限確認（送信者または受信者または管理者）
@@ -11093,7 +11260,7 @@ def shikiriosho_pdf(id):
     conn.close()
     
     if not shikiriosho:
-        flash('請求書が見つかりません', 'error')
+        flash('精算書が見つかりません', 'error')
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
@@ -13233,17 +13400,19 @@ def admin_stripe_dashboard():
                            scheduler_info=scheduler_info)
 
 def get_monthly_fee(item_count):
-    """当月の商品登録数から月額利用料を計算"""
-    if item_count < 50:
+    """当月の商品登録数から月額利用料を計算
+    20点→2,500円、50点→5,000円、100点→10,000円、200点→20,000円、300点→30,000円、それ以降は要相談
+    """
+    if item_count <= 20:
         return 2500
-    elif item_count < 100:
+    elif item_count <= 50:
         return 5000
-    elif item_count < 150:
+    elif item_count <= 100:
         return 10000
-    elif item_count < 200:
+    elif item_count <= 200:
         return 20000
     else:
-        return 30000
+        return 30000  # 300件超は要相談
 
 def get_or_create_stripe_price(monthly_fee):
     """Stripeの料金プラン（Price）を取得または動的に作成"""

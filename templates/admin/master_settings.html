@@ -962,7 +962,7 @@
         <button class="sub-tab" onclick="showSubTab('document', 'seisan')">精算書</button>
         <button class="sub-tab" onclick="showSubTab('document', 'kaitori')">買取明細書</button>
         <button class="sub-tab" onclick="showSubTab('document', 'shikiriosho')">仕切押し書</button>
-        <button class="sub-tab" onclick="showSubTab('document', 'invoice')">請求書</button>
+        <button class="sub-tab" onclick="showSubTab('document', 'invoice')">精算書</button>
         <button class="sub-tab" onclick="showSubTab('document', 'mitsumori')">見積依頼書</button>
         <button class="sub-tab" onclick="showSubTab('document', 'keisan')">計算書</button>
     </div>
@@ -1056,8 +1056,8 @@
                             <input type="text" name="doc_name_shikiriosho" value="{{ document_settings.get('doc_name_shikiriosho', '') }}" class="form-control" placeholder="仕切押し書">
                         </div>
                         <div class="form-group">
-                            <label>請求書</label>
-                            <input type="text" name="doc_name_invoice" value="{{ document_settings.get('doc_name_invoice', '') }}" class="form-control" placeholder="請求書">
+                            <label>精算書</label>
+                            <input type="text" name="doc_name_invoice" value="{{ document_settings.get('doc_name_invoice', '') }}" class="form-control" placeholder="精算書">
                         </div>
                         <div class="form-group">
                             <label>見積依頼書</label>
@@ -1156,11 +1156,11 @@
             </div>
         </div>
         
-        <!-- 請求書設定 -->
+        <!-- 精算書設定 -->
         <div id="sub-document-invoice" class="sub-content">
             <div class="master-section">
                 <div class="master-section-header">
-                    <h3>請求書設定</h3>
+                    <h3>精算書設定</h3>
                 </div>
                 <div style="padding: 1.25rem;">
                     <div class="doc-settings-grid">
@@ -1179,7 +1179,7 @@
                     </div>
                     <div class="form-group" style="margin-top: 1rem;">
                         <label>デフォルト備考</label>
-                        <textarea name="invoice_default_notes" rows="3" class="form-control" placeholder="請求書のデフォルト備考文を入力">{{ document_settings.get('invoice_default_notes', '') }}</textarea>
+                        <textarea name="invoice_default_notes" rows="3" class="form-control" placeholder="精算書のデフォルト備考文を入力">{{ document_settings.get('invoice_default_notes', '') }}</textarea>
                     </div>
                 </div>
             </div>

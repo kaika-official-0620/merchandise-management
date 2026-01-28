@@ -89,7 +89,7 @@
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / sales_safe * 100) }}%</div>
-                <div class="kpi-label">利益率</div>
+                <div class="kpi-label">売上利益率</div>
                 <div class="kpi-detail">利益 ÷ 売上</div>
             </div>
         </div>
@@ -98,7 +98,7 @@
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / purchase_safe * 100) }}%</div>
-                <div class="kpi-label">ROI（投資利益率）</div>
+                <div class="kpi-label">利益÷仕入額</div>
                 <div class="kpi-detail">利益 ÷ 仕入額</div>
             </div>
         </div>

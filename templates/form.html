@@ -3,6 +3,114 @@
 
 {% block content %}
 <style>
+/* Google Drive連携スタイル */
+.photo-upload-options {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.btn-google-drive {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: #fff;
+    border: 2px solid #4285f4;
+    border-radius: 6px;
+    color: #4285f4;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-google-drive:hover:not(:disabled) {
+    background: #4285f4;
+    color: #fff;
+}
+
+.btn-google-drive:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.google-drive-preview {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+    background: #e8f0fe;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-preview img {
+    max-width: 200px;
+    max-height: 150px;
+    border-radius: 4px;
+}
+
+.google-drive-preview .photo-label {
+    display: block;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #4285f4;
+    margin-top: 6px;
+}
+
+.remove-google-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.google-drive-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.google-drive-additional-preview .preview-item {
+    position: relative;
+    background: #e8f0fe;
+    padding: 8px;
+    border-radius: 6px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-additional-preview .preview-item img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.google-drive-additional-preview .preview-item .remove-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+}
+
 /* 写真関連スタイル */
 .current-photo {
     margin-top: 10px;
@@ -178,6 +286,13 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
+                <label for="kaika_product_code">開花商品番号</label>
+                <input type="text" id="kaika_product_code" name="kaika_product_code" 
+                       value="{{ item.kaika_product_code if item else '' }}" placeholder="開花独自の管理番号"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
                 <label for="brand_name">ブランド名</label>
                 <select id="brand_name" name="brand_name" {% if basic_readonly %}disabled{% endif %}>
                     <option value="">選択してください</option>
@@ -265,8 +380,28 @@ input:disabled, select:disabled, textarea:disabled {
             
             <div class="form-group">
                 <label for="photo">メイン写真（1枚目）</label>
-                <input type="file" id="photo" name="photo" accept="image/*"
-                       {% if basic_readonly %}disabled{% endif %}>
+                <div class="photo-upload-options">
+                    <input type="file" id="photo" name="photo" accept="image/*"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive" 
+                            {% if basic_readonly %}disabled{% endif %}>
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>
+                </div>
+                <input type="hidden" id="google-drive-photo-path" name="google_drive_photo_path" value="">
+                <div id="google-drive-photo-preview" class="google-drive-preview" style="display: none;">
+                    <img id="google-drive-photo-img" src="" alt="選択した写真">
+                    <span class="photo-label">Googleドライブから選択</span>
+                    <button type="button" class="remove-google-photo" onclick="removeGoogleDrivePhoto()">×</button>
+                </div>
                 {% if item and item.photo_path %}
                 <div class="current-photo">
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="現在の写真">
@@ -277,8 +412,24 @@ input:disabled, select:disabled, textarea:disabled {
             
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
-                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple
-                       {% if basic_readonly %}disabled{% endif %}>
+                <div class="photo-upload-options">
+                    <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple
+                           {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive"
+                            {% if basic_readonly %}disabled{% endif %}>
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>
+                </div>
+                <input type="hidden" id="google-drive-additional-paths" name="google_drive_additional_paths" value="">
+                <div id="google-drive-additional-preview" class="google-drive-additional-preview"></div>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
                 
                 {% if item and item.additional_photos_list and item.additional_photos_list|length > 0 %}
@@ -1095,7 +1246,222 @@ document.addEventListener('DOMContentLoaded', function() {
             btnLoading.style.display = 'none';
         }
     });
+    
+    // ====================
+    // Google Drive連携
+    // ====================
+    initGoogleDrivePicker();
 });
+
+// Google Drive Picker関連の変数
+let googleDriveConfig = null;
+let googlePickerInited = false;
+let gisInited = false;
+let tokenClient = null;
+let accessToken = null;
+let currentPickerTarget = null; // 'photo' or 'additional'
+let googleDriveAdditionalPaths = [];
+
+// Google Drive設定を取得
+async function initGoogleDrivePicker() {
+    try {
+        const response = await fetch('/api/google-drive/config');
+        googleDriveConfig = await response.json();
+        
+        if (!googleDriveConfig.enabled) {
+            // Google Drive連携が無効の場合、ボタンを非表示
+            document.querySelectorAll('.btn-google-drive').forEach(btn => {
+                btn.style.display = 'none';
+            });
+            return;
+        }
+        
+        // Google APIスクリプトをロード
+        loadGoogleAPIs();
+        
+        // ボタンにイベントリスナーを追加
+        document.getElementById('google-drive-photo-btn')?.addEventListener('click', () => openGooglePicker('photo'));
+        document.getElementById('google-drive-additional-btn')?.addEventListener('click', () => openGooglePicker('additional'));
+        
+    } catch (error) {
+        console.error('Google Drive設定の取得に失敗:', error);
+        document.querySelectorAll('.btn-google-drive').forEach(btn => {
+            btn.style.display = 'none';
+        });
+    }
+}
+
+// Google APIスクリプトをロード
+function loadGoogleAPIs() {
+    // Google Identity Services (GIS)
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = gisLoaded;
+    document.head.appendChild(gisScript);
+    
+    // Google API (gapi)
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = gapiLoaded;
+    document.head.appendChild(gapiScript);
+}
+
+// gapi ロード完了
+function gapiLoaded() {
+    gapi.load('picker', () => {
+        googlePickerInited = true;
+    });
+}
+
+// GIS ロード完了
+function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: googleDriveConfig.clientId,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: '', // 後で設定
+    });
+    gisInited = true;
+}
+
+// Google Pickerを開く
+function openGooglePicker(target) {
+    currentPickerTarget = target;
+    
+    if (!googlePickerInited || !gisInited) {
+        alert('Google Drive連携を読み込み中です。しばらくお待ちください。');
+        return;
+    }
+    
+    tokenClient.callback = async (response) => {
+        if (response.error !== undefined) {
+            throw response;
+        }
+        accessToken = response.access_token;
+        createPicker();
+    };
+    
+    if (accessToken === null) {
+        // 初回は認証を要求
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        // 既に認証済みの場合はそのまま使用
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+// Pickerを作成
+function createPicker() {
+    const picker = new google.picker.PickerBuilder()
+        .addView(new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false))
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(googleDriveConfig.apiKey)
+        .setCallback(pickerCallback)
+        .setTitle('Googleドライブから画像を選択')
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setLocale('ja')
+        .build();
+    picker.setVisible(true);
+}
+
+// Picker選択後のコールバック
+async function pickerCallback(data) {
+    if (data.action === google.picker.Action.PICKED) {
+        const files = data.docs;
+        
+        for (const file of files) {
+            await downloadAndSaveFile(file);
+        }
+    }
+}
+
+// ファイルをダウンロードしてサーバーに保存
+async function downloadAndSaveFile(file) {
+    try {
+        // ローディング表示
+        const btn = currentPickerTarget === 'photo' 
+            ? document.getElementById('google-drive-photo-btn')
+            : document.getElementById('google-drive-additional-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="loading-spinner"></span> ダウンロード中...';
+        btn.disabled = true;
+        
+        const response = await fetch('/api/google-drive/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                fileId: file.id,
+                fileName: file.name,
+                accessToken: accessToken
+            })
+        });
+        
+        const result = await response.json();
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (result.success) {
+            if (currentPickerTarget === 'photo') {
+                // メイン写真
+                document.getElementById('google-drive-photo-path').value = result.filePath;
+                const preview = document.getElementById('google-drive-photo-preview');
+                const img = document.getElementById('google-drive-photo-img');
+                img.src = '/static/' + result.filePath;
+                preview.style.display = 'inline-block';
+                
+                // 通常のファイル入力をクリア
+                document.getElementById('photo').value = '';
+            } else {
+                // 追加写真
+                googleDriveAdditionalPaths.push(result.filePath);
+                document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+                
+                // プレビューを追加
+                const previewContainer = document.getElementById('google-drive-additional-preview');
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
+                previewItem.dataset.path = result.filePath;
+                previewItem.innerHTML = `
+                    <img src="/static/${result.filePath}" alt="追加写真">
+                    <button type="button" class="remove-btn" onclick="removeGoogleDriveAdditional('${result.filePath}')">×</button>
+                `;
+                previewContainer.appendChild(previewItem);
+            }
+        } else {
+            alert('画像のダウンロードに失敗しました: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    }
+}
+
+// メイン写真のGoogle Drive画像を削除
+function removeGoogleDrivePhoto() {
+    document.getElementById('google-drive-photo-path').value = '';
+    document.getElementById('google-drive-photo-preview').style.display = 'none';
+    document.getElementById('google-drive-photo-img').src = '';
+}
+
+// 追加写真のGoogle Drive画像を削除
+function removeGoogleDriveAdditional(path) {
+    googleDriveAdditionalPaths = googleDriveAdditionalPaths.filter(p => p !== path);
+    document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+    
+    const previewContainer = document.getElementById('google-drive-additional-preview');
+    const item = previewContainer.querySelector(`[data-path="${path}"]`);
+    if (item) {
+        item.remove();
+    }
+}
 </script>
 {% endblock %}
 
