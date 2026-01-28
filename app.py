@@ -7716,9 +7716,17 @@ def import_backup():
                 cur.execute("DELETE FROM users WHERE id != ?", (current_user.id,))
         
         # ユーザーをインポート（管理者バックアップの場合）
+        # 現在ログイン中のユーザーのusernameを取得
+        current_username = current_user.username
+        
         if 'users' in backup_data:
             for user in backup_data['users']:
                 try:
+                    # 現在ログイン中のユーザーはスキップ（セッション維持のため）
+                    if user.get('username') == current_username:
+                        print(f"DEBUG: Skipping current user: {current_username}")
+                        continue
+                    
                     if DATABASE_URL:
                         cur.execute('''
                             INSERT INTO users (username, email, password_hash, role, display_name, created_at)
@@ -7735,17 +7743,32 @@ def import_backup():
                             user.get('created_at')
                         ))
                     else:
-                        cur.execute('''
-                            INSERT OR REPLACE INTO users (username, email, password_hash, role, display_name, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (
-                            user.get('username'),
-                            user.get('email'),
-                            user.get('password_hash'),
-                            user.get('role', 'user'),
-                            user.get('display_name'),
-                            user.get('created_at')
-                        ))
+                        # SQLiteの場合: まず存在確認してからINSERTまたはUPDATE
+                        cur.execute("SELECT id FROM users WHERE username = ?", (user.get('username'),))
+                        existing = cur.fetchone()
+                        if existing:
+                            # 既存ユーザーは更新（IDを保持）
+                            cur.execute('''
+                                UPDATE users SET email = ?, display_name = ?
+                                WHERE username = ?
+                            ''', (
+                                user.get('email'),
+                                user.get('display_name'),
+                                user.get('username')
+                            ))
+                        else:
+                            # 新規ユーザーは挿入
+                            cur.execute('''
+                                INSERT INTO users (username, email, password_hash, role, display_name, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            ''', (
+                                user.get('username'),
+                                user.get('email'),
+                                user.get('password_hash'),
+                                user.get('role', 'user'),
+                                user.get('display_name'),
+                                user.get('created_at')
+                            ))
                     imported_counts['users'] += 1
                 except Exception as e:
                     print(f"User import error: {e}")
@@ -7783,7 +7806,9 @@ def import_backup():
             return current_user.id
         
         # 商品をインポート
-        for item in backup_data.get('merchandise', []):
+        merchandise_list = backup_data.get('merchandise', [])
+        print(f"DEBUG: Total merchandise to import: {len(merchandise_list)}")
+        for item in merchandise_list:
             try:
                 # user_idを解決（旧環境のIDを新環境のIDにマッピング）
                 old_user_id = item.get('user_id')
@@ -7792,6 +7817,8 @@ def import_backup():
                     user_id = current_user.id
                 else:
                     user_id = resolve_user_id(old_user_id)
+                
+                print(f"DEBUG: Importing item: {item.get('product_name')} (old_user_id={old_user_id}, new_user_id={user_id})")
                 
                 if DATABASE_URL:
                     cur.execute('''
@@ -7883,7 +7910,13 @@ def import_backup():
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
+                import traceback
                 print(f"Merchandise import error: {e}")
+                print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
+                traceback.print_exc()
+                if 'errors' not in imported_counts:
+                    imported_counts['errors'] = []
+                imported_counts['errors'].append(f"{item.get('product_name')}: {str(e)}")
         
         # 顧客をインポート
         for customer in backup_data.get('customers', []):
@@ -7930,10 +7963,20 @@ def import_backup():
                 print(f"Customer import error: {e}")
         
         conn.commit()
-        flash(f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件", 'success')
+        error_count = len(imported_counts.get('errors', []))
+        msg = f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
+        if error_count > 0:
+            msg += f" (エラー {error_count}件)"
+            flash(msg, 'warning')
+            # エラー詳細をログに出力
+            print(f"Import errors: {imported_counts.get('errors', [])}")
+        else:
+            flash(msg, 'success')
         
     except Exception as e:
         conn.rollback()
+        import traceback
+        traceback.print_exc()
         flash(f'インポートエラー: {str(e)}', 'error')
     finally:
         cur.close()
@@ -8089,7 +8132,13 @@ def import_user_backup():
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
+                import traceback
                 print(f"Merchandise import error: {e}")
+                print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
+                traceback.print_exc()
+                if 'errors' not in imported_counts:
+                    imported_counts['errors'] = []
+                imported_counts['errors'].append(f"{item.get('product_name')}: {str(e)}")
         
         # 顧客をインポート
         for customer in backup_data.get('customers', []):
@@ -8127,10 +8176,19 @@ def import_user_backup():
                 print(f"Customer import error: {e}")
         
         conn.commit()
-        flash(f"インポート完了: 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件", 'success')
+        error_count = len(imported_counts.get('errors', []))
+        msg = f"インポート完了: 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
+        if error_count > 0:
+            msg += f" (エラー {error_count}件)"
+            flash(msg, 'warning')
+            print(f"Import errors: {imported_counts.get('errors', [])}")
+        else:
+            flash(msg, 'success')
         
     except Exception as e:
         conn.rollback()
+        import traceback
+        traceback.print_exc()
         flash(f'インポートエラー: {str(e)}', 'error')
     finally:
         cur.close()
