@@ -7798,8 +7798,11 @@ def import_backup():
                         INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
                             purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                             is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
-                            commission, is_shipped, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            commission, is_shipped, created_at, brand_name, item_condition, additional_photos,
+                            sale_type, model_number, supplier_detail, id_document_path, consent_form_path,
+                            updated_by, updated_at, notes, show_in_proxy_service, kaika_product_code)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         user_id,
                         item.get('purchase_date'),
@@ -7819,15 +7822,31 @@ def import_backup():
                         item.get('sales_destination'),
                         item.get('commission', 0),
                         item.get('is_shipped', False),
-                        item.get('created_at')
+                        item.get('created_at'),
+                        item.get('brand_name'),
+                        item.get('item_condition'),
+                        item.get('additional_photos'),
+                        item.get('sale_type', 'normal'),
+                        item.get('model_number'),
+                        item.get('supplier_detail'),
+                        item.get('id_document_path'),
+                        item.get('consent_form_path'),
+                        item.get('updated_by'),
+                        item.get('updated_at'),
+                        item.get('notes'),
+                        item.get('show_in_proxy_service', 0),
+                        item.get('kaika_product_code')
                     ))
                 else:
                     cur.execute('''
                         INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
                             purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                             is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
-                            commission, is_shipped, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            commission, is_shipped, created_at, brand_name, item_condition, additional_photos,
+                            sale_type, model_number, supplier_detail, id_document_path, consent_form_path,
+                            updated_by, updated_at, notes, show_in_proxy_service, kaika_product_code)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         user_id,
                         item.get('purchase_date'),
@@ -7847,7 +7866,20 @@ def import_backup():
                         item.get('sales_destination'),
                         item.get('commission', 0),
                         1 if item.get('is_shipped') else 0,
-                        item.get('created_at')
+                        item.get('created_at'),
+                        item.get('brand_name'),
+                        item.get('item_condition'),
+                        item.get('additional_photos'),
+                        item.get('sale_type', 'normal'),
+                        item.get('model_number'),
+                        item.get('supplier_detail'),
+                        item.get('id_document_path'),
+                        item.get('consent_form_path'),
+                        item.get('updated_by'),
+                        item.get('updated_at'),
+                        item.get('notes'),
+                        1 if item.get('show_in_proxy_service') else 0,
+                        item.get('kaika_product_code')
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
@@ -7972,8 +8004,11 @@ def import_user_backup():
                         INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
                             purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                             is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
-                            commission, is_shipped)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            commission, is_shipped, created_at, brand_name, item_condition, additional_photos,
+                            sale_type, model_number, supplier_detail, id_document_path, consent_form_path,
+                            updated_by, updated_at, notes, show_in_proxy_service, kaika_product_code)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         current_user.id,
                         item.get('purchase_date'),
@@ -7992,15 +8027,32 @@ def import_user_backup():
                         item.get('shipping_cost', 0),
                         item.get('sales_destination'),
                         item.get('commission', 0),
-                        item.get('is_shipped', False)
+                        item.get('is_shipped', False),
+                        item.get('created_at'),
+                        item.get('brand_name'),
+                        item.get('item_condition'),
+                        item.get('additional_photos'),
+                        item.get('sale_type', 'normal'),
+                        item.get('model_number'),
+                        item.get('supplier_detail'),
+                        item.get('id_document_path'),
+                        item.get('consent_form_path'),
+                        item.get('updated_by'),
+                        item.get('updated_at'),
+                        item.get('notes'),
+                        item.get('show_in_proxy_service', 0),
+                        item.get('kaika_product_code')
                     ))
                 else:
                     cur.execute('''
                         INSERT INTO merchandise (user_id, purchase_date, photo_path, product_name, store_name,
                             purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                             is_listed, listing_date, sale_date, sale_price, shipping_cost, sales_destination,
-                            commission, is_shipped)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            commission, is_shipped, created_at, brand_name, item_condition, additional_photos,
+                            sale_type, model_number, supplier_detail, id_document_path, consent_form_path,
+                            updated_by, updated_at, notes, show_in_proxy_service, kaika_product_code)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         current_user.id,
                         item.get('purchase_date'),
@@ -8019,7 +8071,21 @@ def import_user_backup():
                         item.get('shipping_cost', 0),
                         item.get('sales_destination'),
                         item.get('commission', 0),
-                        1 if item.get('is_shipped') else 0
+                        1 if item.get('is_shipped') else 0,
+                        item.get('created_at'),
+                        item.get('brand_name'),
+                        item.get('item_condition'),
+                        item.get('additional_photos'),
+                        item.get('sale_type', 'normal'),
+                        item.get('model_number'),
+                        item.get('supplier_detail'),
+                        item.get('id_document_path'),
+                        item.get('consent_form_path'),
+                        item.get('updated_by'),
+                        item.get('updated_at'),
+                        item.get('notes'),
+                        1 if item.get('show_in_proxy_service') else 0,
+                        item.get('kaika_product_code')
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
