@@ -3659,18 +3659,27 @@ def add_item():
             try:
                 google_photos = json.loads(google_drive_additional)
                 additional_photos.extend(google_photos)
+                print(f"[DEBUG] Google Drive追加画像: {len(google_photos)}枚")
             except json.JSONDecodeError:
                 pass
         
+        print(f"[DEBUG] request.files keys: {list(request.files.keys())}")
+        print(f"[DEBUG] 'additional_photos' in request.files: {'additional_photos' in request.files}")
+        
         if 'additional_photos' in request.files:
             files = request.files.getlist('additional_photos')
+            print(f"[DEBUG] 追加画像ファイル数: {len(files)}")
             for i, file in enumerate(files[:19]):  # 最大19枚まで（合計20枚）
+                print(f"[DEBUG] ファイル{i}: filename={file.filename}, content_length={file.content_length if hasattr(file, 'content_length') else 'N/A'}")
                 if file and file.filename and allowed_file(file.filename):
                     filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{i+2}_' + secure_filename(file.filename)
                     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                     additional_photos.append(f'uploads/{filename}')
+                    print(f"[DEBUG] 追加画像保存: {filename}")
         
+        print(f"[DEBUG] 追加画像合計: {len(additional_photos)}枚")
         additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+        print(f"[DEBUG] additional_photos_json: {additional_photos_json}")
         
         # 身分証ファイル
         id_document_path = None
@@ -8395,6 +8404,18 @@ def admin_user_products():
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                
+                # 全画像リスト（メイン + 追加）
+                item_dict['all_photos'] = []
+                if item_dict.get('photo_path'):
+                    item_dict['all_photos'].append(item_dict['photo_path'].replace('\\', '/'))
+                if item_dict.get('additional_photos'):
+                    try:
+                        additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+                        item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
+                    except:
+                        pass
+                
                 items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
@@ -8429,6 +8450,18 @@ def admin_user_products():
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                
+                # 全画像リスト（メイン + 追加）
+                item_dict['all_photos'] = []
+                if item_dict.get('photo_path'):
+                    item_dict['all_photos'].append(item_dict['photo_path'].replace('\\', '/'))
+                if item_dict.get('additional_photos'):
+                    try:
+                        additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+                        item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
+                    except:
+                        pass
+                
                 items.append(item_dict)
         
         cur.close()
@@ -8513,14 +8546,19 @@ def admin_add_item():
         additional_photos = []
         if 'additional_photos' in request.files:
             files = request.files.getlist('additional_photos')
+            print(f"[DEBUG admin_add_item] 追加画像ファイル数: {len(files)}")
             for idx, photo in enumerate(files[:19]):
+                print(f"[DEBUG admin_add_item] ファイル{idx}: filename={photo.filename}")
                 if photo and photo.filename:
                     filename = secure_filename(f"{int(time.time())}_{idx}_{photo.filename}")
                     path = os.path.join('uploads', filename).replace('\\', '/')
                     photo.save(os.path.join(app.static_folder, path))
                     additional_photos.append(path)
+                    print(f"[DEBUG admin_add_item] 保存: {path}")
         
-        additional_photos_str = ','.join(additional_photos) if additional_photos else None
+        # JSON形式で保存（他の処理と統一）
+        additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+        print(f"[DEBUG admin_add_item] additional_photos_json: {additional_photos_json}")
         
         # 身分証処理
         id_document_path = None
@@ -8561,7 +8599,7 @@ def admin_add_item():
                 target_user_id,
                 request.form.get('purchase_date') or None,
                 photo_path,
-                additional_photos_str,
+                additional_photos_json,
                 request.form.get('product_name'),
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
