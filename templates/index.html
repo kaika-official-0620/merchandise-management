@@ -599,6 +599,13 @@
     height: 50px;
     object-fit: cover;
     border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.table-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .no-thumb {
@@ -610,6 +617,142 @@
     align-items: center;
     justify-content: center;
     color: #94a3b8;
+}
+
+/* 画像カウントバッジ（PC） */
+.photo-cell {
+    position: relative;
+    display: inline-block;
+}
+
+.photo-count-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 0.65rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* 商品一覧ライトボックス */
+.item-lightbox {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+}
+
+.item-lightbox.active {
+    display: flex;
+}
+
+.item-lightbox-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.item-lightbox-content img {
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.item-lightbox-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.item-lightbox-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.item-lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.item-lightbox-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.item-lightbox-prev {
+    left: -60px;
+}
+
+.item-lightbox-next {
+    right: -60px;
+}
+
+.item-lightbox-counter {
+    color: white;
+    margin-top: 15px;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
+}
+
+.item-lightbox-info {
+    color: white;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* スマホ用ライトボックス調整 */
+@media (max-width: 768px) {
+    .item-lightbox-nav {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    
+    .item-lightbox-prev {
+        left: 10px;
+    }
+    
+    .item-lightbox-next {
+        right: 10px;
+    }
+    
+    .item-lightbox-close {
+        top: 10px;
+        right: 10px;
+        position: fixed;
+    }
 }
 
 /* ステータスバッジ */
@@ -811,19 +954,68 @@
     gap: 12px;
     background: #fafafa;
     border-bottom: 1px solid #f0f0f0;
+    overflow: hidden;
+}
+
+/* スマホで複数画像がある場合のカードヘッダー調整 */
+.card-header.has-multi-photos {
+    flex-wrap: wrap;
+}
+
+.card-header.has-multi-photos .card-photo {
+    width: 100%;
+    height: auto;
+    order: -1;
+    margin-bottom: 8px;
+}
+
+.card-header.has-multi-photos .card-photo-scroll {
+    width: 100%;
+    padding-bottom: 8px;
+}
+
+.card-header.has-multi-photos .card-photo-scroll .scroll-thumb {
+    width: 80px;
+    height: 80px;
 }
 
 .card-photo {
-    width: 60px;
-    height: 60px;
+    width: 70px;
+    height: 70px;
     flex-shrink: 0;
+    position: relative;
 }
 
-.card-photo img {
+.card-photo-single img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     border-radius: 8px;
+    cursor: pointer;
+}
+
+/* スマホ用横スクロール画像 */
+.card-photo-scroll {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+}
+
+.card-photo-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.card-photo-scroll .scroll-thumb {
+    width: 70px;
+    height: 70px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    object-fit: cover;
+    scroll-snap-align: start;
+    cursor: pointer;
 }
 
 .card-photo .no-photo {
@@ -836,6 +1028,17 @@
     justify-content: center;
     font-size: 1.5rem;
     color: #94a3b8;
+}
+
+.card-photo-count {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 0.6rem;
+    padding: 1px 4px;
+    border-radius: 3px;
 }
 
 .card-title {
@@ -1515,7 +1718,12 @@
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
                         {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
+                        <div class="photo-cell" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, 0, '{{ item.product_name | e }}')">
+                            <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
+                            {% if item.all_photos|length > 1 %}
+                            <span class="photo-count-badge">{{ item.all_photos|length }}</span>
+                            {% endif %}
+                        </div>
                         {% else %}
                         <div class="no-thumb">-</div>
                         {% endif %}
@@ -1643,10 +1851,18 @@
          data-sale-price="{{ item.sale_price or 0 }}"
          data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
          data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
-        <div class="card-header">
+        <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
             <div class="card-photo">
-                {% if item.photo_path %}
-                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% if item.all_photos and item.all_photos|length > 1 %}
+                <div class="card-photo-scroll">
+                    {% for photo in item.all_photos %}
+                    <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt="" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, {{ loop.index0 }}, '{{ item.product_name | e }}')">
+                    {% endfor %}
+                </div>
+                {% elif item.photo_path %}
+                <div class="card-photo-single" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, 0, '{{ item.product_name | e }}')">
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                </div>
                 {% else %}
                 <div class="no-photo">-</div>
                 {% endif %}
@@ -2334,4 +2550,88 @@ function cancelSaleRequest() {
 }
 </script>
 {% endif %}
+
+<!-- 商品一覧用ライトボックス -->
+<div class="item-lightbox" id="itemLightbox">
+    <button class="item-lightbox-close" onclick="closeItemLightbox()">×</button>
+    <button class="item-lightbox-nav item-lightbox-prev" onclick="itemLightboxPrev()">‹</button>
+    <button class="item-lightbox-nav item-lightbox-next" onclick="itemLightboxNext()">›</button>
+    <div class="item-lightbox-content">
+        <img id="itemLightboxImage" src="" alt="">
+        <div class="item-lightbox-counter" id="itemLightboxCounter"></div>
+        <div class="item-lightbox-info" id="itemLightboxInfo"></div>
+    </div>
+</div>
+
+<script>
+// 商品一覧用ライトボックス
+let itemLightboxPhotos = [];
+let itemLightboxIndex = 0;
+let itemLightboxName = '';
+
+function openItemLightbox(photos, index, productName) {
+    if (!photos || photos.length === 0) return;
+    
+    itemLightboxPhotos = photos;
+    itemLightboxIndex = index;
+    itemLightboxName = productName || '';
+    
+    updateItemLightbox();
+    document.getElementById('itemLightbox').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeItemLightbox() {
+    document.getElementById('itemLightbox').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function updateItemLightbox() {
+    const img = document.getElementById('itemLightboxImage');
+    const counter = document.getElementById('itemLightboxCounter');
+    const info = document.getElementById('itemLightboxInfo');
+    
+    img.src = '/static/' + itemLightboxPhotos[itemLightboxIndex];
+    counter.textContent = (itemLightboxIndex + 1) + ' / ' + itemLightboxPhotos.length;
+    info.textContent = itemLightboxName;
+    
+    // 1枚しかない場合はナビゲーションボタンを非表示
+    const prevBtn = document.querySelector('.item-lightbox-prev');
+    const nextBtn = document.querySelector('.item-lightbox-next');
+    if (itemLightboxPhotos.length <= 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        counter.style.display = 'none';
+    } else {
+        prevBtn.style.display = 'block';
+        nextBtn.style.display = 'block';
+        counter.style.display = 'block';
+    }
+}
+
+function itemLightboxPrev() {
+    itemLightboxIndex = (itemLightboxIndex - 1 + itemLightboxPhotos.length) % itemLightboxPhotos.length;
+    updateItemLightbox();
+}
+
+function itemLightboxNext() {
+    itemLightboxIndex = (itemLightboxIndex + 1) % itemLightboxPhotos.length;
+    updateItemLightbox();
+}
+
+// キーボードナビゲーション
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('itemLightbox');
+    if (!lightbox.classList.contains('active')) return;
+    
+    if (e.key === 'Escape') closeItemLightbox();
+    if (e.key === 'ArrowLeft') itemLightboxPrev();
+    if (e.key === 'ArrowRight') itemLightboxNext();
+});
+
+// ライトボックス外クリックで閉じる
+document.getElementById('itemLightbox').addEventListener('click', function(e) {
+    if (e.target === this) closeItemLightbox();
+});
+</script>
 {% endblock %}

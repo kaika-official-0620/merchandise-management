@@ -201,6 +201,19 @@
     text-align: center;
 }
 
+/* テーブルセルの折り返し防止 */
+.admin-table td,
+.admin-table th {
+    white-space: nowrap;
+}
+
+/* メールアドレスは折り返し可 */
+.admin-table td:nth-child(4) {
+    white-space: normal;
+    word-break: break-all;
+    max-width: 200px;
+}
+
 .fee-badge {
     display: inline-block;
     padding: 4px 10px;

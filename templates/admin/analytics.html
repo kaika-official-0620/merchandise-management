@@ -101,7 +101,9 @@
         </div>
         <div class="kaika-chart-container">
             <h3>月別推移</h3>
-            <canvas id="kaikaFeeChart" width="400" height="200"></canvas>
+            <div style="position: relative; width: 100%; max-width: 100%;">
+                <canvas id="kaikaFeeChart"></canvas>
+            </div>
         </div>
     </div>
 </div>
@@ -518,11 +520,34 @@
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 1.5rem;
+    overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .kaika-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .kaika-fee-section {
+        padding: 1rem;
+    }
+    
+    .kaika-chart-container {
+        padding: 0.75rem;
+    }
+    
+    .kaika-item {
+        padding: 8px 10px;
+    }
+    
+    .kaika-service {
+        font-size: 0.8rem;
+    }
+    
+    .kaika-amount {
+        font-size: 0.85rem;
     }
 }
 
@@ -565,6 +590,13 @@
     border-radius: 10px;
     padding: 1rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+    min-width: 0;
+}
+
+.kaika-chart-container canvas {
+    max-width: 100% !important;
+    height: auto !important;
 }
 
 .widget-section {
@@ -955,6 +987,7 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
+                aspectRatio: window.innerWidth < 480 ? 1.2 : 2,
                 interaction: {
                     mode: 'index',
                     intersect: false

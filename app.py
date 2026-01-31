@@ -2526,6 +2526,18 @@ def index():
                 item_dict.get('expected_shipping', 0) or 0,
                 item_dict.get('expected_commission', 0) or 0
             )
+        
+        # 全画像リスト（メイン + 追加）
+        item_dict['all_photos'] = []
+        if item_dict.get('photo_path'):
+            item_dict['all_photos'].append(item_dict['photo_path'])
+        if item_dict.get('additional_photos'):
+            try:
+                additional_list = json.loads(item_dict['additional_photos'])
+                item_dict['all_photos'].extend(additional_list)
+            except:
+                pass
+        
         processed_items.append(item_dict)
     
     # アクティブなお知らせを取得
