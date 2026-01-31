@@ -1717,9 +1717,9 @@
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
-                        {% if item.photo_path %}
-                        <div class="photo-cell" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, 0, '{{ item.product_name | e }}')">
-                            <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
+                        {% if item.all_photos and item.all_photos|length > 0 %}
+                        <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}' data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
+                            <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="">
                             {% if item.all_photos|length > 1 %}
                             <span class="photo-count-badge">{{ item.all_photos|length }}</span>
                             {% endif %}
@@ -1854,14 +1854,14 @@
         <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
             <div class="card-photo">
                 {% if item.all_photos and item.all_photos|length > 1 %}
-                <div class="card-photo-scroll">
+                <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}' data-name="{{ item.product_name | e }}">
                     {% for photo in item.all_photos %}
-                    <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt="" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, {{ loop.index0 }}, '{{ item.product_name | e }}')">
+                    <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt="" onclick="openItemLightboxFromParent(this, {{ loop.index0 }})">
                     {% endfor %}
                 </div>
-                {% elif item.photo_path %}
-                <div class="card-photo-single" onclick="openItemLightbox({{ item.all_photos | tojson | e }}, 0, '{{ item.product_name | e }}')">
-                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% elif item.all_photos and item.all_photos|length == 1 %}
+                <div class="card-photo-single" data-photos='{{ item.all_photos | tojson }}' data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="">
                 </div>
                 {% else %}
                 <div class="no-photo">-</div>
@@ -2568,6 +2568,37 @@ function cancelSaleRequest() {
 let itemLightboxPhotos = [];
 let itemLightboxIndex = 0;
 let itemLightboxName = '';
+
+// data属性から画像リストを取得して開く
+function openItemLightboxFromData(element, index) {
+    try {
+        const photosData = element.getAttribute('data-photos');
+        const productName = element.getAttribute('data-name') || '';
+        if (photosData) {
+            const photos = JSON.parse(photosData);
+            openItemLightbox(photos, index, productName);
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
+
+// 親要素のdata属性から画像リストを取得して開く
+function openItemLightboxFromParent(element, index) {
+    try {
+        const parent = element.closest('[data-photos]');
+        if (parent) {
+            const photosData = parent.getAttribute('data-photos');
+            const productName = parent.getAttribute('data-name') || '';
+            if (photosData) {
+                const photos = JSON.parse(photosData);
+                openItemLightbox(photos, index, productName);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
 
 function openItemLightbox(photos, index, productName) {
     if (!photos || photos.length === 0) return;

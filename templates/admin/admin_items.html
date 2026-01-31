@@ -250,6 +250,12 @@
     height: 50px;
     object-fit: cover;
     border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.table-thumb:hover {
+    transform: scale(1.1);
 }
 
 .no-thumb {
@@ -261,6 +267,87 @@
     align-items: center;
     justify-content: center;
     color: #94a3b8;
+}
+
+/* 複数画像バッジ */
+.photo-cell {
+    position: relative;
+}
+.photo-count-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 0.6rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* ライトボックス */
+.lightbox-gallery {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+}
+.lightbox-gallery.active {
+    display: flex;
+}
+.lightbox-gallery-content {
+    max-width: 90vw;
+    max-height: 85vh;
+}
+.lightbox-gallery-img {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+}
+.lightbox-gallery-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 2.5rem;
+    cursor: pointer;
+    z-index: 10001;
+}
+.lightbox-gallery-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 2rem;
+    padding: 20px 15px;
+    cursor: pointer;
+    z-index: 10001;
+}
+.lightbox-gallery-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+.lightbox-gallery-prev {
+    left: 10px;
+}
+.lightbox-gallery-next {
+    right: 10px;
+}
+.lightbox-gallery-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 1rem;
 }
 
 /* ステータスバッジ */
@@ -518,6 +605,7 @@
     width: 60px;
     height: 60px;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .admin-card-photo img {
@@ -525,6 +613,7 @@
     height: 100%;
     object-fit: cover;
     border-radius: 6px;
+    cursor: pointer;
 }
 
 .admin-card-photo .no-photo {
@@ -537,6 +626,34 @@
     color: #94a3b8;
     border-radius: 6px;
     font-size: 0.8rem;
+}
+
+/* スマホ用横スクロール画像 */
+.card-photo-scroll {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+}
+.card-photo-scroll::-webkit-scrollbar {
+    display: none;
+}
+.card-photo-scroll img {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    scroll-snap-align: start;
+    cursor: pointer;
+}
+
+/* 複数画像ありのカード写真エリアを広げる */
+.admin-card-header.has-multi-photos .admin-card-photo {
+    width: 140px;
 }
 
 .admin-card-title {
@@ -814,9 +931,14 @@
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
                     </td>
-                    <td>
-                        {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" class="table-thumb" alt="">
+                    <td class="photo-cell">
+                        {% if item.all_photos and item.all_photos|length > 0 %}
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
+                             data-photos='{{ item.all_photos | tojson }}'
+                             onclick="openLightboxFromData(this, 0)">
+                        {% if item.all_photos|length > 1 %}
+                        <span class="photo-count-badge">{{ item.all_photos|length }}</span>
+                        {% endif %}
                         {% else %}
                         <div class="no-thumb">-</div>
                         {% endif %}
@@ -886,13 +1008,22 @@
 <div class="mobile-cards">
     {% for item in items %}
     <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
-        <div class="admin-card-header">
+        <div class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
             <div class="admin-card-checkbox">
                 <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
             </div>
             <div class="admin-card-photo">
-                {% if item.photo_path %}
-                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                {% if item.all_photos and item.all_photos|length > 1 %}
+                <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
+                    {% for photo in item.all_photos %}
+                    <img src="{{ url_for('static', filename=photo) }}" alt="" 
+                         onclick="openLightboxFromParent(this, {{ loop.index0 }})">
+                    {% endfor %}
+                </div>
+                {% elif item.all_photos and item.all_photos|length == 1 %}
+                <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
+                     data-photos='{{ item.all_photos | tojson }}'
+                     onclick="openLightboxFromData(this, 0)">
                 {% else %}
                 <div class="no-photo">-</div>
                 {% endif %}
@@ -1226,5 +1357,106 @@ function sortTable(column, ascending) {
     
     rows.forEach(row => tbody.appendChild(row));
 }
+
+// ========== ライトボックス機能 ==========
+let currentPhotos = [];
+let currentIndex = 0;
+
+// data属性から画像リストを取得して開く
+function openLightboxFromData(element, index) {
+    try {
+        const photosData = element.getAttribute('data-photos');
+        if (photosData) {
+            const photos = JSON.parse(photosData);
+            openLightboxGallery(photos, index);
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
+
+// 親要素のdata属性から画像リストを取得して開く
+function openLightboxFromParent(element, index) {
+    try {
+        const parent = element.closest('[data-photos]');
+        if (parent) {
+            const photosData = parent.getAttribute('data-photos');
+            if (photosData) {
+                const photos = JSON.parse(photosData);
+                openLightboxGallery(photos, index);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
+
+function openLightboxGallery(photos, index) {
+    if (!photos || photos.length === 0) return;
+    currentPhotos = photos;
+    currentIndex = index;
+    updateLightboxImage();
+    document.getElementById('lightboxGallery').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightboxGallery() {
+    document.getElementById('lightboxGallery').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function lightboxGalleryPrev() {
+    currentIndex = (currentIndex - 1 + currentPhotos.length) % currentPhotos.length;
+    updateLightboxImage();
+}
+
+function lightboxGalleryNext() {
+    currentIndex = (currentIndex + 1) % currentPhotos.length;
+    updateLightboxImage();
+}
+
+function updateLightboxImage() {
+    const img = document.getElementById('lightboxGalleryImage');
+    img.src = '/static/' + currentPhotos[currentIndex];
+    document.getElementById('lightboxGalleryCounter').textContent = 
+        (currentIndex + 1) + ' / ' + currentPhotos.length;
+    
+    // ナビゲーションボタンの表示制御
+    const prevBtn = document.querySelector('.lightbox-gallery-prev');
+    const nextBtn = document.querySelector('.lightbox-gallery-next');
+    if (currentPhotos.length <= 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+    } else {
+        prevBtn.style.display = 'block';
+        nextBtn.style.display = 'block';
+    }
+}
+
+// キーボード操作
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('lightboxGallery');
+    if (!lightbox || !lightbox.classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightboxGallery();
+    if (e.key === 'ArrowLeft') lightboxGalleryPrev();
+    if (e.key === 'ArrowRight') lightboxGalleryNext();
+});
+
+// 背景クリックで閉じる
+document.getElementById('lightboxGallery')?.addEventListener('click', function(e) {
+    if (e.target === this) closeLightboxGallery();
+});
 </script>
+
+<!-- ライトボックス -->
+<div class="lightbox-gallery" id="lightboxGallery">
+    <button class="lightbox-gallery-close" onclick="closeLightboxGallery()">×</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-prev" onclick="lightboxGalleryPrev()">‹</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-next" onclick="lightboxGalleryNext()">›</button>
+    <div class="lightbox-gallery-content">
+        <img id="lightboxGalleryImage" class="lightbox-gallery-img" src="" alt="">
+    </div>
+    <div class="lightbox-gallery-counter" id="lightboxGalleryCounter"></div>
+</div>
+
 {% endblock %}

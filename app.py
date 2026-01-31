@@ -8286,6 +8286,18 @@ def admin_items():
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                
+                # 全画像リスト（メイン + 追加）
+                item_dict['all_photos'] = []
+                if item_dict.get('photo_path'):
+                    item_dict['all_photos'].append(item_dict['photo_path'].replace('\\', '/'))
+                if item_dict.get('additional_photos'):
+                    try:
+                        additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+                        item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
+                    except:
+                        pass
+                
                 items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
@@ -8320,6 +8332,18 @@ def admin_items():
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                
+                # 全画像リスト（メイン + 追加）
+                item_dict['all_photos'] = []
+                if item_dict.get('photo_path'):
+                    item_dict['all_photos'].append(item_dict['photo_path'].replace('\\', '/'))
+                if item_dict.get('additional_photos'):
+                    try:
+                        additional = json.loads(item_dict['additional_photos']) if isinstance(item_dict['additional_photos'], str) else item_dict['additional_photos']
+                        item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
+                    except:
+                        pass
+                
                 items.append(item_dict)
         
         cur.close()
@@ -8727,6 +8751,41 @@ def admin_transfer_item(id):
     target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
     flash(f'商品を「{target_name}」に転送しました', 'success')
     return redirect(url_for('admin_items'))
+
+@app.route('/admin/items/<int:id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_item(id):
+    """管理者による商品削除"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM merchandise WHERE id = %s", (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM merchandise WHERE id = ?", (id,))
+    
+    item = cur.fetchone()
+    if not item:
+        cur.close()
+        conn.close()
+        flash('商品が見つかりません', 'error')
+        return redirect(request.referrer or url_for('admin_user_products'))
+    
+    item_dict = dict(item)
+    product_name = item_dict.get('product_name', '不明')
+    
+    # 削除実行
+    if DATABASE_URL:
+        cur.execute("DELETE FROM merchandise WHERE id = %s", (id,))
+    else:
+        cur.execute("DELETE FROM merchandise WHERE id = ?", (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    flash(f'商品「{product_name}」を削除しました', 'info')
+    return redirect(request.referrer or url_for('admin_user_products'))
 
 @app.route('/admin/items/transfer-bulk', methods=['POST'])
 @login_required

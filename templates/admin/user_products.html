@@ -747,6 +747,15 @@
     background: #2563eb;
 }
 
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
 /* スマホ（768px以下）でカード表示に切り替え */
 @media (max-width: 768px) {
     .table-container {
@@ -986,6 +995,7 @@
                         <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                         <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                         <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+                        <button class="btn btn-sm btn-danger" onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
                     </td>
                 </tr>
                 {% else %}
@@ -1076,6 +1086,7 @@
                 <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                 <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                 <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+                <button class="btn btn-sm btn-danger" onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
             </div>
         </div>
     </div>
@@ -1088,6 +1099,26 @@
     {% endfor %}
     <div class="table-info" style="padding: 12px; text-align: center; color: #64748b; font-size: 0.85rem;">
         全{{ items|length }}件
+    </div>
+</div>
+
+<!-- 削除確認モーダル -->
+<div id="delete-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品を削除</h2>
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <form id="delete-form" method="POST">
+            <div class="modal-body">
+                <p style="color: #ef4444; margin-bottom: 1rem;">⚠️ この操作は取り消せません</p>
+                <p id="delete-item-name" style="font-weight: 500;"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button type="submit" class="btn btn-danger">削除する</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -1281,6 +1312,25 @@ function openTransferModal(itemId, itemName) {
 function closeTransferModal() {
     document.getElementById('transfer-modal').style.display = 'none';
 }
+
+function openDeleteModal(itemId, itemName) {
+    const modal = document.getElementById('delete-modal');
+    const form = document.getElementById('delete-form');
+    const nameEl = document.getElementById('delete-item-name');
+    
+    form.action = '/admin/items/' + itemId + '/delete';
+    nameEl.textContent = '商品: ' + itemName + ' を削除しますか？';
+    modal.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').style.display = 'none';
+}
+
+// モーダル外クリックで閉じる（削除モーダル）
+document.getElementById('delete-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+});
 
 function toggleSelectAll() {
     const selectAll = document.getElementById('select-all');
