@@ -2106,6 +2106,8 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
+        print(f"[DEBUG] ログイン試行: username={username}")
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2116,7 +2118,15 @@ def login():
         
         user = cur.fetchone()
         
-        if user and check_password_hash(user['password_hash'], password):
+        if user:
+            print(f"[DEBUG] ユーザー発見: id={user['id']}, password_hash={user['password_hash'][:30]}...")
+            password_check = check_password_hash(user['password_hash'], password)
+            print(f"[DEBUG] パスワード検証結果: {password_check}")
+        else:
+            print(f"[DEBUG] ユーザーが見つかりません: {username}")
+            password_check = False
+        
+        if user and password_check:
             # ログイン日時更新
             if DATABASE_URL:
                 cur.execute("UPDATE users SET last_login = %s WHERE id = %s", 
@@ -4666,6 +4676,9 @@ def admin_edit_user(id):
         proxy_service_budget = request.form.get('proxy_service_budget', 0)
         tuition_exempt = request.form.get('tuition_exempt') == '1'
         
+        # デバッグログ
+        print(f"[DEBUG] admin_edit_user: id={id}, new_password入力あり={bool(new_password)}, 長さ={len(new_password) if new_password else 0}")
+        
         # 金額をint変換
         try:
             proxy_service_budget = int(proxy_service_budget) if proxy_service_budget else 0
@@ -4687,17 +4700,22 @@ def admin_edit_user(id):
         
         try:
             if new_password and len(new_password) >= 6:
+                print(f"[DEBUG] パスワード更新実行: user_id={id}")
+                hashed_password = generate_password_hash(new_password)
+                print(f"[DEBUG] ハッシュ生成完了: {hashed_password[:20]}...")
                 if DATABASE_URL:
                     cur.execute('''
                         UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, tuition_exempt, id))
+                    ''', (display_name, email, role, hashed_password, admin_permissions_json, proxy_service_budget, tuition_exempt, id))
                 else:
                     cur.execute('''
                         UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, generate_password_hash(new_password), admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
+                    ''', (display_name, email, role, hashed_password, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
+                print(f"[DEBUG] UPDATE実行完了、rowcount={cur.rowcount}")
             else:
+                print(f"[DEBUG] パスワード更新なし（空または6文字未満）")
                 if DATABASE_URL:
                     cur.execute('''
                         UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
@@ -4710,10 +4728,14 @@ def admin_edit_user(id):
                     ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
             
             conn.commit()
+            print(f"[DEBUG] commit完了")
             flash('ユーザー情報を更新しました', 'success')
             return redirect(url_for('admin_users'))
         except Exception as e:
-            flash('メールアドレスが既に使用されています', 'error')
+            print(f"[ERROR] admin_edit_user例外: {e}")
+            import traceback
+            traceback.print_exc()
+            flash(f'エラーが発生しました: {str(e)}', 'error')
         finally:
             cur.close()
             conn.close()

@@ -22,6 +22,7 @@
                     <th>当月商品数<br><small style="font-weight:normal;color:#64748b;">月末締め</small></th>
                     <th>月額利用料</th>
                     <th>開花手数料<br><small style="font-weight:normal;color:#64748b;">累計</small></th>
+                    <th>利用可能金額</th>
                     <th>登録日</th>
                     <th>最終ログイン</th>
                     <th>操作</th>
@@ -74,6 +75,15 @@
                             ¥{{ "{:,}".format(user.kaika_fee|int) }}
                         </span>
                     </td>
+                    <td class="text-center">
+                        {% if user.proxy_service_budget and user.proxy_service_budget > 0 %}
+                        <span class="budget-badge">
+                            ¥{{ "{:,}".format(user.proxy_service_budget|int) }}
+                        </span>
+                        {% else %}
+                        <span class="exempt-na">-</span>
+                        {% endif %}
+                    </td>
                     <td>{{ (user.created_at|string)[:10] if user.created_at else '-' }}</td>
                     <td>{{ (user.last_login|string)[:10] if user.last_login else '-' }}</td>
                     <td>
@@ -109,7 +119,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="12" class="empty-cell">ユーザーがいません</td>
+                    <td colspan="13" class="empty-cell">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -225,6 +235,16 @@
     font-size: 0.875rem;
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     color: #b45309;
+    border-radius: 4px;
+}
+
+.budget-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    font-weight: bold;
+    font-size: 0.875rem;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1d4ed8;
     border-radius: 4px;
 }
 
