@@ -8379,6 +8379,27 @@ def admin_items():
             item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
         else:
             item['updated_by_name'] = '-'
+        
+        # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
+        if current_user.is_owner():
+            item['can_delete'] = True
+        else:
+            # 管理者の場合、登録から1日以内かチェック
+            created_at = item.get('created_at')
+            can_delete = False
+            if created_at:
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            created_at = datetime.strptime(created_at[:19], '%Y-%m-%dT%H:%M:%S')
+                        except:
+                            created_at = None
+                if created_at:
+                    diff = datetime.now() - created_at
+                    can_delete = diff.days < 1
+            item['can_delete'] = can_delete
     
     return render_template('admin/admin_items.html', 
                           items=items, 
@@ -8521,6 +8542,27 @@ def admin_user_products():
             item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
         else:
             item['updated_by_name'] = '-'
+        
+        # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
+        if current_user.is_owner():
+            item['can_delete'] = True
+        else:
+            # 管理者の場合、登録から1日以内かチェック
+            created_at = item.get('created_at')
+            can_delete = False
+            if created_at:
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            created_at = datetime.strptime(created_at[:19], '%Y-%m-%dT%H:%M:%S')
+                        except:
+                            created_at = None
+                if created_at:
+                    diff = datetime.now() - created_at
+                    can_delete = diff.days < 1
+            item['can_delete'] = can_delete
     
     return render_template('admin/user_products.html', 
                           items=items, 
@@ -8756,7 +8798,10 @@ def admin_transfer_item(id):
 @login_required
 @admin_required
 def admin_delete_item(id):
-    """管理者による商品削除"""
+    """管理者による商品削除
+    - オーナー: いつでも削除可能
+    - 管理者: 商品登録から1日以内のみ削除可能
+    """
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -8774,6 +8819,29 @@ def admin_delete_item(id):
     
     item_dict = dict(item)
     product_name = item_dict.get('product_name', '不明')
+    
+    # オーナーでない場合（管理者の場合）、登録から1日以内かチェック
+    if not current_user.is_owner():
+        created_at = item_dict.get('created_at')
+        if created_at:
+            # 文字列の場合はdatetimeに変換
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                except:
+                    try:
+                        created_at = datetime.strptime(created_at[:19], '%Y-%m-%dT%H:%M:%S')
+                    except:
+                        created_at = None
+            
+            if created_at:
+                now = datetime.now()
+                diff = now - created_at
+                if diff.days >= 1:
+                    cur.close()
+                    conn.close()
+                    flash('登録から1日以上経過した商品は削除できません', 'error')
+                    return redirect(request.referrer or url_for('admin_user_products'))
     
     # 削除実行
     if DATABASE_URL:
