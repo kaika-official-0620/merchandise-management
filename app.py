@@ -13792,6 +13792,7 @@ def admin_stripe_subscribe(user_id):
             return jsonify({'success': False, 'error': '料金プランの作成に失敗しました'})
         
         # Checkout Session作成（サブスクリプションモード）
+        # 30日間の無料トライアル付き
         base_url = request.host_url.rstrip('/')
         session = stripe.checkout.Session.create(
             customer=stripe_customer_id,
@@ -13801,6 +13802,9 @@ def admin_stripe_subscribe(user_id):
                 'quantity': 1,
             }],
             mode='subscription',
+            subscription_data={
+                'trial_period_days': 30,  # 30日間無料トライアル
+            },
             success_url=f'{base_url}/admin/stripe/success?session_id={{CHECKOUT_SESSION_ID}}&user_id={user_id}',
             cancel_url=f'{base_url}/admin/stripe/cancel',
             metadata={
