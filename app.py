@@ -2146,9 +2146,9 @@ def login():
             if next_page:
                 return redirect(next_page)
             
-            # 管理者/オーナーの場合は管理者用商品一覧へ、一般ユーザーはダッシュボードへ
+            # 管理者/オーナーの場合は管理者商品一覧へ、一般ユーザーはダッシュボードへ
             if user['role'] in ['admin', 'owner']:
-                return redirect(url_for('admin_user_products'))
+                return redirect(url_for('admin_items'))
             else:
                 return redirect(url_for('index'))
         else:
