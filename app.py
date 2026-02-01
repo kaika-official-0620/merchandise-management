@@ -2100,6 +2100,9 @@ migrate_add_scope_column()
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
+        # 管理者/オーナーの場合は管理者商品一覧へ
+        if current_user.is_admin() or current_user.is_owner():
+            return redirect(url_for('admin_items'))
         return redirect(url_for('index'))
     
     if request.method == 'POST':
