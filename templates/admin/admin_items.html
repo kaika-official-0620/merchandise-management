@@ -570,191 +570,258 @@
     }
 }
 
-/* モバイル用カード表示 */
-.mobile-cards {
+/* モバイル用カード表示 - 横スワイプカルーセル */
+.mobile-cards-wrapper {
     display: none;
 }
 
-.admin-item-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    overflow: hidden;
-}
-
-.admin-item-card.card-sold {
-    opacity: 0.7;
-    background: #f8f8f8;
-}
-
-.admin-card-header {
-    display: flex;
-    padding: 12px;
-    gap: 12px;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.admin-card-checkbox {
-    display: flex;
-    align-items: flex-start;
-    padding-top: 4px;
-}
-
-.admin-card-photo {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
-    overflow: hidden;
-}
-
-.admin-card-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-.admin-card-photo .no-photo {
-    width: 100%;
-    height: 100%;
-    background: #f1f5f9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #94a3b8;
-    border-radius: 6px;
-    font-size: 0.8rem;
-}
-
-/* スマホ用横スクロール画像 */
-.card-photo-scroll {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    gap: 4px;
-    width: 100%;
-    height: 100%;
-}
-.card-photo-scroll::-webkit-scrollbar {
+/* スワイプインジケーター */
+.swipe-indicator {
     display: none;
 }
-.card-photo-scroll img {
-    flex-shrink: 0;
-    width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 6px;
-    scroll-snap-align: start;
-    cursor: pointer;
-}
 
-/* 複数画像ありのカード写真エリアを広げる */
-.admin-card-header.has-multi-photos .admin-card-photo {
-    width: 140px;
-}
-
-.admin-card-title {
-    flex: 1;
-    min-width: 0;
-}
-
-.admin-card-id {
-    font-size: 0.7rem;
-    color: #64748b;
-}
-
-.admin-card-title h3 {
-    margin: 4px 0;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #1e293b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.admin-card-owner {
-    font-size: 0.7rem;
-    color: #8b5cf6;
-    background: #f3e8ff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    display: inline-block;
-}
-
-.admin-card-body {
-    padding: 12px;
-}
-
-.admin-card-info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-.admin-card-info-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.admin-card-info-label {
-    font-size: 0.65rem;
-    color: #94a3b8;
-}
-
-.admin-card-info-value {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.admin-card-info-value.positive {
-    color: #10b981;
-}
-
-.admin-card-info-value.negative {
-    color: #ef4444;
-}
-
-.admin-card-footer {
-    padding: 8px 12px;
-    background: #f8fafc;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-}
-
-.admin-card-footer .btn {
-    padding: 6px 12px;
-    font-size: 0.75rem;
-}
-
-.admin-card-actions {
-    display: flex;
-    gap: 6px;
-}
-
-.btn-edit {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-edit:hover {
-    background: #2563eb;
-}
-
-/* スマホ（768px以下）でカード表示に切り替え */
+/* スマホ（768px以下）でカルーセル表示に切り替え */
 @media (max-width: 768px) {
     .table-container {
         display: none;
     }
     
-    .mobile-cards {
+    .mobile-cards-wrapper {
         display: block;
+        position: relative;
+    }
+    
+    .swipe-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: white;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+    
+    .swipe-indicator .current-index {
+        font-size: 1.2rem;
+        color: #10b981;
+    }
+    
+    .swipe-indicator .swipe-hint {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-left: 12px;
+    }
+    
+    .mobile-cards {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    
+    .mobile-cards::-webkit-scrollbar {
+        display: none;
+    }
+    
+    /* カードを1枚ずつフル幅で表示 */
+    .admin-item-card {
+        flex: 0 0 100%;
+        min-width: 100%;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+        background: white;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: hidden;
+    }
+    
+    .admin-item-card.card-sold {
+        opacity: 0.7;
+        background: #f8f8f8;
+    }
+    
+    /* カードヘッダーを縦並びに */
+    .admin-card-header {
+        flex-direction: column;
+        padding: 0;
+        gap: 0;
+        background: white;
+        border-bottom: none;
+        position: relative;
+    }
+    
+    /* 商品画像を大きく表示 */
+    .admin-card-photo {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 3 / 4;
+        background: #f8f8f8;
+    }
+    
+    .admin-card-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 0;
+        cursor: pointer;
+    }
+    
+    .admin-card-photo .no-photo {
+        width: 100%;
+        height: 100%;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+    
+    /* スマホ用横スクロール画像 */
+    .card-photo-scroll {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        gap: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .card-photo-scroll::-webkit-scrollbar {
+        display: none;
+    }
+    .card-photo-scroll img {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 0;
+        scroll-snap-align: start;
+        cursor: pointer;
+    }
+    
+    /* 複数画像ありのカード写真エリア */
+    .admin-card-header.has-multi-photos .admin-card-photo {
+        width: 100%;
+    }
+    
+    /* チェックボックスを画像の上に配置 */
+    .admin-card-checkbox {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        background: rgba(255,255,255,0.9);
+        padding: 6px;
+        border-radius: 4px;
+    }
+    
+    .admin-card-checkbox input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+    }
+    
+    /* 商品情報 */
+    .admin-card-title {
+        padding: 12px 16px 8px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .admin-card-id {
+        font-size: 0.7rem;
+        color: #94a3b8;
+    }
+    
+    .admin-card-title h3 {
+        margin: 4px 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        line-height: 1.3;
+    }
+    
+    .admin-card-owner {
+        font-size: 0.75rem;
+        color: #8b5cf6;
+        background: #f3e8ff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 4px;
+    }
+    
+    .admin-card-body {
+        padding: 8px 16px 16px;
+    }
+    
+    .admin-card-info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        text-align: center;
+        border-top: 1px solid #f1f5f9;
+        padding-top: 12px;
+    }
+    
+    .admin-card-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .admin-card-info-label {
+        font-size: 0.7rem;
+        color: #94a3b8;
+    }
+    
+    .admin-card-info-value {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    .admin-card-info-value.positive {
+        color: #10b981;
+    }
+    
+    .admin-card-info-value.negative {
+        color: #ef4444;
+    }
+    
+    .admin-card-footer {
+        padding: 12px 16px;
+        background: #f8fafc;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid #f1f5f9;
+    }
+    
+    .admin-card-footer .btn {
+        padding: 10px 20px;
+        font-size: 0.85rem;
+    }
+    
+    .admin-card-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-edit {
+        background: #3b82f6;
+        color: white;
+    }
+    
+    .btn-edit:hover {
+        background: #2563eb;
     }
 }
 </style>
@@ -1007,93 +1074,78 @@
     </div>
 </div>
 
-<!-- スマホ用カード表示 -->
-<div class="mobile-cards">
-    {% for item in items %}
-    <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
-        <div class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
-            <div class="admin-card-checkbox">
-                <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
-            </div>
-            <div class="admin-card-photo">
-                {% if item.all_photos and item.all_photos|length > 1 %}
-                <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
-                    {% for photo in item.all_photos %}
-                    <img src="{{ url_for('static', filename=photo) }}" alt="" 
-                         onclick="openLightboxFromParent(this, {{ loop.index0 }})">
-                    {% endfor %}
+<!-- スマホ用カード表示（横スワイプカルーセル） -->
+<div class="mobile-cards-wrapper">
+    <div class="swipe-indicator">
+        <span class="current-index">1</span> / <span class="total-count">{{ items|length }}</span>
+        <span class="swipe-hint">← スワイプで移動 →</span>
+    </div>
+    <div class="mobile-cards" id="mobileCards">
+        {% for item in items %}
+        <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
+            <div class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
+                <div class="admin-card-checkbox">
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
                 </div>
-                {% elif item.all_photos and item.all_photos|length == 1 %}
-                <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
-                     data-photos='{{ item.all_photos | tojson }}'
-                     onclick="openLightboxFromData(this, 0)">
+                <div class="admin-card-photo">
+                    {% if item.all_photos and item.all_photos|length > 1 %}
+                    <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
+                        {% for photo in item.all_photos %}
+                        <img src="{{ url_for('static', filename=photo) }}" alt="" 
+                             onclick="openLightboxFromParent(this, {{ loop.index0 }})">
+                        {% endfor %}
+                    </div>
+                    {% elif item.all_photos and item.all_photos|length == 1 %}
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
+                         data-photos='{{ item.all_photos | tojson }}'
+                         onclick="openLightboxFromData(this, 0)">
+                    {% else %}
+                    <div class="no-photo">-</div>
+                    {% endif %}
+                </div>
+                <div class="admin-card-title">
+                    <span class="admin-card-id">#{{ item.id }}</span>
+                    <h3>{{ item.product_name or '-' }}</h3>
+                    <span class="admin-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
+                </div>
+            </div>
+            <div class="admin-card-body">
+                <div class="admin-card-info-grid">
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">仕入</span>
+                        <span class="admin-card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">出品</span>
+                        <span class="admin-card-info-value">{% if item.listing_price %}¥{{ "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">売上</span>
+                        <span class="admin-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-card-footer">
+                {% if item.sale_date %}
+                <span class="status-badge sold">売却済</span>
+                {% elif item.is_listed %}
+                <span class="status-badge listed">出品中</span>
                 {% else %}
-                <div class="no-photo">-</div>
+                <span class="status-badge unlisted">未出品</span>
                 {% endif %}
-            </div>
-            <div class="admin-card-title">
-                <span class="admin-card-id">#{{ item.id }}</span>
-                <h3>{{ item.product_name or '-' }}</h3>
-                <span class="admin-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
-            </div>
-        </div>
-        <div class="admin-card-body">
-            <div class="admin-card-info-grid">
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">ブランド</span>
-                    <span class="admin-card-info-value">{{ item.brand_name or '-' }}</span>
-                </div>
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">仕入日</span>
-                    <span class="admin-card-info-value">{{ item.purchase_date or '-' }}</span>
-                </div>
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">仕入額</span>
-                    <span class="admin-card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
-                </div>
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">出品価格</span>
-                    <span class="admin-card-info-value">{% if item.listing_price %}¥{{ "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
-                </div>
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">売上</span>
-                    <span class="admin-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
-                </div>
-                <div class="admin-card-info-item">
-                    <span class="admin-card-info-label">利益</span>
-                    <span class="admin-card-info-value {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
-                        {% if item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
-                    </span>
+                <div class="admin-card-actions">
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                 </div>
             </div>
         </div>
-        <div class="admin-card-footer">
-            {% if item.sale_date %}
-            <span class="status-badge sold">売却済</span>
-            {% elif item.is_listed %}
-            <span class="status-badge listed">出品中</span>
-            {% else %}
-            <span class="status-badge unlisted">未出品</span>
-            {% endif %}
-            <div class="admin-card-actions">
-                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
-                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
-                <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
-                {% if item.can_delete %}
-                <button class="btn btn-sm btn-danger" onclick="confirmDelete({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
-                {% endif %}
+        {% else %}
+        <div class="admin-item-card">
+            <div class="admin-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                管理者の商品がありません
             </div>
         </div>
-    </div>
-    {% else %}
-    <div class="admin-item-card">
-        <div class="admin-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
-            管理者の商品がありません
-        </div>
-    </div>
-    {% endfor %}
-    <div class="table-info" style="padding: 12px; text-align: center; color: #64748b; font-size: 0.85rem;">
-        全{{ items|length }}件
+        {% endfor %}
     </div>
 </div>
 
@@ -1491,6 +1543,22 @@ document.addEventListener('keydown', function(e) {
 // 背景クリックで閉じる
 document.getElementById('lightboxGallery')?.addEventListener('click', function(e) {
     if (e.target === this) closeLightboxGallery();
+});
+
+// スワイプカルーセルのインジケーター更新
+document.addEventListener('DOMContentLoaded', function() {
+    const mobileCards = document.getElementById('mobileCards');
+    const currentIndex = document.querySelector('.current-index');
+    const totalCount = document.querySelector('.total-count');
+    
+    if (mobileCards && currentIndex) {
+        mobileCards.addEventListener('scroll', function() {
+            const cardWidth = mobileCards.offsetWidth;
+            const scrollLeft = mobileCards.scrollLeft;
+            const index = Math.round(scrollLeft / cardWidth) + 1;
+            currentIndex.textContent = index;
+        });
+    }
 });
 </script>
 
