@@ -2087,7 +2087,7 @@
                 {% endif %}
             </div>
             <div class="card-title">
-                <span class="card-id">#{{ item.id }}</span>
+                <span class="card-id">{{ item.kaika_product_code or '-' }}</span>
                 <h3>{{ item.product_name or '-' }}</h3>
                 <div class="card-brand">
                     {{ item.brand_name or '-' }}

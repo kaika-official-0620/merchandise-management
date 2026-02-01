@@ -699,7 +699,10 @@
     }
     
     .user-card-id {
-        display: none;
+        display: block;
+        font-size: 0.6rem;
+        color: #94a3b8;
+        margin-bottom: 2px;
     }
     
     .user-card-title h3 {
@@ -1057,7 +1060,7 @@
                     {% endif %}
                 </div>
                 <div class="user-card-title">
-                    <span class="user-card-id">#{{ item.id }}</span>
+                    <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
                     <h3>{{ item.product_name or '-' }}</h3>
                     <span class="user-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
                 </div>
