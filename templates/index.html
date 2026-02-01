@@ -887,7 +887,7 @@
    レスポンシブ表示切替
    ==================== */
 
-/* スマホ用カード表示 - 縦スクロール・大画像 */
+/* スマホ用カード表示 - 3列グリッド */
 .mobile-cards-wrapper {
     display: none;
 }
@@ -903,7 +903,7 @@
         display: none;
     }
     
-    /* スマホ用カード表示を有効化 - 縦スクロール */
+    /* スマホ用カード表示を有効化 */
     .mobile-cards-wrapper {
         display: block;
     }
@@ -913,9 +913,13 @@
         display: none;
     }
     
+    /* 3列グリッドで表示 */
     .mobile-cards {
-        display: block;
-        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        padding: 2px;
+        background: #f1f5f9;
     }
     
     .mobile-only {
@@ -937,18 +941,17 @@
         flex-wrap: nowrap;
     }
     
-    /* カードを縦に並べて表示 */
+    /* コンパクトなカード */
     .item-card {
         background: white;
         border: none;
-        border-bottom: 8px solid #f1f5f9;
         border-radius: 0;
         margin-bottom: 0;
         box-shadow: none;
         overflow: hidden;
     }
     
-    /* カードヘッダーを縦並びに（画像を上に） */
+    /* カードヘッダー */
     .card-header {
         display: flex;
         flex-direction: column;
@@ -967,11 +970,11 @@
         margin-bottom: 0;
     }
     
-    /* 画像を大きく表示 */
+    /* 正方形の画像 */
     .card-photo {
         width: 100%;
         height: auto;
-        aspect-ratio: 3 / 4;
+        aspect-ratio: 1 / 1;
         background: #f1f5f9;
         order: -1;
     }
@@ -1026,44 +1029,51 @@
     
     .card-photo .no-photo {
         border-radius: 0;
-        font-size: 3rem;
+        font-size: 1.5rem;
     }
     
     /* ステータスバッジを画像上に配置 */
     .card-status {
         position: absolute;
-        top: 12px;
-        right: 12px;
+        top: 4px;
+        right: 4px;
         z-index: 10;
     }
     
-    /* 商品情報 */
+    .card-status .status-badge {
+        font-size: 0.55rem;
+        padding: 2px 4px;
+    }
+    
+    /* 商品情報 - コンパクト */
     .card-title {
-        padding: 16px;
+        padding: 6px;
         width: 100%;
         box-sizing: border-box;
     }
     
     .card-id {
-        font-size: 0.7rem;
-        color: #94a3b8;
+        display: none;
     }
     
     .card-title h3 {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin: 4px 0 8px;
-        white-space: normal;
+        font-size: 0.7rem;
+        font-weight: 500;
+        margin: 0;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
     
     .card-brand {
-        font-size: 0.9rem;
-        color: #64748b;
+        display: none;
     }
     
-    /* カード本体の詳細情報 */
+    /* カード本体の詳細情報 - コンパクト */
     .card-body {
-        padding: 0 16px 16px;
+        padding: 0 6px 6px;
         background: white;
     }
     
@@ -1071,18 +1081,32 @@
         display: none;
     }
     
-    /* 価格表示 */
+    /* 価格表示 - コンパクト */
     .card-prices {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        text-align: center;
-        padding-top: 12px;
-        border-top: 1px solid #f1f5f9;
+        display: block;
+    }
+    
+    .card-prices .price-item {
+        display: none;
+    }
+    
+    /* 仕入価格のみ表示 */
+    .card-prices .price-item:first-child {
+        display: block;
+    }
+    
+    .card-prices .price-item .price-label {
+        display: none;
+    }
+    
+    .card-prices .price-item .price-value {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #1e293b;
     }
     
     .card-prices.three-col {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr;
     }
     
     .price-item {

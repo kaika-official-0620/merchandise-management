@@ -570,7 +570,7 @@
     }
 }
 
-/* モバイル用カード表示 - 縦スクロール・大画像 */
+/* モバイル用カード表示 - 3列グリッド */
 .mobile-cards-wrapper {
     display: none;
 }
@@ -589,16 +589,19 @@
         display: none;
     }
     
+    /* 3列グリッドで表示 */
     .mobile-cards {
-        display: block;
-        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        padding: 2px;
+        background: #f1f5f9;
     }
     
-    /* カードを縦に並べて表示 */
+    /* コンパクトなカード */
     .user-item-card {
         background: white;
         border: none;
-        border-bottom: 8px solid #f1f5f9;
         border-radius: 0;
         margin-bottom: 0;
         overflow: hidden;
@@ -610,7 +613,7 @@
         background: #f8f8f8;
     }
     
-    /* カードヘッダーを縦並びに（画像を上に） */
+    /* カードヘッダー */
     .user-card-header {
         display: flex;
         flex-direction: column;
@@ -620,11 +623,11 @@
         position: relative;
     }
     
-    /* 商品画像を大きく表示 */
+    /* 正方形の画像 */
     .user-card-photo {
         width: 100%;
         height: auto;
-        aspect-ratio: 3 / 4;
+        aspect-ratio: 1 / 1;
         background: #f8f8f8;
     }
     
@@ -644,10 +647,10 @@
         align-items: center;
         justify-content: center;
         color: #94a3b8;
-        font-size: 3rem;
+        font-size: 1.5rem;
     }
     
-    /* スマホ用横スクロール画像 */
+    /* 複数画像は横スクロール */
     .card-photo-scroll {
         display: flex;
         overflow-x: auto;
@@ -671,82 +674,66 @@
         cursor: pointer;
     }
     
-    /* 複数画像ありのカード写真エリア */
     .user-card-header.has-multi-photos .user-card-photo {
         width: 100%;
     }
     
-    /* チェックボックスを画像上に配置 */
+    /* チェックボックスを非表示（グリッドでは操作しにくい） */
     .user-card-checkbox {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 10;
-        background: rgba(255,255,255,0.9);
-        padding: 6px;
-        border-radius: 4px;
+        display: none;
     }
     
-    .user-card-checkbox input[type="checkbox"] {
-        width: 20px;
-        height: 20px;
-    }
-    
-    /* 商品情報 */
+    /* 商品情報 - コンパクト */
     .user-card-title {
-        padding: 16px;
+        padding: 6px;
         width: 100%;
         box-sizing: border-box;
     }
     
     .user-card-id {
-        font-size: 0.7rem;
-        color: #94a3b8;
+        display: none;
     }
     
     .user-card-title h3 {
-        margin: 4px 0;
-        font-size: 1.1rem;
-        font-weight: 600;
+        margin: 0;
+        font-size: 0.7rem;
+        font-weight: 500;
         color: #1e293b;
-        white-space: normal;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
     
     .user-card-owner {
-        font-size: 0.75rem;
-        color: #059669;
-        background: #d1fae5;
-        padding: 2px 8px;
-        border-radius: 4px;
-        display: inline-block;
-        margin-top: 4px;
+        display: none;
     }
     
     .user-card-body {
-        padding: 0 16px 16px;
+        padding: 0 6px 6px;
     }
     
+    /* 価格のみコンパクト表示 */
     .user-card-info-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        text-align: center;
-        padding-top: 12px;
-        border-top: 1px solid #f1f5f9;
+        display: block;
     }
     
     .user-card-info-item {
-        display: flex;
-        flex-direction: column;
+        display: none;
+    }
+    
+    /* 仕入価格のみ表示 */
+    .user-card-info-item:first-child {
+        display: block;
     }
     
     .user-card-info-label {
-        font-size: 0.7rem;
-        color: #94a3b8;
+        display: none;
     }
     
     .user-card-info-value {
-        font-size: 0.9rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: #1e293b;
     }
@@ -759,24 +746,9 @@
         color: #ef4444;
     }
     
+    /* フッターを非表示 */
     .user-card-footer {
-        padding: 12px 16px;
-        background: #f8fafc;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 12px;
-        border-top: 1px solid #f1f5f9;
-    }
-    
-    .user-card-footer .btn {
-        padding: 10px 20px;
-        font-size: 0.85rem;
-    }
-    
-    .user-card-actions {
-        display: flex;
-        gap: 8px;
+        display: none;
     }
     
     .btn-edit {
