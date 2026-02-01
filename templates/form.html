@@ -267,7 +267,8 @@ input:disabled, select:disabled, textarea:disabled {
             {% if basic_readonly %}
             <div class="basic-readonly-notice">
                 <strong>⚠️ 基本情報は編集できません</strong>
-                仕入れ情報（仕入日〜支払方法、写真）はオーナーのみ編集可能です。売却情報のみ編集できます。
+                仕入れ情報（仕入日〜支払方法）はオーナーのみ編集可能です。<br>
+                <span style="color: #10b981;">✓ 商品写真の追加・削除は可能です。</span>
             </div>
             {% endif %}
             
@@ -379,12 +380,10 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
-                <label for="photo">メイン写真（1枚目）</label>
+                <label for="photo">メイン写真（1枚目）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
                 <div class="photo-upload-options">
-                    <input type="file" id="photo" name="photo" accept="image/*"
-                           {% if basic_readonly %}disabled{% endif %}>
-                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive" 
-                            {% if basic_readonly %}disabled{% endif %}>
+                <input type="file" id="photo" name="photo" accept="image/*">
+                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive">
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
                             <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
@@ -411,12 +410,10 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
-                <label for="additional_photos">追加写真（最大19枚）</label>
+                <label for="additional_photos">追加写真（最大19枚）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
                 <div class="photo-upload-options">
-                    <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple
-                           {% if basic_readonly %}disabled{% endif %}>
-                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive"
-                            {% if basic_readonly %}disabled{% endif %}>
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
+                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive">
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
                             <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
@@ -439,12 +436,10 @@ input:disabled, select:disabled, textarea:disabled {
                     <div class="additional-photo-item">
                         <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
                         <span class="photo-number">{{ loop.index + 1 }}枚目</span>
-                        {% if not basic_readonly %}
                         <label class="delete-checkbox">
                             <input type="checkbox" name="delete_photos" value="{{ photo }}">
                             <span>削除</span>
                         </label>
-                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>

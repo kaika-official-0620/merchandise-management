@@ -3817,187 +3817,327 @@ def edit_item(id):
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        # オーナーかどうかを判定
-        is_owner_user = current_user.is_owner()
-        
-        # 管理者（非オーナー）の場合、基本情報は元の値を維持
-        if is_owner_user:
-            # オーナーは全フィールド編集可能
-            photo_path = item['photo_path']
+        try:
+            # オーナーかどうかを判定
+            is_owner_user = current_user.is_owner()
             
-            # 既存の追加写真を取得
-            existing_additional = item.get('additional_photos')
-            if existing_additional:
-                try:
-                    additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
-                except:
+            # sqlite3.Rowをdictに変換（.get()を使用可能にする）
+            item_dict = dict(item)
+            
+            # 管理者（非オーナー）の場合、基本情報は元の値を維持
+            if is_owner_user:
+                # オーナーは全フィールド編集可能
+                photo_path = item_dict['photo_path']
+                
+                # 既存の追加写真を取得
+                existing_additional = item_dict.get('additional_photos')
+                if existing_additional:
+                    try:
+                        additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
+                    except:
+                        additional_photos = []
+                else:
                     additional_photos = []
-            else:
-                additional_photos = []
-            
-            # メイン写真の更新
-            if 'photo' in request.files:
-                file = request.files['photo']
-                if file and file.filename and allowed_file(file.filename):
-                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
-                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    photo_path = f'uploads/{filename}'
-            
-            # 追加写真の追加
-            if 'additional_photos' in request.files:
-                files = request.files.getlist('additional_photos')
-                for i, file in enumerate(files):
-                    if len(additional_photos) >= 19:  # 最大19枚まで
-                        break
+                
+                # メイン写真の更新
+                if 'photo' in request.files:
+                    file = request.files['photo']
                     if file and file.filename and allowed_file(file.filename):
-                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
                         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                        additional_photos.append(f'uploads/{filename}')
+                        photo_path = f'uploads/{filename}'
+                
+                # 追加写真の追加
+                if 'additional_photos' in request.files:
+                    files = request.files.getlist('additional_photos')
+                    for i, file in enumerate(files):
+                        if len(additional_photos) >= 19:  # 最大19枚まで
+                            break
+                        if file and file.filename and allowed_file(file.filename):
+                            filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                            additional_photos.append(f'uploads/{filename}')
+                
+                # 削除する写真を処理
+                delete_photos = request.form.getlist('delete_photos')
+                print(f"[DEBUG] delete_photos: {delete_photos}")
+                print(f"[DEBUG] additional_photos before: {additional_photos}")
+                if delete_photos:
+                    additional_photos = [p for p in additional_photos if p not in delete_photos]
+                print(f"[DEBUG] additional_photos after: {additional_photos}")
+                
+                additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+                
+                # 身分証ファイル
+                id_document_path = item_dict.get('id_document_path')
+                if 'id_document' in request.files:
+                    file = request.files['id_document']
+                    if file and file.filename:
+                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                        id_document_path = f'uploads/{filename}'
+                
+                # 同意書ファイル
+                consent_form_path = item_dict.get('consent_form_path')
+                if 'consent_form' in request.files:
+                    file = request.files['consent_form']
+                    if file and file.filename:
+                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                        consent_form_path = f'uploads/{filename}'
+                
+                # 基本情報はフォームから取得
+                new_purchase_date = request.form.get('purchase_date') or None
+                new_product_name = request.form.get('product_name')
+                new_kaika_product_code = request.form.get('kaika_product_code')
+                new_brand_name = request.form.get('brand_name')
+                new_model_number = request.form.get('model_number')
+                new_item_condition = request.form.get('item_condition')
+                new_store_name = request.form.get('store_name')
+                new_supplier_detail = request.form.get('supplier_detail')
+                new_purchase_price = int(request.form.get('purchase_price') or 0)
+                new_payment_method = request.form.get('payment_method')
+            else:
+                # 管理者は基本情報を元の値で維持（変更不可）、ただし画像は編集可能
+                photo_path = item_dict['photo_path']
+                
+                # 既存の追加写真を取得
+                existing_additional = item_dict.get('additional_photos')
+                if existing_additional:
+                    try:
+                        additional_photos = json.loads(existing_additional) if isinstance(existing_additional, str) else existing_additional
+                    except:
+                        additional_photos = []
+                else:
+                    additional_photos = []
+                
+                # メイン写真の更新（管理者も可能）
+                if 'photo' in request.files:
+                    file = request.files['photo']
+                    if file and file.filename and allowed_file(file.filename):
+                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                        photo_path = f'uploads/{filename}'
+                
+                # 追加写真の追加（管理者も可能）
+                if 'additional_photos' in request.files:
+                    files = request.files.getlist('additional_photos')
+                    for i, file in enumerate(files):
+                        if len(additional_photos) >= 19:  # 最大19枚まで
+                            break
+                        if file and file.filename and allowed_file(file.filename):
+                            filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                            additional_photos.append(f'uploads/{filename}')
+                
+                # 削除する写真を処理（管理者も可能）
+                delete_photos = request.form.getlist('delete_photos')
+                print(f"[DEBUG Admin] delete_photos: {delete_photos}")
+                print(f"[DEBUG Admin] additional_photos before: {additional_photos}")
+                if delete_photos:
+                    additional_photos = [p for p in additional_photos if p not in delete_photos]
+                print(f"[DEBUG Admin] additional_photos after: {additional_photos}")
+                
+                additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+                
+                # 身分証・同意書は元の値を維持（変更不可）
+                id_document_path = item_dict.get('id_document_path')
+                consent_form_path = item_dict.get('consent_form_path')
+                
+                # 基本情報は元の値で維持（変更不可）
+                new_purchase_date = item_dict['purchase_date']
+                new_product_name = item_dict['product_name']
+                new_kaika_product_code = item_dict.get('kaika_product_code')
+                new_brand_name = item_dict['brand_name']
+                new_model_number = item_dict.get('model_number')
+                new_item_condition = item_dict['item_condition']
+                new_store_name = item_dict['store_name']
+                new_supplier_detail = item_dict.get('supplier_detail')
+                new_purchase_price = item_dict['purchase_price']
+                new_payment_method = item_dict['payment_method']
             
-            # 削除する写真を処理
-            delete_photos = request.form.getlist('delete_photos')
-            if delete_photos:
-                additional_photos = [p for p in additional_photos if p not in delete_photos]
+            # ステータスを取得（未出品/出品中/売却済み）
+            item_status = request.form.get('item_status', 'unlisted')
             
-            additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+            # 管理者/オーナーは全商品編集可能
+            if DATABASE_URL:
+                if current_user.is_admin() or current_user.is_owner():
+                    cur.execute('''
+                        UPDATE merchandise SET 
+                            purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                            supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
+                            purchase_price = %s, payment_method = %s, listing_price = %s, 
+                            expected_shipping = %s, expected_commission = %s,
+                            is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
+                            shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
+                            updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    ''', (
+                        new_purchase_date,
+                        photo_path,
+                        additional_photos_json,
+                        new_product_name,
+                        new_kaika_product_code,
+                        new_brand_name,
+                        new_model_number,
+                        new_item_condition,
+                        new_store_name,
+                        new_supplier_detail,
+                        id_document_path,
+                        consent_form_path,
+                        new_purchase_price,
+                        new_payment_method,
+                        int(request.form.get('listing_price') or 0),
+                        int(request.form.get('expected_shipping') or 0),
+                        int(request.form.get('expected_commission') or 0),
+                        item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                        request.form.get('sale_date') or None if item_status == 'sold' else None,
+                        request.form.get('sale_type') or 'normal',
+                        int(request.form.get('sale_price') or 0),
+                        int(request.form.get('shipping_cost') or 0),
+                        request.form.get('sales_destination'),
+                        int(request.form.get('commission') or 0),
+                        'is_shipped' in request.form,
+                        current_user.id,
+                        id
+                    ))
+                else:
+                    cur.execute('''
+                        UPDATE merchandise SET 
+                            purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                            supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
+                            purchase_price = %s, payment_method = %s, listing_price = %s, 
+                            expected_shipping = %s, expected_commission = %s,
+                            is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
+                            shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
+                            updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s AND user_id = %s
+                    ''', (
+                        new_purchase_date,
+                        photo_path,
+                        additional_photos_json,
+                        new_product_name,
+                        new_kaika_product_code,
+                        new_brand_name,
+                        new_model_number,
+                        new_item_condition,
+                        new_store_name,
+                        new_supplier_detail,
+                        id_document_path,
+                        consent_form_path,
+                        new_purchase_price,
+                        new_payment_method,
+                        int(request.form.get('listing_price') or 0),
+                        int(request.form.get('expected_shipping') or 0),
+                        int(request.form.get('expected_commission') or 0),
+                        item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                        request.form.get('sale_date') or None if item_status == 'sold' else None,
+                        request.form.get('sale_type') or 'normal',
+                        int(request.form.get('sale_price') or 0),
+                        int(request.form.get('shipping_cost') or 0),
+                        request.form.get('sales_destination'),
+                        int(request.form.get('commission') or 0),
+                        'is_shipped' in request.form,
+                        current_user.id,
+                        id, current_user.id
+                    ))
+            else:
+                if current_user.is_admin() or current_user.is_owner():
+                    cur.execute('''
+                        UPDATE merchandise SET 
+                            purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                            supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
+                            purchase_price = ?, payment_method = ?, listing_price = ?, 
+                            expected_shipping = ?, expected_commission = ?,
+                            is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
+                            shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
+                            updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (
+                        new_purchase_date,
+                        photo_path,
+                        additional_photos_json,
+                        new_product_name,
+                        new_kaika_product_code,
+                        new_brand_name,
+                        new_model_number,
+                        new_item_condition,
+                        new_store_name,
+                        new_supplier_detail,
+                        id_document_path,
+                        consent_form_path,
+                        new_purchase_price,
+                        new_payment_method,
+                        int(request.form.get('listing_price') or 0),
+                        int(request.form.get('expected_shipping') or 0),
+                        int(request.form.get('expected_commission') or 0),
+                        1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                        request.form.get('sale_date') or None if item_status == 'sold' else None,
+                        request.form.get('sale_type') or 'normal',
+                        int(request.form.get('sale_price') or 0),
+                        int(request.form.get('shipping_cost') or 0),
+                        request.form.get('sales_destination'),
+                        int(request.form.get('commission') or 0),
+                        1 if 'is_shipped' in request.form else 0,
+                        current_user.id,
+                        id
+                    ))
+                else:
+                    cur.execute('''
+                        UPDATE merchandise SET 
+                            purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                            supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
+                            purchase_price = ?, payment_method = ?, listing_price = ?, 
+                            expected_shipping = ?, expected_commission = ?,
+                            is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
+                            shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
+                            updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ? AND user_id = ?
+                    ''', (
+                        new_purchase_date,
+                        photo_path,
+                        additional_photos_json,
+                        new_product_name,
+                        new_kaika_product_code,
+                        new_brand_name,
+                        new_model_number,
+                        new_item_condition,
+                        new_store_name,
+                        new_supplier_detail,
+                        id_document_path,
+                        consent_form_path,
+                        new_purchase_price,
+                        new_payment_method,
+                        int(request.form.get('listing_price') or 0),
+                        int(request.form.get('expected_shipping') or 0),
+                        int(request.form.get('expected_commission') or 0),
+                        1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
+                        request.form.get('sale_date') or None if item_status == 'sold' else None,
+                        request.form.get('sale_type') or 'normal',
+                        int(request.form.get('sale_price') or 0),
+                        int(request.form.get('shipping_cost') or 0),
+                        request.form.get('sales_destination'),
+                        int(request.form.get('commission') or 0),
+                        1 if 'is_shipped' in request.form else 0,
+                        current_user.id,
+                        id, current_user.id
+                    ))
             
-            # 身分証ファイル
-            id_document_path = item.get('id_document_path')
-            if 'id_document' in request.files:
-                file = request.files['id_document']
-                if file and file.filename:
-                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
-                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    id_document_path = f'uploads/{filename}'
-            
-            # 同意書ファイル
-            consent_form_path = item.get('consent_form_path')
-            if 'consent_form' in request.files:
-                file = request.files['consent_form']
-                if file and file.filename:
-                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
-                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    consent_form_path = f'uploads/{filename}'
-            
-            # 基本情報はフォームから取得
-            new_purchase_date = request.form.get('purchase_date') or None
-            new_product_name = request.form.get('product_name')
-            new_kaika_product_code = request.form.get('kaika_product_code')
-            new_brand_name = request.form.get('brand_name')
-            new_model_number = request.form.get('model_number')
-            new_item_condition = request.form.get('item_condition')
-            new_store_name = request.form.get('store_name')
-            new_supplier_detail = request.form.get('supplier_detail')
-            new_purchase_price = int(request.form.get('purchase_price') or 0)
-            new_payment_method = request.form.get('payment_method')
-        else:
-            # 管理者は基本情報を元の値で維持（変更不可）
-            photo_path = item['photo_path']
-            additional_photos_json = item.get('additional_photos')
-            id_document_path = item.get('id_document_path')
-            consent_form_path = item.get('consent_form_path')
-            new_purchase_date = item['purchase_date']
-            new_product_name = item['product_name']
-            new_kaika_product_code = item.get('kaika_product_code')
-            new_brand_name = item['brand_name']
-            new_model_number = item.get('model_number')
-            new_item_condition = item['item_condition']
-            new_store_name = item['store_name']
-            new_supplier_detail = item.get('supplier_detail')
-            new_purchase_price = item['purchase_price']
-            new_payment_method = item['payment_method']
-        
-        # ステータスを取得（未出品/出品中/売却済み）
-        item_status = request.form.get('item_status', 'unlisted')
-        
-        if DATABASE_URL:
-            cur.execute('''
-                UPDATE merchandise SET 
-                    purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
-                    supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
-                    purchase_price = %s, payment_method = %s, listing_price = %s, 
-                    expected_shipping = %s, expected_commission = %s,
-                    is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
-                    shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
-                    updated_by = %s, updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND user_id = %s
-            ''', (
-                new_purchase_date,
-                photo_path,
-                additional_photos_json,
-                new_product_name,
-                new_kaika_product_code,
-                new_brand_name,
-                new_model_number,
-                new_item_condition,
-                new_store_name,
-                new_supplier_detail,
-                id_document_path,
-                consent_form_path,
-                new_purchase_price,
-                new_payment_method,
-                int(request.form.get('listing_price') or 0),
-                int(request.form.get('expected_shipping') or 0),
-                int(request.form.get('expected_commission') or 0),
-                item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
-                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                request.form.get('sale_date') or None if item_status == 'sold' else None,
-                request.form.get('sale_type') or 'normal',
-                int(request.form.get('sale_price') or 0),
-                int(request.form.get('shipping_cost') or 0),
-                request.form.get('sales_destination'),
-                int(request.form.get('commission') or 0),
-                'is_shipped' in request.form,
-                current_user.id,
-                id, current_user.id
-            ))
-        else:
-            cur.execute('''
-                UPDATE merchandise SET 
-                    purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
-                    supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
-                    purchase_price = ?, payment_method = ?, listing_price = ?, 
-                    expected_shipping = ?, expected_commission = ?,
-                    is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
-                    shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
-                    updated_by = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ? AND user_id = ?
-            ''', (
-                new_purchase_date,
-                photo_path,
-                additional_photos_json,
-                new_product_name,
-                new_kaika_product_code,
-                new_brand_name,
-                new_model_number,
-                new_item_condition,
-                new_store_name,
-                new_supplier_detail,
-                id_document_path,
-                consent_form_path,
-                new_purchase_price,
-                new_payment_method,
-                int(request.form.get('listing_price') or 0),
-                int(request.form.get('expected_shipping') or 0),
-                int(request.form.get('expected_commission') or 0),
-                1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
-                request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                request.form.get('sale_date') or None if item_status == 'sold' else None,
-                request.form.get('sale_type') or 'normal',
-                int(request.form.get('sale_price') or 0),
-                int(request.form.get('shipping_cost') or 0),
-                request.form.get('sales_destination'),
-                int(request.form.get('commission') or 0),
-                1 if 'is_shipped' in request.form else 0,
-                current_user.id,
-                id, current_user.id
-            ))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('商品を更新しました', 'success')
-        return redirect(url_for('index'))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('商品を更新しました', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            print(f"[ERROR] edit_item: {e}")
+            import traceback
+            traceback.print_exc()
+            flash(f'エラーが発生しました: {str(e)}', 'error')
+            return redirect(url_for('edit_item', id=id))
     
     cur.close()
     conn.close()
@@ -7418,37 +7558,65 @@ def export_backup():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '1.0',
+        'version': '3.0',
         'users': [],
         'merchandise': [],
-        'customers': []
+        'customers': [],
+        'sale_requests': [],
+        'shikiriosho': [],
+        'shikiriosho_items': [],
+        'invoices': [],
+        'invoice_items': [],
+        'user_mitsumori': [],
+        'user_mitsumori_items': [],
+        'user_keisan': [],
+        'user_keisan_items': [],
+        'user_kaitori_shoudaku': [],
+        'user_kaitori_shoudaku_items': [],
+        'service_documents': [],
+        'announcements': [],
+        'master_brand_categories': [],
+        'master_brands': [],
+        'master_suppliers': [],
+        'master_conditions': [],
+        'master_payment_methods': [],
+        'master_supplier_details': [],
+        'master_document_settings': [],
+        'proxy_service_settings': [],
+        'line_settings': [],
+        'line_scheduled_messages': []
     }
+    
+    # テーブル一覧（存在しない場合はスキップ）
+    tables_to_backup = [
+        'users', 'merchandise', 'customers', 'sale_requests',
+        'shikiriosho', 'shikiriosho_items', 'invoices', 'invoice_items',
+        'user_mitsumori', 'user_mitsumori_items', 'user_keisan', 'user_keisan_items',
+        'user_kaitori_shoudaku', 'user_kaitori_shoudaku_items', 'service_documents',
+        'announcements', 'master_brand_categories', 'master_brands',
+        'master_suppliers', 'master_conditions', 'master_payment_methods',
+        'master_supplier_details', 'master_document_settings',
+        'proxy_service_settings', 'line_settings', 'line_scheduled_messages'
+    ]
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # ユーザーデータ（パスワードハッシュ含む）
-        cur.execute("SELECT * FROM users ORDER BY id")
-        backup_data['users'] = [dict(u) for u in cur.fetchall()]
-        
-        # 商品データ
-        cur.execute("SELECT * FROM merchandise ORDER BY id")
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        
-        # 顧客データ
-        cur.execute("SELECT * FROM customers ORDER BY id")
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table in tables_to_backup:
+            try:
+                cur.execute(f"SELECT * FROM {table} ORDER BY id")
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
     else:
         cur = conn.cursor()
-        
-        cur.execute("SELECT * FROM users ORDER BY id")
-        backup_data['users'] = [dict(u) for u in cur.fetchall()]
-        
-        cur.execute("SELECT * FROM merchandise ORDER BY id")
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        
-        cur.execute("SELECT * FROM customers ORDER BY id")
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table in tables_to_backup:
+            try:
+                cur.execute(f"SELECT * FROM {table} ORDER BY id")
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
     
     cur.close()
     conn.close()
@@ -7485,29 +7653,66 @@ def export_backup_with_images():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '2.0',
+        'version': '3.0',
         'includes_images': True,
         'users': [],
         'merchandise': [],
-        'customers': []
+        'customers': [],
+        'sale_requests': [],
+        'shikiriosho': [],
+        'shikiriosho_items': [],
+        'invoices': [],
+        'invoice_items': [],
+        'user_mitsumori': [],
+        'user_mitsumori_items': [],
+        'user_keisan': [],
+        'user_keisan_items': [],
+        'user_kaitori_shoudaku': [],
+        'user_kaitori_shoudaku_items': [],
+        'service_documents': [],
+        'announcements': [],
+        'master_brand_categories': [],
+        'master_brands': [],
+        'master_suppliers': [],
+        'master_conditions': [],
+        'master_payment_methods': [],
+        'master_supplier_details': [],
+        'master_document_settings': [],
+        'proxy_service_settings': [],
+        'line_settings': [],
+        'line_scheduled_messages': []
     }
+    
+    # テーブル一覧（存在しない場合はスキップ）
+    tables_to_backup = [
+        'users', 'merchandise', 'customers', 'sale_requests',
+        'shikiriosho', 'shikiriosho_items', 'invoices', 'invoice_items',
+        'user_mitsumori', 'user_mitsumori_items', 'user_keisan', 'user_keisan_items',
+        'user_kaitori_shoudaku', 'user_kaitori_shoudaku_items', 'service_documents',
+        'announcements', 'master_brand_categories', 'master_brands',
+        'master_suppliers', 'master_conditions', 'master_payment_methods',
+        'master_supplier_details', 'master_document_settings',
+        'proxy_service_settings', 'line_settings', 'line_scheduled_messages'
+    ]
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM users ORDER BY id")
-        backup_data['users'] = [dict(u) for u in cur.fetchall()]
-        cur.execute("SELECT * FROM merchandise ORDER BY id")
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        cur.execute("SELECT * FROM customers ORDER BY id")
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table in tables_to_backup:
+            try:
+                cur.execute(f"SELECT * FROM {table} ORDER BY id")
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM users ORDER BY id")
-        backup_data['users'] = [dict(u) for u in cur.fetchall()]
-        cur.execute("SELECT * FROM merchandise ORDER BY id")
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        cur.execute("SELECT * FROM customers ORDER BY id")
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table in tables_to_backup:
+            try:
+                cur.execute(f"SELECT * FROM {table} ORDER BY id")
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
     
     cur.close()
     conn.close()
@@ -7531,22 +7736,53 @@ def export_backup_with_images():
         json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
+        # 画像ファイルを追加するヘルパー関数
+        def add_file_to_zip(file_path, added_files):
+            if not file_path:
+                return
+            file_path = file_path.replace('\\', '/')
+            if file_path.startswith('uploads/'):
+                filename = file_path[8:]
+            else:
+                filename = os.path.basename(file_path)
+            
+            full_path = os.path.join(uploads_path, filename)
+            if os.path.exists(full_path) and filename not in added_files:
+                zip_file.write(full_path, f'images/{filename}')
+                added_files.add(filename)
+        
         # 画像ファイルを追加
         uploads_path = os.path.join(app.config['UPLOAD_FOLDER'])
+        added_files = set()  # 重複防止用
+        
         if os.path.exists(uploads_path):
+            # 商品の画像
             for item in backup_data['merchandise']:
-                photo_path = item.get('photo_path')
-                if photo_path:
-                    # パスを正規化
-                    photo_path = photo_path.replace('\\', '/')
-                    if photo_path.startswith('uploads/'):
-                        filename = photo_path[8:]  # 'uploads/'を除去
-                    else:
-                        filename = os.path.basename(photo_path)
-                    
-                    full_path = os.path.join(uploads_path, filename)
-                    if os.path.exists(full_path):
-                        zip_file.write(full_path, f'images/{filename}')
+                # メイン写真
+                add_file_to_zip(item.get('photo_path'), added_files)
+                
+                # 追加写真（2枚目以降）
+                additional_photos = item.get('additional_photos')
+                if additional_photos:
+                    try:
+                        if isinstance(additional_photos, str):
+                            additional_list = json.loads(additional_photos)
+                        else:
+                            additional_list = additional_photos
+                        for add_photo in additional_list:
+                            add_file_to_zip(add_photo, added_files)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
+                # 身分証
+                add_file_to_zip(item.get('id_document_path'), added_files)
+                
+                # 同意書
+                add_file_to_zip(item.get('consent_form_path'), added_files)
+            
+            # 売却申請のQRコード画像
+            for req in backup_data.get('sale_requests', []):
+                add_file_to_zip(req.get('qr_image_path'), added_files)
     
     zip_buffer.seek(0)
     
@@ -7564,27 +7800,95 @@ def export_user_backup():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '1.0',
+        'version': '3.0',
         'user_id': current_user.id,
         'username': current_user.username,
         'merchandise': [],
-        'customers': []
+        'customers': [],
+        'sale_requests': [],
+        'user_mitsumori': [],
+        'user_mitsumori_items': [],
+        'user_keisan': [],
+        'user_keisan_items': [],
+        'user_kaitori_shoudaku': [],
+        'user_kaitori_shoudaku_items': [],
+        'invoices': [],
+        'invoice_items': [],
+        'service_documents': []
+    }
+    
+    # ユーザーIDでフィルタするテーブル
+    user_tables = {
+        'merchandise': 'user_id',
+        'customers': 'user_id',
+        'sale_requests': 'user_id',
+        'user_mitsumori': 'user_id',
+        'user_keisan': 'user_id',
+        'user_kaitori_shoudaku': 'user_id',
+        'invoices': 'user_id',
+        'service_documents': 'user_id'
     }
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        for table, user_col in user_tables.items():
+            try:
+                cur.execute(f"SELECT * FROM {table} WHERE {user_col} = %s ORDER BY id", (current_user.id,))
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
         
-        cur.execute("SELECT * FROM customers WHERE user_id = %s ORDER BY id", (current_user.id,))
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        # 明細テーブル（親のIDでフィルタ）
+        mitsumori_ids = [m['id'] for m in backup_data['user_mitsumori']]
+        if mitsumori_ids:
+            cur.execute(f"SELECT * FROM user_mitsumori_items WHERE mitsumori_id IN ({','.join(['%s']*len(mitsumori_ids))}) ORDER BY id", tuple(mitsumori_ids))
+            backup_data['user_mitsumori_items'] = [dict(row) for row in cur.fetchall()]
+        
+        keisan_ids = [k['id'] for k in backup_data['user_keisan']]
+        if keisan_ids:
+            cur.execute(f"SELECT * FROM user_keisan_items WHERE keisan_id IN ({','.join(['%s']*len(keisan_ids))}) ORDER BY id", tuple(keisan_ids))
+            backup_data['user_keisan_items'] = [dict(row) for row in cur.fetchall()]
+        
+        kaitori_ids = [k['id'] for k in backup_data['user_kaitori_shoudaku']]
+        if kaitori_ids:
+            cur.execute(f"SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id IN ({','.join(['%s']*len(kaitori_ids))}) ORDER BY id", tuple(kaitori_ids))
+            backup_data['user_kaitori_shoudaku_items'] = [dict(row) for row in cur.fetchall()]
+        
+        invoice_ids = [i['id'] for i in backup_data['invoices']]
+        if invoice_ids:
+            cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id IN ({','.join(['%s']*len(invoice_ids))}) ORDER BY id", tuple(invoice_ids))
+            backup_data['invoice_items'] = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
+        for table, user_col in user_tables.items():
+            try:
+                cur.execute(f"SELECT * FROM {table} WHERE {user_col} = ? ORDER BY id", (current_user.id,))
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
         
-        cur.execute("SELECT * FROM customers WHERE user_id = ? ORDER BY id", (current_user.id,))
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        # 明細テーブル（親のIDでフィルタ）
+        mitsumori_ids = [m['id'] for m in backup_data['user_mitsumori']]
+        if mitsumori_ids:
+            cur.execute(f"SELECT * FROM user_mitsumori_items WHERE mitsumori_id IN ({','.join(['?']*len(mitsumori_ids))}) ORDER BY id", tuple(mitsumori_ids))
+            backup_data['user_mitsumori_items'] = [dict(row) for row in cur.fetchall()]
+        
+        keisan_ids = [k['id'] for k in backup_data['user_keisan']]
+        if keisan_ids:
+            cur.execute(f"SELECT * FROM user_keisan_items WHERE keisan_id IN ({','.join(['?']*len(keisan_ids))}) ORDER BY id", tuple(keisan_ids))
+            backup_data['user_keisan_items'] = [dict(row) for row in cur.fetchall()]
+        
+        kaitori_ids = [k['id'] for k in backup_data['user_kaitori_shoudaku']]
+        if kaitori_ids:
+            cur.execute(f"SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id IN ({','.join(['?']*len(kaitori_ids))}) ORDER BY id", tuple(kaitori_ids))
+            backup_data['user_kaitori_shoudaku_items'] = [dict(row) for row in cur.fetchall()]
+        
+        invoice_ids = [i['id'] for i in backup_data['invoices']]
+        if invoice_ids:
+            cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id IN ({','.join(['?']*len(invoice_ids))}) ORDER BY id", tuple(invoice_ids))
+            backup_data['invoice_items'] = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -7618,26 +7922,96 @@ def export_user_backup_with_images():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '2.0',
+        'version': '3.0',
         'includes_images': True,
         'user_id': current_user.id,
         'username': current_user.username,
         'merchandise': [],
-        'customers': []
+        'customers': [],
+        'sale_requests': [],
+        'user_mitsumori': [],
+        'user_mitsumori_items': [],
+        'user_keisan': [],
+        'user_keisan_items': [],
+        'user_kaitori_shoudaku': [],
+        'user_kaitori_shoudaku_items': [],
+        'invoices': [],
+        'invoice_items': [],
+        'service_documents': []
+    }
+    
+    # ユーザーIDでフィルタするテーブル
+    user_tables = {
+        'merchandise': 'user_id',
+        'customers': 'user_id',
+        'sale_requests': 'user_id',
+        'user_mitsumori': 'user_id',
+        'user_keisan': 'user_id',
+        'user_kaitori_shoudaku': 'user_id',
+        'invoices': 'user_id',
+        'service_documents': 'user_id'
     }
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id", (current_user.id,))
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        cur.execute("SELECT * FROM customers WHERE user_id = %s ORDER BY id", (current_user.id,))
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table, user_col in user_tables.items():
+            try:
+                cur.execute(f"SELECT * FROM {table} WHERE {user_col} = %s ORDER BY id", (current_user.id,))
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
+        
+        # 明細テーブル
+        mitsumori_ids = [m['id'] for m in backup_data['user_mitsumori']]
+        if mitsumori_ids:
+            cur.execute(f"SELECT * FROM user_mitsumori_items WHERE mitsumori_id IN ({','.join(['%s']*len(mitsumori_ids))}) ORDER BY id", tuple(mitsumori_ids))
+            backup_data['user_mitsumori_items'] = [dict(row) for row in cur.fetchall()]
+        
+        keisan_ids = [k['id'] for k in backup_data['user_keisan']]
+        if keisan_ids:
+            cur.execute(f"SELECT * FROM user_keisan_items WHERE keisan_id IN ({','.join(['%s']*len(keisan_ids))}) ORDER BY id", tuple(keisan_ids))
+            backup_data['user_keisan_items'] = [dict(row) for row in cur.fetchall()]
+        
+        kaitori_ids = [k['id'] for k in backup_data['user_kaitori_shoudaku']]
+        if kaitori_ids:
+            cur.execute(f"SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id IN ({','.join(['%s']*len(kaitori_ids))}) ORDER BY id", tuple(kaitori_ids))
+            backup_data['user_kaitori_shoudaku_items'] = [dict(row) for row in cur.fetchall()]
+        
+        invoice_ids = [i['id'] for i in backup_data['invoices']]
+        if invoice_ids:
+            cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id IN ({','.join(['%s']*len(invoice_ids))}) ORDER BY id", tuple(invoice_ids))
+            backup_data['invoice_items'] = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id", (current_user.id,))
-        backup_data['merchandise'] = [dict(m) for m in cur.fetchall()]
-        cur.execute("SELECT * FROM customers WHERE user_id = ? ORDER BY id", (current_user.id,))
-        backup_data['customers'] = [dict(c) for c in cur.fetchall()]
+        for table, user_col in user_tables.items():
+            try:
+                cur.execute(f"SELECT * FROM {table} WHERE {user_col} = ? ORDER BY id", (current_user.id,))
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
+        
+        # 明細テーブル
+        mitsumori_ids = [m['id'] for m in backup_data['user_mitsumori']]
+        if mitsumori_ids:
+            cur.execute(f"SELECT * FROM user_mitsumori_items WHERE mitsumori_id IN ({','.join(['?']*len(mitsumori_ids))}) ORDER BY id", tuple(mitsumori_ids))
+            backup_data['user_mitsumori_items'] = [dict(row) for row in cur.fetchall()]
+        
+        keisan_ids = [k['id'] for k in backup_data['user_keisan']]
+        if keisan_ids:
+            cur.execute(f"SELECT * FROM user_keisan_items WHERE keisan_id IN ({','.join(['?']*len(keisan_ids))}) ORDER BY id", tuple(keisan_ids))
+            backup_data['user_keisan_items'] = [dict(row) for row in cur.fetchall()]
+        
+        kaitori_ids = [k['id'] for k in backup_data['user_kaitori_shoudaku']]
+        if kaitori_ids:
+            cur.execute(f"SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id IN ({','.join(['?']*len(kaitori_ids))}) ORDER BY id", tuple(kaitori_ids))
+            backup_data['user_kaitori_shoudaku_items'] = [dict(row) for row in cur.fetchall()]
+        
+        invoice_ids = [i['id'] for i in backup_data['invoices']]
+        if invoice_ids:
+            cur.execute(f"SELECT * FROM invoice_items WHERE invoice_id IN ({','.join(['?']*len(invoice_ids))}) ORDER BY id", tuple(invoice_ids))
+            backup_data['invoice_items'] = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -7660,21 +8034,53 @@ def export_user_backup_with_images():
         json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
+        # 画像ファイルを追加するヘルパー関数
+        def add_file_to_zip(file_path, added_files):
+            if not file_path:
+                return
+            file_path = file_path.replace('\\', '/')
+            if file_path.startswith('uploads/'):
+                filename = file_path[8:]
+            else:
+                filename = os.path.basename(file_path)
+            
+            full_path = os.path.join(uploads_path, filename)
+            if os.path.exists(full_path) and filename not in added_files:
+                zip_file.write(full_path, f'images/{filename}')
+                added_files.add(filename)
+        
         # 画像ファイルを追加
         uploads_path = os.path.join(app.config['UPLOAD_FOLDER'])
+        added_files = set()  # 重複防止用
+        
         if os.path.exists(uploads_path):
+            # 商品の画像
             for item in backup_data['merchandise']:
-                photo_path = item.get('photo_path')
-                if photo_path:
-                    photo_path = photo_path.replace('\\', '/')
-                    if photo_path.startswith('uploads/'):
-                        filename = photo_path[8:]
-                    else:
-                        filename = os.path.basename(photo_path)
-                    
-                    full_path = os.path.join(uploads_path, filename)
-                    if os.path.exists(full_path):
-                        zip_file.write(full_path, f'images/{filename}')
+                # メイン写真
+                add_file_to_zip(item.get('photo_path'), added_files)
+                
+                # 追加写真（2枚目以降）
+                additional_photos = item.get('additional_photos')
+                if additional_photos:
+                    try:
+                        if isinstance(additional_photos, str):
+                            additional_list = json.loads(additional_photos)
+                        else:
+                            additional_list = additional_photos
+                        for add_photo in additional_list:
+                            add_file_to_zip(add_photo, added_files)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
+                # 身分証
+                add_file_to_zip(item.get('id_document_path'), added_files)
+                
+                # 同意書
+                add_file_to_zip(item.get('consent_form_path'), added_files)
+            
+            # 売却申請のQRコード画像
+            for req in backup_data.get('sale_requests', []):
+                add_file_to_zip(req.get('qr_image_path'), added_files)
     
     zip_buffer.seek(0)
     
