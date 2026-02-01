@@ -2938,6 +2938,40 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowRight') itemLightboxNext();
 });
 
+// スワイプによる画像切り替え（スマホ対応）
+let touchStartX = 0;
+let touchEndX = 0;
+let touchStartY = 0;
+let touchEndY = 0;
+const swipeThreshold = 50; // スワイプと判定する最小距離(px)
+
+document.getElementById('itemLightbox').addEventListener('touchstart', function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+document.getElementById('itemLightbox').addEventListener('touchend', function(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    touchEndY = e.changedTouches[0].screenY;
+    handleSwipe();
+}, { passive: true });
+
+function handleSwipe() {
+    const diffX = touchStartX - touchEndX;
+    const diffY = touchStartY - touchEndY;
+    
+    // 横方向のスワイプが縦方向より大きい場合のみ処理
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
+        if (diffX > 0) {
+            // 左スワイプ → 次の画像
+            itemLightboxNext();
+        } else {
+            // 右スワイプ → 前の画像
+            itemLightboxPrev();
+        }
+    }
+}
+
 // ライトボックス外クリックで閉じる
 document.getElementById('itemLightbox').addEventListener('click', function(e) {
     if (e.target === this) closeItemLightbox();

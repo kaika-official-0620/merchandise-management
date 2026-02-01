@@ -2290,6 +2290,10 @@ def profile():
 @app.route('/')
 @login_required
 def index():
+    # 管理者/オーナーの場合は管理者商品一覧へリダイレクト
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_items'))
+    
     filter_type = request.args.get('filter', '')
     search = request.args.get('search', '')
     
