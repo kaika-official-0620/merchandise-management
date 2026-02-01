@@ -709,6 +709,37 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowRight') lightboxNext();
 });
 
+// スワイプによる画像切り替え（スマホ対応）
+let touchStartX = 0;
+let touchEndX = 0;
+let touchStartY = 0;
+let touchEndY = 0;
+const swipeThreshold = 50;
+
+document.getElementById('lightbox').addEventListener('touchstart', function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+document.getElementById('lightbox').addEventListener('touchend', function(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    touchEndY = e.changedTouches[0].screenY;
+    handleSwipe();
+}, { passive: true });
+
+function handleSwipe() {
+    const diffX = touchStartX - touchEndX;
+    const diffY = touchStartY - touchEndY;
+    
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
+        if (diffX > 0) {
+            lightboxNext();
+        } else {
+            lightboxPrev();
+        }
+    }
+}
+
 // ライトボックス外クリックで閉じる
 document.getElementById('lightbox').addEventListener('click', function(e) {
     if (e.target === this) closeLightbox();

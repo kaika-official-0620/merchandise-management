@@ -1129,8 +1129,11 @@
         font-size: 1rem;
     }
     
-    /* アクションボタン */
+    /* アクションボタン - 縦並び */
     .card-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
         padding: 12px 16px 20px;
         background: white;
         border-top: 1px solid #f1f5f9;
@@ -1139,6 +1142,8 @@
     .card-actions .btn {
         padding: 12px;
         font-size: 0.9rem;
+        width: 100%;
+        text-align: center;
     }
 }
 
@@ -2109,24 +2114,6 @@
             </div>
         </div>
         <div class="card-body">
-            <div class="card-row">
-                <span class="card-label">仕入先</span>
-                <span class="card-value">{{ item.store_name or '-' }}</span>
-            </div>
-            {% if is_shared_view %}
-            <div class="card-row">
-                <span class="card-label">登録者</span>
-                <span class="card-value owner-name">{{ item.owner_name or '-' }}</span>
-            </div>
-            {% endif %}
-            <div class="card-row">
-                <span class="card-label">仕入日</span>
-                <span class="card-value">{{ item.purchase_date or '-' }}</span>
-            </div>
-            <div class="card-row">
-                <span class="card-label">最終更新者</span>
-                <span class="card-value">{{ item.updated_by_name or '-' }}</span>
-            </div>
             <div class="card-prices three-col">
                 <div class="price-item">
                     <span class="price-label">仕入</span>
