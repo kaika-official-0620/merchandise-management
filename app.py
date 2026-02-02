@@ -17394,103 +17394,111 @@ def admin_sales_agency_requests():
     
     status_filter = request.args.get('status', 'all')
     
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        if status_filter != 'all':
-            cur.execute('''
-                SELECT sar.*, u.display_name as user_name, u.username,
-                       p.display_name as processor_name
-                FROM sales_agency_requests sar
-                JOIN users u ON sar.user_id = u.id
-                LEFT JOIN users p ON sar.processed_by = p.id
-                WHERE sar.status = %s
-                ORDER BY sar.created_at DESC
-            ''', (status_filter,))
-        else:
-            cur.execute('''
-                SELECT sar.*, u.display_name as user_name, u.username,
-                       p.display_name as processor_name
-                FROM sales_agency_requests sar
-                JOIN users u ON sar.user_id = u.id
-                LEFT JOIN users p ON sar.processed_by = p.id
-                ORDER BY 
-                    CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
-                    sar.created_at DESC
-            ''')
-    else:
-        cur = conn.cursor()
-        if status_filter != 'all':
-            cur.execute('''
-                SELECT sar.*, u.display_name as user_name, u.username,
-                       p.display_name as processor_name
-                FROM sales_agency_requests sar
-                JOIN users u ON sar.user_id = u.id
-                LEFT JOIN users p ON sar.processed_by = p.id
-                WHERE sar.status = ?
-                ORDER BY sar.created_at DESC
-            ''', (status_filter,))
-        else:
-            cur.execute('''
-                SELECT sar.*, u.display_name as user_name, u.username,
-                       p.display_name as processor_name
-                FROM sales_agency_requests sar
-                JOIN users u ON sar.user_id = u.id
-                LEFT JOIN users p ON sar.processed_by = p.id
-                ORDER BY 
-                    CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
-                    sar.created_at DESC
-            ''')
-    
-    requests_raw = cur.fetchall()
-    requests = []
-    
-    # 統計
-    stats = {'pending': 0, 'approved': 0, 'rejected': 0}
-    
-    for req in requests_raw:
-        req_dict = dict(req)
-        # 関連商品を取得
+    try:
+        conn = get_db()
         if DATABASE_URL:
-            cur.execute('''
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                FROM sales_agency_request_items sari
-                JOIN merchandise m ON sari.merchandise_id = m.id
-                WHERE sari.request_id = %s
-            ''', (req_dict['id'],))
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if status_filter != 'all':
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    WHERE sar.status = %s
+                    ORDER BY sar.created_at DESC
+                ''', (status_filter,))
+            else:
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    ORDER BY 
+                        CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
+                        sar.created_at DESC
+                ''')
         else:
-            cur.execute('''
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                FROM sales_agency_request_items sari
-                JOIN merchandise m ON sari.merchandise_id = m.id
-                WHERE sari.request_id = ?
-            ''', (req_dict['id'],))
+            cur = conn.cursor()
+            if status_filter != 'all':
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    WHERE sar.status = ?
+                    ORDER BY sar.created_at DESC
+                ''', (status_filter,))
+            else:
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    ORDER BY 
+                        CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
+                        sar.created_at DESC
+                ''')
         
-        items = [dict(item) for item in cur.fetchall()]
-        req_dict['items'] = items
-        requests.append(req_dict)
-    
-    # 統計を取得
-    if DATABASE_URL:
-        cur.execute("SELECT status, COUNT(*) FROM sales_agency_requests GROUP BY status")
-    else:
-        cur.execute("SELECT status, COUNT(*) FROM sales_agency_requests GROUP BY status")
-    
-    for row in cur.fetchall():
-        if isinstance(row, dict):
-            stats[row['status']] = row['count']
+        requests_raw = cur.fetchall()
+        requests = []
+        
+        # 統計
+        stats = {'pending': 0, 'approved': 0, 'rejected': 0}
+        
+        for req in requests_raw:
+            req_dict = dict(req)
+            # 関連商品を取得
+            if DATABASE_URL:
+                cur.execute('''
+                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                    FROM sales_agency_request_items sari
+                    JOIN merchandise m ON sari.merchandise_id = m.id
+                    WHERE sari.request_id = %s
+                ''', (req_dict['id'],))
+            else:
+                cur.execute('''
+                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                    FROM sales_agency_request_items sari
+                    JOIN merchandise m ON sari.merchandise_id = m.id
+                    WHERE sari.request_id = ?
+                ''', (req_dict['id'],))
+            
+            items = [dict(item) for item in cur.fetchall()]
+            req_dict['items'] = items
+            requests.append(req_dict)
+        
+        # 統計を取得
+        if DATABASE_URL:
+            cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
+            for row in cur.fetchall():
+                if row['status'] in stats:
+                    stats[row['status']] = row['cnt']
         else:
-            stats[row[0]] = row[1]
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/sales_agency_requests.html',
-                         requests=requests,
-                         stats=stats,
-                         status_filter=status_filter,
-                         service_types=SALES_AGENCY_SERVICE_TYPES,
-                         statuses=SALES_AGENCY_STATUS)
+            cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
+            for row in cur.fetchall():
+                row_dict = dict(row)
+                if row_dict['status'] in stats:
+                    stats[row_dict['status']] = row_dict['cnt']
+        
+        cur.close()
+        conn.close()
+        
+        return render_template('admin/sales_agency_requests.html',
+                             requests=requests,
+                             stats=stats,
+                             status_filter=status_filter,
+                             service_types=SALES_AGENCY_SERVICE_TYPES,
+                             statuses=SALES_AGENCY_STATUS)
+    except Exception as e:
+        import traceback
+        print(f"Sales agency requests error: {e}")
+        traceback.print_exc()
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/admin/sales-agency-requests/<int:id>/process', methods=['POST'])
 @login_required
