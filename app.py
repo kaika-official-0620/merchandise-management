@@ -5404,7 +5404,7 @@ def admin_analytics():
 @login_required
 @admin_required
 def admin_analytics_kaika():
-    """開花（管理者）商品の分析ページ（user_id = NULL の商品のみ）"""
+    """開花（管理者）商品の分析ページ（管理者/オーナーの商品）"""
     analytics_data = {}
     overall_stats = {}
     
@@ -5416,6 +5416,10 @@ def admin_analytics_kaika():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 管理者/オーナーのユーザーIDを取得
+            cur.execute("SELECT id FROM users WHERE role IN ('admin', 'owner')")
+            admin_ids = [row['id'] for row in cur.fetchall()]
             
             # 日付条件を構築
             date_condition = ""
@@ -5430,8 +5434,14 @@ def admin_analytics_kaika():
                 date_condition = " AND sale_date <= %s"
                 date_params = [date_to]
             
-            # 管理者商品（user_id IS NULL）の条件
-            user_condition = "user_id IS NULL"
+            # 管理者商品の条件（user_id IS NULL または 管理者/オーナーのID）
+            if admin_ids:
+                admin_placeholders = ','.join(['%s'] * len(admin_ids))
+                user_condition = f"(user_id IS NULL OR user_id IN ({admin_placeholders}))"
+                base_params = admin_ids
+            else:
+                user_condition = "user_id IS NULL"
+                base_params = []
             
             # 全体統計
             query = f"""
@@ -5443,7 +5453,7 @@ def admin_analytics_kaika():
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
                 FROM merchandise
                 WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
-            cur.execute(query, date_params if date_params else None)
+            cur.execute(query, base_params + date_params if (base_params or date_params) else None)
             overall_stats = dict(cur.fetchone() or {})
             
             # 月別売上・利益推移
@@ -5458,7 +5468,7 @@ def admin_analytics_kaika():
                 GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
                 ORDER BY month DESC
                 LIMIT 12
-            """, date_params if date_params else None)
+            """, base_params + date_params if (base_params or date_params) else None)
             analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
             
             # ブランド別統計
@@ -5476,7 +5486,7 @@ def admin_analytics_kaika():
                 GROUP BY brand_name
                 ORDER BY total_profit DESC
                 LIMIT 10
-            """, date_params if date_params else None)
+            """, base_params + date_params if (base_params or date_params) else None)
             analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売タイプ別統計
@@ -5490,7 +5500,7 @@ def admin_analytics_kaika():
                 WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
                 GROUP BY sale_type
                 ORDER BY count DESC
-            """, date_params if date_params else None)
+            """, base_params + date_params if (base_params or date_params) else None)
             analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
             
             # 在庫統計
@@ -5500,13 +5510,17 @@ def admin_analytics_kaika():
                     COALESCE(SUM(purchase_price), 0) as inventory_value
                 FROM merchandise 
                 WHERE {user_condition} AND sale_date IS NULL
-            """)
+            """, base_params if base_params else None)
             analytics_data['inventory'] = dict(cur.fetchone() or {})
             
         else:
             import sqlite3
             cur = conn.cursor()
-            cur.row_factory = sqlite3.Row
+            conn.row_factory = sqlite3.Row
+            
+            # 管理者/オーナーのユーザーIDを取得
+            cur.execute("SELECT id FROM users WHERE role IN ('admin', 'owner')")
+            admin_ids = [row[0] for row in cur.fetchall()]
             
             # 日付条件を構築（SQLite用）
             date_condition = ""
@@ -5521,8 +5535,14 @@ def admin_analytics_kaika():
                 date_condition = " AND sale_date <= ?"
                 date_params = [date_to]
             
-            # 管理者商品（user_id IS NULL）の条件
-            user_condition = "user_id IS NULL"
+            # 管理者商品の条件（user_id IS NULL または 管理者/オーナーのID）
+            if admin_ids:
+                admin_placeholders = ','.join(['?'] * len(admin_ids))
+                user_condition = f"(user_id IS NULL OR user_id IN ({admin_placeholders}))"
+                base_params = admin_ids
+            else:
+                user_condition = "user_id IS NULL"
+                base_params = []
             
             # 全体統計
             query = f"""
@@ -5534,7 +5554,7 @@ def admin_analytics_kaika():
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
                 FROM merchandise
                 WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
-            cur.execute(query, date_params if date_params else ())
+            cur.execute(query, base_params + date_params if (base_params or date_params) else ())
             overall_stats = dict(cur.fetchone() or {})
             
             # 月別売上・利益推移
@@ -5549,7 +5569,7 @@ def admin_analytics_kaika():
                 GROUP BY strftime('%Y-%m', sale_date)
                 ORDER BY month DESC
                 LIMIT 12
-            """, date_params if date_params else ())
+            """, base_params + date_params if (base_params or date_params) else ())
             analytics_data['monthly_sales'] = [dict(m) for m in cur.fetchall()]
             
             # ブランド別統計
@@ -5567,7 +5587,7 @@ def admin_analytics_kaika():
                 GROUP BY brand_name
                 ORDER BY total_profit DESC
                 LIMIT 10
-            """, date_params if date_params else ())
+            """, base_params + date_params if (base_params or date_params) else ())
             analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売タイプ別統計
@@ -5581,7 +5601,7 @@ def admin_analytics_kaika():
                 WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
                 GROUP BY sale_type
                 ORDER BY count DESC
-            """, date_params if date_params else ())
+            """, base_params + date_params if (base_params or date_params) else ())
             analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
             
             # 在庫統計
@@ -5591,7 +5611,7 @@ def admin_analytics_kaika():
                     COALESCE(SUM(purchase_price), 0) as inventory_value
                 FROM merchandise 
                 WHERE {user_condition} AND sale_date IS NULL
-            """)
+            """, base_params if base_params else ())
             analytics_data['inventory'] = dict(cur.fetchone() or {})
         
         cur.close()
