@@ -853,6 +853,14 @@
 }
 
 @media (max-width: 768px) {
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .page-description {
+        font-size: 0.75rem;
+    }
+    
     .analytics-grid {
         grid-template-columns: 1fr;
     }
@@ -867,31 +875,176 @@
     
     .analytics-summary {
         grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .summary-card {
+        padding: 0.75rem;
+    }
+    
+    .summary-label {
+        font-size: 0.65rem;
+    }
+    
+    .summary-value {
+        font-size: 0.9rem;
+    }
+    
+    .expense-summary {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .expense-card {
+        padding: 0.75rem;
+    }
+    
+    .expense-label {
+        font-size: 0.7rem;
+    }
+    
+    .expense-value {
+        font-size: 1rem;
+    }
+    
+    .kpi-dashboard {
+        padding: 1rem;
+    }
+    
+    .kpi-dashboard h2 {
+        font-size: 0.95rem;
     }
     
     .kpi-grid {
         grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
     }
     
     .kpi-card {
-        padding: 0.75rem;
+        padding: 0.6rem;
+        gap: 0.5rem;
     }
     
     .kpi-icon {
-        font-size: 1.5rem;
+        font-size: 1.2rem;
     }
     
     .kpi-value {
-        font-size: 1.25rem;
+        font-size: 1rem;
+    }
+    
+    .kpi-label {
+        font-size: 0.7rem;
+    }
+    
+    .kpi-detail {
+        font-size: 0.6rem;
+    }
+    
+    .cashflow-section {
+        padding: 1rem;
+    }
+    
+    .cashflow-section h2 {
+        font-size: 0.95rem;
     }
     
     .cashflow-table {
-        font-size: 0.8rem;
+        font-size: 0.65rem;
+        min-width: 550px;
     }
     
     .cashflow-table th,
     .cashflow-table td {
-        padding: 0.5rem;
+        padding: 0.4rem 0.3rem;
+        white-space: nowrap;
+    }
+    
+    .analytics-section {
+        padding: 1rem;
+    }
+    
+    .analytics-section h2 {
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .chart-label {
+        font-size: 0.7rem;
+    }
+    
+    .chart-bar-group {
+        height: 10px;
+    }
+    
+    .chart-legend {
+        gap: 1rem;
+        font-size: 0.75rem;
+    }
+    
+    .legend-color {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .stats-info {
+        font-size: 0.8rem;
+    }
+    
+    .stats-name {
+        font-size: 0.8rem;
+    }
+    
+    .stats-count {
+        font-size: 0.7rem;
+    }
+    
+    .stats-values {
+        font-size: 0.7rem;
+    }
+    
+    .pie-item {
+        padding: 0.4rem;
+    }
+    
+    .pie-label {
+        font-size: 0.75rem;
+    }
+    
+    .pie-count {
+        font-size: 0.65rem;
+    }
+    
+    .pie-values {
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .analytics-summary {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .summary-card {
+        padding: 0.6rem;
+    }
+    
+    .summary-label {
+        font-size: 0.6rem;
+    }
+    
+    .summary-value {
+        font-size: 0.8rem;
+    }
+    
+    .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .kpi-value {
+        font-size: 0.85rem;
     }
 }
 </style>

@@ -77,32 +77,24 @@
 {% if kaika_fee and kaika_fee.summary %}
 <div class="admin-section kaika-fee-section">
     <h2>開花手数料</h2>
-    <div class="kaika-grid">
-        <div class="kaika-breakdown">
-            <h3>サービス別内訳</h3>
-            <div class="kaika-items">
-                <div class="kaika-item">
-                    <span class="kaika-service">📸 撮影梱包等代行サービス</span>
-                    <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
-                </div>
-                <div class="kaika-item">
-                    <span class="kaika-service">🏭 業者卸販売</span>
-                    <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
-                </div>
-                <div class="kaika-item">
-                    <span class="kaika-service">📋 同時出品サービス</span>
-                    <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
-                </div>
-                <div class="kaika-item">
-                    <span class="kaika-service">🔨 オークション流し</span>
-                    <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
-                </div>
+    <div class="kaika-breakdown-only">
+        <h3>サービス別内訳</h3>
+        <div class="kaika-items">
+            <div class="kaika-item">
+                <span class="kaika-service">📸 撮影梱包等代行サービス</span>
+                <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
             </div>
-        </div>
-        <div class="kaika-chart-container">
-            <h3>月別推移</h3>
-            <div style="position: relative; width: 100%; max-width: 100%;">
-                <canvas id="kaikaFeeChart"></canvas>
+            <div class="kaika-item">
+                <span class="kaika-service">🏭 業者卸販売</span>
+                <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
+            </div>
+            <div class="kaika-item">
+                <span class="kaika-service">📋 同時出品サービス</span>
+                <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
+            </div>
+            <div class="kaika-item">
+                <span class="kaika-service">🔨 オークション流し</span>
+                <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
             </div>
         </div>
     </div>
@@ -551,6 +543,11 @@
     }
 }
 
+.kaika-breakdown-only {
+    max-width: 500px;
+}
+
+.kaika-breakdown-only h3,
 .kaika-breakdown h3,
 .kaika-chart-container h3 {
     font-size: 1rem;
@@ -922,6 +919,15 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
 
 /* レスポンシブ */
 @media (max-width: 768px) {
+    /* 全体のフォントサイズを小さく */
+    .admin-section h2 {
+        font-size: 1rem;
+    }
+    
+    .admin-section h3 {
+        font-size: 0.9rem;
+    }
+    
     .day-sales-chart {
         flex-wrap: wrap;
         height: auto;
@@ -932,9 +938,26 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
         min-width: 45px;
     }
     
+    .day-label {
+        font-size: 0.65rem;
+    }
+    
+    .day-amount {
+        font-size: 0.6rem;
+    }
+    
     .repeat-item {
         grid-template-columns: 1fr;
         gap: 5px;
+    }
+    
+    .repeat-name {
+        font-size: 0.8rem;
+    }
+    
+    .repeat-count,
+    .repeat-amount {
+        font-size: 0.75rem;
     }
     
     /* テーブル横スクロール対応 */
@@ -945,6 +968,17 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
     
     .admin-table {
         min-width: 600px;
+        font-size: 0.75rem;
+    }
+    
+    .admin-table th {
+        font-size: 0.7rem;
+        padding: 0.5rem 0.4rem;
+    }
+    
+    .admin-table td {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.4rem;
     }
     
     /* 商品名を横書きで固定 */
@@ -963,16 +997,30 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
     /* 統計カードの調整 */
     .admin-stats-grid {
         grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .admin-stat-card {
+        padding: 0.75rem;
+    }
+    
+    .admin-stat-card .stat-label-top {
+        font-size: 0.65rem;
     }
     
     .admin-stat-card .stat-value {
-        font-size: 1.1rem;
+        font-size: 0.95rem;
         white-space: nowrap;
+    }
+    
+    .admin-stat-card .stat-change {
+        font-size: 0.6rem;
     }
     
     /* ブランド統計 */
     .brand-stat-item {
         flex-wrap: wrap;
+        padding: 0.5rem;
     }
     
     .brand-info h4 {
@@ -980,131 +1028,96 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 150px;
+        font-size: 0.8rem;
+    }
+    
+    .brand-info span {
+        font-size: 0.7rem;
+    }
+    
+    .brand-stats span {
+        font-size: 0.7rem;
     }
     
     /* 販売先カード */
     .analytics-cards {
         grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+    
+    .analytics-card {
+        padding: 0.75rem;
     }
     
     .analytics-card h4 {
         white-space: nowrap;
+        font-size: 0.75rem;
+    }
+    
+    .analytics-card .card-value {
+        font-size: 0.9rem;
+    }
+    
+    .analytics-card .card-sub {
+        font-size: 0.65rem;
+    }
+    
+    /* 開花手数料セクション */
+    .kaika-fee-section h2 {
+        font-size: 1rem;
+    }
+    
+    .kaika-breakdown-only h3 {
         font-size: 0.85rem;
+    }
+    
+    .kaika-service {
+        font-size: 0.75rem;
+    }
+    
+    .kaika-amount {
+        font-size: 0.8rem;
+    }
+    
+    .kaika-fee-card .stat-value {
+        font-size: 1rem;
     }
 }
 
 @media (max-width: 480px) {
     .admin-stats-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .admin-stat-card {
+        padding: 0.6rem;
+    }
+    
+    .admin-stat-card .stat-label-top {
+        font-size: 0.6rem;
+    }
+    
+    .admin-stat-card .stat-value {
+        font-size: 0.85rem;
     }
     
     .analytics-cards {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .analytics-card {
+        padding: 0.6rem;
+    }
+    
+    .analytics-card h4 {
+        font-size: 0.7rem;
+    }
+    
+    .analytics-card .card-value {
+        font-size: 0.8rem;
     }
 }
 </style>
-
-<!-- 開花手数料グラフ -->
-{% if kaika_fee and kaika_fee.monthly %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('kaikaFeeChart');
-    if (ctx) {
-        // データを逆順（古い順）に
-        const monthlyData = {{ kaika_fee.monthly | tojson | safe }}.reverse();
-        const labels = monthlyData.map(d => d.month);
-        const fees = monthlyData.map(d => d.fee || 0);
-        const counts = monthlyData.map(d => d.count || 0);
-        
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: '開花手数料',
-                    data: fees,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    borderWidth: 3,
-                    fill: true,
-                    tension: 0.4,
-                    pointBackgroundColor: '#f59e0b',
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 7,
-                    yAxisID: 'y'
-                }, {
-                    label: '取引件数',
-                    data: counts,
-                    borderColor: '#6366f1',
-                    backgroundColor: 'transparent',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    tension: 0.4,
-                    pointBackgroundColor: '#6366f1',
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    yAxisID: 'y1'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                aspectRatio: window.innerWidth < 480 ? 1.2 : 2,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                if (context.datasetIndex === 0) {
-                                    return '手数料: ¥' + context.raw.toLocaleString();
-                                }
-                                return '件数: ' + context.raw + '件';
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: '手数料 (円)'
-                        },
-                        ticks: {
-                            callback: function(value) {
-                                return '¥' + value.toLocaleString();
-                            }
-                        }
-                    },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: '件数'
-                        },
-                        grid: {
-                            drawOnChartArea: false
-                        }
-                    }
-                }
-            }
-        });
-    }
-});
-</script>
-{% endif %}
 {% endblock %}

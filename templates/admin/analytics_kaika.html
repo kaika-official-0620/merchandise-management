@@ -357,5 +357,137 @@
     text-align: center;
     padding: 2rem;
 }
+
+/* スマホ表示 */
+@media (max-width: 768px) {
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .page-description {
+        font-size: 0.75rem;
+    }
+    
+    .admin-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .admin-stat-card {
+        padding: 0.75rem;
+    }
+    
+    .admin-stat-card .stat-label-top {
+        font-size: 0.65rem;
+    }
+    
+    .admin-stat-card .stat-value {
+        font-size: 0.9rem;
+    }
+    
+    .admin-section h2 {
+        font-size: 0.95rem;
+    }
+    
+    .admin-table-container {
+        overflow-x: auto;
+    }
+    
+    .admin-table {
+        font-size: 0.7rem;
+        min-width: 500px;
+    }
+    
+    .admin-table th,
+    .admin-table td {
+        padding: 0.4rem 0.3rem;
+        white-space: nowrap;
+    }
+    
+    .inventory-stats {
+        gap: 1rem;
+    }
+    
+    .inventory-label {
+        font-size: 0.7rem;
+    }
+    
+    .inventory-value {
+        font-size: 1.1rem;
+    }
+    
+    .brand-stats-list {
+        gap: 6px;
+    }
+    
+    .brand-stat-item {
+        padding: 8px 10px;
+        gap: 10px;
+    }
+    
+    .brand-rank {
+        width: 22px;
+        height: 22px;
+        font-size: 0.7rem;
+    }
+    
+    .brand-info h4 {
+        font-size: 0.8rem;
+    }
+    
+    .brand-detail {
+        font-size: 0.65rem;
+    }
+    
+    .profit-rate {
+        font-size: 0.9rem;
+    }
+    
+    .profit-amount {
+        font-size: 0.7rem;
+    }
+    
+    .date-filter-section {
+        padding: 0.75rem;
+    }
+    
+    .date-input-group label {
+        font-size: 0.7rem;
+    }
+    
+    .date-input {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+    }
+    
+    .filter-badge {
+        font-size: 0.7rem;
+        padding: 4px 8px;
+    }
+    
+    .admin-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .admin-stat-card .stat-value {
+        font-size: 0.8rem;
+    }
+    
+    .date-filter-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .date-separator {
+        display: none;
+    }
+}
 </style>
 {% endblock %}
