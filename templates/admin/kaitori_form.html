@@ -379,6 +379,36 @@
     flex: 1;
     max-width: 400px;
 }
+
+/* スマホ対応 */
+@media (max-width: 768px) {
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .attachment-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .product-selector {
+        flex-wrap: wrap;
+    }
+    
+    .product-selector label {
+        flex: 1 1 100%;
+    }
+    
+    .product-selector select {
+        flex: 1 1 100%;
+        max-width: none;
+    }
+}
 </style>
 
 <script>

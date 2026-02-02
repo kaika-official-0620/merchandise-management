@@ -13435,13 +13435,14 @@ def check_and_transfer_overdue_items():
 
 
 def check_and_transfer_long_term_items():
-    """5ヶ月以上経過した長期在庫商品を管理者に自動移動"""
+    """仕入れ日から5ヶ月以上経過した長期在庫商品を管理者に自動移動"""
     print(f"[{datetime.now()}] Running long-term items check...")
     
     conn = get_db()
     
     # 150日（約5ヶ月）以上経過
     five_months_ago = datetime.now() - timedelta(days=150)
+    five_months_ago_str = five_months_ago.strftime('%Y-%m-%d')
     
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
@@ -13452,15 +13453,16 @@ def check_and_transfer_long_term_items():
         owner = cur.fetchone()
         owner_id = owner['id'] if owner else 1
         
-        # 5ヶ月以上経過した未売却の一般ユーザー商品を取得
+        # 仕入れ日から5ヶ月以上経過した未売却の一般ユーザー商品を取得
         cur.execute("""
             SELECT m.id, m.user_id, m.product_name, u.display_name, u.username, u.line_user_id
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
             WHERE m.sale_date IS NULL
-              AND m.created_at <= %s
+              AND m.purchase_date IS NOT NULL
+              AND m.purchase_date <= %s
               AND u.role = 'user'
-        """, (five_months_ago,))
+        """, (five_months_ago_str,))
         long_term_items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
@@ -13475,9 +13477,10 @@ def check_and_transfer_long_term_items():
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
             WHERE m.sale_date IS NULL
-              AND m.created_at <= ?
+              AND m.purchase_date IS NOT NULL
+              AND m.purchase_date <= ?
               AND u.role = 'user'
-        """, (five_months_ago.strftime('%Y-%m-%d'),))
+        """, (five_months_ago_str,))
         
         columns = ['id', 'user_id', 'product_name', 'display_name', 'username', 'line_user_id']
         long_term_items = [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -13540,7 +13543,7 @@ def check_and_transfer_long_term_items():
 
 {display_name}様
 
-登録から5ヶ月以上経過した商品が管理者へ移管されました。
+仕入れ日から5ヶ月以上経過した商品が管理者へ移管されました。
 
 移管商品（{len(items)}件）:
 {items_text}
@@ -13752,44 +13755,47 @@ def submit_disposal_request():
 @app.route('/long-term-items')
 @login_required
 def long_term_items():
-    """長期在庫商品（3ヶ月以上経過）の一覧・処分オプションページ"""
+    """長期在庫商品（仕入れ日から3ヶ月以上経過）の一覧・処分オプションページ"""
     conn = get_db()
     
     # 3ヶ月前の日付を計算
     three_months_ago = datetime.now() - timedelta(days=90)
+    three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 3ヶ月以上経過した未売却商品を取得
+        # 仕入れ日から3ヶ月以上経過した未売却商品を取得
         cur.execute("""
             SELECT m.*, 
                    dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                   EXTRACT(DAY FROM (CURRENT_TIMESTAMP - m.created_at)) as days_since_created
+                   EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date)) as days_since_purchase
             FROM merchandise m
             LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
             WHERE m.user_id = %s 
               AND m.sale_date IS NULL
-              AND m.created_at <= %s
-            ORDER BY m.created_at ASC
-        """, (current_user.id, three_months_ago))
+              AND m.purchase_date IS NOT NULL
+              AND m.purchase_date <= %s
+            ORDER BY m.purchase_date ASC
+        """, (current_user.id, three_months_ago_str))
         items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
         
-        # 3ヶ月以上経過した未売却商品を取得
+        # 仕入れ日から3ヶ月以上経過した未売却商品を取得
         cur.execute("""
             SELECT m.*, 
                    dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                   CAST((julianday('now') - julianday(m.created_at)) AS INTEGER) as days_since_created
+                   CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
             FROM merchandise m
             LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
             WHERE m.user_id = ? 
               AND m.sale_date IS NULL
-              AND m.created_at <= ?
-            ORDER BY m.created_at ASC
-        """, (current_user.id, three_months_ago.strftime('%Y-%m-%d')))
+              AND m.purchase_date IS NOT NULL
+              AND m.purchase_date <= ?
+            ORDER BY m.purchase_date ASC
+        """, (current_user.id, three_months_ago_str))
         items = [dict(row) for row in cur.fetchall()]
     
     cur.close()
@@ -13797,13 +13803,13 @@ def long_term_items():
     
     # 各商品の経過日数を計算
     for item in items:
-        if item.get('created_at'):
-            created_at = item['created_at']
-            if isinstance(created_at, str):
-                created_at = datetime.strptime(created_at[:19], '%Y-%m-%d %H:%M:%S')
-            days = (datetime.now() - created_at).days
-            item['days_since_created'] = days
-            item['months_since_created'] = days // 30
+        if item.get('purchase_date'):
+            purchase_date = item['purchase_date']
+            if isinstance(purchase_date, str):
+                purchase_date = datetime.strptime(purchase_date[:10], '%Y-%m-%d')
+            days = (datetime.now() - datetime.combine(purchase_date, datetime.min.time()) if hasattr(purchase_date, 'year') and not hasattr(purchase_date, 'hour') else (datetime.now() - purchase_date)).days
+            item['days_since_purchase'] = days
+            item['months_since_purchase'] = days // 30
     
     return render_template('long_term_items.html', items=items)
 
@@ -13910,7 +13916,7 @@ def submit_long_term_disposal_request():
 
 
 def get_long_term_item_count():
-    """3ヶ月以上経過した未処理の長期在庫商品数を取得"""
+    """仕入れ日から3ヶ月以上経過した未処理の長期在庫商品数を取得"""
     if not current_user.is_authenticated:
         return 0
     
@@ -13919,6 +13925,7 @@ def get_long_term_item_count():
         cur = conn.cursor()
         
         three_months_ago = datetime.now() - timedelta(days=90)
+        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
         
         if DATABASE_URL:
             cur.execute("""
@@ -13926,18 +13933,20 @@ def get_long_term_item_count():
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
-                  AND m.created_at <= %s
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= %s
                   AND dr.id IS NULL
-            """, (current_user.id, three_months_ago))
+            """, (current_user.id, three_months_ago_str))
         else:
             cur.execute("""
                 SELECT COUNT(*) FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = ? 
                   AND m.sale_date IS NULL
-                  AND m.created_at <= ?
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= ?
                   AND dr.id IS NULL
-            """, (current_user.id, three_months_ago.strftime('%Y-%m-%d')))
+            """, (current_user.id, three_months_ago_str))
         
         count = cur.fetchone()[0]
         cur.close()

@@ -10,14 +10,14 @@
     <!-- 説明 -->
     <div class="info-card">
         <h3>📦 長期在庫商品について</h3>
-        <p>登録から<strong>3ヶ月以上</strong>経過した未売却商品は、以下の処分オプションを選択できます。</p>
+        <p>仕入れ日から<strong>3ヶ月以上</strong>経過した未売却商品は、以下の処分オプションを選択できます。</p>
         <ul>
             <li><strong>オークション販売</strong> - 弊社でオークションに出品し販売</li>
             <li><strong>在庫処分</strong> - 弊社で買取・処分</li>
             <li><strong>受け取り郵送</strong> - ご指定の住所に郵送（送料自己負担）</li>
         </ul>
         <div class="warning-note">
-            <strong>⚠️ ご注意</strong>：登録から<strong>5ヶ月</strong>を過ぎると、商品は自動的に管理者へ移管されます。
+            <strong>⚠️ ご注意</strong>：仕入れ日から<strong>5ヶ月</strong>を過ぎると、商品は自動的に管理者へ移管されます。
         </div>
     </div>
     
@@ -46,10 +46,10 @@
                         <div class="item-name">{{ item.product_name or '商品名なし' }}</div>
                         <div class="item-brand">{{ item.brand_name or '-' }}</div>
                         <div class="item-days">
-                            <span class="days-badge {% if item.days_since_created >= 150 %}danger{% elif item.days_since_created >= 120 %}warning{% endif %}">
-                                {{ item.days_since_created }}日経過
+                            <span class="days-badge {% if item.days_since_purchase >= 150 %}danger{% elif item.days_since_purchase >= 120 %}warning{% endif %}">
+                                {{ item.days_since_purchase }}日経過
                             </span>
-                            {% if item.days_since_created >= 150 %}
+                            {% if item.days_since_purchase >= 150 %}
                             <span class="auto-transfer-warning">まもなく自動移管</span>
                             {% endif %}
                         </div>
@@ -135,7 +135,7 @@
     </form>
     {% else %}
     <div class="empty-message">
-        <p>3ヶ月以上経過した商品はありません</p>
+        <p>仕入れ日から3ヶ月以上経過した商品はありません</p>
     </div>
     {% endif %}
 </div>

@@ -295,6 +295,26 @@
     max-width: 400px;
     min-width: 200px;
 }
+
+/* スマホ対応 */
+@media (max-width: 768px) {
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .product-selector select,
+    .product-selector .form-control {
+        flex: 1 1 100%;
+        max-width: none;
+        min-width: 0;
+    }
+}
 </style>
 
 <script>

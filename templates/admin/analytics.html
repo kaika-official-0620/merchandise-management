@@ -936,6 +936,71 @@ tr:nth-child(n+4) .rank-badge { background: #e2e8f0; color: #64748b; }
         grid-template-columns: 1fr;
         gap: 5px;
     }
+    
+    /* テーブル横スクロール対応 */
+    .admin-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .admin-table {
+        min-width: 600px;
+    }
+    
+    /* 商品名を横書きで固定 */
+    .admin-table td,
+    .admin-table th {
+        white-space: nowrap;
+    }
+    
+    /* 商品名のみ折り返し許可（長すぎる場合） */
+    .admin-table td:nth-child(2) {
+        white-space: normal;
+        min-width: 120px;
+        word-break: keep-all;
+    }
+    
+    /* 統計カードの調整 */
+    .admin-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .admin-stat-card .stat-value {
+        font-size: 1.1rem;
+        white-space: nowrap;
+    }
+    
+    /* ブランド統計 */
+    .brand-stat-item {
+        flex-wrap: wrap;
+    }
+    
+    .brand-info h4 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
+    
+    /* 販売先カード */
+    .analytics-cards {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .analytics-card h4 {
+        white-space: nowrap;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .analytics-cards {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 

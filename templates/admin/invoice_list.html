@@ -157,6 +157,23 @@
     color: #666;
     font-size: 16px;
 }
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
 </style>
 {% endblock %}
 

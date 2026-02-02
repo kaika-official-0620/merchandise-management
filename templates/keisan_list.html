@@ -102,5 +102,28 @@
     font-family: 'Consolas', monospace;
     font-weight: 600;
 }
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+}
 </style>
 {% endblock %}

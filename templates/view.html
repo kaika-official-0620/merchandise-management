@@ -323,6 +323,7 @@
     .view-image {
         order: 1;
         margin-bottom: 15px;
+        margin-top: 10px;
     }
     
     .view-details {
@@ -654,6 +655,42 @@ function changePhoto(index) {
     document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
         thumb.classList.toggle('active', i === index);
     });
+}
+
+// メイン画像のスワイプ切り替え（スマホ対応）
+let mainTouchStartX = 0;
+let mainTouchEndX = 0;
+let mainTouchStartY = 0;
+let mainTouchEndY = 0;
+const mainSwipeThreshold = 50;
+
+document.querySelector('.main-photo')?.addEventListener('touchstart', function(e) {
+    mainTouchStartX = e.changedTouches[0].screenX;
+    mainTouchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+document.querySelector('.main-photo')?.addEventListener('touchend', function(e) {
+    mainTouchEndX = e.changedTouches[0].screenX;
+    mainTouchEndY = e.changedTouches[0].screenY;
+    handleMainPhotoSwipe();
+}, { passive: true });
+
+function handleMainPhotoSwipe() {
+    const diffX = mainTouchStartX - mainTouchEndX;
+    const diffY = mainTouchStartY - mainTouchEndY;
+    
+    // 横方向のスワイプが縦方向より大きい場合のみ処理
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > mainSwipeThreshold) {
+        if (diffX > 0) {
+            // 左スワイプ → 次の画像
+            const nextIndex = (currentPhotoIndex + 1) % photos.length;
+            changePhoto(nextIndex);
+        } else {
+            // 右スワイプ → 前の画像
+            const prevIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
+            changePhoto(prevIndex);
+        }
+    }
 }
 
 function openLightbox(index) {
