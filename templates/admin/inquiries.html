@@ -57,7 +57,7 @@
                     </td>
                     <td>{{ inquiry.display_name or inquiry.username }}</td>
                     <td class="text-center">{{ inquiry.reply_count or 0 }}</td>
-                    <td>{{ inquiry.updated_at.strftime('%Y/%m/%d %H:%M') if inquiry.updated_at else '-' }}</td>
+                    <td>{{ inquiry.updated_at[:16].replace('-', '/').replace('T', ' ') if inquiry.updated_at else '-' }}</td>
                     <td>
                         <a href="{{ url_for('admin_inquiry_view', id=inquiry.id) }}" class="btn btn-sm">詳細</a>
                     </td>

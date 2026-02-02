@@ -18,7 +18,7 @@
         </div>
         <h2 class="inquiry-title">{{ inquiry.title }}</h2>
         <div class="inquiry-meta">
-            <span>送信日時: {{ inquiry.created_at.strftime('%Y/%m/%d %H:%M') if inquiry.created_at else '-' }}</span>
+            <span>送信日時: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
         </div>
         <div class="inquiry-content">
             {{ inquiry.content | replace('\n', '<br>') | safe }}
@@ -55,7 +55,7 @@
                         {% endif %}
                         {{ reply.display_name or reply.username }}
                     </span>
-                    <span class="thread-date">{{ reply.created_at.strftime('%Y/%m/%d %H:%M') if reply.created_at else '-' }}</span>
+                    <span class="thread-date">{{ reply.created_at[:16].replace('-', '/').replace('T', ' ') if reply.created_at else '-' }}</span>
                 </div>
                 <div class="thread-content">
                     {{ reply.content | replace('\n', '<br>') | safe }}

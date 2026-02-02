@@ -63,7 +63,7 @@
                                 {% endif %}
                                 {{ reply.display_name or reply.username }}
                             </span>
-                            <span class="thread-date">{{ reply.created_at.strftime('%Y/%m/%d %H:%M') if reply.created_at else '-' }}</span>
+                            <span class="thread-date">{{ reply.created_at[:16].replace('-', '/').replace('T', ' ') if reply.created_at else '-' }}</span>
                         </div>
                         <div class="thread-content">
                             {{ reply.content | replace('\n', '<br>') | safe }}
@@ -116,11 +116,11 @@
                 </div>
                 <div class="user-info-item">
                     <label>送信日時</label>
-                    <span>{{ inquiry.created_at.strftime('%Y/%m/%d %H:%M') if inquiry.created_at else '-' }}</span>
+                    <span>{{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
                 </div>
                 <div class="user-info-item">
                     <label>最終更新</label>
-                    <span>{{ inquiry.updated_at.strftime('%Y/%m/%d %H:%M') if inquiry.updated_at else '-' }}</span>
+                    <span>{{ inquiry.updated_at[:16].replace('-', '/').replace('T', ' ') if inquiry.updated_at else '-' }}</span>
                 </div>
             </div>
         </div>

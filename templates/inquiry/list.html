@@ -28,7 +28,7 @@
                 {% endif %}
             </div>
             <div class="inquiry-meta">
-                <span class="inquiry-date">{{ inquiry.created_at.strftime('%Y/%m/%d %H:%M') if inquiry.created_at else '-' }}</span>
+                <span class="inquiry-date">{{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
             </div>
         </a>
         {% endfor %}
