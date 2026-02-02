@@ -6093,6 +6093,97 @@ def admin_proxy_service_bulk_toggle():
     
     return jsonify({'success': True, 'updated_count': updated_count})
 
+@app.route('/admin/proxy-service/history')
+@login_required
+def admin_proxy_service_history():
+    """代行サービス履歴（落札済み商品・入札履歴）"""
+    if not current_user.is_admin():
+        flash('管理者権限が必要です', 'error')
+        return redirect(url_for('index'))
+    
+    finalized_items = []
+    bid_history = []
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 落札済み商品（代行サービス経由で売却された商品）
+            # proxy_service_bidsに入札があり、sale_dateが入っている商品
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price,
+                       m.photo_path, m.listing_price,
+                       u.display_name as winner_name,
+                       pb.bid_amount as winning_bid,
+                       pb.created_at as bid_time
+                FROM merchandise m
+                JOIN proxy_service_bids pb ON m.id = pb.merchandise_id
+                JOIN users u ON pb.user_id = u.id
+                WHERE m.sale_date IS NOT NULL
+                AND pb.bid_amount = (SELECT MAX(bid_amount) FROM proxy_service_bids WHERE merchandise_id = m.id)
+                ORDER BY m.sale_date DESC
+                LIMIT 100
+            """)
+            finalized_items = cur.fetchall()
+            
+            # 全入札履歴
+            cur.execute("""
+                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name,
+                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date,
+                       u.display_name as user_display_name
+                FROM proxy_service_bids pb
+                JOIN merchandise m ON pb.merchandise_id = m.id
+                LEFT JOIN users u ON pb.user_id = u.id
+                ORDER BY pb.created_at DESC
+                LIMIT 200
+            """)
+            bid_history = cur.fetchall()
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            
+            # 落札済み商品
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price,
+                       m.photo_path, m.listing_price,
+                       u.display_name as winner_name,
+                       pb.bid_amount as winning_bid,
+                       pb.created_at as bid_time
+                FROM merchandise m
+                JOIN proxy_service_bids pb ON m.id = pb.merchandise_id
+                JOIN users u ON pb.user_id = u.id
+                WHERE m.sale_date IS NOT NULL
+                AND pb.bid_amount = (SELECT MAX(bid_amount) FROM proxy_service_bids WHERE merchandise_id = m.id)
+                ORDER BY m.sale_date DESC
+                LIMIT 100
+            """)
+            finalized_items = [dict(row) for row in cur.fetchall()]
+            
+            # 全入札履歴
+            cur.execute("""
+                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name,
+                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date,
+                       u.display_name as user_display_name
+                FROM proxy_service_bids pb
+                JOIN merchandise m ON pb.merchandise_id = m.id
+                LEFT JOIN users u ON pb.user_id = u.id
+                ORDER BY pb.created_at DESC
+                LIMIT 200
+            """)
+            bid_history = [dict(row) for row in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Proxy service history error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return render_template('admin/proxy_service_history.html',
+                         finalized_items=finalized_items,
+                         bid_history=bid_history)
+
 @app.route('/admin/proxy-service/finalize', methods=['POST'])
 @login_required
 def admin_proxy_service_finalize():
@@ -7775,7 +7866,7 @@ def export_backup():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '3.1',
+        'version': '3.2',
         'users': [],
         'merchandise': [],
         'customers': [],
@@ -7807,7 +7898,12 @@ def export_backup():
         'inquiry_replies': [],
         'admin_kaitori_shoudaku': [],
         'admin_kaitori_shoudaku_items': [],
-        'item_disposal_requests': []
+        'item_disposal_requests': [],
+        # v3.2で追加：代行サービス関連
+        'proxy_service_users': [],
+        'proxy_service_bids': [],
+        'sales_agency_requests': [],
+        'sales_agency_request_items': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -7823,7 +7919,10 @@ def export_backup():
         # v3.1で追加
         'inquiries', 'inquiry_replies',
         'admin_kaitori_shoudaku', 'admin_kaitori_shoudaku_items',
-        'item_disposal_requests'
+        'item_disposal_requests',
+        # v3.2で追加（代行サービス関連）
+        'proxy_service_users', 'proxy_service_bids',
+        'sales_agency_requests', 'sales_agency_request_items'
     ]
     
     if DATABASE_URL:
@@ -17224,10 +17323,10 @@ SALES_AGENCY_STATUS = {
 
 def get_pending_sales_agency_count():
     """管理者向け：未処理の販売代行申請件数を取得"""
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return 0
-    
     try:
+        if not current_user.is_authenticated or not current_user.is_admin():
+            return 0
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
@@ -17239,7 +17338,8 @@ def get_pending_sales_agency_count():
         cur.close()
         conn.close()
         return count
-    except:
+    except Exception as e:
+        print(f"get_pending_sales_agency_count error: {e}")
         return 0
 
 @app.context_processor
@@ -17398,7 +17498,18 @@ def admin_sales_agency_requests():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            if status_filter != 'all':
+            if status_filter == 'processed':
+                # 処理済み（承認・却下）のみ表示
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    WHERE sar.status IN ('approved', 'rejected')
+                    ORDER BY sar.processed_at DESC
+                ''')
+            elif status_filter != 'all':
                 cur.execute('''
                     SELECT sar.*, u.display_name as user_name, u.username,
                            p.display_name as processor_name
@@ -17421,7 +17532,18 @@ def admin_sales_agency_requests():
                 ''')
         else:
             cur = conn.cursor()
-            if status_filter != 'all':
+            if status_filter == 'processed':
+                # 処理済み（承認・却下）のみ表示
+                cur.execute('''
+                    SELECT sar.*, u.display_name as user_name, u.username,
+                           p.display_name as processor_name
+                    FROM sales_agency_requests sar
+                    JOIN users u ON sar.user_id = u.id
+                    LEFT JOIN users p ON sar.processed_by = p.id
+                    WHERE sar.status IN ('approved', 'rejected')
+                    ORDER BY sar.processed_at DESC
+                ''')
+            elif status_filter != 'all':
                 cur.execute('''
                     SELECT sar.*, u.display_name as user_name, u.username,
                            p.display_name as processor_name

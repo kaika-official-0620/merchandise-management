@@ -377,6 +377,7 @@
     <div class="filter-tabs">
         <a href="{{ url_for('admin_sales_agency_requests') }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
         <a href="{{ url_for('admin_sales_agency_requests', status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">審査中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', status='processed') }}" class="filter-tab {% if status_filter == 'processed' %}active{% endif %}">処理済み</a>
         <a href="{{ url_for('admin_sales_agency_requests', status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">承認済み</a>
         <a href="{{ url_for('admin_sales_agency_requests', status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下</a>
     </div>

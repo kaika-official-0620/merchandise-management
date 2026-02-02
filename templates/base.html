@@ -134,11 +134,14 @@
                         <span class="menu-badge-inline">{{ get_pending_sale_request_count() }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('admin_sales_agency_requests') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' %}active{% endif %}">
+                    <a href="{{ url_for('admin_sales_agency_requests') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('status') != 'approved' and request.args.get('status') != 'rejected' %}active{% endif %}">
                         販売代行サービス受信BOX
                         {% if get_pending_sales_agency_count() > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sales_agency_count() }}</span>
                         {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', status='processed') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('status') == 'processed' %}active{% endif %}">
+                        販売代行サービス履歴
                     </a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
@@ -318,14 +321,15 @@
             
             <!-- サービス -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_proxy_service'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history'] %}active{% endif %}" onclick="toggleCategory(this)">
                     サービス
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_proxy_service'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history'] %}open{% endif %}">
                     {% if current_user.is_owner() %}
                     <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
                     {% endif %}
+                    <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行サービス履歴</a>
                 </div>
             </div>
             {% endif %}
