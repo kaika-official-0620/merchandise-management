@@ -205,14 +205,30 @@
             </div>
         </div>
         
+        <!-- 一括操作バー -->
+        <div class="bulk-action-bar" id="available-bulk-bar" style="display: none;">
+            <label class="checkbox-label select-all-inline">
+                <input type="checkbox" id="selectAllAvailable" onchange="toggleAllAvailableItems(this)">
+                <span>表示中をすべて選択</span>
+            </label>
+            <span class="selected-count" id="available-selected-count">0件選択中</span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="bulkAddItems()">
+                選択した商品を一括掲載
+            </button>
+        </div>
+        
         {% if available_items %}
         <div class="proxy-items-grid" id="available-items-grid">
             {% for item in available_items %}
             <div class="proxy-item-card available available-item" id="available-{{ item.id }}"
+                 data-id="{{ item.id }}"
                  data-name="{{ (item.product_name or '')|lower }}"
                  data-brand="{{ (item.brand_name or '')|lower }}"
                  data-owner="{{ item.owner_name }}"
                  data-price="{{ item.listing_price or 0 }}">
+                <div class="item-checkbox">
+                    <input type="checkbox" class="available-item-checkbox" data-id="{{ item.id }}" onchange="updateAvailableSelection()">
+                </div>
                 <div class="item-photo">
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
@@ -694,9 +710,62 @@
     gap: 0.5rem;
 }
 
+/* 一括操作バー */
+.bulk-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: #eff6ff;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #bfdbfe;
+}
+
+.select-all-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0;
+    background: none;
+    margin: 0;
+}
+
+.select-all-inline input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+.selected-count {
+    font-weight: 600;
+    color: #2563eb;
+}
+
+/* 商品カードのチェックボックス */
+.item-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+}
+
+.item-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #2563eb;
+    cursor: pointer;
+}
+
 .proxy-item-card.available {
+    position: relative;
     border: 1px dashed #d1d5db;
     background: white;
+}
+
+.proxy-item-card.available.selected {
+    border: 2px solid #2563eb;
+    background: #eff6ff;
 }
 
 .proxy-item-card .item-price {
@@ -850,6 +919,9 @@ function addProxyItem(itemId, btn) {
     btn.disabled = true;
     btn.textContent = '処理中...';
     
+    // 現在のフィルター状態を保存
+    saveAvailableFilters();
+    
     fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
         method: 'POST',
         headers: {
@@ -859,8 +931,8 @@ function addProxyItem(itemId, btn) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // ページをリロードして最新状態を表示
-            location.reload();
+            // ページをリロードして最新状態を表示（フィルター状態付き）
+            reloadWithFilters();
         } else {
             btn.disabled = false;
             btn.textContent = '掲載する';
@@ -870,6 +942,116 @@ function addProxyItem(itemId, btn) {
     .catch(err => {
         btn.disabled = false;
         btn.textContent = '掲載する';
+        alert('エラーが発生しました');
+    });
+}
+
+// フィルター状態を保存
+function saveAvailableFilters() {
+    const filters = {
+        search: document.getElementById('available-search').value,
+        owner: document.getElementById('available-owner-filter').value,
+        price: document.getElementById('available-price-filter').value
+    };
+    sessionStorage.setItem('proxyAvailableFilters', JSON.stringify(filters));
+}
+
+// フィルター状態を復元
+function restoreAvailableFilters() {
+    const saved = sessionStorage.getItem('proxyAvailableFilters');
+    if (saved) {
+        try {
+            const filters = JSON.parse(saved);
+            if (filters.search) document.getElementById('available-search').value = filters.search;
+            if (filters.owner) document.getElementById('available-owner-filter').value = filters.owner;
+            if (filters.price) document.getElementById('available-price-filter').value = filters.price;
+            filterAvailableItems();
+        } catch(e) {}
+    }
+}
+
+// フィルター状態を維持してリロード
+function reloadWithFilters() {
+    location.reload();
+}
+
+// 選択状態の更新
+function updateAvailableSelection() {
+    const checkboxes = document.querySelectorAll('.available-item-checkbox');
+    const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
+    const bulkBar = document.getElementById('available-bulk-bar');
+    const countSpan = document.getElementById('available-selected-count');
+    
+    // 選択された商品にハイライトを追加
+    checkboxes.forEach(cb => {
+        const card = cb.closest('.proxy-item-card');
+        if (cb.checked) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    });
+    
+    // 一括操作バーの表示/非表示
+    if (checkedBoxes.length > 0) {
+        bulkBar.style.display = 'flex';
+        countSpan.textContent = checkedBoxes.length + '件選択中';
+    } else {
+        bulkBar.style.display = 'none';
+    }
+    
+    // 全選択チェックボックスの状態を更新
+    const selectAll = document.getElementById('selectAllAvailable');
+    const visibleCheckboxes = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox');
+    const visibleChecked = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox:checked');
+    selectAll.checked = visibleCheckboxes.length > 0 && visibleCheckboxes.length === visibleChecked.length;
+}
+
+// 表示中の商品をすべて選択/解除
+function toggleAllAvailableItems(checkbox) {
+    const visibleItems = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox');
+    visibleItems.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateAvailableSelection();
+}
+
+// 一括掲載
+function bulkAddItems() {
+    const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
+    const itemIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
+    
+    if (itemIds.length === 0) {
+        alert('商品を選択してください');
+        return;
+    }
+    
+    if (!confirm(itemIds.length + '件の商品を一括で掲載しますか？')) {
+        return;
+    }
+    
+    // フィルター状態を保存
+    saveAvailableFilters();
+    
+    fetch('/admin/proxy-service/bulk-toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            item_ids: itemIds,
+            action: 'add'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            reloadWithFilters();
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
         alert('エラーが発生しました');
     });
 }
@@ -888,6 +1070,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const allChecked = Array.from(userCheckboxes).every(cb => cb.checked);
     if (selectAllCheckbox) {
         selectAllCheckbox.checked = allChecked && userCheckboxes.length > 0;
+    }
+    
+    // フィルター状態を復元
+    restoreAvailableFilters();
+    
+    // 一括操作バーを初期表示
+    const bulkBar = document.getElementById('available-bulk-bar');
+    if (bulkBar) {
+        bulkBar.style.display = 'none';
     }
 });
 
@@ -1006,6 +1197,7 @@ function clearAvailableFilters() {
     document.getElementById('available-search').value = '';
     document.getElementById('available-owner-filter').value = '';
     document.getElementById('available-price-filter').value = '';
+    sessionStorage.removeItem('proxyAvailableFilters');
     filterAvailableItems();
 }
 

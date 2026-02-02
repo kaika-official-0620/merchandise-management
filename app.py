@@ -5735,11 +5735,12 @@ def admin_proxy_service():
         """)
         bids = cur.fetchall()
         
-        # 選択可能な商品（未掲載かつ未販売）- PostgreSQL
+        # 選択可能な商品（未掲載かつ未販売、公開対象ユーザーのみ）- PostgreSQL
         cur.execute("""
             SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
             ORDER BY m.id DESC
             LIMIT 100
@@ -5787,11 +5788,12 @@ def admin_proxy_service():
         """)
         bids = cur.fetchall()
         
-        # 選択可能な商品（未掲載かつ未販売）- SQLite
+        # 選択可能な商品（未掲載かつ未販売、公開対象ユーザーのみ）- SQLite
         cur.execute("""
             SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
+            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = 0 AND m.sale_date IS NULL
             ORDER BY m.id DESC
             LIMIT 100
@@ -5902,6 +5904,56 @@ def admin_proxy_service_toggle_item(item_id):
     conn.close()
     
     return jsonify({'success': True, 'new_value': bool(new_value) if DATABASE_URL else bool(new_value)})
+
+@app.route('/admin/proxy-service/bulk-toggle', methods=['POST'])
+@login_required
+def admin_proxy_service_bulk_toggle():
+    """複数商品の代行サービス表示フラグを一括切り替え"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    
+    data = request.get_json()
+    item_ids = data.get('item_ids', [])
+    action = data.get('action', 'add')  # 'add' or 'remove'
+    
+    if not item_ids:
+        return jsonify({'success': False, 'error': '商品が選択されていません'}), 400
+    
+    conn = get_db()
+    new_value = True if action == 'add' else False
+    updated_count = 0
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        for item_id in item_ids:
+            try:
+                if current_user.is_owner():
+                    cur.execute("UPDATE merchandise SET show_in_proxy_service = %s WHERE id = %s", (new_value, item_id))
+                else:
+                    cur.execute("UPDATE merchandise SET show_in_proxy_service = %s WHERE id = %s AND user_id = %s", 
+                               (new_value, item_id, current_user.id))
+                updated_count += cur.rowcount
+            except:
+                pass
+    else:
+        cur = conn.cursor()
+        new_value_int = 1 if action == 'add' else 0
+        for item_id in item_ids:
+            try:
+                if current_user.is_owner():
+                    cur.execute("UPDATE merchandise SET show_in_proxy_service = ? WHERE id = ?", (new_value_int, item_id))
+                else:
+                    cur.execute("UPDATE merchandise SET show_in_proxy_service = ? WHERE id = ? AND user_id = ?", 
+                               (new_value_int, item_id, current_user.id))
+                updated_count += cur.rowcount
+            except:
+                pass
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify({'success': True, 'updated_count': updated_count})
 
 @app.route('/admin/proxy-service/finalize', methods=['POST'])
 @login_required
