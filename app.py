@@ -921,6 +921,30 @@ if DATABASE_URL:
             )
         ''')
         
+        # 販売代行申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sales_agency_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                service_type VARCHAR(50) NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id),
+                result_notified BOOLEAN DEFAULT FALSE
+            )
+        ''')
+        
+        # 販売代行申請商品テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sales_agency_request_items (
+                id SERIAL PRIMARY KEY,
+                request_id INTEGER REFERENCES sales_agency_requests(id) ON DELETE CASCADE,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1792,6 +1816,30 @@ else:
             )
         ''')
         
+        # 販売代行申請テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sales_agency_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                service_type TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id),
+                result_notified INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # 販売代行申請商品テーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sales_agency_request_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER REFERENCES sales_agency_requests(id) ON DELETE CASCADE,
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE
+            )
+        ''')
+        
         # デフォルト管理者作成
         cur.execute("SELECT * FROM users WHERE username = 'admin'")
         if not cur.fetchone():
@@ -1838,6 +1886,14 @@ class User(UserMixin):
     def is_payment_overdue(self):
         """支払いが遅延しているか"""
         return self.subscription_status == 'past_due'
+    
+    def can_edit_merchandise(self):
+        """商品の追加・編集が可能か（1ヶ月以上滞納で不可）"""
+        # オーナーは常に可能
+        if self.role == 'owner':
+            return True
+        # 支払い遅延中は編集不可（閲覧と商品処分のみ可能）
+        return self.subscription_status != 'past_due'
     
     def can_participate_auction(self):
         """オークションに参加できるか"""
@@ -2130,6 +2186,40 @@ def login():
             password_check = False
         
         if user and password_check:
+            # 3ヶ月以上滞納チェック（オーナー/管理者以外）
+            if user['role'] not in ['owner', 'admin']:
+                user_dict = dict(user) if DATABASE_URL else user
+                subscription_status = user_dict.get('subscription_status') if DATABASE_URL else None
+                overdue_since = user_dict.get('overdue_since') if DATABASE_URL else None
+                
+                # SQLiteの場合はカラム名でアクセス
+                if not DATABASE_URL:
+                    try:
+                        subscription_status = user['subscription_status']
+                        overdue_since = user['overdue_since']
+                    except:
+                        subscription_status = None
+                        overdue_since = None
+                
+                if subscription_status == 'past_due' and overdue_since:
+                    # 日付をパース
+                    if isinstance(overdue_since, str):
+                        try:
+                            overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S')
+                        except:
+                            try:
+                                overdue_since = datetime.strptime(overdue_since, '%Y-%m-%d %H:%M:%S.%f')
+                            except:
+                                overdue_since = None
+                    
+                    if overdue_since:
+                        overdue_days = (datetime.now() - overdue_since).days
+                        if overdue_days >= 90:  # 3ヶ月 = 約90日
+                            cur.close()
+                            conn.close()
+                            flash('月謝の未納が3ヶ月を超えているため、ログインできません。管理者にお問い合わせください。', 'error')
+                            return render_template('login.html')
+            
             # ログイン日時更新
             if DATABASE_URL:
                 cur.execute("UPDATE users SET last_login = %s WHERE id = %s", 
@@ -2550,9 +2640,17 @@ def index():
     # アクティブなお知らせを取得
     announcements = get_active_announcements()
     
+    # 代行仕入れサービスの利用可能残高を取得
+    proxy_service_info = {
+        'budget': current_user.proxy_service_budget or 0,
+        'used': current_user.get_proxy_service_used_amount(),
+        'remaining': current_user.get_proxy_service_remaining_budget()
+    }
+    
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements,
-                         is_shared_view=is_shared_view, all_users=all_users)
+                         is_shared_view=is_shared_view, all_users=all_users,
+                         proxy_service_info=proxy_service_info)
 
 # ===================
 # レポート機能
@@ -3346,6 +3444,10 @@ def user_analytics():
     conn = get_db()
     analytics_data = {}
     
+    # 期間フィルター取得
+    start_month = request.args.get('start_month', '')
+    end_month = request.args.get('end_month', '')
+    
     # 管理者かどうかで条件を変更
     is_admin = current_user.is_admin()
     
@@ -3361,6 +3463,16 @@ def user_analytics():
             user_condition = "user_id = %s"
             user_params = (current_user.id,)
         
+        # 期間フィルター条件（売上日ベース）
+        sale_date_filter = ""
+        purchase_date_filter = ""
+        if start_month:
+            sale_date_filter += f" AND sale_date >= '{start_month}-01'"
+            purchase_date_filter += f" AND purchase_date >= '{start_month}-01'"
+        if end_month:
+            sale_date_filter += f" AND sale_date <= '{end_month}-31'"
+            purchase_date_filter += f" AND purchase_date <= '{end_month}-31'"
+        
         # 月別売上・利益推移
         cur.execute(f"""
             SELECT 
@@ -3369,7 +3481,7 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
             ORDER BY month DESC
             LIMIT 12
@@ -3390,7 +3502,7 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY price_range
             ORDER BY MIN(sale_price)
         """, user_params)
@@ -3407,7 +3519,7 @@ def user_analytics():
                     THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY brand_name
             ORDER BY total_profit DESC
             LIMIT 10
@@ -3422,23 +3534,23 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY sale_type
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
         
-        # 総合統計
+        # 総合統計（期間フィルター適用）
         cur.execute(f"""
             SELECT 
                 COUNT(*) as total_items,
-                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END) as sold_count,
                 COALESCE(SUM(purchase_price), 0) as total_purchase,
                 COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE NULL END), 0) as avg_sale_price,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
             FROM merchandise 
             WHERE {user_condition}
         """, user_params)
@@ -3449,14 +3561,14 @@ def user_analytics():
             cur.execute(f"""
                 SELECT 
                     COUNT(*) as total_items,
-                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END) as sold_count,
                     SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
                     COALESCE(SUM(purchase_price), 0) as total_purchase,
                     COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
-                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN sale_date::date - purchase_date::date END), 0) as avg_days_to_sell
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN commission ELSE 0 END), 0) as total_commission,
+                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} AND purchase_date IS NOT NULL THEN sale_date::date - purchase_date::date END), 0) as avg_days_to_sell
                 FROM merchandise 
                 WHERE {user_condition}
             """, user_params)
@@ -3501,6 +3613,16 @@ def user_analytics():
             user_condition = "user_id = ?"
             user_params = (current_user.id,)
         
+        # 期間フィルター条件（売上日ベース）
+        sale_date_filter = ""
+        purchase_date_filter = ""
+        if start_month:
+            sale_date_filter += f" AND sale_date >= '{start_month}-01'"
+            purchase_date_filter += f" AND purchase_date >= '{start_month}-01'"
+        if end_month:
+            sale_date_filter += f" AND sale_date <= '{end_month}-31'"
+            purchase_date_filter += f" AND purchase_date <= '{end_month}-31'"
+        
         # 月別売上・利益推移
         cur.execute(f"""
             SELECT 
@@ -3509,7 +3631,7 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY strftime('%Y-%m', sale_date)
             ORDER BY month DESC
             LIMIT 12
@@ -3530,7 +3652,7 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY price_range
             ORDER BY MIN(sale_price)
         """, user_params)
@@ -3547,7 +3669,7 @@ def user_analytics():
                     THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY brand_name
             ORDER BY total_profit DESC
             LIMIT 10
@@ -3562,23 +3684,23 @@ def user_analytics():
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
             FROM merchandise 
-            WHERE {user_condition} AND sale_date IS NOT NULL
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
             GROUP BY sale_type
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
         
-        # 総合統計
+        # 総合統計（期間フィルター適用）
         cur.execute(f"""
             SELECT 
                 COUNT(*) as total_items,
-                SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END) as sold_count,
                 COALESCE(SUM(purchase_price), 0) as total_purchase,
                 COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE NULL END), 0) as avg_sale_price,
-                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE 0 END), 0) as total_sales,
+                COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE NULL END), 0) as avg_sale_price,
+                COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price - purchase_price - shipping_cost - commission ELSE NULL END), 0) as avg_profit
             FROM merchandise 
             WHERE {user_condition}
         """, user_params)
@@ -3589,14 +3711,14 @@ def user_analytics():
             cur.execute(f"""
                 SELECT 
                     COUNT(*) as total_items,
-                    SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                    SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END) as sold_count,
                     SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END) as unsold_count,
                     COALESCE(SUM(purchase_price), 0) as total_purchase,
                     COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN sale_price ELSE 0 END), 0) as total_sales,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN shipping_cost ELSE 0 END), 0) as total_shipping,
-                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN commission ELSE 0 END), 0) as total_commission,
-                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL AND purchase_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN shipping_cost ELSE 0 END), 0) as total_shipping,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL {sale_date_filter} THEN commission ELSE 0 END), 0) as total_commission,
+                    COALESCE(AVG(CASE WHEN sale_date IS NOT NULL {sale_date_filter} AND purchase_date IS NOT NULL THEN julianday(sale_date) - julianday(purchase_date) END), 0) as avg_days_to_sell
                 FROM merchandise 
                 WHERE {user_condition}
             """, user_params)
@@ -3633,7 +3755,8 @@ def user_analytics():
     # 管理者の場合は分析対象がわかるようにフラグを渡す
     analytics_data['is_admin_view'] = is_admin
     
-    return render_template('user_analytics.html', analytics=analytics_data)
+    return render_template('user_analytics.html', analytics=analytics_data,
+                         start_month=start_month, end_month=end_month)
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -3642,6 +3765,11 @@ def add_item():
     if not current_user.is_admin():
         flash('商品登録は管理者のみ可能です', 'error')
         return redirect(url_for('index'))
+    
+    # 滞納中は商品追加不可
+    if not current_user.can_edit_merchandise():
+        flash('月謝のお支払いが確認できていないため、商品の追加はできません。', 'error')
+        return redirect(url_for('disposal_options'))
     
     if request.method == 'POST':
         photo_path = None
@@ -3801,6 +3929,11 @@ def edit_item(id):
     if not current_user.is_admin():
         flash('商品編集は管理者のみ可能です', 'error')
         return redirect(url_for('index'))
+    
+    # 滞納中は商品編集不可
+    if not current_user.can_edit_merchandise():
+        flash('月謝のお支払いが確認できていないため、商品の編集はできません。', 'error')
+        return redirect(url_for('disposal_options'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -4237,6 +4370,11 @@ def delete_item(id):
     if not current_user.is_admin():
         flash('商品削除は管理者のみ可能です', 'error')
         return redirect(url_for('index'))
+    
+    # 滞納中は商品削除不可
+    if not current_user.can_edit_merchandise():
+        flash('月謝のお支払いが確認できていないため、商品の削除はできません。', 'error')
+        return redirect(url_for('disposal_options'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -13666,26 +13804,26 @@ def run_scheduled_line_messages():
 
 
 def check_and_transfer_overdue_items():
-    """4ヶ月以上未払いのユーザーの商品を管理者に自動移動"""
+    """3ヶ月以上未払いのユーザーの商品を管理者に自動移動"""
     print(f"[{datetime.now()}] Running overdue items check...")
     
     conn = get_db()
     
-    # 120日（約4ヶ月）以上未払いのユーザーを取得
-    four_months_ago = datetime.now() - timedelta(days=120)
+    # 90日（約3ヶ月）以上未払いのユーザーを取得
+    three_months_ago = datetime.now() - timedelta(days=90)
     
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 4ヶ月以上未払いのユーザーを取得
+        # 3ヶ月以上未払いのユーザーを取得
         cur.execute("""
             SELECT id, display_name, username, line_user_id, email 
             FROM users 
             WHERE subscription_status = 'past_due' 
               AND overdue_since IS NOT NULL 
               AND overdue_since <= %s
-        """, (four_months_ago,))
+        """, (three_months_ago,))
         overdue_users = [dict(row) for row in cur.fetchall()]
         
         # オーナーのIDを取得
@@ -13701,7 +13839,7 @@ def check_and_transfer_overdue_items():
             WHERE subscription_status = 'past_due' 
               AND overdue_since IS NOT NULL 
               AND overdue_since <= ?
-        """, (four_months_ago.strftime('%Y-%m-%d %H:%M:%S'),))
+        """, (three_months_ago.strftime('%Y-%m-%d %H:%M:%S'),))
         
         columns = ['id', 'display_name', 'username', 'line_user_id', 'email']
         overdue_users = [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -13733,7 +13871,7 @@ def check_and_transfer_overdue_items():
         
         if item_count > 0:
             # 商品を管理者に移動
-            transfer_note = f'[自動移管 {datetime.now().strftime("%Y/%m/%d")}] {display_name}様から未払い4ヶ月超過により移管'
+            transfer_note = f'[自動移管 {datetime.now().strftime("%Y/%m/%d")}] {display_name}様から未払い3ヶ月超過により移管'
             
             if DATABASE_URL:
                 cur.execute("""
@@ -13758,7 +13896,7 @@ def check_and_transfer_overdue_items():
 
 {display_name}様
 
-4ヶ月以上の未払いにより、お客様の在庫商品（{item_count}点）は管理者へ移管されました。
+3ヶ月以上の未払いにより、お客様の在庫商品（{item_count}点）は管理者へ移管されました。
 
 移管された商品は、弊社にて適切に処理いたします。
 
@@ -15040,8 +15178,9 @@ def stripe_webhook():
 ━━━━━━━━━━━━━━━━━
 【重要なお知らせ】
 ━━━━━━━━━━━━━━━━━
-・3ヶ月間未払いが続くと、商品の処分手続きが必要になります
-・4ヶ月以上経過すると、商品は自動的に管理者へ移管されます
+・未払い期間中は画面の閲覧と商品処分のみ可能です
+・商品の追加・編集はできなくなります
+・3ヶ月以上未払いが続くと、ログインができなくなり商品は自動的に管理者へ移管されます
 
 ご不明点がございましたらお問い合わせください。"""
                     try:
@@ -16229,19 +16368,33 @@ def inquiry_new():
             return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
         
         try:
-            # 画像アップロード処理
-            image_path = None
-            if 'image' in request.files:
+            # 複数画像アップロード処理
+            image_paths = []
+            if 'images' in request.files:
+                images = request.files.getlist('images')
+                upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'inquiries')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                for i, image in enumerate(images):
+                    if image and image.filename:
+                        # ファイル名をセキュアに（インデックス付き）
+                        filename = secure_filename(f"inquiry_{int(time.time())}_{i}_{image.filename}")
+                        # ファイルを保存
+                        image.save(os.path.join(upload_dir, filename))
+                        image_paths.append(f'uploads/inquiries/{filename}')
+            
+            # 後方互換性のため、単一画像もサポート
+            elif 'image' in request.files:
                 image = request.files['image']
                 if image and image.filename:
-                    # ファイル名をセキュアに
                     filename = secure_filename(f"inquiry_{int(time.time())}_{image.filename}")
-                    # inquiries用のフォルダを作成（UPLOAD_FOLDERを基準にする）
                     upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'inquiries')
                     os.makedirs(upload_dir, exist_ok=True)
-                    # ファイルを保存
                     image.save(os.path.join(upload_dir, filename))
-                    image_path = f'uploads/inquiries/{filename}'
+                    image_paths.append(f'uploads/inquiries/{filename}')
+            
+            # 複数パスをJSON形式で保存
+            image_path = json.dumps(image_paths) if image_paths else None
             
             conn = get_db()
             if DATABASE_URL:
@@ -17052,6 +17205,366 @@ def cancel_sale_request(request_id):
     
     flash('売却申請をキャンセルしました', 'info')
     return redirect(url_for('index'))
+
+# =====================================================
+# 販売代行サービス機能
+# =====================================================
+
+SALES_AGENCY_SERVICE_TYPES = {
+    'wholesale': '業者卸販売サービス',
+    'simultaneous': '同時出品サービス',
+    'auction': '業者オークション出品'
+}
+
+SALES_AGENCY_STATUS = {
+    'pending': '審査中',
+    'approved': '承認',
+    'rejected': '却下'
+}
+
+def get_pending_sales_agency_count():
+    """管理者向け：未処理の販売代行申請件数を取得"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return 0
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except:
+        return 0
+
+@app.context_processor
+def inject_sales_agency_count():
+    return dict(get_pending_sales_agency_count=get_pending_sales_agency_count)
+
+@app.route('/sales-agency/apply', methods=['POST'])
+@login_required
+def sales_agency_apply():
+    """販売代行サービス申請"""
+    service_type = request.form.get('service_type')
+    merchandise_ids = request.form.getlist('merchandise_ids')
+    
+    if not service_type or service_type not in SALES_AGENCY_SERVICE_TYPES:
+        flash('サービス種別を選択してください', 'error')
+        return redirect(url_for('index'))
+    
+    if not merchandise_ids:
+        flash('商品を選択してください', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            # 申請を作成
+            cur.execute('''
+                INSERT INTO sales_agency_requests (user_id, service_type)
+                VALUES (%s, %s) RETURNING id
+            ''', (current_user.id, service_type))
+            request_id = cur.fetchone()[0]
+            
+            # 商品を紐付け
+            for m_id in merchandise_ids:
+                cur.execute('''
+                    INSERT INTO sales_agency_request_items (request_id, merchandise_id)
+                    VALUES (%s, %s)
+                ''', (request_id, int(m_id)))
+        else:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO sales_agency_requests (user_id, service_type)
+                VALUES (?, ?)
+            ''', (current_user.id, service_type))
+            request_id = cur.lastrowid
+            
+            for m_id in merchandise_ids:
+                cur.execute('''
+                    INSERT INTO sales_agency_request_items (request_id, merchandise_id)
+                    VALUES (?, ?)
+                ''', (request_id, int(m_id)))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        # 管理者にLINE通知
+        try:
+            admin_conn = get_db()
+            if DATABASE_URL:
+                admin_cur = admin_conn.cursor(cursor_factory=RealDictCursor)
+                admin_cur.execute("SELECT line_user_id FROM users WHERE role IN ('admin', 'owner') AND line_user_id IS NOT NULL")
+            else:
+                admin_cur = admin_conn.cursor()
+                admin_cur.execute("SELECT line_user_id FROM users WHERE role IN ('admin', 'owner') AND line_user_id IS NOT NULL")
+            
+            admins = admin_cur.fetchall()
+            admin_cur.close()
+            admin_conn.close()
+            
+            service_name = SALES_AGENCY_SERVICE_TYPES.get(service_type, service_type)
+            message = f"【販売代行申請】\n{current_user.display_name or current_user.username}さんから{service_name}の申請がありました。\n商品数: {len(merchandise_ids)}点"
+            
+            for admin in admins:
+                line_id = admin['line_user_id'] if isinstance(admin, dict) else admin[0]
+                if line_id:
+                    send_line_push(line_id, message)
+        except Exception as e:
+            print(f"LINE notification error: {e}")
+        
+        flash(f'{SALES_AGENCY_SERVICE_TYPES[service_type]}の申請を送信しました', 'success')
+    except Exception as e:
+        print(f"Sales agency apply error: {e}")
+        flash('申請に失敗しました', 'error')
+    
+    return redirect(url_for('index'))
+
+@app.route('/sales-agency/my-requests')
+@login_required
+def sales_agency_my_requests():
+    """ユーザーの販売代行申請履歴"""
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('''
+            SELECT sar.*, u.display_name as processor_name
+            FROM sales_agency_requests sar
+            LEFT JOIN users u ON sar.processed_by = u.id
+            WHERE sar.user_id = %s
+            ORDER BY sar.created_at DESC
+        ''', (current_user.id,))
+    else:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT sar.*, u.display_name as processor_name
+            FROM sales_agency_requests sar
+            LEFT JOIN users u ON sar.processed_by = u.id
+            WHERE sar.user_id = ?
+            ORDER BY sar.created_at DESC
+        ''', (current_user.id,))
+    
+    requests_raw = cur.fetchall()
+    requests = []
+    
+    for req in requests_raw:
+        req_dict = dict(req)
+        # 関連商品を取得
+        if DATABASE_URL:
+            cur.execute('''
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                FROM sales_agency_request_items sari
+                JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id = %s
+            ''', (req_dict['id'],))
+        else:
+            cur.execute('''
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                FROM sales_agency_request_items sari
+                JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id = ?
+            ''', (req_dict['id'],))
+        
+        items = [dict(item) for item in cur.fetchall()]
+        req_dict['items'] = items
+        requests.append(req_dict)
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('sales_agency_requests.html',
+                         requests=requests,
+                         service_types=SALES_AGENCY_SERVICE_TYPES,
+                         statuses=SALES_AGENCY_STATUS)
+
+@app.route('/admin/sales-agency-requests')
+@login_required
+def admin_sales_agency_requests():
+    """管理者：販売代行サービス受信BOX"""
+    if not current_user.is_admin():
+        flash('アクセス権限がありません', 'error')
+        return redirect(url_for('index'))
+    
+    status_filter = request.args.get('status', 'all')
+    
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if status_filter != 'all':
+            cur.execute('''
+                SELECT sar.*, u.display_name as user_name, u.username,
+                       p.display_name as processor_name
+                FROM sales_agency_requests sar
+                JOIN users u ON sar.user_id = u.id
+                LEFT JOIN users p ON sar.processed_by = p.id
+                WHERE sar.status = %s
+                ORDER BY sar.created_at DESC
+            ''', (status_filter,))
+        else:
+            cur.execute('''
+                SELECT sar.*, u.display_name as user_name, u.username,
+                       p.display_name as processor_name
+                FROM sales_agency_requests sar
+                JOIN users u ON sar.user_id = u.id
+                LEFT JOIN users p ON sar.processed_by = p.id
+                ORDER BY 
+                    CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
+                    sar.created_at DESC
+            ''')
+    else:
+        cur = conn.cursor()
+        if status_filter != 'all':
+            cur.execute('''
+                SELECT sar.*, u.display_name as user_name, u.username,
+                       p.display_name as processor_name
+                FROM sales_agency_requests sar
+                JOIN users u ON sar.user_id = u.id
+                LEFT JOIN users p ON sar.processed_by = p.id
+                WHERE sar.status = ?
+                ORDER BY sar.created_at DESC
+            ''', (status_filter,))
+        else:
+            cur.execute('''
+                SELECT sar.*, u.display_name as user_name, u.username,
+                       p.display_name as processor_name
+                FROM sales_agency_requests sar
+                JOIN users u ON sar.user_id = u.id
+                LEFT JOIN users p ON sar.processed_by = p.id
+                ORDER BY 
+                    CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
+                    sar.created_at DESC
+            ''')
+    
+    requests_raw = cur.fetchall()
+    requests = []
+    
+    # 統計
+    stats = {'pending': 0, 'approved': 0, 'rejected': 0}
+    
+    for req in requests_raw:
+        req_dict = dict(req)
+        # 関連商品を取得
+        if DATABASE_URL:
+            cur.execute('''
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                FROM sales_agency_request_items sari
+                JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id = %s
+            ''', (req_dict['id'],))
+        else:
+            cur.execute('''
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                FROM sales_agency_request_items sari
+                JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id = ?
+            ''', (req_dict['id'],))
+        
+        items = [dict(item) for item in cur.fetchall()]
+        req_dict['items'] = items
+        requests.append(req_dict)
+    
+    # 統計を取得
+    if DATABASE_URL:
+        cur.execute("SELECT status, COUNT(*) FROM sales_agency_requests GROUP BY status")
+    else:
+        cur.execute("SELECT status, COUNT(*) FROM sales_agency_requests GROUP BY status")
+    
+    for row in cur.fetchall():
+        if isinstance(row, dict):
+            stats[row['status']] = row['count']
+        else:
+            stats[row[0]] = row[1]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/sales_agency_requests.html',
+                         requests=requests,
+                         stats=stats,
+                         status_filter=status_filter,
+                         service_types=SALES_AGENCY_SERVICE_TYPES,
+                         statuses=SALES_AGENCY_STATUS)
+
+@app.route('/admin/sales-agency-requests/<int:id>/process', methods=['POST'])
+@login_required
+def admin_sales_agency_process(id):
+    """管理者：販売代行申請を処理（承認/却下）"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'error': 'アクセス権限がありません'}), 403
+    
+    data = request.get_json()
+    action = data.get('action')  # 'approve' or 'reject'
+    admin_note = data.get('admin_note', '')
+    
+    if action not in ['approve', 'reject']:
+        return jsonify({'success': False, 'error': '無効なアクションです'}), 400
+    
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 申請を取得
+            cur.execute('SELECT * FROM sales_agency_requests WHERE id = %s', (id,))
+            req = cur.fetchone()
+            if not req:
+                return jsonify({'success': False, 'error': '申請が見つかりません'}), 404
+            
+            # ステータス更新
+            cur.execute('''
+                UPDATE sales_agency_requests
+                SET status = %s, admin_note = %s, processed_at = %s, processed_by = %s
+                WHERE id = %s
+            ''', (new_status, admin_note, datetime.now(), current_user.id, id))
+            
+            # ユーザー情報を取得
+            cur.execute('SELECT * FROM users WHERE id = %s', (req['user_id'],))
+            user = cur.fetchone()
+        else:
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM sales_agency_requests WHERE id = ?', (id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': '申請が見つかりません'}), 404
+            req = dict(zip([d[0] for d in cur.description], row))
+            
+            cur.execute('''
+                UPDATE sales_agency_requests
+                SET status = ?, admin_note = ?, processed_at = ?, processed_by = ?
+                WHERE id = ?
+            ''', (new_status, admin_note, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, id))
+            
+            cur.execute('SELECT * FROM users WHERE id = ?', (req['user_id'],))
+            row = cur.fetchone()
+            user = dict(zip([d[0] for d in cur.description], row)) if row else None
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        # ユーザーにLINE通知
+        if user:
+            line_user_id = user.get('line_user_id') if isinstance(user, dict) else user[7]
+            if line_user_id:
+                service_name = SALES_AGENCY_SERVICE_TYPES.get(req['service_type'], req['service_type'])
+                status_text = '承認' if new_status == 'approved' else '却下'
+                message = f"【販売代行申請結果】\n{service_name}の申請が{status_text}されました。"
+                if admin_note:
+                    message += f"\n\n備考: {admin_note}"
+                send_line_push(line_user_id, message)
+        
+        return jsonify({'success': True, 'status': new_status})
+    except Exception as e:
+        print(f"Sales agency process error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ

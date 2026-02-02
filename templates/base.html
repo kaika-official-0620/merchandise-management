@@ -125,13 +125,19 @@
                     {% endif %}
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products', 'admin_sale_requests'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products', 'admin_sale_requests', 'admin_sales_agency_requests', 'sales_agency_my_requests', 'long_term_items'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
                     <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('admin_sale_requests') }}" class="{% if request.endpoint == 'admin_sale_requests' %}active{% endif %}">
                         発送商品受信BOX
                         {% if get_pending_sale_request_count() > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sale_request_count() }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' %}active{% endif %}">
+                        販売代行サービス受信BOX
+                        {% if get_pending_sales_agency_count() > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count() }}</span>
                         {% endif %}
                     </a>
                     {% else %}
@@ -142,6 +148,7 @@
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}
                     </a>
+                    <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint == 'sales_agency_my_requests' %}active{% endif %}">販売代行申請履歴</a>
                     {% endif %}
                     <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                 </div>

@@ -30,19 +30,16 @@
         </div>
         
         <div class="form-group">
-            <label for="image">📷 画像添付（任意）</label>
+            <label>📷 画像添付（任意・最大5枚）</label>
             <div class="image-upload-area" id="imageUploadArea">
-                <input type="file" id="image" name="image" accept="image/*" class="image-input" onchange="previewImage(this)">
+                <input type="file" id="images" name="images" accept="image/*" multiple class="image-input" onchange="previewImages(this)">
                 <div class="upload-placeholder" id="uploadPlaceholder">
                     <span class="upload-icon">📁</span>
                     <span class="upload-text">クリックまたはドラッグ&ドロップで画像を選択</span>
-                    <span class="upload-hint">PNG, JPG, GIF（最大5MB）</span>
-                </div>
-                <div class="image-preview" id="imagePreview" style="display: none;">
-                    <img id="previewImg" src="" alt="プレビュー">
-                    <button type="button" class="remove-image" onclick="removeImage()">✕</button>
+                    <span class="upload-hint">PNG, JPG, GIF（各最大5MB・最大5枚）</span>
                 </div>
             </div>
+            <div class="images-preview-container" id="imagesPreviewContainer"></div>
             <small class="form-help">スクリーンショットやエラー画面など、問い合わせに関連する画像があれば添付してください</small>
         </div>
         
@@ -195,14 +192,23 @@ textarea.form-control {
     color: #9ca3af;
 }
 
-.image-preview {
+/* 複数画像プレビューコンテナ */
+.images-preview-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.image-preview-item {
     position: relative;
     display: inline-block;
 }
 
-.image-preview img {
-    max-width: 100%;
-    max-height: 300px;
+.image-preview-item img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
@@ -211,14 +217,14 @@ textarea.form-control {
     position: absolute;
     top: -8px;
     right: -8px;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: #ef4444;
     color: white;
     border: 2px solid white;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -227,6 +233,16 @@ textarea.form-control {
 
 .remove-image:hover {
     background: #dc2626;
+}
+
+.image-count-badge {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
 }
 
 .form-help {
@@ -238,32 +254,60 @@ textarea.form-control {
 </style>
 
 <script>
-function previewImage(input) {
-    const preview = document.getElementById('imagePreview');
-    const placeholder = document.getElementById('uploadPlaceholder');
-    const previewImg = document.getElementById('previewImg');
+let selectedFiles = [];
+const MAX_FILES = 5;
+
+function previewImages(input) {
+    const container = document.getElementById('imagesPreviewContainer');
+    const files = Array.from(input.files);
     
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            previewImg.src = e.target.result;
-            preview.style.display = 'inline-block';
-            placeholder.style.display = 'none';
-        }
-        
-        reader.readAsDataURL(input.files[0]);
+    // 既存のファイルと新しいファイルを結合（最大5枚まで）
+    const newFiles = files.slice(0, MAX_FILES - selectedFiles.length);
+    selectedFiles = [...selectedFiles, ...newFiles].slice(0, MAX_FILES);
+    
+    updatePreview();
+    updateFileInput();
+    
+    if (files.length > MAX_FILES - (selectedFiles.length - newFiles.length)) {
+        alert(`最大${MAX_FILES}枚までアップロードできます`);
     }
 }
 
-function removeImage() {
-    const input = document.getElementById('image');
-    const preview = document.getElementById('imagePreview');
-    const placeholder = document.getElementById('uploadPlaceholder');
+function updatePreview() {
+    const container = document.getElementById('imagesPreviewContainer');
+    container.innerHTML = '';
     
-    input.value = '';
-    preview.style.display = 'none';
-    placeholder.style.display = 'flex';
+    selectedFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const div = document.createElement('div');
+            div.className = 'image-preview-item';
+            div.innerHTML = `
+                <img src="${e.target.result}" alt="プレビュー ${index + 1}">
+                <button type="button" class="remove-image" onclick="removeImage(${index})">✕</button>
+            `;
+            container.appendChild(div);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function updateFileInput() {
+    // DataTransferを使用して選択されたファイルを更新
+    const input = document.getElementById('images');
+    const dataTransfer = new DataTransfer();
+    
+    selectedFiles.forEach(file => {
+        dataTransfer.items.add(file);
+    });
+    
+    input.files = dataTransfer.files;
+}
+
+function removeImage(index) {
+    selectedFiles.splice(index, 1);
+    updatePreview();
+    updateFileInput();
 }
 
 // ドラッグ&ドロップ対応
@@ -283,11 +327,17 @@ uploadArea.addEventListener('drop', function(e) {
     e.preventDefault();
     this.classList.remove('dragover');
     
-    const files = e.dataTransfer.files;
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
     if (files.length > 0) {
-        const input = document.getElementById('image');
-        input.files = files;
-        previewImage(input);
+        const newFiles = files.slice(0, MAX_FILES - selectedFiles.length);
+        selectedFiles = [...selectedFiles, ...newFiles].slice(0, MAX_FILES);
+        
+        updatePreview();
+        updateFileInput();
+        
+        if (files.length > MAX_FILES - (selectedFiles.length - newFiles.length)) {
+            alert(`最大${MAX_FILES}枚までアップロードできます`);
+        }
     }
 });
 </script>

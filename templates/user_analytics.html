@@ -10,6 +10,110 @@
 </div>
 {% endif %}
 
+<!-- 期間フィルター -->
+<div class="period-filter-card">
+    <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        <div class="filter-label">📅 期間で絞り込み</div>
+        <div class="filter-inputs">
+            <input type="month" name="start_month" value="{{ start_month }}" class="month-input" placeholder="開始月">
+            <span class="filter-separator">〜</span>
+            <input type="month" name="end_month" value="{{ end_month }}" class="month-input" placeholder="終了月">
+            <button type="submit" class="btn btn-primary btn-sm">適用</button>
+            {% if start_month or end_month %}
+            <a href="{{ url_for('user_analytics') }}" class="btn btn-secondary btn-sm">クリア</a>
+            {% endif %}
+        </div>
+        {% if start_month or end_month %}
+        <div class="filter-active">
+            <span class="filter-badge">
+                フィルター適用中: {{ start_month or '全期間' }} 〜 {{ end_month or '現在' }}
+            </span>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<style>
+.period-filter-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid #e2e8f0;
+}
+
+.period-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.95rem;
+}
+
+.filter-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.month-input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+}
+
+.month-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filter-separator {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.filter-active {
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.filter-badge {
+    display: inline-block;
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .period-filter-form {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .filter-inputs {
+        width: 100%;
+    }
+    
+    .month-input {
+        flex: 1;
+        min-width: 0;
+    }
+}
+</style>
+
 <!-- 総合サマリー -->
 <div class="analytics-summary">
     <div class="summary-card">

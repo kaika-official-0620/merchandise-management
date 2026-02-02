@@ -99,6 +99,34 @@
     }
 }
 
+/* 代行仕入れサービス利用可能残高 */
+.proxy-service-card {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #f59e0b;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.proxy-service-card .proxy-icon {
+    font-size: 1.25rem;
+}
+
+.proxy-service-card .proxy-label {
+    font-size: 0.9rem;
+    color: #92400e;
+}
+
+.proxy-service-card .proxy-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #d97706;
+    margin-left: 0.5rem;
+}
+
 /* お知らせエリア */
 .announcement-area {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -211,6 +239,16 @@
 
 .btn-export:hover {
     background: #e5e7eb;
+}
+
+.btn-sales-agency {
+    background: #059669;
+    border: 1px solid #047857;
+    color: white;
+}
+
+.btn-sales-agency:hover {
+    background: #047857;
 }
 
 /* 検索ボタン */
@@ -1723,6 +1761,15 @@
 </div>
 {% endif %}
 
+<!-- 代行仕入れサービス利用可能残高 -->
+{% if proxy_service_info and proxy_service_info.budget > 0 %}
+<div class="proxy-service-card">
+    <span class="proxy-icon">🛒</span>
+    <span class="proxy-label">利用可能残高:</span>
+    <span class="proxy-value">¥{{ "{:,}".format(proxy_service_info.remaining) }}</span>
+</div>
+{% endif %}
+
 <!-- 統計サマリー -->
 <div class="stats-summary">
     <div class="stats-item">
@@ -1775,6 +1822,9 @@
     </div>
     <div class="action-buttons">
         <a href="{{ url_for('export_csv') }}" class="btn btn-export">CSV</a>
+        {% if not current_user.is_admin() %}
+        <button type="button" class="btn btn-sales-agency" onclick="openSalesAgencyModal()">販売代行</button>
+        {% endif %}
         {% if current_user.is_admin() %}
         <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 登録</a>
         {% endif %}
@@ -2988,5 +3038,403 @@ document.querySelectorAll('.mobile-cards .item-card').forEach(function(card) {
         }
     });
 });
+
+// =====================================================
+// 販売代行サービス機能
+// =====================================================
+function openSalesAgencyModal() {
+    document.getElementById('salesAgencyModal').style.display = 'flex';
+    loadSalesAgencyItems();
+}
+
+function closeSalesAgencyModal() {
+    document.getElementById('salesAgencyModal').style.display = 'none';
+}
+
+function loadSalesAgencyItems() {
+    const container = document.getElementById('salesAgencyItemList');
+    container.innerHTML = '';
+    
+    // 売却済み以外の商品を取得（ページ内のアイテムから）
+    const items = document.querySelectorAll('.item-card[data-id]');
+    let availableItems = [];
+    
+    items.forEach(item => {
+        const id = item.getAttribute('data-id');
+        const isSold = item.querySelector('.status-sold') !== null || 
+                       item.classList.contains('sold-item') ||
+                       item.querySelector('[class*="sold"]') !== null;
+        
+        // 売却済みでない商品のみ
+        if (!isSold) {
+            const nameEl = item.querySelector('.card-name, .item-name, h3');
+            const brandEl = item.querySelector('.card-brand, .brand-name');
+            const priceEl = item.querySelector('.listing-price, .card-listing-price');
+            const imgEl = item.querySelector('img');
+            
+            availableItems.push({
+                id: id,
+                name: nameEl ? nameEl.textContent.trim() : '商品名不明',
+                brand: brandEl ? brandEl.textContent.trim() : '',
+                price: priceEl ? priceEl.textContent.trim() : '',
+                image: imgEl ? imgEl.src : ''
+            });
+        }
+    });
+    
+    if (availableItems.length === 0) {
+        container.innerHTML = '<p class="no-items-message">申請可能な商品がありません</p>';
+        return;
+    }
+    
+    availableItems.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'sales-agency-item';
+        div.innerHTML = `
+            <label class="sales-agency-item-label">
+                <input type="checkbox" name="merchandise_ids" value="${item.id}" class="sales-agency-checkbox">
+                <div class="sales-agency-item-content">
+                    ${item.image ? `<img src="${item.image}" alt="${item.name}" class="sales-agency-item-img">` : '<div class="sales-agency-item-img-placeholder"></div>'}
+                    <div class="sales-agency-item-info">
+                        <div class="sales-agency-item-name">${item.name}</div>
+                        ${item.brand ? `<div class="sales-agency-item-brand">${item.brand}</div>` : ''}
+                        ${item.price ? `<div class="sales-agency-item-price">${item.price}</div>` : ''}
+                    </div>
+                </div>
+            </label>
+        `;
+        container.appendChild(div);
+    });
+    
+    updateSelectedCount();
+}
+
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('.sales-agency-checkbox');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+    selectAllBtn.textContent = allChecked ? '全選択' : '全解除';
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.sales-agency-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = checked;
+}
+
+// チェックボックス変更時にカウント更新
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('sales-agency-checkbox')) {
+        updateSelectedCount();
+    }
+});
+
+// モーダル外クリックで閉じる
+document.getElementById('salesAgencyModal').addEventListener('click', function(e) {
+    if (e.target === this) closeSalesAgencyModal();
+});
 </script>
+
+<!-- 販売代行サービスモーダル -->
+<div id="salesAgencyModal" class="sales-agency-modal" style="display: none;">
+    <div class="sales-agency-modal-content">
+        <div class="sales-agency-modal-header">
+            <h2>販売代行サービス申請</h2>
+            <button type="button" class="sales-agency-close-btn" onclick="closeSalesAgencyModal()">&times;</button>
+        </div>
+        
+        <form method="POST" action="{{ url_for('sales_agency_apply') }}">
+            <div class="sales-agency-modal-body">
+                <div class="sales-agency-service-section">
+                    <label class="sales-agency-section-label">サービス種別を選択</label>
+                    <div class="sales-agency-service-options">
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="wholesale" required>
+                            <span class="sales-agency-service-name">業者卸販売サービス</span>
+                        </label>
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="simultaneous">
+                            <span class="sales-agency-service-name">同時出品サービス</span>
+                        </label>
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="auction">
+                            <span class="sales-agency-service-name">業者オークション出品</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="sales-agency-items-section">
+                    <div class="sales-agency-items-header">
+                        <label class="sales-agency-section-label">商品を選択 (<span id="selectedCount">0</span>点選択中)</label>
+                        <button type="button" id="selectAllBtn" class="btn btn-sm btn-outline" onclick="toggleSelectAll()">全選択</button>
+                    </div>
+                    <div id="salesAgencyItemList" class="sales-agency-item-list">
+                        <!-- 動的に商品リストが入る -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sales-agency-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSalesAgencyModal()">キャンセル</button>
+                <button type="submit" class="btn btn-primary">申請する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+/* 販売代行モーダル */
+.sales-agency-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.sales-agency-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.sales-agency-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.sales-agency-modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.sales-agency-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.75rem;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.sales-agency-close-btn:hover {
+    color: #1e293b;
+}
+
+.sales-agency-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.sales-agency-section-label {
+    display: block;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.75rem;
+}
+
+.sales-agency-service-section {
+    margin-bottom: 1.5rem;
+}
+
+.sales-agency-service-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sales-agency-service-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sales-agency-service-option:hover {
+    border-color: #059669;
+    background: #f0fdf4;
+}
+
+.sales-agency-service-option input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #059669;
+}
+
+.sales-agency-service-option input[type="radio"]:checked + .sales-agency-service-name {
+    color: #059669;
+    font-weight: 600;
+}
+
+.sales-agency-service-name {
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+.sales-agency-items-section {
+    margin-top: 1rem;
+}
+
+.sales-agency-items-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.btn-outline {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+}
+
+.btn-outline:hover {
+    background: #f3f4f6;
+}
+
+.sales-agency-item-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.sales-agency-item {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.sales-agency-item:last-child {
+    border-bottom: none;
+}
+
+.sales-agency-item-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.sales-agency-item-label:hover {
+    background: #f8fafc;
+}
+
+.sales-agency-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: #059669;
+    flex-shrink: 0;
+}
+
+.sales-agency-item-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.sales-agency-item-img {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.sales-agency-item-img-placeholder {
+    width: 50px;
+    height: 50px;
+    background: #e2e8f0;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.sales-agency-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sales-agency-item-name {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sales-agency-item-brand {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.sales-agency-item-price {
+    font-size: 0.85rem;
+    color: #059669;
+    font-weight: 600;
+}
+
+.sales-agency-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 0 0 12px 12px;
+}
+
+.no-items-message {
+    text-align: center;
+    padding: 2rem;
+    color: #64748b;
+}
+
+@media (max-width: 640px) {
+    .sales-agency-modal-content {
+        width: 95%;
+        max-height: 85vh;
+    }
+    
+    .sales-agency-modal-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    .sales-agency-item-img {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
 {% endblock %}
