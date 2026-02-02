@@ -7565,7 +7565,7 @@ def export_backup():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '3.0',
+        'version': '3.1',
         'users': [],
         'merchandise': [],
         'customers': [],
@@ -7591,7 +7591,13 @@ def export_backup():
         'master_document_settings': [],
         'proxy_service_settings': [],
         'line_settings': [],
-        'line_scheduled_messages': []
+        'line_scheduled_messages': [],
+        # v3.1で追加：問い合わせ、管理者用買取承諾書、処分申請
+        'inquiries': [],
+        'inquiry_replies': [],
+        'admin_kaitori_shoudaku': [],
+        'admin_kaitori_shoudaku_items': [],
+        'item_disposal_requests': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -7603,7 +7609,11 @@ def export_backup():
         'announcements', 'master_brand_categories', 'master_brands',
         'master_suppliers', 'master_conditions', 'master_payment_methods',
         'master_supplier_details', 'master_document_settings',
-        'proxy_service_settings', 'line_settings', 'line_scheduled_messages'
+        'proxy_service_settings', 'line_settings', 'line_scheduled_messages',
+        # v3.1で追加
+        'inquiries', 'inquiry_replies',
+        'admin_kaitori_shoudaku', 'admin_kaitori_shoudaku_items',
+        'item_disposal_requests'
     ]
     
     if DATABASE_URL:
@@ -7660,7 +7670,7 @@ def export_backup_with_images():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '3.0',
+        'version': '3.1',
         'includes_images': True,
         'users': [],
         'merchandise': [],
@@ -7687,7 +7697,13 @@ def export_backup_with_images():
         'master_document_settings': [],
         'proxy_service_settings': [],
         'line_settings': [],
-        'line_scheduled_messages': []
+        'line_scheduled_messages': [],
+        # v3.1で追加：問い合わせ、管理者用買取承諾書、処分申請
+        'inquiries': [],
+        'inquiry_replies': [],
+        'admin_kaitori_shoudaku': [],
+        'admin_kaitori_shoudaku_items': [],
+        'item_disposal_requests': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -7699,7 +7715,11 @@ def export_backup_with_images():
         'announcements', 'master_brand_categories', 'master_brands',
         'master_suppliers', 'master_conditions', 'master_payment_methods',
         'master_supplier_details', 'master_document_settings',
-        'proxy_service_settings', 'line_settings', 'line_scheduled_messages'
+        'proxy_service_settings', 'line_settings', 'line_scheduled_messages',
+        # v3.1で追加
+        'inquiries', 'inquiry_replies',
+        'admin_kaitori_shoudaku', 'admin_kaitori_shoudaku_items',
+        'item_disposal_requests'
     ]
     
     if DATABASE_URL:
@@ -8418,9 +8438,258 @@ def import_backup():
             except Exception as e:
                 print(f"Customer import error: {e}")
         
+        # 問い合わせをインポート（v3.1追加）
+        imported_counts['inquiries'] = 0
+        inquiry_id_map = {}  # 旧ID → 新ID のマッピング
+        for inquiry in backup_data.get('inquiries', []):
+            try:
+                old_inquiry_id = inquiry.get('id')
+                user_id = resolve_user_id(inquiry.get('user_id'))
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO inquiries (user_id, category, title, content, image_path, status, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    ''', (
+                        user_id,
+                        inquiry.get('category', 'general'),
+                        inquiry.get('title'),
+                        inquiry.get('content'),
+                        inquiry.get('image_path'),
+                        inquiry.get('status', 'new'),
+                        inquiry.get('created_at'),
+                        inquiry.get('updated_at')
+                    ))
+                    new_id = cur.fetchone()[0]
+                else:
+                    cur.execute('''
+                        INSERT INTO inquiries (user_id, category, title, content, image_path, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id,
+                        inquiry.get('category', 'general'),
+                        inquiry.get('title'),
+                        inquiry.get('content'),
+                        inquiry.get('image_path'),
+                        inquiry.get('status', 'new'),
+                        inquiry.get('created_at'),
+                        inquiry.get('updated_at')
+                    ))
+                    new_id = cur.lastrowid
+                
+                if old_inquiry_id is not None:
+                    inquiry_id_map[old_inquiry_id] = new_id
+                imported_counts['inquiries'] += 1
+            except Exception as e:
+                print(f"Inquiry import error: {e}")
+        
+        # 問い合わせ返信をインポート（v3.1追加）
+        imported_counts['inquiry_replies'] = 0
+        for reply in backup_data.get('inquiry_replies', []):
+            try:
+                old_inquiry_id = reply.get('inquiry_id')
+                new_inquiry_id = inquiry_id_map.get(old_inquiry_id)
+                if new_inquiry_id is None:
+                    continue  # 対応する問い合わせがない場合はスキップ
+                
+                user_id = resolve_user_id(reply.get('user_id'))
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                    ''', (
+                        new_inquiry_id,
+                        user_id,
+                        reply.get('content'),
+                        reply.get('is_admin_reply', False),
+                        reply.get('created_at')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO inquiry_replies (inquiry_id, user_id, content, is_admin_reply, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (
+                        new_inquiry_id,
+                        user_id,
+                        reply.get('content'),
+                        1 if reply.get('is_admin_reply') else 0,
+                        reply.get('created_at')
+                    ))
+                imported_counts['inquiry_replies'] += 1
+            except Exception as e:
+                print(f"Inquiry reply import error: {e}")
+        
+        # 管理者用買取承諾書（法人版）をインポート（v3.1追加）
+        imported_counts['admin_kaitori_shoudaku'] = 0
+        admin_kaitori_id_map = {}  # 旧ID → 新ID のマッピング
+        for kaitori in backup_data.get('admin_kaitori_shoudaku', []):
+            try:
+                old_kaitori_id = kaitori.get('id')
+                admin_id = resolve_user_id(kaitori.get('admin_id'))
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku (document_no, admin_id, company_name, company_address, company_phone,
+                            contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info,
+                            notes, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    ''', (
+                        kaitori.get('document_no'),
+                        admin_id,
+                        kaitori.get('company_name'),
+                        kaitori.get('company_address'),
+                        kaitori.get('company_phone'),
+                        kaitori.get('contact_name'),
+                        kaitori.get('issue_date'),
+                        kaitori.get('subtotal', 0),
+                        kaitori.get('tax_amount', 0),
+                        kaitori.get('total_amount', 0),
+                        kaitori.get('tax_rate', 10.0),
+                        kaitori.get('payment_method'),
+                        kaitori.get('bank_info'),
+                        kaitori.get('notes'),
+                        kaitori.get('created_at'),
+                        kaitori.get('updated_at')
+                    ))
+                    new_id = cur.fetchone()[0]
+                else:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku (document_no, admin_id, company_name, company_address, company_phone,
+                            contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info,
+                            notes, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        kaitori.get('document_no'),
+                        admin_id,
+                        kaitori.get('company_name'),
+                        kaitori.get('company_address'),
+                        kaitori.get('company_phone'),
+                        kaitori.get('contact_name'),
+                        kaitori.get('issue_date'),
+                        kaitori.get('subtotal', 0),
+                        kaitori.get('tax_amount', 0),
+                        kaitori.get('total_amount', 0),
+                        kaitori.get('tax_rate', 10.0),
+                        kaitori.get('payment_method'),
+                        kaitori.get('bank_info'),
+                        kaitori.get('notes'),
+                        kaitori.get('created_at'),
+                        kaitori.get('updated_at')
+                    ))
+                    new_id = cur.lastrowid
+                
+                if old_kaitori_id is not None:
+                    admin_kaitori_id_map[old_kaitori_id] = new_id
+                imported_counts['admin_kaitori_shoudaku'] += 1
+            except Exception as e:
+                print(f"Admin kaitori shoudaku import error: {e}")
+        
+        # 管理者用買取承諾書明細をインポート（v3.1追加）
+        imported_counts['admin_kaitori_shoudaku_items'] = 0
+        for item in backup_data.get('admin_kaitori_shoudaku_items', []):
+            try:
+                old_kaitori_id = item.get('kaitori_shoudaku_id')
+                new_kaitori_id = admin_kaitori_id_map.get(old_kaitori_id)
+                if new_kaitori_id is None:
+                    continue  # 対応する買取承諾書がない場合はスキップ
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku_items (kaitori_shoudaku_id, item_no, product_name, brand_name,
+                            condition, quantity, unit_price, amount, notes)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        new_kaitori_id,
+                        item.get('item_no'),
+                        item.get('product_name'),
+                        item.get('brand_name'),
+                        item.get('condition'),
+                        item.get('quantity', 1),
+                        item.get('unit_price', 0),
+                        item.get('amount', 0),
+                        item.get('notes')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO admin_kaitori_shoudaku_items (kaitori_shoudaku_id, item_no, product_name, brand_name,
+                            condition, quantity, unit_price, amount, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        new_kaitori_id,
+                        item.get('item_no'),
+                        item.get('product_name'),
+                        item.get('brand_name'),
+                        item.get('condition'),
+                        item.get('quantity', 1),
+                        item.get('unit_price', 0),
+                        item.get('amount', 0),
+                        item.get('notes')
+                    ))
+                imported_counts['admin_kaitori_shoudaku_items'] += 1
+            except Exception as e:
+                print(f"Admin kaitori shoudaku item import error: {e}")
+        
+        # 処分申請をインポート（v3.1追加）
+        imported_counts['item_disposal_requests'] = 0
+        for disposal in backup_data.get('item_disposal_requests', []):
+            try:
+                user_id = resolve_user_id(disposal.get('user_id'))
+                processed_by = resolve_user_id(disposal.get('processed_by')) if disposal.get('processed_by') else None
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO item_disposal_requests (user_id, merchandise_id, disposal_type, reason, shipping_address,
+                            shipping_name, shipping_phone, status, admin_note, created_at, processed_at, processed_by)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        user_id,
+                        disposal.get('merchandise_id'),
+                        disposal.get('disposal_type'),
+                        disposal.get('reason', 'overdue'),
+                        disposal.get('shipping_address'),
+                        disposal.get('shipping_name'),
+                        disposal.get('shipping_phone'),
+                        disposal.get('status', 'pending'),
+                        disposal.get('admin_note'),
+                        disposal.get('created_at'),
+                        disposal.get('processed_at'),
+                        processed_by
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO item_disposal_requests (user_id, merchandise_id, disposal_type, reason, shipping_address,
+                            shipping_name, shipping_phone, status, admin_note, created_at, processed_at, processed_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id,
+                        disposal.get('merchandise_id'),
+                        disposal.get('disposal_type'),
+                        disposal.get('reason', 'overdue'),
+                        disposal.get('shipping_address'),
+                        disposal.get('shipping_name'),
+                        disposal.get('shipping_phone'),
+                        disposal.get('status', 'pending'),
+                        disposal.get('admin_note'),
+                        disposal.get('created_at'),
+                        disposal.get('processed_at'),
+                        processed_by
+                    ))
+                imported_counts['item_disposal_requests'] += 1
+            except Exception as e:
+                print(f"Item disposal request import error: {e}")
+        
         conn.commit()
         error_count = len(imported_counts.get('errors', []))
         msg = f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
+        if imported_counts.get('inquiries', 0) > 0:
+            msg += f", 問い合わせ {imported_counts['inquiries']}件"
+        if imported_counts.get('admin_kaitori_shoudaku', 0) > 0:
+            msg += f", 買取承諾書(法人) {imported_counts['admin_kaitori_shoudaku']}件"
+        if imported_counts.get('item_disposal_requests', 0) > 0:
+            msg += f", 処分申請 {imported_counts['item_disposal_requests']}件"
         if error_count > 0:
             msg += f" (エラー {error_count}件)"
             flash(msg, 'warning')
@@ -15851,6 +16120,7 @@ def inquiry_list():
             ORDER BY i.updated_at DESC
         ''', (current_user.id,))
     else:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute('''
             SELECT i.*, 
@@ -15886,40 +16156,47 @@ def inquiry_new():
             flash('タイトルと内容を入力してください', 'error')
             return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
         
-        # 画像アップロード処理
-        image_path = None
-        if 'image' in request.files:
-            image = request.files['image']
-            if image and image.filename:
-                # ファイル名をセキュアに
-                filename = secure_filename(f"inquiry_{int(time.time())}_{image.filename}")
-                # inquiries用のフォルダを作成
-                upload_dir = os.path.join(app.static_folder, 'uploads', 'inquiries')
-                os.makedirs(upload_dir, exist_ok=True)
-                # ファイルを保存
-                image.save(os.path.join(upload_dir, filename))
-                image_path = f'uploads/inquiries/{filename}'
-        
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute('''
-                INSERT INTO inquiries (user_id, category, title, content, image_path)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (current_user.id, category, title, content, image_path))
-        else:
-            cur = conn.cursor()
-            cur.execute('''
-                INSERT INTO inquiries (user_id, category, title, content, image_path)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (current_user.id, category, title, content, image_path))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-        flash('お問い合わせを送信しました', 'success')
-        return redirect(url_for('inquiry_list'))
+        try:
+            # 画像アップロード処理
+            image_path = None
+            if 'image' in request.files:
+                image = request.files['image']
+                if image and image.filename:
+                    # ファイル名をセキュアに
+                    filename = secure_filename(f"inquiry_{int(time.time())}_{image.filename}")
+                    # inquiries用のフォルダを作成（UPLOAD_FOLDERを基準にする）
+                    upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'inquiries')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    # ファイルを保存
+                    image.save(os.path.join(upload_dir, filename))
+                    image_path = f'uploads/inquiries/{filename}'
+            
+            conn = get_db()
+            if DATABASE_URL:
+                cur = conn.cursor()
+                cur.execute('''
+                    INSERT INTO inquiries (user_id, category, title, content, image_path)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (current_user.id, category, title, content, image_path))
+            else:
+                cur = conn.cursor()
+                cur.execute('''
+                    INSERT INTO inquiries (user_id, category, title, content, image_path)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (current_user.id, category, title, content, image_path))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            flash('お問い合わせを送信しました', 'success')
+            return redirect(url_for('inquiry_list'))
+        except Exception as e:
+            import traceback
+            print(f"Inquiry creation error: {e}")
+            traceback.print_exc()
+            flash(f'エラーが発生しました: {str(e)}', 'error')
+            return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
     
     return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
 
@@ -15932,6 +16209,7 @@ def inquiry_view(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute('SELECT * FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
     else:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
     
@@ -16068,6 +16346,7 @@ def admin_inquiries():
                         i.updated_at DESC
                 ''')
         else:
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             if status_filter:
                 cur.execute('''
@@ -16143,6 +16422,7 @@ def admin_inquiry_view(id):
             WHERE i.id = %s
         ''', (id,))
     else:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute('''
             SELECT i.*, u.display_name, u.username, u.email
