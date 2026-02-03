@@ -5830,119 +5830,128 @@ def admin_proxy_service():
         flash('この機能はオーナーのみ利用可能です', 'error')
         return redirect(url_for('index'))
     
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 設定取得
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
-        settings = cur.fetchone()
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 設定取得
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+            settings = cur.fetchone()
+            
+            # 全ユーザーを取得
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY 
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+            """)
+            users = cur.fetchall()
+            
+            # 掲載中の商品を取得（代行サービス表示フラグが立っているもの、全ユーザー対象）
+            cur.execute("""
+                SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                       (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                       (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+            """)
+            items = cur.fetchall()
+            
+            # 全入札履歴を取得
+            cur.execute("""
+                SELECT b.*, m.product_name
+                FROM proxy_service_bids b
+                JOIN merchandise m ON b.merchandise_id = m.id
+                ORDER BY b.created_at DESC
+                LIMIT 50
+            """)
+            bids = cur.fetchall()
+            
+            # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- PostgreSQL
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
+                       COALESCE(u.display_name, '不明') as owner_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE (m.show_in_proxy_service = FALSE OR m.show_in_proxy_service IS NULL) AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+                LIMIT 100
+            """)
+            available_items = cur.fetchall()
+        else:
+            cur = conn.cursor()
+            # 設定取得
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+            settings = cur.fetchone()
+            
+            # 全ユーザーを取得
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY 
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+            """)
+            users = cur.fetchall()
+            
+            # 掲載中の商品を取得（全ユーザー対象）
+            cur.execute("""
+                SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                       (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                       (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+            """)
+            items = cur.fetchall()
+            
+            # 全入札履歴を取得
+            cur.execute("""
+                SELECT b.*, m.product_name
+                FROM proxy_service_bids b
+                JOIN merchandise m ON b.merchandise_id = m.id
+                ORDER BY b.created_at DESC
+                LIMIT 50
+            """)
+            bids = cur.fetchall()
+            
+            # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- SQLite
+            cur.execute("""
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
+                       COALESCE(u.display_name, '不明') as owner_name
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE (m.show_in_proxy_service = 0 OR m.show_in_proxy_service IS NULL) AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+                LIMIT 100
+            """)
+            available_items = cur.fetchall()
         
-        # 全オーナー/管理者を取得
-        cur.execute("""
-            SELECT u.id, u.username, u.display_name, u.role,
-                   CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
-            FROM users u
-            LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-            ORDER BY 
-                CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                u.id
-        """)
-        users = cur.fetchall()
+        cur.close()
+        conn.close()
         
-        # 掲載中の商品を取得（代行サービス表示フラグが立っているもの、全ユーザー対象）
-        cur.execute("""
-            SELECT m.*, u.display_name as owner_name,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
-                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
-                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
-            FROM merchandise m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-        """)
-        items = cur.fetchall()
-        
-        # 全入札履歴を取得
-        cur.execute("""
-            SELECT b.*, m.product_name
-            FROM proxy_service_bids b
-            JOIN merchandise m ON b.merchandise_id = m.id
-            ORDER BY b.created_at DESC
-            LIMIT 50
-        """)
-        bids = cur.fetchall()
-        
-        # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- PostgreSQL
-        cur.execute("""
-            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
-            FROM merchandise m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-            LIMIT 100
-        """)
-        available_items = cur.fetchall()
-    else:
-        cur = conn.cursor()
-        # 設定取得
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
-        settings = cur.fetchone()
-        
-        # 全オーナー/管理者を取得
-        cur.execute("""
-            SELECT u.id, u.username, u.display_name, u.role,
-                   CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
-            FROM users u
-            LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-            ORDER BY 
-                CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                u.id
-        """)
-        users = cur.fetchall()
-        
-        # 掲載中の商品を取得（全ユーザー対象）
-        cur.execute("""
-            SELECT m.*, u.display_name as owner_name,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
-                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
-                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
-            FROM merchandise m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-        """)
-        items = cur.fetchall()
-        
-        # 全入札履歴を取得
-        cur.execute("""
-            SELECT b.*, m.product_name
-            FROM proxy_service_bids b
-            JOIN merchandise m ON b.merchandise_id = m.id
-            ORDER BY b.created_at DESC
-            LIMIT 50
-        """)
-        bids = cur.fetchall()
-        
-        # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- SQLite
-        cur.execute("""
-            SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
-            FROM merchandise m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.show_in_proxy_service = 0 AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-            LIMIT 100
-        """)
-        available_items = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/proxy_service.html',
-                         settings=dict(settings) if settings else {},
-                         users=[dict(u) for u in users],
-                         items=[dict(i) for i in items],
-                         bids=[dict(b) for b in bids],
-                         available_items=[dict(i) for i in available_items])
+        return render_template('admin/proxy_service.html',
+                             settings=dict(settings) if settings else {},
+                             users=[dict(u) for u in users],
+                             items=[dict(i) for i in items],
+                             bids=[dict(b) for b in bids],
+                             available_items=[dict(i) for i in available_items])
+    except Exception as e:
+        import traceback
+        print(f"Proxy service admin error: {e}")
+        traceback.print_exc()
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/admin/proxy-service/settings', methods=['POST'])
 @login_required
@@ -17635,8 +17644,8 @@ def admin_sales_agency_requests():
                     WHERE sari.request_id = ?
                 ''', (req_dict['id'],))
             
-            items = [dict(item) for item in cur.fetchall()]
-            req_dict['items'] = items
+            merchandise_items = [dict(item) for item in cur.fetchall()]
+            req_dict['merchandise_items'] = merchandise_items
             requests_list.append(req_dict)
         
         # 統計を取得

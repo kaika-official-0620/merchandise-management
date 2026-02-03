@@ -397,7 +397,7 @@
             </div>
             <div class="request-body">
                 <div class="request-items">
-                    {% for item in req.items %}
+                    {% for item in req.merchandise_items %}
                     <div class="request-item">
                         {% if item.photo_path %}
                         <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
