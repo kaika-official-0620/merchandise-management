@@ -16875,11 +16875,20 @@ def get_unread_inquiry_count():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) as count FROM inquiries WHERE status = 'new'")
+            # 一覧と同じ条件でカウント（存在するユーザーの問い合わせのみ、クローズを除外）
+            cur.execute("""
+                SELECT COUNT(*) as count FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = 'new'
+            """)
             count = cur.fetchone()[0]
         else:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+            cur.execute("""
+                SELECT COUNT(*) FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = 'new'
+            """)
             count = cur.fetchone()[0]
         cur.close()
         conn.close()
