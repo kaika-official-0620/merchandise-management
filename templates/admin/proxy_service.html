@@ -60,14 +60,14 @@
             <div class="form-group">
                 <label>開始日時</label>
                 <input type="datetime-local" name="start_datetime" class="form-control" 
-                       value="{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') if settings.start_datetime else '' }}">
+                       value="{% if settings.start_datetime %}{% if settings.start_datetime is string %}{{ settings.start_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
                 <p class="form-hint">この日時以降に公開されます（空欄で即時公開）</p>
             </div>
             
             <div class="form-group">
                 <label>終了日時</label>
                 <input type="datetime-local" name="end_datetime" class="form-control"
-                       value="{{ settings.end_datetime.strftime('%Y-%m-%dT%H:%M') if settings.end_datetime else '' }}">
+                       value="{% if settings.end_datetime %}{% if settings.end_datetime is string %}{{ settings.end_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.end_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
                 <p class="form-hint">この日時に終了します（空欄で無期限）</p>
             </div>
             
@@ -277,7 +277,7 @@
                         <td>{{ bid.product_name }}</td>
                         <td>{{ bid.bidder_name }}</td>
                         <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
-                        <td class="bid-time">{{ bid.created_at.strftime('%m/%d %H:%M') if bid.created_at else '-' }}</td>
+                        <td class="bid-time">{% if bid.created_at %}{% if bid.created_at is string %}{{ bid.created_at[5:16].replace('-', '/').replace('T', ' ').replace(' ', ' ') }}{% else %}{{ bid.created_at.strftime('%m/%d %H:%M') }}{% endif %}{% else %}-{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
