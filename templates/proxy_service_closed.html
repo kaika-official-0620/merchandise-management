@@ -98,6 +98,10 @@
             <div class="datetime">{{ end_datetime.strftime('%Y年%m月%d日 %H:%M') }}</div>
         </div>
         {% endif %}
+        {% elif reason == 'not_allowed' %}
+        <div class="icon">🚫</div>
+        <h1>アクセス権限がありません</h1>
+        <p>このサービスは現在、あなたのアカウントには<br>公開されていません。</p>
         {% else %}
         <div class="icon">🔒</div>
         <h1>現在非公開です</h1>

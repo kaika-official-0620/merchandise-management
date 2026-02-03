@@ -5849,7 +5849,7 @@ def admin_proxy_service():
         """)
         users = cur.fetchall()
         
-        # 公開対象ユーザーの商品を取得（代行サービス表示フラグが立っているもの）
+        # 掲載中の商品を取得（代行サービス表示フラグが立っているもの、全ユーザー対象）
         cur.execute("""
             SELECT m.*, u.display_name as owner_name,
                    (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
@@ -5857,7 +5857,6 @@ def admin_proxy_service():
                    (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
             ORDER BY m.id DESC
         """)
@@ -5873,12 +5872,11 @@ def admin_proxy_service():
         """)
         bids = cur.fetchall()
         
-        # 選択可能な商品（未掲載かつ未販売、公開対象ユーザーのみ）- PostgreSQL
+        # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- PostgreSQL
         cur.execute("""
             SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = FALSE AND m.sale_date IS NULL
             ORDER BY m.id DESC
             LIMIT 100
@@ -5902,7 +5900,7 @@ def admin_proxy_service():
         """)
         users = cur.fetchall()
         
-        # 公開対象ユーザーの商品を取得
+        # 掲載中の商品を取得（全ユーザー対象）
         cur.execute("""
             SELECT m.*, u.display_name as owner_name,
                    (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
@@ -5910,7 +5908,6 @@ def admin_proxy_service():
                    (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
             ORDER BY m.id DESC
         """)
@@ -5926,12 +5923,11 @@ def admin_proxy_service():
         """)
         bids = cur.fetchall()
         
-        # 選択可能な商品（未掲載かつ未販売、公開対象ユーザーのみ）- SQLite
+        # 選択可能な商品（未掲載かつ未販売、全ユーザー対象）- SQLite
         cur.execute("""
             SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, u.display_name as owner_name
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = 0 AND m.sale_date IS NULL
             ORDER BY m.id DESC
             LIMIT 100
@@ -6385,6 +6381,14 @@ def public_proxy_service():
         
         settings_dict = dict(settings)
         
+        # サービス利用対象ユーザーかチェック（ログイン時のみ）
+        if current_user.is_authenticated:
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            # 管理者/オーナーは常にアクセス可能
+            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                return render_template('proxy_service_closed.html', reason='not_allowed')
+        
         # 日時チェック
         start_dt = settings_dict.get('start_datetime')
         end_dt = settings_dict.get('end_datetime')
@@ -6395,7 +6399,7 @@ def public_proxy_service():
         if end_dt and now > end_dt:
             return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
         
-        # 公開対象ユーザーの商品を取得（最高入札情報付き）
+        # 掲載中の商品を取得（全ユーザーの商品、最高入札情報付き）
         cur.execute("""
             SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
                    m.listing_price, m.model_number, u.display_name as owner_name,
@@ -6403,7 +6407,6 @@ def public_proxy_service():
                    (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = TRUE AND m.sale_date IS NULL
             ORDER BY m.id DESC
         """)
@@ -6423,6 +6426,14 @@ def public_proxy_service():
         if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
             settings_dict['sale_mode'] = 'auction'
         
+        # サービス利用対象ユーザーかチェック（ログイン時のみ）
+        if current_user.is_authenticated:
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            # 管理者/オーナーは常にアクセス可能
+            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                return render_template('proxy_service_closed.html', reason='not_allowed')
+        
         # 日時チェック
         start_dt = settings_dict.get('start_datetime')
         end_dt = settings_dict.get('end_datetime')
@@ -6437,7 +6448,7 @@ def public_proxy_service():
             if now > end_dt:
                 return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
         
-        # 公開対象ユーザーの商品を取得
+        # 掲載中の商品を取得（全ユーザーの商品）
         cur.execute("""
             SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
                    m.listing_price, m.model_number, u.display_name as owner_name,
@@ -6445,7 +6456,6 @@ def public_proxy_service():
                    (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
-            JOIN proxy_service_users psu ON m.user_id = psu.user_id
             WHERE m.show_in_proxy_service = 1 AND m.sale_date IS NULL
             ORDER BY m.id DESC
         """)
@@ -6469,6 +6479,21 @@ def proxy_service_bid():
     # 支払い遅延チェック
     if not current_user.can_participate_auction():
         return jsonify({'success': False, 'error': '月謝のお支払いが確認できていないため、入札できません'}), 403
+    
+    # サービス利用対象ユーザーかチェック（管理者/オーナーは除外）
+    if not current_user.is_admin() and not current_user.is_owner():
+        conn_check = get_db()
+        if DATABASE_URL:
+            cur_check = conn_check.cursor()
+            cur_check.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
+        else:
+            cur_check = conn_check.cursor()
+            cur_check.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
+        is_allowed = cur_check.fetchone() is not None
+        cur_check.close()
+        conn_check.close()
+        if not is_allowed:
+            return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     
     data = request.get_json() or request.form
     
