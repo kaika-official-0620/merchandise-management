@@ -413,10 +413,25 @@
     
     .product-selector select,
     .product-selector .form-control {
-        flex: 1 1 100%;
-        max-width: none;
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 100%;
         font-size: 0.75rem;
         padding: 6px;
+    }
+    
+    .product-selector #product-filter {
+        max-width: 80px !important;
+    }
+    
+    .product-selector #product-select {
+        max-width: 120px;
+    }
+    
+    .product-selector .btn {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        font-size: 0.75rem;
     }
     
     .totals-row td {
