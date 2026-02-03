@@ -142,14 +142,16 @@ if DATABASE_URL:
         # 代行仕入れサービス利用可能金額カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS proxy_service_budget INTEGER DEFAULT 0")
-        except:
-            pass
+            print("[DEBUG] proxy_service_budget カラム追加成功/既存")
+        except Exception as e:
+            print(f"[ERROR] proxy_service_budget カラム追加失敗: {e}")
         
         # 月謝免除フラグカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS tuition_exempt BOOLEAN DEFAULT FALSE")
-        except:
-            pass
+            print("[DEBUG] tuition_exempt カラム追加成功/既存")
+        except Exception as e:
+            print(f"[ERROR] tuition_exempt カラム追加失敗: {e}")
         
         # 未払い開始日カラムを追加（既存テーブル用）
         try:
@@ -4979,17 +4981,19 @@ def admin_edit_user(id):
         email = request.form.get('email')
         role = request.form.get('role', 'user')
         new_password = request.form.get('new_password')
-        proxy_service_budget = request.form.get('proxy_service_budget', 0)
+        proxy_service_budget_raw = request.form.get('proxy_service_budget', '0')
         tuition_exempt = request.form.get('tuition_exempt') == '1'
         
         # デバッグログ
         print(f"[DEBUG] admin_edit_user: id={id}, new_password入力あり={bool(new_password)}, 長さ={len(new_password) if new_password else 0}")
+        print(f"[DEBUG] proxy_service_budget_raw={proxy_service_budget_raw}, type={type(proxy_service_budget_raw)}")
         
         # 金額をint変換
         try:
-            proxy_service_budget = int(proxy_service_budget) if proxy_service_budget else 0
+            proxy_service_budget = int(proxy_service_budget_raw) if proxy_service_budget_raw else 0
         except ValueError:
             proxy_service_budget = 0
+        print(f"[DEBUG] proxy_service_budget after conversion={proxy_service_budget}")
         
         # 管理者権限の設定を取得
         admin_permissions = request.form.getlist('admin_permissions')
@@ -5005,6 +5009,7 @@ def admin_edit_user(id):
             role = user['role']
         
         try:
+            print(f"[DEBUG] 更新開始: proxy_service_budget={proxy_service_budget}, tuition_exempt={tuition_exempt}")
             if new_password and len(new_password) >= 6:
                 print(f"[DEBUG] パスワード更新実行: user_id={id}")
                 hashed_password = generate_password_hash(new_password)
@@ -5032,9 +5037,19 @@ def admin_edit_user(id):
                         UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
                         WHERE id = ?
                     ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
+                print(f"[DEBUG] UPDATE実行完了、rowcount={cur.rowcount}")
             
             conn.commit()
             print(f"[DEBUG] commit完了")
+            
+            # 更新後の値を確認
+            if DATABASE_URL:
+                cur.execute("SELECT proxy_service_budget, tuition_exempt FROM users WHERE id = %s", (id,))
+            else:
+                cur.execute("SELECT proxy_service_budget, tuition_exempt FROM users WHERE id = ?", (id,))
+            updated_user = cur.fetchone()
+            print(f"[DEBUG] 更新後の値: {updated_user}")
+            
             flash('ユーザー情報を更新しました', 'success')
             return redirect(url_for('admin_users'))
         except Exception as e:
@@ -8013,7 +8028,7 @@ def export_backup_with_images():
     conn = get_db()
     backup_data = {
         'exported_at': datetime.now().isoformat(),
-        'version': '3.1',
+        'version': '3.2',
         'includes_images': True,
         'users': [],
         'merchandise': [],
@@ -8046,7 +8061,12 @@ def export_backup_with_images():
         'inquiry_replies': [],
         'admin_kaitori_shoudaku': [],
         'admin_kaitori_shoudaku_items': [],
-        'item_disposal_requests': []
+        'item_disposal_requests': [],
+        # v3.2で追加：代行サービス関連
+        'proxy_service_users': [],
+        'proxy_service_bids': [],
+        'sales_agency_requests': [],
+        'sales_agency_request_items': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -8062,7 +8082,10 @@ def export_backup_with_images():
         # v3.1で追加
         'inquiries', 'inquiry_replies',
         'admin_kaitori_shoudaku', 'admin_kaitori_shoudaku_items',
-        'item_disposal_requests'
+        'item_disposal_requests',
+        # v3.2で追加（代行サービス関連）
+        'proxy_service_users', 'proxy_service_bids',
+        'sales_agency_requests', 'sales_agency_request_items'
     ]
     
     if DATABASE_URL:
