@@ -675,7 +675,7 @@
     border-radius: 3px;
 }
 
-/* 商品一覧ライトボックス */
+/* 商品一覧ライトボックス（横スクロール形式） */
 .item-lightbox {
     display: none;
     position: fixed;
@@ -685,6 +685,7 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
     z-index: 9999;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
 }
@@ -693,20 +694,47 @@
     display: flex;
 }
 
-.item-lightbox-content {
-    position: relative;
+.item-lightbox-scroll-container {
+    width: 100%;
+    height: 80vh;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.item-lightbox-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.item-lightbox-scroll-container .lightbox-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    scroll-snap-align: start;
+}
+
+.item-lightbox-scroll-container .lightbox-slide img {
     max-width: 90%;
-    max-height: 90%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.item-lightbox-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-}
-
-.item-lightbox-content img {
-    max-width: 100%;
-    max-height: 80vh;
-    border-radius: 8px;
-    object-fit: contain;
+    gap: 8px;
 }
 
 .item-lightbox-close {
@@ -1228,12 +1256,15 @@
 
 .card-header.has-multi-photos .card-photo-scroll {
     width: 100%;
-    padding-bottom: 8px;
+    padding-bottom: 0;
 }
 
 .card-header.has-multi-photos .card-photo-scroll .scroll-thumb {
-    width: 80px;
-    height: 80px;
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
+    border-radius: 8px;
 }
 
 .card-photo {
@@ -1251,14 +1282,16 @@
     cursor: pointer;
 }
 
-/* スマホ用横スクロール画像 */
+/* 横スクロール画像（1枚ずつスワイプ） */
 .card-photo-scroll {
     display: flex;
-    gap: 6px;
+    gap: 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
+    width: 100%;
+    height: 100%;
 }
 
 .card-photo-scroll::-webkit-scrollbar {
@@ -1266,11 +1299,12 @@
 }
 
 .card-photo-scroll .scroll-thumb {
-    width: 70px;
-    height: 70px;
-    flex-shrink: 0;
-    border-radius: 8px;
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
     object-fit: cover;
+    border-radius: 8px;
     scroll-snap-align: start;
     cursor: pointer;
 }
@@ -2866,20 +2900,22 @@ function cancelSaleRequest() {
 </script>
 {% endif %}
 
-<!-- 商品一覧用ライトボックス -->
+<!-- 商品一覧用ライトボックス（横スクロール形式） -->
 <div class="item-lightbox" id="itemLightbox">
     <button class="item-lightbox-close" onclick="closeItemLightbox()">×</button>
     <button class="item-lightbox-nav item-lightbox-prev" onclick="itemLightboxPrev()">‹</button>
     <button class="item-lightbox-nav item-lightbox-next" onclick="itemLightboxNext()">›</button>
-    <div class="item-lightbox-content">
-        <img id="itemLightboxImage" src="" alt="">
+    <div class="item-lightbox-scroll-container" id="itemLightboxScrollContainer">
+        <!-- 画像は動的に挿入される -->
+    </div>
+    <div class="item-lightbox-footer">
         <div class="item-lightbox-counter" id="itemLightboxCounter"></div>
         <div class="item-lightbox-info" id="itemLightboxInfo"></div>
     </div>
 </div>
 
 <script>
-// 商品一覧用ライトボックス
+// 商品一覧用ライトボックス（横スクロール形式）
 let itemLightboxPhotos = [];
 let itemLightboxIndex = 0;
 let itemLightboxName = '';
@@ -2922,9 +2958,36 @@ function openItemLightbox(photos, index, productName) {
     itemLightboxIndex = index;
     itemLightboxName = productName || '';
     
-    updateItemLightbox();
+    // スクロールコンテナに画像を挿入
+    const container = document.getElementById('itemLightboxScrollContainer');
+    container.innerHTML = '';
+    
+    photos.forEach((photo, i) => {
+        const slide = document.createElement('div');
+        slide.className = 'lightbox-slide';
+        slide.innerHTML = `<img src="/static/${photo}" alt="">`;
+        container.appendChild(slide);
+    });
+    
     document.getElementById('itemLightbox').classList.add('active');
     document.body.style.overflow = 'hidden';
+    
+    // 指定したインデックスにスクロール
+    setTimeout(() => {
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+        updateItemLightboxCounter();
+    }, 10);
+    
+    // スクロールイベントでカウンター更新
+    container.onscroll = function() {
+        const slideWidth = container.offsetWidth;
+        const newIndex = Math.round(container.scrollLeft / slideWidth);
+        if (newIndex !== itemLightboxIndex) {
+            itemLightboxIndex = newIndex;
+            updateItemLightboxCounter();
+        }
+    };
 }
 
 function closeItemLightbox() {
@@ -2932,12 +2995,10 @@ function closeItemLightbox() {
     document.body.style.overflow = '';
 }
 
-function updateItemLightbox() {
-    const img = document.getElementById('itemLightboxImage');
+function updateItemLightboxCounter() {
     const counter = document.getElementById('itemLightboxCounter');
     const info = document.getElementById('itemLightboxInfo');
     
-    img.src = '/static/' + itemLightboxPhotos[itemLightboxIndex];
     counter.textContent = (itemLightboxIndex + 1) + ' / ' + itemLightboxPhotos.length;
     info.textContent = itemLightboxName;
     
@@ -2956,13 +3017,17 @@ function updateItemLightbox() {
 }
 
 function itemLightboxPrev() {
+    const container = document.getElementById('itemLightboxScrollContainer');
     itemLightboxIndex = (itemLightboxIndex - 1 + itemLightboxPhotos.length) % itemLightboxPhotos.length;
-    updateItemLightbox();
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ left: slideWidth * itemLightboxIndex, behavior: 'smooth' });
 }
 
 function itemLightboxNext() {
+    const container = document.getElementById('itemLightboxScrollContainer');
     itemLightboxIndex = (itemLightboxIndex + 1) % itemLightboxPhotos.length;
-    updateItemLightbox();
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ left: slideWidth * itemLightboxIndex, behavior: 'smooth' });
 }
 
 // キーボードナビゲーション
@@ -2975,43 +3040,12 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowRight') itemLightboxNext();
 });
 
-// スワイプによる画像切り替え（スマホ対応）
-let touchStartX = 0;
-let touchEndX = 0;
-let touchStartY = 0;
-let touchEndY = 0;
-const swipeThreshold = 50; // スワイプと判定する最小距離(px)
-
-document.getElementById('itemLightbox').addEventListener('touchstart', function(e) {
-    touchStartX = e.changedTouches[0].screenX;
-    touchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-
-document.getElementById('itemLightbox').addEventListener('touchend', function(e) {
-    touchEndX = e.changedTouches[0].screenX;
-    touchEndY = e.changedTouches[0].screenY;
-    handleSwipe();
-}, { passive: true });
-
-function handleSwipe() {
-    const diffX = touchStartX - touchEndX;
-    const diffY = touchStartY - touchEndY;
-    
-    // 横方向のスワイプが縦方向より大きい場合のみ処理
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
-        if (diffX > 0) {
-            // 左スワイプ → 次の画像
-            itemLightboxNext();
-        } else {
-            // 右スワイプ → 前の画像
-            itemLightboxPrev();
-        }
-    }
-}
-
-// ライトボックス外クリックで閉じる
+// ライトボックス外クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
 document.getElementById('itemLightbox').addEventListener('click', function(e) {
-    if (e.target === this) closeItemLightbox();
+    // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+    if (e.target === this || e.target.classList.contains('item-lightbox-close')) {
+        closeItemLightbox();
+    }
 });
 
 // カードタップで詳細ページに移動（画像エリア以外）

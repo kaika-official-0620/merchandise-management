@@ -133,23 +133,41 @@
     margin-bottom: 20px;
 }
 
-.main-photo {
+/* 横スクロール形式のメイン画像 */
+.main-photo-scroll {
     position: relative;
     width: 100%;
     max-width: 500px;
     margin: 0 auto 15px;
 }
 
-.main-photo img {
-    width: 100%;
+.main-photo-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    cursor: pointer;
-    transition: transform 0.2s;
 }
 
-.main-photo img:hover {
-    transform: scale(1.02);
+.main-photo-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.main-photo-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-snap-align: start;
+    cursor: pointer;
+}
+
+.main-photo-slide img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
 }
 
 .photo-counter {
@@ -162,6 +180,7 @@
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 500;
+    z-index: 5;
 }
 
 .thumbnail-strip {
@@ -212,7 +231,7 @@
     object-fit: cover;
 }
 
-/* ライトボックス */
+/* ライトボックス - 横スクロール形式 */
 .lightbox {
     display: none;
     position: fixed;
@@ -222,6 +241,7 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
     z-index: 1000;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
 }
@@ -232,14 +252,45 @@
 
 .lightbox-content {
     position: relative;
-    max-width: 90%;
-    max-height: 90%;
+    width: 100%;
+    max-width: 800px;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
-.lightbox-content img {
-    max-width: 100%;
-    max-height: 85vh;
+.lightbox-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
+    height: 100%;
+}
+
+.lightbox-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.lightbox-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-slide img {
+    max-width: 90%;
+    max-height: 100%;
     border-radius: 8px;
+    object-fit: contain;
 }
 
 .lightbox-close {
@@ -275,6 +326,7 @@
     font-size: 1.5rem;
     cursor: pointer;
     transition: background 0.2s;
+    z-index: 1001;
 }
 
 .lightbox-nav:hover {
@@ -299,6 +351,7 @@
     background: rgba(0,0,0,0.5);
     padding: 6px 15px;
     border-radius: 20px;
+    z-index: 1001;
 }
 
 .no-image-large {
@@ -334,12 +387,12 @@
         margin-bottom: 10px;
     }
     
-    .main-photo {
-        max-width: 200px;
+    .main-photo-scroll {
+        max-width: 250px;
         margin: 0 auto 10px;
     }
     
-    .main-photo img {
+    .main-photo-scroll-container {
         border-radius: 8px;
     }
     
@@ -395,8 +448,8 @@
 
 /* さらに小さい画面用 */
 @media (max-width: 480px) {
-    .main-photo {
-        max-width: 150px;
+    .main-photo-scroll {
+        max-width: 200px;
     }
     
     .thumbnail-item {
@@ -420,8 +473,14 @@
     <div class="view-image">
         {% if item.all_photos and item.all_photos|length > 0 %}
         <div class="gallery-container">
-            <div class="main-photo" onclick="openLightbox(currentPhotoIndex)">
-                <img id="mainImage" src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="{{ item.product_name }}">
+            <div class="main-photo-scroll">
+                <div class="main-photo-scroll-container" id="mainPhotoScrollContainer">
+                    {% for photo in item.all_photos %}
+                    <div class="main-photo-slide" onclick="openLightbox({{ loop.index0 }})">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+                    </div>
+                    {% endfor %}
+                </div>
                 {% if item.all_photos|length > 1 %}
                 <span class="photo-counter" id="photoCounter">1 / {{ item.all_photos|length }}</span>
                 {% endif %}
@@ -435,7 +494,7 @@
             {% if item.all_photos|length > 1 %}
             <div class="thumbnail-strip">
                 {% for photo in item.all_photos %}
-                <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="changePhoto({{ loop.index0 }})">
+                <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="scrollToPhoto({{ loop.index0 }})">
                     <img src="{{ url_for('static', filename=photo) }}" alt="写真{{ loop.index }}">
                 </div>
                 {% endfor %}
@@ -622,14 +681,20 @@
 
 <!-- ライトボックス -->
 {% if item.all_photos and item.all_photos|length > 0 %}
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" onclick="closeLightboxOnBackground(event)">
     <button class="lightbox-close" onclick="closeLightbox()">×</button>
     {% if item.all_photos|length > 1 %}
     <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()">‹</button>
     <button class="lightbox-nav lightbox-next" onclick="lightboxNext()">›</button>
     {% endif %}
     <div class="lightbox-content">
-        <img id="lightboxImage" src="" alt="">
+        <div class="lightbox-scroll-container" id="lightboxScrollContainer">
+            {% for photo in item.all_photos %}
+            <div class="lightbox-slide">
+                <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% if item.all_photos|length > 1 %}
     <div class="lightbox-counter" id="lightboxCounter"></div>
@@ -640,72 +705,69 @@
 const photos = {{ item.all_photos | tojson }};
 let currentPhotoIndex = 0;
 
-function changePhoto(index) {
-    currentPhotoIndex = index;
-    const mainImage = document.getElementById('mainImage');
-    mainImage.src = '{{ url_for("static", filename="") }}' + photos[index];
-    
-    // 更新カウンター
-    const counter = document.getElementById('photoCounter');
-    if (counter) {
-        counter.textContent = (index + 1) + ' / ' + photos.length;
-    }
-    
-    // サムネイルのアクティブ状態更新
-    document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
-        thumb.classList.toggle('active', i === index);
+// メイン画像のスクロールコンテナ
+const mainPhotoScrollContainer = document.getElementById('mainPhotoScrollContainer');
+
+// スクロール位置から現在のインデックスを更新
+if (mainPhotoScrollContainer) {
+    mainPhotoScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = mainPhotoScrollContainer.offsetWidth;
+        const newIndex = Math.round(mainPhotoScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updatePhotoCounter();
+            updateThumbnails();
+        }
     });
 }
 
-// メイン画像のスワイプ切り替え（スマホ対応）
-let mainTouchStartX = 0;
-let mainTouchEndX = 0;
-let mainTouchStartY = 0;
-let mainTouchEndY = 0;
-const mainSwipeThreshold = 50;
+// 特定の写真にスクロール
+function scrollToPhoto(index) {
+    currentPhotoIndex = index;
+    const slideWidth = mainPhotoScrollContainer.offsetWidth;
+    mainPhotoScrollContainer.scrollTo({ left: slideWidth * index, behavior: 'smooth' });
+    updatePhotoCounter();
+    updateThumbnails();
+}
 
-document.querySelector('.main-photo')?.addEventListener('touchstart', function(e) {
-    mainTouchStartX = e.changedTouches[0].screenX;
-    mainTouchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-
-document.querySelector('.main-photo')?.addEventListener('touchend', function(e) {
-    mainTouchEndX = e.changedTouches[0].screenX;
-    mainTouchEndY = e.changedTouches[0].screenY;
-    handleMainPhotoSwipe();
-}, { passive: true });
-
-function handleMainPhotoSwipe() {
-    const diffX = mainTouchStartX - mainTouchEndX;
-    const diffY = mainTouchStartY - mainTouchEndY;
-    
-    // 横方向のスワイプが縦方向より大きい場合のみ処理
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > mainSwipeThreshold) {
-        if (diffX > 0) {
-            // 左スワイプ → 次の画像
-            const nextIndex = (currentPhotoIndex + 1) % photos.length;
-            changePhoto(nextIndex);
-        } else {
-            // 右スワイプ → 前の画像
-            const prevIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
-            changePhoto(prevIndex);
-        }
+// カウンターを更新
+function updatePhotoCounter() {
+    const counter = document.getElementById('photoCounter');
+    if (counter) {
+        counter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
     }
 }
 
+// サムネイルのアクティブ状態を更新
+function updateThumbnails() {
+    document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === currentPhotoIndex);
+    });
+}
+
+// ライトボックス
 function openLightbox(index) {
     currentPhotoIndex = index;
     const lightbox = document.getElementById('lightbox');
-    const lightboxImage = document.getElementById('lightboxImage');
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
     const lightboxCounter = document.getElementById('lightboxCounter');
     
-    lightboxImage.src = '{{ url_for("static", filename="") }}' + photos[index];
+    // 指定インデックスにスクロール
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+    
     if (lightboxCounter) {
         lightboxCounter.textContent = (index + 1) + ' / ' + photos.length;
     }
     
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
+    
+    // 表示後にスクロール位置を再調整
+    setTimeout(() => {
+        const containerWidth = scrollContainer.offsetWidth;
+        scrollContainer.scrollTo({ left: containerWidth * index, behavior: 'instant' });
+    }, 10);
 }
 
 function closeLightbox() {
@@ -713,27 +775,56 @@ function closeLightbox() {
     document.body.style.overflow = '';
 }
 
+function closeLightboxOnBackground(event) {
+    if (event.target.classList.contains('lightbox')) {
+        closeLightbox();
+    }
+}
+
 function lightboxPrev() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
     currentPhotoIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
-    updateLightboxImage();
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
 }
 
 function lightboxNext() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
     currentPhotoIndex = (currentPhotoIndex + 1) % photos.length;
-    updateLightboxImage();
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
 }
 
-function updateLightboxImage() {
-    const lightboxImage = document.getElementById('lightboxImage');
+function updateLightboxCounter() {
     const lightboxCounter = document.getElementById('lightboxCounter');
-    
-    lightboxImage.src = '{{ url_for("static", filename="") }}' + photos[currentPhotoIndex];
     if (lightboxCounter) {
         lightboxCounter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
     }
-    
-    // メイン画像も更新
-    changePhoto(currentPhotoIndex);
+}
+
+// ライトボックスのスクロール監視
+const lightboxScrollContainer = document.getElementById('lightboxScrollContainer');
+if (lightboxScrollContainer) {
+    lightboxScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = lightboxScrollContainer.offsetWidth;
+        const newIndex = Math.round(lightboxScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updateLightboxCounter();
+            // メイン画像も同期
+            if (mainPhotoScrollContainer) {
+                const mainSlideWidth = mainPhotoScrollContainer.offsetWidth;
+                mainPhotoScrollContainer.scrollTo({ left: mainSlideWidth * currentPhotoIndex, behavior: 'instant' });
+                updateThumbnails();
+            }
+        }
+    });
 }
 
 // キーボードナビゲーション
@@ -744,42 +835,6 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeLightbox();
     if (e.key === 'ArrowLeft') lightboxPrev();
     if (e.key === 'ArrowRight') lightboxNext();
-});
-
-// スワイプによる画像切り替え（スマホ対応）
-let touchStartX = 0;
-let touchEndX = 0;
-let touchStartY = 0;
-let touchEndY = 0;
-const swipeThreshold = 50;
-
-document.getElementById('lightbox').addEventListener('touchstart', function(e) {
-    touchStartX = e.changedTouches[0].screenX;
-    touchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-
-document.getElementById('lightbox').addEventListener('touchend', function(e) {
-    touchEndX = e.changedTouches[0].screenX;
-    touchEndY = e.changedTouches[0].screenY;
-    handleSwipe();
-}, { passive: true });
-
-function handleSwipe() {
-    const diffX = touchStartX - touchEndX;
-    const diffY = touchStartY - touchEndY;
-    
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
-        if (diffX > 0) {
-            lightboxNext();
-        } else {
-            lightboxPrev();
-        }
-    }
-}
-
-// ライトボックス外クリックで閉じる
-document.getElementById('lightbox').addEventListener('click', function(e) {
-    if (e.target === this) closeLightbox();
 });
 </script>
 {% endif %}
