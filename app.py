@@ -17521,25 +17521,6 @@ def admin_sales_agency_requests():
             from psycopg2.extras import RealDictCursor
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            # テーブルが存在するか確認
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'sales_agency_requests'
-                )
-            """)
-            table_exists = cur.fetchone()[0]
-            
-            if not table_exists:
-                cur.close()
-                conn.close()
-                return render_template('admin/sales_agency_requests.html',
-                                     requests=requests_list,
-                                     stats=stats,
-                                     status_filter=status_filter,
-                                     service_types=SALES_AGENCY_SERVICE_TYPES,
-                                     statuses=SALES_AGENCY_STATUS)
-            
             if status_filter == 'processed':
                 # 処理済み（承認・却下）のみ表示
                 cur.execute('''
@@ -17575,18 +17556,6 @@ def admin_sales_agency_requests():
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            
-            # テーブルが存在するか確認
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_agency_requests'")
-            if not cur.fetchone():
-                cur.close()
-                conn.close()
-                return render_template('admin/sales_agency_requests.html',
-                                     requests=requests_list,
-                                     stats=stats,
-                                     status_filter=status_filter,
-                                     service_types=SALES_AGENCY_SERVICE_TYPES,
-                                     statuses=SALES_AGENCY_STATUS)
             
             if status_filter == 'processed':
                 # 処理済み（承認・却下）のみ表示

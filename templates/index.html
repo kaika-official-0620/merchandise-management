@@ -3085,13 +3085,20 @@ function closeSalesAgencyModal() {
     document.getElementById('salesAgencyModal').style.display = 'none';
 }
 
+// 販売代行用の商品データを保持
+let salesAgencyAllItems = [];
+
 function loadSalesAgencyItems() {
     const container = document.getElementById('salesAgencyItemList');
     container.innerHTML = '';
+    salesAgencyAllItems = [];
+    
+    // 検索ボックスをクリア
+    const searchInput = document.getElementById('salesAgencySearch');
+    if (searchInput) searchInput.value = '';
     
     // 売却済み以外の商品を取得（ページ内のアイテムから）
     const items = document.querySelectorAll('.item-card[data-id]');
-    let availableItems = [];
     
     items.forEach(item => {
         const id = item.getAttribute('data-id');
@@ -3106,7 +3113,7 @@ function loadSalesAgencyItems() {
             const priceEl = item.querySelector('.listing-price, .card-listing-price');
             const imgEl = item.querySelector('img');
             
-            availableItems.push({
+            salesAgencyAllItems.push({
                 id: id,
                 name: nameEl ? nameEl.textContent.trim() : '商品名不明',
                 brand: brandEl ? brandEl.textContent.trim() : '',
@@ -3116,14 +3123,26 @@ function loadSalesAgencyItems() {
         }
     });
     
-    if (availableItems.length === 0) {
-        container.innerHTML = '<p class="no-items-message">申請可能な商品がありません</p>';
+    renderSalesAgencyItems(salesAgencyAllItems);
+}
+
+function renderSalesAgencyItems(items) {
+    const container = document.getElementById('salesAgencyItemList');
+    container.innerHTML = '';
+    
+    // フィルター件数を更新
+    const filterCountEl = document.getElementById('salesAgencyFilterCount');
+    if (filterCountEl) filterCountEl.textContent = items.length;
+    
+    if (items.length === 0) {
+        container.innerHTML = '<p class="no-items-message">該当する商品がありません</p>';
         return;
     }
     
-    availableItems.forEach(item => {
+    items.forEach(item => {
         const div = document.createElement('div');
         div.className = 'sales-agency-item';
+        div.setAttribute('data-item-id', item.id);
         div.innerHTML = `
             <label class="sales-agency-item-label">
                 <input type="checkbox" name="merchandise_ids" value="${item.id}" class="sales-agency-checkbox">
@@ -3141,6 +3160,24 @@ function loadSalesAgencyItems() {
     });
     
     updateSelectedCount();
+}
+
+function filterSalesAgencyItems() {
+    const searchInput = document.getElementById('salesAgencySearch');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    
+    if (!searchTerm) {
+        renderSalesAgencyItems(salesAgencyAllItems);
+        return;
+    }
+    
+    const filteredItems = salesAgencyAllItems.filter(item => {
+        const nameMatch = item.name.toLowerCase().includes(searchTerm);
+        const brandMatch = item.brand.toLowerCase().includes(searchTerm);
+        return nameMatch || brandMatch;
+    });
+    
+    renderSalesAgencyItems(filteredItems);
 }
 
 function toggleSelectAll() {
@@ -3204,6 +3241,18 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
                         <label class="sales-agency-section-label">商品を選択 (<span id="selectedCount">0</span>点選択中)</label>
                         <button type="button" id="selectAllBtn" class="btn btn-sm btn-outline" onclick="toggleSelectAll()">全選択</button>
                     </div>
+                    
+                    <!-- 検索・フィルター -->
+                    <div class="sales-agency-search-section">
+                        <div class="sales-agency-search-box">
+                            <input type="text" id="salesAgencySearch" placeholder="商品名・ブランド名で検索..." oninput="filterSalesAgencyItems()">
+                            <span class="sales-agency-search-icon">🔍</span>
+                        </div>
+                        <div class="sales-agency-filter-info">
+                            <span id="salesAgencyFilterCount">0</span>件表示
+                        </div>
+                    </div>
+                    
                     <div id="salesAgencyItemList" class="sales-agency-item-list">
                         <!-- 動的に商品リストが入る -->
                     </div>
@@ -3327,6 +3376,57 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
 .sales-agency-service-name {
     font-size: 0.95rem;
     color: #1e293b;
+}
+
+/* 検索・フィルターセクション */
+.sales-agency-search-section {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f1f5f9;
+    border-radius: 8px;
+}
+
+.sales-agency-search-box {
+    flex: 1;
+    position: relative;
+}
+
+.sales-agency-search-box input {
+    width: 100%;
+    padding: 0.6rem 0.75rem 0.6rem 2.25rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.sales-agency-search-box input:focus {
+    outline: none;
+    border-color: #059669;
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.sales-agency-search-box input::placeholder {
+    color: #9ca3af;
+}
+
+.sales-agency-search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9rem;
+    opacity: 0.5;
+}
+
+.sales-agency-filter-info {
+    font-size: 0.85rem;
+    color: #64748b;
+    white-space: nowrap;
 }
 
 .sales-agency-items-section {
