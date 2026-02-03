@@ -9047,6 +9047,182 @@ def import_backup():
             except Exception as e:
                 print(f"Item disposal request import error: {e}")
         
+        # 代行サービス設定をインポート（v3.2追加）
+        imported_counts['proxy_service_settings'] = 0
+        for setting in backup_data.get('proxy_service_settings', []):
+            try:
+                if DATABASE_URL:
+                    cur.execute("DELETE FROM proxy_service_settings")
+                    cur.execute('''
+                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, updated_by, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        setting.get('is_public', False),
+                        setting.get('page_title', '代行仕入れサービス'),
+                        setting.get('page_description'),
+                        setting.get('start_datetime'),
+                        setting.get('end_datetime'),
+                        setting.get('sale_mode', 'auction'),
+                        current_user.id,
+                        setting.get('updated_at')
+                    ))
+                else:
+                    cur.execute("DELETE FROM proxy_service_settings")
+                    cur.execute('''
+                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, updated_by, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        1 if setting.get('is_public') else 0,
+                        setting.get('page_title', '代行仕入れサービス'),
+                        setting.get('page_description'),
+                        setting.get('start_datetime'),
+                        setting.get('end_datetime'),
+                        setting.get('sale_mode', 'auction'),
+                        current_user.id,
+                        setting.get('updated_at')
+                    ))
+                imported_counts['proxy_service_settings'] += 1
+            except Exception as e:
+                print(f"Proxy service settings import error: {e}")
+        
+        # 代行サービス公開ユーザーをインポート（v3.2追加）
+        imported_counts['proxy_service_users'] = 0
+        if DATABASE_URL:
+            cur.execute("DELETE FROM proxy_service_users")
+        else:
+            cur.execute("DELETE FROM proxy_service_users")
+        for psu in backup_data.get('proxy_service_users', []):
+            try:
+                user_id = resolve_user_id(psu.get('user_id'))
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO proxy_service_users (user_id, is_enabled, created_at)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_id) DO NOTHING
+                    ''', (
+                        user_id,
+                        psu.get('is_enabled', True),
+                        psu.get('created_at')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT OR IGNORE INTO proxy_service_users (user_id, is_enabled, created_at)
+                        VALUES (?, ?, ?)
+                    ''', (
+                        user_id,
+                        1 if psu.get('is_enabled') else 0,
+                        psu.get('created_at')
+                    ))
+                imported_counts['proxy_service_users'] += 1
+            except Exception as e:
+                print(f"Proxy service user import error: {e}")
+        
+        # 代行サービス入札履歴をインポート（v3.2追加）
+        imported_counts['proxy_service_bids'] = 0
+        for bid in backup_data.get('proxy_service_bids', []):
+            try:
+                user_id = resolve_user_id(bid.get('user_id')) if bid.get('user_id') else None
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount, created_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                    ''', (
+                        bid.get('merchandise_id'),
+                        user_id,
+                        bid.get('bidder_name'),
+                        bid.get('bid_amount'),
+                        bid.get('created_at')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (
+                        bid.get('merchandise_id'),
+                        user_id,
+                        bid.get('bidder_name'),
+                        bid.get('bid_amount'),
+                        bid.get('created_at')
+                    ))
+                imported_counts['proxy_service_bids'] += 1
+            except Exception as e:
+                print(f"Proxy service bid import error: {e}")
+        
+        # 販売代行申請をインポート（v3.2追加）
+        imported_counts['sales_agency_requests'] = 0
+        sales_agency_id_map = {}
+        for sar in backup_data.get('sales_agency_requests', []):
+            try:
+                old_sar_id = sar.get('id')
+                user_id = resolve_user_id(sar.get('user_id'))
+                processed_by = resolve_user_id(sar.get('processed_by')) if sar.get('processed_by') else None
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO sales_agency_requests (user_id, service_type, status, admin_note, created_at, processed_at, processed_by, result_notified)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    ''', (
+                        user_id,
+                        sar.get('service_type'),
+                        sar.get('status', 'pending'),
+                        sar.get('admin_note'),
+                        sar.get('created_at'),
+                        sar.get('processed_at'),
+                        processed_by,
+                        sar.get('result_notified', 0)
+                    ))
+                    new_id = cur.fetchone()[0]
+                else:
+                    cur.execute('''
+                        INSERT INTO sales_agency_requests (user_id, service_type, status, admin_note, created_at, processed_at, processed_by, result_notified)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id,
+                        sar.get('service_type'),
+                        sar.get('status', 'pending'),
+                        sar.get('admin_note'),
+                        sar.get('created_at'),
+                        sar.get('processed_at'),
+                        processed_by,
+                        sar.get('result_notified', 0)
+                    ))
+                    new_id = cur.lastrowid
+                
+                if old_sar_id is not None:
+                    sales_agency_id_map[old_sar_id] = new_id
+                imported_counts['sales_agency_requests'] += 1
+            except Exception as e:
+                print(f"Sales agency request import error: {e}")
+        
+        # 販売代行申請商品をインポート（v3.2追加）
+        imported_counts['sales_agency_request_items'] = 0
+        for item in backup_data.get('sales_agency_request_items', []):
+            try:
+                old_request_id = item.get('request_id')
+                new_request_id = sales_agency_id_map.get(old_request_id)
+                if new_request_id is None:
+                    continue  # 対応する申請がない場合はスキップ
+                
+                if DATABASE_URL:
+                    cur.execute('''
+                        INSERT INTO sales_agency_request_items (request_id, merchandise_id)
+                        VALUES (%s, %s)
+                    ''', (
+                        new_request_id,
+                        item.get('merchandise_id')
+                    ))
+                else:
+                    cur.execute('''
+                        INSERT INTO sales_agency_request_items (request_id, merchandise_id)
+                        VALUES (?, ?)
+                    ''', (
+                        new_request_id,
+                        item.get('merchandise_id')
+                    ))
+                imported_counts['sales_agency_request_items'] += 1
+            except Exception as e:
+                print(f"Sales agency request item import error: {e}")
+        
         conn.commit()
         error_count = len(imported_counts.get('errors', []))
         msg = f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
@@ -9056,6 +9232,10 @@ def import_backup():
             msg += f", 買取承諾書(法人) {imported_counts['admin_kaitori_shoudaku']}件"
         if imported_counts.get('item_disposal_requests', 0) > 0:
             msg += f", 処分申請 {imported_counts['item_disposal_requests']}件"
+        if imported_counts.get('proxy_service_bids', 0) > 0:
+            msg += f", 代行サービス入札 {imported_counts['proxy_service_bids']}件"
+        if imported_counts.get('sales_agency_requests', 0) > 0:
+            msg += f", 販売代行申請 {imported_counts['sales_agency_requests']}件"
         if error_count > 0:
             msg += f" (エラー {error_count}件)"
             flash(msg, 'warning')
