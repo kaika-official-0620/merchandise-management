@@ -194,9 +194,98 @@
     color: var(--danger);
 }
 
+/* スマホ用スタイル */
 @media (max-width: 768px) {
+    .page-header {
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .form-section {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .form-section h2 {
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.5rem;
+    }
+    
+    .form-group label {
+        font-size: 0.8rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.85rem;
+    }
+    
+    .form-grid {
+        gap: 0.5rem;
+    }
+    
     .item-grid {
         grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+    
+    .item-row {
+        padding: 0.5rem;
+    }
+    
+    .item-row .form-group label {
+        font-size: 0.7rem;
+    }
+    
+    .item-row .form-group input,
+    .item-row .form-group select {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    .item-row .btn-sm {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.7rem;
+    }
+    
+    #add-item {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+        width: 100%;
+    }
+    
+    .total-section {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+    }
+    
+    .total-row {
+        font-size: 1rem;
+    }
+    
+    .form-actions {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        gap: 0.5rem;
+    }
+    
+    .form-actions .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+        flex: 1;
+    }
+    
+    .header-actions .btn {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.75rem;
     }
 }
 </style>

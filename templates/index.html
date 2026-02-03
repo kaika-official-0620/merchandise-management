@@ -3291,6 +3291,7 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
 }
 
 .sales-agency-modal-header {
@@ -3299,6 +3300,7 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
     align-items: center;
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
 }
 
 .sales-agency-modal-header h2 {
@@ -3326,6 +3328,7 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
     flex: 1;
     overflow-y: auto;
     padding: 1.5rem;
+    min-height: 0;
 }
 
 .sales-agency-section-label {
@@ -3456,7 +3459,7 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
 }
 
 .sales-agency-item-list {
-    max-height: 300px;
+    max-height: min(300px, 35vh);
     overflow-y: auto;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -3547,6 +3550,7 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
     border-top: 1px solid #e2e8f0;
     background: #f8fafc;
     border-radius: 0 0 12px 12px;
+    flex-shrink: 0;
 }
 
 .no-items-message {

@@ -5840,9 +5840,9 @@ def admin_analytics_settings():
 @app.route('/admin/proxy-service')
 @login_required
 def admin_proxy_service():
-    """代行仕入れサービス管理画面（オーナー専用）"""
-    if not current_user.is_owner():
-        flash('この機能はオーナーのみ利用可能です', 'error')
+    """代行仕入れサービス管理画面（オーナー・管理者）"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
     
     try:
@@ -5972,8 +5972,8 @@ def admin_proxy_service():
 @login_required
 def admin_proxy_service_settings():
     """代行サービス設定を更新"""
-    if not current_user.is_owner():
-        flash('この機能はオーナーのみ利用可能です', 'error')
+    if not (current_user.is_owner() or current_user.is_admin()):
+        flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
     
     is_public = request.form.get('is_public') == 'on'
@@ -6117,8 +6117,8 @@ def admin_proxy_service_bulk_toggle():
 @login_required
 def admin_proxy_service_history():
     """代行サービス履歴（落札済み商品・入札履歴）"""
-    if not current_user.is_admin():
-        flash('管理者権限が必要です', 'error')
+    if not (current_user.is_owner() or current_user.is_admin()):
+        flash('オーナーまたは管理者権限が必要です', 'error')
         return redirect(url_for('index'))
     
     finalized_items = []
@@ -6208,8 +6208,8 @@ def admin_proxy_service_history():
 @login_required
 def admin_proxy_service_finalize():
     """オークション終了・落札確定処理"""
-    if not current_user.is_owner():
-        return jsonify({'success': False, 'error': 'オーナー権限が必要です'}), 403
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
     
     conn = get_db()
     finalized_count = 0
