@@ -16700,12 +16700,20 @@ def admin_inquiries():
         
         inquiries = [dict(row) for row in cur.fetchall()]
         
-        # 新着件数を取得
+        # 新着件数を取得（存在するユーザーの問い合わせのみ）
         if DATABASE_URL:
-            cur.execute("SELECT COUNT(*) as count FROM inquiries WHERE status = 'new'")
+            cur.execute("""
+                SELECT COUNT(*) as count FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = 'new'
+            """)
             new_count = cur.fetchone()['count']
         else:
-            cur.execute("SELECT COUNT(*) FROM inquiries WHERE status = 'new'")
+            cur.execute("""
+                SELECT COUNT(*) FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.status = 'new'
+            """)
             new_count = cur.fetchone()[0]
         
         cur.close()
@@ -17503,10 +17511,35 @@ def admin_sales_agency_requests():
     
     status_filter = request.args.get('status', 'all')
     
+    # デフォルト値
+    requests_list = []
+    stats = {'pending': 0, 'approved': 0, 'rejected': 0}
+    
     try:
         conn = get_db()
         if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # テーブルが存在するか確認
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'sales_agency_requests'
+                )
+            """)
+            table_exists = cur.fetchone()[0]
+            
+            if not table_exists:
+                cur.close()
+                conn.close()
+                return render_template('admin/sales_agency_requests.html',
+                                     requests=requests_list,
+                                     stats=stats,
+                                     status_filter=status_filter,
+                                     service_types=SALES_AGENCY_SERVICE_TYPES,
+                                     statuses=SALES_AGENCY_STATUS)
+            
             if status_filter == 'processed':
                 # 処理済み（承認・却下）のみ表示
                 cur.execute('''
@@ -17540,7 +17573,21 @@ def admin_sales_agency_requests():
                         sar.created_at DESC
                 ''')
         else:
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
+            
+            # テーブルが存在するか確認
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_agency_requests'")
+            if not cur.fetchone():
+                cur.close()
+                conn.close()
+                return render_template('admin/sales_agency_requests.html',
+                                     requests=requests_list,
+                                     stats=stats,
+                                     status_filter=status_filter,
+                                     service_types=SALES_AGENCY_SERVICE_TYPES,
+                                     statuses=SALES_AGENCY_STATUS)
+            
             if status_filter == 'processed':
                 # 処理済み（承認・却下）のみ表示
                 cur.execute('''
@@ -17575,10 +17622,6 @@ def admin_sales_agency_requests():
                 ''')
         
         requests_raw = cur.fetchall()
-        requests = []
-        
-        # 統計
-        stats = {'pending': 0, 'approved': 0, 'rejected': 0}
         
         for req in requests_raw:
             req_dict = dict(req)
@@ -17600,26 +17643,27 @@ def admin_sales_agency_requests():
             
             items = [dict(item) for item in cur.fetchall()]
             req_dict['items'] = items
-            requests.append(req_dict)
+            requests_list.append(req_dict)
         
         # 統計を取得
         if DATABASE_URL:
             cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
             for row in cur.fetchall():
-                if row['status'] in stats:
-                    stats[row['status']] = row['cnt']
+                row_dict = dict(row)
+                if row_dict.get('status') in stats:
+                    stats[row_dict['status']] = row_dict.get('cnt', 0)
         else:
             cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
             for row in cur.fetchall():
                 row_dict = dict(row)
-                if row_dict['status'] in stats:
-                    stats[row_dict['status']] = row_dict['cnt']
+                if row_dict.get('status') in stats:
+                    stats[row_dict['status']] = row_dict.get('cnt', 0)
         
         cur.close()
         conn.close()
         
         return render_template('admin/sales_agency_requests.html',
-                             requests=requests,
+                             requests=requests_list,
                              stats=stats,
                              status_filter=status_filter,
                              service_types=SALES_AGENCY_SERVICE_TYPES,
@@ -17628,8 +17672,13 @@ def admin_sales_agency_requests():
         import traceback
         print(f"Sales agency requests error: {e}")
         traceback.print_exc()
-        flash(f'エラーが発生しました: {str(e)}', 'error')
-        return redirect(url_for('index'))
+        # エラーでも空の状態で表示
+        return render_template('admin/sales_agency_requests.html',
+                             requests=[],
+                             stats={'pending': 0, 'approved': 0, 'rejected': 0},
+                             status_filter=status_filter,
+                             service_types=SALES_AGENCY_SERVICE_TYPES,
+                             statuses=SALES_AGENCY_STATUS)
 
 @app.route('/admin/sales-agency-requests/<int:id>/process', methods=['POST'])
 @login_required
