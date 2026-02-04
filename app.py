@@ -6084,17 +6084,18 @@ def admin_proxy_service_detail(auction_id):
             """, (auction_id,))
             bids = cur.fetchall()
             
-            # 選択可能な商品（どのオークションにも属していない未販売商品）
+            # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
                 SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
-                       COALESCE(u.display_name, '不明') as owner_name
+                       COALESCE(u.display_name, '不明') as owner_name,
+                       m.auction_id
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
-                WHERE (m.auction_id IS NULL OR m.auction_id = %s) AND m.sale_date IS NULL
-                  AND (m.show_in_proxy_service = FALSE OR m.show_in_proxy_service IS NULL OR m.auction_id = %s)
+                WHERE m.sale_date IS NULL
+                  AND (m.auction_id IS NULL OR m.auction_id = %s)
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id, auction_id))
+            """, (auction_id,))
             available_items = cur.fetchall()
         else:
             import sqlite3
@@ -6143,17 +6144,18 @@ def admin_proxy_service_detail(auction_id):
             """, (auction_id,))
             bids = cur.fetchall()
             
-            # 選択可能な商品
+            # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
                 SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
-                       COALESCE(u.display_name, '不明') as owner_name
+                       COALESCE(u.display_name, '不明') as owner_name,
+                       m.auction_id
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
-                WHERE (m.auction_id IS NULL OR m.auction_id = ?) AND m.sale_date IS NULL
-                  AND (m.show_in_proxy_service = 0 OR m.show_in_proxy_service IS NULL OR m.auction_id = ?)
+                WHERE m.sale_date IS NULL
+                  AND (m.auction_id IS NULL OR m.auction_id = ?)
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id, auction_id))
+            """, (auction_id,))
             available_items = cur.fetchall()
         
         cur.close()
