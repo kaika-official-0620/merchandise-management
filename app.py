@@ -5901,6 +5901,7 @@ def admin_proxy_service():
             """)
             users = cur.fetchall()
         else:
+            import sqlite3
             cur = conn.cursor()
             conn.row_factory = sqlite3.Row
             # 全オークションを取得
@@ -6075,6 +6076,7 @@ def admin_proxy_service_detail(auction_id):
             """, (auction_id, auction_id))
             available_items = cur.fetchall()
         else:
+            import sqlite3
             cur = conn.cursor()
             conn.row_factory = sqlite3.Row
             # オークション設定取得
@@ -6393,6 +6395,7 @@ def admin_proxy_service_history():
             """)
             bid_history = cur.fetchall()
         else:
+            import sqlite3
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             
