@@ -5137,6 +5137,27 @@ def admin_user_items(id):
                 item_dict.get('shipping_cost', 0) or 0,
                 item_dict.get('commission', 0) or 0
             )
+        
+        # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
+        if current_user.is_owner():
+            item_dict['can_delete'] = True
+        else:
+            created_at = item_dict.get('created_at')
+            can_delete = False
+            if created_at:
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            created_at = datetime.strptime(created_at[:19], '%Y-%m-%dT%H:%M:%S')
+                        except:
+                            created_at = None
+                if created_at:
+                    diff = datetime.now() - created_at
+                    can_delete = diff.days < 1
+            item_dict['can_delete'] = can_delete
+        
         processed_items.append(item_dict)
     
     return render_template('admin/user_items.html', user=dict(user), items=processed_items)
@@ -9366,15 +9387,22 @@ def import_backup():
             except Exception as e:
                 print(f"Item disposal request import error: {e}")
         
-        # 代行サービス設定をインポート（v3.2追加）
+        # 代行サービス設定をインポート（v3.2追加、v3.3でauction_name対応）
         imported_counts['proxy_service_settings'] = 0
-        for setting in backup_data.get('proxy_service_settings', []):
+        # 既存データを削除（ループの外で1回だけ実行）
+        proxy_settings_list = backup_data.get('proxy_service_settings', [])
+        if proxy_settings_list:
+            if DATABASE_URL:
+                cur.execute("DELETE FROM proxy_service_settings")
+            else:
+                cur.execute("DELETE FROM proxy_service_settings")
+        
+        for setting in proxy_settings_list:
             try:
                 if DATABASE_URL:
-                    cur.execute("DELETE FROM proxy_service_settings")
                     cur.execute('''
-                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, updated_by, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, auction_name, updated_by, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         setting.get('is_public', False),
                         setting.get('page_title', '代行仕入れサービス'),
@@ -9382,14 +9410,14 @@ def import_backup():
                         setting.get('start_datetime'),
                         setting.get('end_datetime'),
                         setting.get('sale_mode', 'auction'),
+                        setting.get('auction_name', 'オークション'),
                         current_user.id,
                         setting.get('updated_at')
                     ))
                 else:
-                    cur.execute("DELETE FROM proxy_service_settings")
                     cur.execute('''
-                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, updated_by, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO proxy_service_settings (is_public, page_title, page_description, start_datetime, end_datetime, sale_mode, auction_name, updated_by, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         1 if setting.get('is_public') else 0,
                         setting.get('page_title', '代行仕入れサービス'),
@@ -9397,6 +9425,7 @@ def import_backup():
                         setting.get('start_datetime'),
                         setting.get('end_datetime'),
                         setting.get('sale_mode', 'auction'),
+                        setting.get('auction_name', 'オークション'),
                         current_user.id,
                         setting.get('updated_at')
                     ))
