@@ -81,12 +81,15 @@
             <h2>公開設定</h2>
             
             <div class="form-group toggle-group">
-                <label class="toggle-label">
-                    <input type="checkbox" name="is_public" id="is_public">
-                    <span class="toggle-switch"></span>
-                    <span class="toggle-text">作成後すぐに公開する</span>
-                </label>
-                <p class="form-hint">オフの場合、後から公開設定できます</p>
+                <div class="toggle-info">
+                    <span class="toggle-text">ページを公開する</span>
+                    <p class="form-hint">オフにするとページは非公開になります</p>
+                </div>
+                <div class="toggle-buttons">
+                    <button type="button" class="toggle-btn off active" onclick="setPublic(false)">非公開</button>
+                    <button type="button" class="toggle-btn on" onclick="setPublic(true)">公開</button>
+                    <input type="hidden" name="is_public" id="is_public_input" value="">
+                </div>
             </div>
         </div>
         
@@ -180,53 +183,54 @@
 
 .toggle-group {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.toggle-label {
-    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
-    cursor: pointer;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
-.toggle-label input {
-    display: none;
-}
-
-.toggle-switch {
-    position: relative;
-    width: 48px;
-    height: 26px;
-    background: #cbd5e1;
-    border-radius: 13px;
-    transition: background 0.2s;
-}
-
-.toggle-switch::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 20px;
-    height: 20px;
-    background: white;
-    border-radius: 50%;
-    transition: transform 0.2s;
-}
-
-.toggle-label input:checked + .toggle-switch {
-    background: var(--primary);
-}
-
-.toggle-label input:checked + .toggle-switch::after {
-    transform: translateX(22px);
+.toggle-info {
+    flex: 1;
 }
 
 .toggle-text {
     font-weight: 500;
     color: var(--text-primary);
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.toggle-btn {
+    padding: 0.5rem 1.25rem;
+    border: none;
+    background: var(--bg-main);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toggle-btn:first-child {
+    border-right: 1px solid var(--border);
+}
+
+.toggle-btn.off.active {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.toggle-btn.on.active {
+    background: #10b981;
+    color: white;
 }
 
 .form-actions {
@@ -251,4 +255,25 @@
     }
 }
 </style>
+
+<script>
+function setPublic(isPublic) {
+    const input = document.getElementById('is_public_input');
+    const buttons = document.querySelectorAll('.toggle-btn');
+    
+    // hidden inputの値を設定
+    input.value = isPublic ? 'on' : '';
+    
+    // ボタンのactive状態を更新
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (isPublic) {
+        document.querySelector('.toggle-btn.on').classList.add('active');
+    } else {
+        document.querySelector('.toggle-btn.off').classList.add('active');
+    }
+}
+</script>
 {% endblock %}
