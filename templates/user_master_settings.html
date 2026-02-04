@@ -257,24 +257,47 @@
     color: white;
 }
 
+/* テーブルコンテナ（横スクロール用） */
+.master-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 768px) {
     .add-form-grid,
     .edit-form-grid {
         grid-template-columns: 1fr;
     }
     
+    .master-table-container {
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
+    }
+    
     .master-table {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
+        min-width: 500px;
     }
     
     .master-table th,
     .master-table td {
-        padding: 0.5rem;
+        padding: 0.5rem 0.4rem;
+        white-space: nowrap;
     }
     
     .main-tab {
         padding: 0.75rem 1rem;
         font-size: 0.9rem;
+    }
+    
+    .sub-tabs {
+        gap: 0;
+        padding-bottom: 2px;
+    }
+    
+    .sub-tab {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
     }
 }
 </style>
@@ -316,7 +339,7 @@
             <h3>ブランド名一覧</h3>
             <span>{{ brands|length }}件</span>
         </div>
-        <div style="overflow-x: auto;">
+        <div class="master-table-container">
             <table class="master-table">
                 <thead>
                     <tr>
@@ -447,6 +470,7 @@
             <h3>ブランドカテゴリ一覧</h3>
             <span>{{ brand_categories|length }}件</span>
         </div>
+        <div class="master-table-container">
         <table class="master-table">
             <thead>
                 <tr>
@@ -506,6 +530,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="add-form">
             <h4>＋ 新規追加</h4>
             <form action="{{ url_for('user_master_add', table_name='brand_categories') }}" method="POST">
@@ -534,6 +559,7 @@
             <h3>仕入先一覧</h3>
             <span>{{ suppliers|length }}件</span>
         </div>
+        <div class="master-table-container">
         <table class="master-table">
             <thead>
                 <tr>
@@ -599,6 +625,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="add-form">
             <h4>＋ 新規追加</h4>
             <form action="{{ url_for('user_master_add', table_name='suppliers') }}" method="POST">
@@ -631,6 +658,7 @@
             <h3>商品状態一覧</h3>
             <span>{{ conditions|length }}件</span>
         </div>
+        <div class="master-table-container">
         <table class="master-table">
             <thead>
                 <tr>
@@ -702,6 +730,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="add-form">
             <h4>＋ 新規追加</h4>
             <form action="{{ url_for('user_master_add', table_name='conditions') }}" method="POST">
@@ -738,6 +767,7 @@
             <h3>支払方法一覧</h3>
             <span>{{ payment_methods|length }}件</span>
         </div>
+        <div class="master-table-container">
         <table class="master-table">
             <thead>
                 <tr>
@@ -803,6 +833,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="add-form">
             <h4>＋ 新規追加</h4>
             <form action="{{ url_for('user_master_add', table_name='payment_methods') }}" method="POST">
@@ -835,6 +866,7 @@
             <h3>仕入先詳細一覧</h3>
             <span>{{ supplier_details|length }}件</span>
         </div>
+        <div class="master-table-container">
         <table class="master-table">
             <thead>
                 <tr>
@@ -900,6 +932,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="add-form">
             <h4>＋ 新規追加</h4>
             <form action="{{ url_for('user_master_add', table_name='supplier_details') }}" method="POST">

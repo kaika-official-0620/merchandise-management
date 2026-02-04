@@ -5775,6 +5775,10 @@ def admin_analytics_kaika():
         import traceback
         traceback.print_exc()
     
+    # デフォルト値を設定（エラー時も表示されるように）
+    if not overall_stats:
+        overall_stats = {'total_items': 0, 'total_purchase': 0, 'total_sales': 0, 'total_profit': 0}
+    
     return render_template('admin/analytics_kaika.html',
                          overall_stats=overall_stats,
                          date_from=date_from,

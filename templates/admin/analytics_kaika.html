@@ -96,7 +96,8 @@
                 </tr>
             </thead>
             <tbody>
-                {% set max_sales = monthly_sales|map(attribute='sales')|max if monthly_sales else 1 %}
+                {% set max_sales_raw = monthly_sales|map(attribute='sales')|max if monthly_sales else 1 %}
+                {% set max_sales = max_sales_raw if max_sales_raw and max_sales_raw > 0 else 1 %}
                 {% for month in monthly_sales %}
                 <tr>
                     <td><strong>{{ month.month }}</strong></td>
