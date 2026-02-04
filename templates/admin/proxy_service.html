@@ -1,12 +1,16 @@
 {% extends "base.html" %}
-{% block title %}代行仕入れサービス管理 - 株式会社 開花{% endblock %}
+{% block title %}{{ settings.auction_name or 'オークション' }} - 代行仕入れサービス管理{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>代行仕入れサービス管理</h1>
+    <h1>
+        <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 一覧</a>
+        {{ settings.auction_name or 'オークション' }}
+    </h1>
     <div class="header-actions">
-        <a href="{{ url_for('public_proxy_service') }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+        <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
         <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
+        <button onclick="deleteAuction()" class="btn btn-outline-danger">削除</button>
     </div>
 </div>
 
@@ -14,7 +18,12 @@
     <!-- 設定フォーム -->
     <div class="settings-card">
         <h2>基本設定</h2>
-        <form method="POST" action="{{ url_for('admin_proxy_service_settings') }}">
+        <form method="POST" action="{{ url_for('admin_proxy_service_settings', auction_id=auction_id) }}">
+            <div class="form-group">
+                <label>オークション名（管理用）</label>
+                <input type="text" name="auction_name" value="{{ settings.auction_name or 'オークション' }}" class="form-control" required>
+                <p class="form-hint">管理画面での識別用の名前</p>
+            </div>
             <div class="form-group toggle-group">
                 <div class="toggle-info">
                     <span class="toggle-text">ページを公開する</span>
@@ -290,6 +299,31 @@
 </div>
 
 <style>
+/* 一覧へ戻るリンク */
+.back-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: normal;
+    margin-right: 0.5rem;
+}
+
+.back-link:hover {
+    color: var(--primary);
+}
+
+/* 削除ボタン */
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger);
+    color: white;
+}
+
 /* 検索・フィルターセクション */
 .filter-section {
     background: #f8fafc;
@@ -894,8 +928,10 @@
 </style>
 
 <script>
+const AUCTION_ID = {{ auction_id }};
+
 function toggleProxyItem(itemId, btn) {
-    fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -922,7 +958,7 @@ function addProxyItem(itemId, btn) {
     // 現在のフィルター状態を保存
     saveAvailableFilters();
     
-    fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1033,7 +1069,7 @@ function bulkAddItems() {
     // フィルター状態を保存
     saveAvailableFilters();
     
-    fetch('/admin/proxy-service/bulk-toggle', {
+    fetch(`/admin/proxy-service/${AUCTION_ID}/bulk-toggle`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1202,12 +1238,24 @@ function clearAvailableFilters() {
 }
 
 // オークション終了・落札確定
+function deleteAuction() {
+    if (!confirm('このオークションを削除しますか？\n\n掲載中の商品は未掲載状態に戻ります。')) {
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/proxy-service/{{ auction_id }}/delete';
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function finalizeAuction() {
     if (!confirm('オークションを終了し、落札者に商品を割り当てますか？\n\nこの操作は取り消せません。入札のあった商品は落札者の商品一覧に移動します。')) {
         return;
     }
     
-    fetch('/admin/proxy-service/finalize', {
+    fetch('/admin/proxy-service/{{ auction_id }}/finalize', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

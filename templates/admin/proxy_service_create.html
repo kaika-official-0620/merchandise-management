@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}新規オークション作成 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>新規オークション作成</h1>
+    <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">← 一覧に戻る</a>
+</div>
+
+<div class="create-form-container">
+    <form method="POST" action="{{ url_for('admin_proxy_service_create') }}">
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
+            <div class="form-group">
+                <label>オークション名 <span class="required">*</span></label>
+                <input type="text" name="auction_name" class="form-control" required placeholder="例: 第1回 ブランドバッグオークション">
+                <p class="form-hint">管理用の名前です（公開ページには表示されません）</p>
+            </div>
+            
+            <div class="form-group">
+                <label>ページタイトル</label>
+                <input type="text" name="page_title" class="form-control" value="代行仕入れサービス" placeholder="例: 代行仕入れサービス">
+                <p class="form-hint">公開ページに表示されるタイトル</p>
+            </div>
+            
+            <div class="form-group">
+                <label>ページ説明文</label>
+                <textarea name="page_description" class="form-control" rows="3" placeholder="オークションの説明や注意事項を入力"></textarea>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>販売方式</h2>
+            
+            <div class="form-group">
+                <div class="sale-mode-options">
+                    <label class="radio-card">
+                        <input type="radio" name="sale_mode" value="auction" checked>
+                        <div class="radio-card-content">
+                            <div class="radio-card-icon">🔨</div>
+                            <div class="radio-card-info">
+                                <strong>オークション</strong>
+                                <small>入札形式で最高額を競います</small>
+                            </div>
+                        </div>
+                    </label>
+                    <label class="radio-card">
+                        <input type="radio" name="sale_mode" value="fixed">
+                        <div class="radio-card-content">
+                            <div class="radio-card-icon">⚡</div>
+                            <div class="radio-card-info">
+                                <strong>即決・早い者勝ち</strong>
+                                <small>固定価格で先着順に購入</small>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>開催期間</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>開始日時</label>
+                    <input type="datetime-local" name="start_datetime" class="form-control">
+                    <p class="form-hint">空欄で即時公開可能</p>
+                </div>
+                
+                <div class="form-group">
+                    <label>終了日時</label>
+                    <input type="datetime-local" name="end_datetime" class="form-control">
+                    <p class="form-hint">空欄で無期限</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>公開設定</h2>
+            
+            <div class="form-group toggle-group">
+                <label class="toggle-label">
+                    <input type="checkbox" name="is_public" id="is_public">
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">作成後すぐに公開する</span>
+                </label>
+                <p class="form-hint">オフの場合、後から公開設定できます</p>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">オークションを作成</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.create-form-container {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-section h2 {
+    margin: 0 0 1.25rem 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.required {
+    color: var(--danger);
+}
+
+.sale-mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.radio-card {
+    cursor: pointer;
+}
+
+.radio-card input {
+    display: none;
+}
+
+.radio-card-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-main);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    transition: all 0.2s;
+}
+
+.radio-card input:checked + .radio-card-content {
+    border-color: var(--primary);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.radio-card-icon {
+    font-size: 2rem;
+}
+
+.radio-card-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.radio-card-info strong {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.radio-card-info small {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.toggle-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+}
+
+.toggle-label input {
+    display: none;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    background: #cbd5e1;
+    border-radius: 13px;
+    transition: background 0.2s;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle-label input:checked + .toggle-switch {
+    background: var(--primary);
+}
+
+.toggle-label input:checked + .toggle-switch::after {
+    transform: translateX(22px);
+}
+
+.toggle-text {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1rem;
+}
+
+@media (max-width: 768px) {
+    .form-row,
+    .sale-mode-options {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
