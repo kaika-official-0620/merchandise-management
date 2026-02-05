@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}計算書編集 - 物販管理システム{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('admin_auction_keisan_view', id=keisan.id) }}" class="btn btn-secondary">← 戻る</a>
+    <h1>計算書編集</h1>
+</div>
+
+<div class="form-container">
+    <form method="POST" id="keisan-form">
+        <div class="form-section">
+            <h3>基本情報</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>書類No.</label>
+                    <input type="text" value="{{ keisan.document_no }}" readonly class="readonly-field">
+                </div>
+                <div class="form-group">
+                    <label>宛先ユーザー</label>
+                    <input type="text" value="{{ keisan.user_name }}" readonly class="readonly-field">
+                </div>
+                <div class="form-group">
+                    <label for="issue_date">発行日 <span class="required">*</span></label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ keisan.issue_date }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="recipient_name">宛名</label>
+                    <input type="text" id="recipient_name" name="recipient_name" value="{{ keisan.recipient_name or '' }}" placeholder="例: ○○様">
+                </div>
+            </div>
+            <div class="form-group full-width">
+                <label for="subject">件名</label>
+                <input type="text" id="subject" name="subject" value="{{ keisan.subject or '' }}" placeholder="例: 代行仕入れサービス落札">
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>明細</h3>
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">No.</th>
+                        <th>項目名</th>
+                        <th style="width: 80px;">数量</th>
+                        <th style="width: 80px;">単位</th>
+                        <th style="width: 120px;">単価</th>
+                        <th style="width: 120px;">金額</th>
+                        <th style="width: 50px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-tbody">
+                    {% for item in items %}
+                    <tr class="item-row">
+                        <td class="item-no">{{ loop.index }}</td>
+                        <td><input type="text" name="item_name[]" value="{{ item.item_name }}" class="item-name" required></td>
+                        <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="item-qty" min="1"></td>
+                        <td><input type="text" name="unit[]" value="{{ item.unit or '' }}" class="item-unit" placeholder="個"></td>
+                        <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="item-price" min="0"></td>
+                        <td class="item-amount">¥{{ "{:,}".format(item.amount) }}</td>
+                        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                    </tr>
+                    {% else %}
+                    <tr class="item-row">
+                        <td class="item-no">1</td>
+                        <td><input type="text" name="item_name[]" class="item-name" required></td>
+                        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+                        <td><input type="text" name="unit[]" class="item-unit" placeholder="個"></td>
+                        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+                        <td class="item-amount">¥0</td>
+                        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="7">
+                            <button type="button" class="btn btn-add" onclick="addRow()">+ 明細を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="total-row">
+                        <td colspan="5" class="text-right"><strong>合計金額</strong></td>
+                        <td id="total-amount" class="total-amount">¥{{ "{:,}".format(keisan.total_amount or 0) }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="form-section">
+            <h3>備考</h3>
+            <div class="form-group full-width">
+                <textarea name="notes" rows="4" placeholder="備考を入力">{{ keisan.notes or '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('admin_auction_keisan_view', id=keisan.id) }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.form-container {
+    max-width: 1000px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 24px;
+}
+
+.form-section {
+    margin-bottom: 32px;
+}
+
+.form-section h3 {
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #6366f1;
+    color: #1e293b;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group label {
+    font-weight: 500;
+    color: #475569;
+    font-size: 0.875rem;
+}
+
+.required {
+    color: #ef4444;
+}
+
+.form-group input,
+.form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.readonly-field {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8fafc;
+    font-weight: 500;
+    color: #475569;
+    font-size: 0.875rem;
+}
+
+.items-table input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.items-table input:focus {
+    outline: none;
+    border-color: #6366f1;
+}
+
+.item-no {
+    text-align: center;
+    font-weight: 500;
+    color: #64748b;
+}
+
+.item-amount {
+    font-family: 'Consolas', monospace;
+    text-align: right;
+    font-weight: 500;
+}
+
+.btn-remove {
+    background: #fee2e2;
+    color: #ef4444;
+    border: none;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.btn-remove:hover {
+    background: #fecaca;
+}
+
+.btn-add {
+    background: #e0e7ff;
+    color: #4f46e5;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-add:hover {
+    background: #c7d2fe;
+}
+
+.total-row td {
+    background: #f0f4ff;
+    border-top: 2px solid #6366f1;
+}
+
+.total-amount {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #6366f1;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+    font-weight: 500;
+}
+
+.btn-primary { background: #6366f1; color: white; }
+.btn-primary:hover { background: #4f46e5; }
+.btn-secondary { background: #64748b; color: white; }
+.btn-secondary:hover { background: #475569; }
+
+@media (max-width: 768px) {
+    .form-container {
+        padding: 16px;
+    }
+    
+    .items-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+</style>
+
+<script>
+function addRow() {
+    const tbody = document.getElementById('items-tbody');
+    const rowCount = tbody.querySelectorAll('.item-row').length + 1;
+    
+    const newRow = document.createElement('tr');
+    newRow.className = 'item-row';
+    newRow.innerHTML = `
+        <td class="item-no">${rowCount}</td>
+        <td><input type="text" name="item_name[]" class="item-name" required></td>
+        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+        <td><input type="text" name="unit[]" class="item-unit" placeholder="個"></td>
+        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+        <td class="item-amount">¥0</td>
+        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+    `;
+    
+    tbody.appendChild(newRow);
+    attachCalculation(newRow);
+}
+
+function removeRow(btn) {
+    const row = btn.closest('tr');
+    row.remove();
+    updateRowNumbers();
+    calculateTotal();
+}
+
+function updateRowNumbers() {
+    const rows = document.querySelectorAll('#items-tbody .item-row');
+    rows.forEach((row, index) => {
+        row.querySelector('.item-no').textContent = index + 1;
+    });
+}
+
+function attachCalculation(row) {
+    const qtyInput = row.querySelector('.item-qty');
+    const priceInput = row.querySelector('.item-price');
+    
+    [qtyInput, priceInput].forEach(input => {
+        input.addEventListener('input', () => {
+            const qty = parseInt(qtyInput.value) || 0;
+            const price = parseInt(priceInput.value) || 0;
+            const amount = qty * price;
+            row.querySelector('.item-amount').textContent = '¥' + amount.toLocaleString();
+            calculateTotal();
+        });
+    });
+}
+
+function calculateTotal() {
+    let total = 0;
+    document.querySelectorAll('#items-tbody .item-row').forEach(row => {
+        const qty = parseInt(row.querySelector('.item-qty').value) || 0;
+        const price = parseInt(row.querySelector('.item-price').value) || 0;
+        total += qty * price;
+    });
+    document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
+}
+
+// 初期化
+document.querySelectorAll('#items-tbody .item-row').forEach(attachCalculation);
+</script>
+{% endblock %}

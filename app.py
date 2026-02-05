@@ -533,6 +533,12 @@ if DATABASE_URL:
         except:
             pass
         
+        # 計算書に管理者作成フラグを追加（オークション落札用）
+        try:
+            cur.execute("ALTER TABLE user_keisan ADD COLUMN IF NOT EXISTS is_admin_created BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+        
         # 代行サービス公開ユーザーテーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS proxy_service_users (
@@ -1437,6 +1443,12 @@ else:
         # 商品にオークションIDを追加（複数オークション対応）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN auction_id INTEGER REFERENCES proxy_service_settings(id)")
+        except:
+            pass
+        
+        # 計算書に管理者作成フラグを追加（オークション落札用）
+        try:
+            cur.execute("ALTER TABLE user_keisan ADD COLUMN is_admin_created INTEGER DEFAULT 0")
         except:
             pass
         
@@ -5952,6 +5964,40 @@ def admin_proxy_service():
         cur.close()
         conn.close()
         
+        # 各オークションの状態を判定（終了/開始前/公開中）
+        now = datetime.now()
+        for auction in auctions:
+            end_dt = auction.get('end_datetime')
+            start_dt = auction.get('start_datetime')
+            
+            # 終了判定
+            if end_dt:
+                if isinstance(end_dt, str):
+                    try:
+                        end_dt = datetime.fromisoformat(end_dt.replace('T', ' ').split('.')[0])
+                    except:
+                        end_dt = None
+                if end_dt and now > end_dt:
+                    auction['is_ended'] = True
+                else:
+                    auction['is_ended'] = False
+            else:
+                auction['is_ended'] = False
+            
+            # 開始前判定
+            if start_dt:
+                if isinstance(start_dt, str):
+                    try:
+                        start_dt = datetime.fromisoformat(start_dt.replace('T', ' ').split('.')[0])
+                    except:
+                        start_dt = None
+                if start_dt and now < start_dt:
+                    auction['is_not_started'] = True
+                else:
+                    auction['is_not_started'] = False
+            else:
+                auction['is_not_started'] = False
+        
         return render_template('admin/proxy_service_list.html',
                              auctions=auctions,
                              users=[dict(u) for u in users],
@@ -6527,20 +6573,20 @@ def admin_proxy_service_finalize(auction_id):
                 ))
                 new_item_id = cur.fetchone()['id']
                 
-                # 3. 計算書を自動作成（送信待ち）
+                # 3. 計算書を自動作成（管理者作成フラグ付き、送信待ち）
                 doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
                 cur.execute("""
                     INSERT INTO user_keisan (
                         document_no, user_id, issue_date, recipient_name,
-                        subject, total_amount, notes, status
+                        subject, total_amount, notes, status, is_admin_created
                     ) VALUES (
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s
                     ) RETURNING id
                 """, (
                     doc_no, winner_user_id, today, winner_name,
                     '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}', 'draft'
+                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}', 'draft', True
                 ))
                 keisan_id = cur.fetchone()['id']
                 
@@ -6550,6 +6596,13 @@ def admin_proxy_service_finalize(auction_id):
                         keisan_id, item_no, item_name, quantity, unit_price, amount
                     ) VALUES (%s, %s, %s, %s, %s, %s)
                 """, (keisan_id, 1, item.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                
+                # 4. 落札者の利用可能額を減算
+                cur.execute("""
+                    UPDATE users 
+                    SET proxy_service_budget = GREATEST(0, COALESCE(proxy_service_budget, 0) - %s)
+                    WHERE id = %s
+                """, (winning_bid, winner_user_id))
                 
                 finalized_count += 1
         
@@ -6609,20 +6662,20 @@ def admin_proxy_service_finalize(auction_id):
                 ))
                 new_item_id = cur.lastrowid
                 
-                # 3. 計算書を自動作成（送信待ち）
+                # 3. 計算書を自動作成（管理者作成フラグ付き、送信待ち）
                 doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
                 cur.execute("""
                     INSERT INTO user_keisan (
                         document_no, user_id, issue_date, recipient_name,
-                        subject, total_amount, notes, status
+                        subject, total_amount, notes, status, is_admin_created
                     ) VALUES (
                         ?, ?, ?, ?,
-                        ?, ?, ?, ?
+                        ?, ?, ?, ?, ?
                     )
                 """, (
                     doc_no, winner_user_id, today, winner_name,
                     '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}', 'draft'
+                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}', 'draft', 1
                 ))
                 keisan_id = cur.lastrowid
                 
@@ -6632,6 +6685,13 @@ def admin_proxy_service_finalize(auction_id):
                         keisan_id, item_no, item_name, quantity, unit_price, amount
                     ) VALUES (?, ?, ?, ?, ?, ?)
                 """, (keisan_id, 1, item_dict.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                
+                # 4. 落札者の利用可能額を減算
+                cur.execute("""
+                    UPDATE users 
+                    SET proxy_service_budget = MAX(0, COALESCE(proxy_service_budget, 0) - ?)
+                    WHERE id = ?
+                """, (winning_bid, winner_user_id))
                 
                 finalized_count += 1
         
@@ -6647,6 +6707,257 @@ def admin_proxy_service_finalize(auction_id):
         'message': f'{finalized_count}件の商品を落札者に割り当てました。計算書を送信待ちに追加しました。',
         'finalized_count': finalized_count
     })
+
+@app.route('/admin/auction-keisan')
+@login_required
+@admin_required
+def admin_auction_keisan_list():
+    """管理者用：オークション落札計算書一覧"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name, u.username
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.is_admin_created = TRUE
+            ORDER BY k.created_at DESC
+        """)
+        keisan_list = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name, u.username
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.is_admin_created = 1
+            ORDER BY k.created_at DESC
+        """)
+        keisan_list = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/auction_keisan_list.html', keisan_list=keisan_list)
+
+@app.route('/admin/auction-keisan/<int:id>')
+@login_required
+@admin_required
+def admin_auction_keisan_view(id):
+    """管理者用：オークション落札計算書詳細"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name, u.username, u.email
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = %s AND k.is_admin_created = TRUE
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name, u.username, u.email
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = ? AND k.is_admin_created = 1
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('admin_auction_keisan_list'))
+    
+    return render_template('admin/auction_keisan_view.html', keisan=keisan, items=items)
+
+@app.route('/admin/auction-keisan/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_auction_keisan_edit(id):
+    """管理者用：オークション落札計算書編集"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = %s AND k.is_admin_created = TRUE
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = ? AND k.is_admin_created = 1
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('admin_auction_keisan_list'))
+    
+    if request.method == 'POST':
+        issue_date = request.form.get('issue_date')
+        recipient_name = request.form.get('recipient_name', '')
+        subject = request.form.get('subject', '')
+        notes = request.form.get('notes', '')
+        
+        # 明細を取得
+        item_names = request.form.getlist('item_name[]')
+        quantities = request.form.getlist('quantity[]')
+        units = request.form.getlist('unit[]')
+        unit_prices = request.form.getlist('unit_price[]')
+        
+        total_amount = 0
+        new_items = []
+        for i, (name, qty, unit, price) in enumerate(zip(item_names, quantities, units, unit_prices), start=1):
+            if name.strip():
+                qty = int(qty) if qty else 1
+                price = int(price) if price else 0
+                amount = qty * price
+                total_amount += amount
+                new_items.append((i, name, qty, unit, price, amount))
+        
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE user_keisan SET
+                    issue_date = %s, recipient_name = %s, subject = %s,
+                    notes = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (issue_date, recipient_name, subject, notes, total_amount, id))
+            
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
+            for item in new_items:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (id, *item))
+        else:
+            cur.execute("""
+                UPDATE user_keisan SET
+                    issue_date = ?, recipient_name = ?, subject = ?,
+                    notes = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (issue_date, recipient_name, subject, notes, total_amount, id))
+            
+            cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
+            for item in new_items:
+                cur.execute("""
+                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (id, *item))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('計算書を更新しました', 'success')
+        return redirect(url_for('admin_auction_keisan_view', id=id))
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('admin/auction_keisan_edit.html', keisan=keisan, items=items)
+
+@app.route('/admin/auction-keisan/<int:id>/submit', methods=['POST'])
+@login_required
+@admin_required
+def admin_auction_keisan_submit(id):
+    """管理者用：計算書をユーザーに送信（ステータスを submitted に変更）"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            UPDATE user_keisan SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND is_admin_created = TRUE
+        """, (id,))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE user_keisan SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_admin_created = 1
+        """, (id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    flash('計算書をユーザーに送信しました', 'success')
+    return redirect(url_for('admin_auction_keisan_list'))
+
+@app.route('/admin/auction-keisan/<int:id>/pdf')
+@login_required
+@admin_required
+def admin_auction_keisan_pdf(id):
+    """管理者用：オークション落札計算書PDF"""
+    conn = get_db()
+    
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = %s AND k.is_admin_created = TRUE
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT k.*, u.display_name as user_name
+            FROM user_keisan k
+            JOIN users u ON k.user_id = u.id
+            WHERE k.id = ? AND k.is_admin_created = 1
+        """, (id,))
+        keisan = cur.fetchone()
+        if keisan:
+            keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            items = []
+    
+    cur.close()
+    conn.close()
+    
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('admin_auction_keisan_list'))
+    
+    return render_template('pdf/keisan.html', keisan=keisan, items=items)
 
 @app.route('/proxy-service')
 def public_proxy_service_list():
@@ -8913,18 +9224,24 @@ def import_backup():
                     
                     if DATABASE_URL:
                         cur.execute('''
-                            INSERT INTO users (username, email, password_hash, role, display_name, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s)
+                            INSERT INTO users (username, email, password_hash, role, display_name, created_at, proxy_service_budget, admin_permissions, subscription_status)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (username) DO UPDATE SET
                                 email = EXCLUDED.email,
-                                display_name = EXCLUDED.display_name
+                                display_name = EXCLUDED.display_name,
+                                proxy_service_budget = EXCLUDED.proxy_service_budget,
+                                admin_permissions = EXCLUDED.admin_permissions,
+                                subscription_status = EXCLUDED.subscription_status
                         ''', (
                             user.get('username'),
                             user.get('email'),
                             user.get('password_hash'),
                             user.get('role', 'user'),
                             user.get('display_name'),
-                            user.get('created_at')
+                            user.get('created_at'),
+                            user.get('proxy_service_budget', 0),
+                            user.get('admin_permissions'),
+                            user.get('subscription_status', 'inactive')
                         ))
                     else:
                         # SQLiteの場合: まず存在確認してからINSERTまたはUPDATE
@@ -8933,25 +9250,31 @@ def import_backup():
                         if existing:
                             # 既存ユーザーは更新（IDを保持）
                             cur.execute('''
-                                UPDATE users SET email = ?, display_name = ?
+                                UPDATE users SET email = ?, display_name = ?, proxy_service_budget = ?, admin_permissions = ?, subscription_status = ?
                                 WHERE username = ?
                             ''', (
                                 user.get('email'),
                                 user.get('display_name'),
+                                user.get('proxy_service_budget', 0),
+                                user.get('admin_permissions'),
+                                user.get('subscription_status', 'inactive'),
                                 user.get('username')
                             ))
                         else:
                             # 新規ユーザーは挿入
                             cur.execute('''
-                                INSERT INTO users (username, email, password_hash, role, display_name, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?)
+                                INSERT INTO users (username, email, password_hash, role, display_name, created_at, proxy_service_budget, admin_permissions, subscription_status)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ''', (
                                 user.get('username'),
                                 user.get('email'),
                                 user.get('password_hash'),
                                 user.get('role', 'user'),
                                 user.get('display_name'),
-                                user.get('created_at')
+                                user.get('created_at'),
+                                user.get('proxy_service_budget', 0),
+                                user.get('admin_permissions'),
+                                user.get('subscription_status', 'inactive')
                             ))
                     imported_counts['users'] += 1
                 except Exception as e:
@@ -12342,6 +12665,11 @@ def user_keisan_edit(id):
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('documents'))
     
+    # 管理者作成の計算書は編集不可
+    if keisan.get('is_admin_created'):
+        flash('管理者が発行した計算書は編集できません。閲覧とPDF出力のみ可能です。', 'error')
+        return redirect(url_for('user_keisan_view', id=id))
+    
     if keisan['status'] != 'draft':
         flash('完了済みの計算書は編集できません', 'error')
         return redirect(url_for('documents'))
@@ -12502,9 +12830,11 @@ def user_keisan_delete(id):
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT status FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur.execute("SELECT status, is_admin_created FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
         keisan = cur.fetchone()
-        if keisan and keisan['status'] == 'draft':
+        if keisan and keisan.get('is_admin_created'):
+            flash('管理者が発行した計算書は削除できません', 'error')
+        elif keisan and keisan['status'] == 'draft':
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = %s", (id,))
             conn.commit()
@@ -12513,9 +12843,13 @@ def user_keisan_delete(id):
             flash('完了済みの計算書は削除できません', 'error')
     else:
         cur = conn.cursor()
-        cur.execute("SELECT status FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        cur.execute("SELECT status, is_admin_created FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
         keisan = cur.fetchone()
-        if keisan and keisan['status'] == 'draft':
+        if keisan:
+            keisan = dict(keisan)
+        if keisan and keisan.get('is_admin_created'):
+            flash('管理者が発行した計算書は削除できません', 'error')
+        elif keisan and keisan['status'] == 'draft':
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = ?", (id,))
             conn.commit()

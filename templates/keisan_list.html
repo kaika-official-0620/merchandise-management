@@ -32,7 +32,9 @@
                 <td>{{ doc.issue_date }}</td>
                 <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
                 <td>
-                    {% if doc.status == 'completed' %}
+                    {% if doc.is_admin_created %}
+                        <span class="status-badge status-admin">管理者発行</span>
+                    {% elif doc.status == 'completed' %}
                         <span class="status-badge status-completed">完了</span>
                     {% elif doc.status == 'submitted' %}
                         <span class="status-badge status-submitted">送信済</span>
@@ -43,7 +45,7 @@
                 <td class="actions">
                     <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
-                    {% if doc.status == 'draft' %}
+                    {% if doc.status == 'draft' and not doc.is_admin_created %}
                         <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
                         <a href="{{ url_for('user_keisan_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この計算書を削除しますか？')">削除</a>
                     {% endif %}
@@ -90,6 +92,7 @@
 .status-completed { background: #d4edda; color: #155724; }
 .status-submitted { background: #cce5ff; color: #004085; }
 .status-draft { background: #fff3cd; color: #856404; }
+.status-admin { background: #e0cffc; color: #6610f2; }
 
 .btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
 .btn-info { background: #17a2b8; color: white; }

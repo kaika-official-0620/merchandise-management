@@ -24,10 +24,14 @@
 {% if auctions %}
 <div class="auction-grid">
     {% for auction in auctions %}
-    <div class="auction-card {% if auction.is_public %}active{% else %}inactive{% endif %}">
+    <div class="auction-card {% if auction.is_ended %}ended{% elif auction.is_public %}active{% else %}inactive{% endif %}">
         <div class="auction-header">
             <div class="auction-status">
-                {% if auction.is_public %}
+                {% if auction.is_ended %}
+                <span class="status-badge ended">終了</span>
+                {% elif auction.is_not_started %}
+                <span class="status-badge waiting">開始前</span>
+                {% elif auction.is_public %}
                 <span class="status-badge public">公開中</span>
                 {% else %}
                 <span class="status-badge private">非公開</span>
@@ -146,6 +150,12 @@
     opacity: 0.8;
 }
 
+.auction-card.ended {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    opacity: 0.9;
+}
+
 .auction-header {
     display: flex;
     justify-content: space-between;
@@ -169,6 +179,16 @@
 
 .status-badge.private {
     background: #94a3b8;
+    color: white;
+}
+
+.status-badge.ended {
+    background: #ef4444;
+    color: white;
+}
+
+.status-badge.waiting {
+    background: #f59e0b;
     color: white;
 }
 

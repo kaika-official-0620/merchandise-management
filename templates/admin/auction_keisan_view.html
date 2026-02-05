@@ -1,26 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}計算書詳細 - 株式会社 開花{% endblock %}
+{% block title %}計算書詳細 - 物販管理システム{% endblock %}
 
 {% block content %}
 <div class="page-actions">
-    <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類管理に戻る</a>
-    <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
-    {% if keisan.status == 'draft' and not keisan.is_admin_created %}
-    <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+    <a href="{{ url_for('admin_auction_keisan_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+    {% if keisan.status == 'draft' %}
+    <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+    <form action="{{ url_for('admin_auction_keisan_submit', id=keisan.id) }}" method="POST" style="display: inline;">
+        <button type="submit" class="btn btn-success" onclick="return confirm('この計算書をユーザーに送信しますか？')">ユーザーに送信</button>
+    </form>
     {% endif %}
+    <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
 </div>
 
 <div class="document-view">
     <div class="document-header">
         <div class="doc-title-section">
             <h1>計算書</h1>
-            {% if keisan.is_admin_created %}
-            <span class="status-badge status-admin">管理者発行</span>
+            {% if keisan.status == 'draft' %}
+            <span class="status-badge status-draft">未送信</span>
+            {% elif keisan.status == 'submitted' %}
+            <span class="status-badge status-submitted">送信済み</span>
             {% else %}
-            <span class="status-badge status-{{ keisan.status }}">
-                {% if keisan.status == 'draft' %}下書き{% else %}完了{% endif %}
-            </span>
+            <span class="status-badge status-completed">完了</span>
             {% endif %}
         </div>
         <div class="doc-no">{{ keisan.document_no }}</div>
@@ -28,14 +31,25 @@
 
     <div class="document-body">
         <div class="info-section">
+            <h3>基本情報</h3>
             <div class="info-grid">
                 <div class="info-item">
                     <span class="info-label">発行日</span>
                     <span class="info-value">{{ keisan.issue_date }}</span>
                 </div>
+                <div class="info-item">
+                    <span class="info-label">宛先ユーザー</span>
+                    <span class="info-value">{{ keisan.user_name or keisan.username }}</span>
+                </div>
+                {% if keisan.email %}
+                <div class="info-item">
+                    <span class="info-label">メールアドレス</span>
+                    <span class="info-value">{{ keisan.email }}</span>
+                </div>
+                {% endif %}
                 {% if keisan.recipient_name %}
                 <div class="info-item">
-                    <span class="info-label">宛先</span>
+                    <span class="info-label">宛名</span>
                     <span class="info-value">{{ keisan.recipient_name }}</span>
                 </div>
                 {% endif %}
@@ -97,6 +111,28 @@
 </div>
 
 <style>
+.page-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary { background: #3b82f6; color: white; }
+.btn-secondary { background: #64748b; color: white; }
+.btn-success { background: #10b981; color: white; }
+.btn-pdf { background: #dc3545; color: white; }
+
 .document-view {
     max-width: 900px;
     margin: 0 auto;
@@ -107,7 +143,7 @@
 }
 
 .document-header {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: white;
     padding: 24px;
     display: flex;
@@ -140,10 +176,8 @@
 }
 
 .status-badge.status-draft { background: #fef3c7; color: #b45309; }
+.status-badge.status-submitted { background: #dbeafe; color: #1d4ed8; }
 .status-badge.status-completed { background: #d1fae5; color: #059669; }
-.status-badge.status-admin { background: #e0cffc; color: #6610f2; }
-
-.btn-pdf { background: #dc3545; color: white; }
 
 .document-body {
     padding: 24px;
@@ -153,6 +187,14 @@
     margin-bottom: 24px;
     padding-bottom: 16px;
     border-bottom: 1px solid #e2e8f0;
+}
+
+h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: #334155;
+    border-left: 3px solid #6366f1;
+    padding-left: 10px;
 }
 
 .info-grid {
@@ -181,16 +223,6 @@
 .items-section,
 .notes-section {
     margin-bottom: 24px;
-}
-
-.subject-section h3,
-.items-section h3,
-.notes-section h3 {
-    margin: 0 0 12px 0;
-    font-size: 1rem;
-    color: #334155;
-    border-left: 3px solid #10b981;
-    padding-left: 10px;
 }
 
 .subject-text {
@@ -228,17 +260,17 @@
 }
 
 .total-row {
-    background: #ecfdf5;
+    background: #f0f4ff;
 }
 
 .total-row td {
-    border-top: 2px solid #10b981;
+    border-top: 2px solid #6366f1;
 }
 
 .total-amount {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #10b981;
+    color: #6366f1;
 }
 
 .notes-text {
@@ -250,30 +282,15 @@
     color: #475569;
 }
 
-.page-actions {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.btn-primary { background: #10b981; color: white; }
-.btn-secondary { background: #64748b; color: white; }
-
 @media (max-width: 768px) {
     .document-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
+    }
+    
+    .page-actions {
+        flex-direction: column;
     }
 }
 </style>
