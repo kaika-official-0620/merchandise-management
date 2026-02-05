@@ -2135,6 +2135,18 @@ def get_active_announcements():
 # データベース初期化
 init_db()
 
+# デバッグ: どのDBを使用しているか表示
+if DATABASE_URL:
+    print("=" * 50)
+    print("=== Using PostgreSQL ===")
+    print(f"DATABASE_URL exists: {bool(DATABASE_URL)}")
+    print("=" * 50)
+else:
+    print("=" * 50)
+    print("=== Using SQLite ===")
+    print("WARNING: DATABASE_URL is not set!")
+    print("=" * 50)
+
 # マスターテーブルにscopeカラムを追加するマイグレーション
 def migrate_add_scope_column():
     """マスターテーブルにscopeカラムを追加（ユーザー機能/開花管理の分離用）"""
