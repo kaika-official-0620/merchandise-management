@@ -7196,26 +7196,39 @@ def proxy_service_bid():
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 設定確認
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        
+        # まず商品を取得してauction_idを確認
+        cur.execute("SELECT id, listing_price, auction_id FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 商品のauction_idに基づいて設定を取得
+        auction_id = item.get('auction_id')
+        if auction_id:
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         settings = cur.fetchone()
         
         if not settings or not settings['is_public']:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
         
         start_dt = settings.get('start_datetime')
         end_dt = settings.get('end_datetime')
         
         if start_dt and now < start_dt:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
         if end_dt and now > end_dt:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
-        
-        # 商品確認
-        cur.execute("SELECT id, listing_price FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
-        item = cur.fetchone()
-        if not item:
-            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
         
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = %s ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
@@ -7223,11 +7236,15 @@ def proxy_service_bid():
         min_bid = highest['bid_amount'] + 1 if highest else (item['listing_price'] or 0)
         
         if bid_amount < min_bid:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(bid_amount):
             remaining = current_user.get_proxy_service_remaining_budget()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'利用可能残高を超えています（残高: ¥{remaining:,}）'}), 400
         
         # 入札を保存（user_id含む）
@@ -7235,17 +7252,53 @@ def proxy_service_bid():
                    (merchandise_id, user_id, bidder_name, bid_amount))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        
+        # まず商品を取得してauction_idを確認
+        cur.execute("SELECT id, listing_price, auction_id FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 商品のauction_idに基づいて設定を取得
+        auction_id = item[2] if len(item) > 2 else None  # auction_id
+        if auction_id:
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+        else:
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         row = cur.fetchone()
         
         if not row or not row[1]:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
         
-        # 商品確認
-        cur.execute("SELECT id, listing_price FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
-        item = cur.fetchone()
-        if not item:
-            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        # 時間チェック（SQLiteの場合）
+        start_dt_idx = 5  # start_datetime
+        end_dt_idx = 6    # end_datetime
+        if len(row) > start_dt_idx and row[start_dt_idx]:
+            start_dt = row[start_dt_idx]
+            if isinstance(start_dt, str):
+                try:
+                    start_dt = datetime.fromisoformat(start_dt)
+                except:
+                    start_dt = None
+            if start_dt and now < start_dt:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
+        if len(row) > end_dt_idx and row[end_dt_idx]:
+            end_dt = row[end_dt_idx]
+            if isinstance(end_dt, str):
+                try:
+                    end_dt = datetime.fromisoformat(end_dt)
+                except:
+                    end_dt = None
+            if end_dt and now > end_dt:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
         
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = ? ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
@@ -7253,11 +7306,15 @@ def proxy_service_bid():
         min_bid = highest[0] + 1 if highest else (item[1] or 0)
         
         if bid_amount < min_bid:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(bid_amount):
             remaining = current_user.get_proxy_service_remaining_budget()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'利用可能残高を超えています（残高: ¥{remaining:,}）'}), 400
         
         # 入札を保存（user_id含む）
@@ -7300,40 +7357,63 @@ def proxy_service_purchase():
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 設定確認
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        
+        # まず商品を取得してauction_idを確認
+        cur.execute("""
+            SELECT id, listing_price, product_name, sale_date, auction_id 
+            FROM merchandise 
+            WHERE id = %s AND show_in_proxy_service = TRUE
+        """, (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 既に購入済みかチェック
+        if item.get('sale_date'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+        
+        # 商品のauction_idに基づいて設定を取得
+        auction_id = item.get('auction_id')
+        if auction_id:
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         settings = cur.fetchone()
         
         if not settings or not settings['is_public']:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': '販売は現在行われていません'}), 400
         
         # 即決モードか確認
         if settings.get('sale_mode') != 'fixed':
-            return jsonify({'success': False, 'error': 'この商品は即決購入できません'}), 400
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
         start_dt = settings.get('start_datetime')
         end_dt = settings.get('end_datetime')
         
         if start_dt and now < start_dt:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': '販売はまだ開始されていません'}), 400
         if end_dt and now > end_dt:
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
-        
-        # 商品確認（未売却かつ代行サービス表示中）
-        cur.execute("SELECT id, listing_price, product_name, sale_date FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
-        item = cur.fetchone()
-        if not item:
-            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
-        
-        # 既に購入済みかチェック
-        if item.get('sale_date'):
-            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
         
         purchase_price = item['listing_price'] or 0
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
             remaining = current_user.get_proxy_service_remaining_budget()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'利用可能残高が不足しています（残高: ¥{remaining:,}）'}), 400
         
         # 商品を購入済みにマーク（sale_dateを設定、購入者情報を記録）
@@ -7348,6 +7428,8 @@ def proxy_service_purchase():
         
         if cur.rowcount == 0:
             conn.rollback()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'この商品は既に購入されました'}), 400
         
         # 入札履歴にも記録（購入記録として）
@@ -7355,32 +7437,52 @@ def proxy_service_purchase():
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
+        
+        # まず商品を取得してauction_idを確認
+        cur.execute("""
+            SELECT id, listing_price, product_name, sale_date, auction_id 
+            FROM merchandise 
+            WHERE id = ? AND show_in_proxy_service = 1
+        """, (merchandise_id,))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        
+        # 既に購入済みかチェック
+        if item[3]:  # sale_date
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+        
+        # 商品のauction_idに基づいて設定を取得
+        auction_id = item[4] if len(item) > 4 else None  # auction_id
+        if auction_id:
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+        else:
+            cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         row = cur.fetchone()
         
-        if not row or not row[1]:
+        if not row or not row[1]:  # is_public
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': '販売は現在行われていません'}), 400
         
         # sale_modeの位置を確認（8番目のカラム、インデックス8）
         sale_mode = row[8] if len(row) > 8 else 'auction'
         if sale_mode != 'fixed':
-            return jsonify({'success': False, 'error': 'この商品は即決購入できません'}), 400
-        
-        # 商品確認
-        cur.execute("SELECT id, listing_price, product_name, sale_date FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
-        item = cur.fetchone()
-        if not item:
-            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
-        
-        # 既に購入済みかチェック
-        if item[3]:  # sale_date
-            return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
         purchase_price = item[1] or 0
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
             remaining = current_user.get_proxy_service_remaining_budget()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': f'利用可能残高が不足しています（残高: ¥{remaining:,}）'}), 400
         
         # 商品を購入済みにマーク
@@ -7395,6 +7497,8 @@ def proxy_service_purchase():
         
         if cur.rowcount == 0:
             conn.rollback()
+            cur.close()
+            conn.close()
             return jsonify({'success': False, 'error': 'この商品は既に購入されました'}), 400
         
         # 入札履歴にも記録
