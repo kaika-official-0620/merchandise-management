@@ -159,31 +159,6 @@ if DATABASE_URL:
         except:
             pass
         
-        # 商品処分申請テーブル
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS item_disposal_requests (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                merchandise_id INTEGER REFERENCES merchandise(id),
-                disposal_type VARCHAR(30) NOT NULL,
-                reason VARCHAR(30) DEFAULT 'overdue',
-                shipping_address TEXT,
-                shipping_name TEXT,
-                shipping_phone TEXT,
-                status VARCHAR(20) DEFAULT 'pending',
-                admin_note TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                processed_at TIMESTAMP,
-                processed_by INTEGER REFERENCES users(id)
-            )
-        ''')
-        
-        # reasonカラムを追加（既存テーブル用）
-        try:
-            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN IF NOT EXISTS reason VARCHAR(30) DEFAULT 'overdue'")
-        except:
-            pass
-        
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
             cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
@@ -294,6 +269,31 @@ if DATABASE_URL:
         # notesカラムを追加（備考・メモ）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS notes TEXT")
+        except:
+            pass
+        
+        # 商品処分申請テーブル（merchandiseテーブルの後に作成）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS item_disposal_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                merchandise_id INTEGER REFERENCES merchandise(id),
+                disposal_type VARCHAR(30) NOT NULL,
+                reason VARCHAR(30) DEFAULT 'overdue',
+                shipping_address TEXT,
+                shipping_name TEXT,
+                shipping_phone TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        
+        # reasonカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN IF NOT EXISTS reason VARCHAR(30) DEFAULT 'overdue'")
         except:
             pass
         
