@@ -88,6 +88,17 @@ def allowed_file(filename):
 # データベース設定（PostgreSQL or SQLite）
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+# 起動時デバッグ: 環境変数の状態を詳細に出力
+print("=" * 60)
+print("[STARTUP DEBUG] Environment Variables Check")
+print(f"[DEBUG] DATABASE_URL is set: {DATABASE_URL is not None}")
+print(f"[DEBUG] DATABASE_URL length: {len(DATABASE_URL) if DATABASE_URL else 0}")
+if DATABASE_URL:
+    print(f"[DEBUG] DATABASE_URL starts with: {DATABASE_URL[:30]}...")
+print(f"[DEBUG] RENDER env: {os.environ.get('RENDER', 'not set')}")
+print(f"[DEBUG] All env vars starting with DATA: {[k for k in os.environ.keys() if 'DATA' in k.upper()]}")
+print("=" * 60)
+
 if DATABASE_URL:
     import psycopg2
     from psycopg2.extras import RealDictCursor
@@ -1052,31 +1063,6 @@ else:
         except:
             pass
         
-        # 商品処分申請テーブル
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS item_disposal_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER REFERENCES users(id),
-                merchandise_id INTEGER REFERENCES merchandise(id),
-                disposal_type TEXT NOT NULL,
-                reason TEXT DEFAULT 'overdue',
-                shipping_address TEXT,
-                shipping_name TEXT,
-                shipping_phone TEXT,
-                status TEXT DEFAULT 'pending',
-                admin_note TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                processed_at TIMESTAMP,
-                processed_by INTEGER REFERENCES users(id)
-            )
-        ''')
-        
-        # reasonカラムを追加（既存テーブル用）
-        try:
-            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN reason TEXT DEFAULT 'overdue'")
-        except:
-            pass
-        
         # オーナーがいない場合、最初の管理者をオーナーに昇格
         try:
             cur.execute("SELECT COUNT(*) FROM users WHERE role = 'owner'")
@@ -1187,6 +1173,31 @@ else:
         # notesカラムを追加（備考・メモ）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN notes TEXT")
+        except:
+            pass
+        
+        # 商品処分申請テーブル（merchandiseテーブルの後に作成）
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS item_disposal_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                merchandise_id INTEGER REFERENCES merchandise(id),
+                disposal_type TEXT NOT NULL,
+                reason TEXT DEFAULT 'overdue',
+                shipping_address TEXT,
+                shipping_name TEXT,
+                shipping_phone TEXT,
+                status TEXT DEFAULT 'pending',
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        
+        # reasonカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE item_disposal_requests ADD COLUMN reason TEXT DEFAULT 'overdue'")
         except:
             pass
         
