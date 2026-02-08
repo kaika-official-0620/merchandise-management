@@ -17720,49 +17720,67 @@ def inquiry_new():
 @login_required
 def inquiry_view(id):
     """問い合わせ詳細"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT * FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
-    else:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
-    
-    inquiry = cur.fetchone()
-    if not inquiry:
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('SELECT * FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
+        
+        inquiry = cur.fetchone()
+        if not inquiry:
+            cur.close()
+            conn.close()
+            flash('お問い合わせが見つかりません', 'error')
+            return redirect(url_for('inquiry_list'))
+        
+        inquiry = dict(inquiry)
+        # datetime を文字列に変換
+        if inquiry.get('created_at') and hasattr(inquiry['created_at'], 'strftime'):
+            inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        if inquiry.get('updated_at') and hasattr(inquiry['updated_at'], 'strftime'):
+            inquiry['updated_at'] = inquiry['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 返信を取得
+        if DATABASE_URL:
+            cur.execute('''
+                SELECT r.*, u.display_name, u.username, u.role
+                FROM inquiry_replies r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.inquiry_id = %s
+                ORDER BY r.created_at ASC
+            ''', (id,))
+        else:
+            cur.execute('''
+                SELECT r.*, u.display_name, u.username, u.role
+                FROM inquiry_replies r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.inquiry_id = ?
+                ORDER BY r.created_at ASC
+            ''', (id,))
+        
+        replies = []
+        for row in cur.fetchall():
+            reply = dict(row)
+            if reply.get('created_at') and hasattr(reply['created_at'], 'strftime'):
+                reply['created_at'] = reply['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            replies.append(reply)
+        
         cur.close()
         conn.close()
-        flash('お問い合わせが見つかりません', 'error')
+        
+        return render_template('inquiry/view.html',
+                             inquiry=inquiry,
+                             replies=replies,
+                             categories=INQUIRY_CATEGORIES,
+                             statuses=INQUIRY_STATUS)
+    except Exception as e:
+        print(f"[ERROR] inquiry_view: {e}", flush=True)
+        flash('問い合わせの読み込みでエラーが発生しました', 'error')
         return redirect(url_for('inquiry_list'))
-    
-    # 返信を取得
-    if DATABASE_URL:
-        cur.execute('''
-            SELECT r.*, u.display_name, u.username, u.role
-            FROM inquiry_replies r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.inquiry_id = %s
-            ORDER BY r.created_at ASC
-        ''', (id,))
-    else:
-        cur.execute('''
-            SELECT r.*, u.display_name, u.username, u.role
-            FROM inquiry_replies r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.inquiry_id = ?
-            ORDER BY r.created_at ASC
-        ''', (id,))
-    
-    replies = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
-    
-    return render_template('inquiry/view.html',
-                         inquiry=dict(inquiry),
-                         replies=replies,
-                         categories=INQUIRY_CATEGORIES,
-                         statuses=INQUIRY_STATUS)
 
 @app.route('/inquiry/<int:id>/reply', methods=['POST'])
 @login_required
@@ -17838,7 +17856,9 @@ def admin_inquiries():
             cur = conn.cursor(cursor_factory=RealDictCursor)
             if status_filter:
                 cur.execute('''
-                    SELECT i.*, u.display_name, u.username,
+                    SELECT i.id, i.user_id, i.category, i.subject, i.content, i.status,
+                           i.created_at, i.updated_at,
+                           u.display_name, u.username,
                            (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
                     FROM inquiries i
                     JOIN users u ON i.user_id = u.id
@@ -17851,7 +17871,9 @@ def admin_inquiries():
                 ''', (status_filter,))
             else:
                 cur.execute('''
-                    SELECT i.*, u.display_name, u.username,
+                    SELECT i.id, i.user_id, i.category, i.subject, i.content, i.status,
+                           i.created_at, i.updated_at,
+                           u.display_name, u.username,
                            (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
                     FROM inquiries i
                     JOIN users u ON i.user_id = u.id
@@ -17890,7 +17912,16 @@ def admin_inquiries():
                         i.updated_at DESC
                 ''')
         
-        inquiries = [dict(row) for row in cur.fetchall()]
+        rows = cur.fetchall()
+        inquiries = []
+        for row in rows:
+            inquiry = dict(row)
+            # datetime を文字列に変換
+            if inquiry.get('created_at') and hasattr(inquiry['created_at'], 'strftime'):
+                inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            if inquiry.get('updated_at') and hasattr(inquiry['updated_at'], 'strftime'):
+                inquiry['updated_at'] = inquiry['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+            inquiries.append(inquiry)
         
         # 新着件数を取得（存在するユーザーの問い合わせのみ）
         if DATABASE_URL:
@@ -17939,59 +17970,77 @@ def admin_inquiry_view(id):
         flash('アクセス権限がありません', 'error')
         return redirect(url_for('index'))
     
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('''
-            SELECT i.*, u.display_name, u.username, u.email
-            FROM inquiries i
-            JOIN users u ON i.user_id = u.id
-            WHERE i.id = %s
-        ''', (id,))
-    else:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute('''
-            SELECT i.*, u.display_name, u.username, u.email
-            FROM inquiries i
-            JOIN users u ON i.user_id = u.id
-            WHERE i.id = ?
-        ''', (id,))
-    
-    inquiry = cur.fetchone()
-    if not inquiry:
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username, u.email
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.id = %s
+            ''', (id,))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT i.*, u.display_name, u.username, u.email
+                FROM inquiries i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.id = ?
+            ''', (id,))
+        
+        inquiry = cur.fetchone()
+        if not inquiry:
+            cur.close()
+            conn.close()
+            flash('お問い合わせが見つかりません', 'error')
+            return redirect(url_for('admin_inquiries'))
+        
+        inquiry = dict(inquiry)
+        # datetime を文字列に変換
+        if inquiry.get('created_at') and hasattr(inquiry['created_at'], 'strftime'):
+            inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        if inquiry.get('updated_at') and hasattr(inquiry['updated_at'], 'strftime'):
+            inquiry['updated_at'] = inquiry['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 返信を取得
+        if DATABASE_URL:
+            cur.execute('''
+                SELECT r.*, u.display_name, u.username, u.role
+                FROM inquiry_replies r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.inquiry_id = %s
+                ORDER BY r.created_at ASC
+            ''', (id,))
+        else:
+            cur.execute('''
+                SELECT r.*, u.display_name, u.username, u.role
+                FROM inquiry_replies r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.inquiry_id = ?
+                ORDER BY r.created_at ASC
+            ''', (id,))
+        
+        replies = []
+        for row in cur.fetchall():
+            reply = dict(row)
+            if reply.get('created_at') and hasattr(reply['created_at'], 'strftime'):
+                reply['created_at'] = reply['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            replies.append(reply)
+        
         cur.close()
         conn.close()
-        flash('お問い合わせが見つかりません', 'error')
+        
+        return render_template('admin/inquiry_view.html',
+                             inquiry=inquiry,
+                             replies=replies,
+                             categories=INQUIRY_CATEGORIES,
+                             statuses=INQUIRY_STATUS)
+    except Exception as e:
+        print(f"[ERROR] admin_inquiry_view: {e}", flush=True)
+        flash('問い合わせの読み込みでエラーが発生しました', 'error')
         return redirect(url_for('admin_inquiries'))
-    
-    # 返信を取得
-    if DATABASE_URL:
-        cur.execute('''
-            SELECT r.*, u.display_name, u.username, u.role
-            FROM inquiry_replies r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.inquiry_id = %s
-            ORDER BY r.created_at ASC
-        ''', (id,))
-    else:
-        cur.execute('''
-            SELECT r.*, u.display_name, u.username, u.role
-            FROM inquiry_replies r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.inquiry_id = ?
-            ORDER BY r.created_at ASC
-        ''', (id,))
-    
-    replies = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/inquiry_view.html',
-                         inquiry=dict(inquiry),
-                         replies=replies,
-                         categories=INQUIRY_CATEGORIES,
-                         statuses=INQUIRY_STATUS)
 
 @app.route('/admin/inquiry/<int:id>/reply', methods=['POST'])
 @login_required
@@ -18651,13 +18700,16 @@ def sales_agency_my_requests():
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute('''
-                SELECT sar.*, u.display_name as processor_name
+                SELECT sar.id, sar.user_id, sar.service_type, sar.status, sar.admin_note,
+                       sar.created_at, sar.processed_at, sar.processed_by, sar.result_notified,
+                       u.display_name as processor_name
                 FROM sales_agency_requests sar
                 LEFT JOIN users u ON sar.processed_by = u.id
                 WHERE sar.user_id = %s
                 ORDER BY sar.created_at DESC
             ''', (current_user.id,))
         else:
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute('''
                 SELECT sar.*, u.display_name as processor_name
@@ -18671,6 +18723,12 @@ def sales_agency_my_requests():
         
         for req in requests_raw:
             req_dict = dict(req)
+            # datetime を文字列に変換
+            if req_dict.get('created_at') and hasattr(req_dict['created_at'], 'strftime'):
+                req_dict['created_at'] = req_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            if req_dict.get('processed_at') and hasattr(req_dict['processed_at'], 'strftime'):
+                req_dict['processed_at'] = req_dict['processed_at'].strftime('%Y-%m-%d %H:%M:%S')
+            
             # 関連商品を取得
             if DATABASE_URL:
                 cur.execute('''
@@ -18695,6 +18753,8 @@ def sales_agency_my_requests():
         conn.close()
     except Exception as e:
         print(f"[ERROR] sales_agency_my_requests: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     
     return render_template('sales_agency_requests.html',
                          requests=requests,
@@ -18796,6 +18856,12 @@ def admin_sales_agency_requests():
         
         for req in requests_raw:
             req_dict = dict(req)
+            # datetime を文字列に変換
+            if req_dict.get('created_at') and hasattr(req_dict['created_at'], 'strftime'):
+                req_dict['created_at'] = req_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            if req_dict.get('processed_at') and hasattr(req_dict['processed_at'], 'strftime'):
+                req_dict['processed_at'] = req_dict['processed_at'].strftime('%Y-%m-%d %H:%M:%S')
+            
             # 関連商品を取得
             if DATABASE_URL:
                 cur.execute('''
