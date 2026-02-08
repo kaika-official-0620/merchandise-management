@@ -9482,14 +9482,14 @@ def import_backup():
                         item.get('listing_price', 0),
                         item.get('expected_shipping', 0),
                         item.get('expected_commission', 0),
-                        item.get('is_listed', False),
+                        bool(item.get('is_listed', False)),  # PostgreSQLのboolean型に変換
                         item.get('listing_date'),
                         item.get('sale_date'),
                         item.get('sale_price', 0),
                         item.get('shipping_cost', 0),
                         item.get('sales_destination'),
                         item.get('commission', 0),
-                        item.get('is_shipped', False),
+                        bool(item.get('is_shipped', False)),  # PostgreSQLのboolean型に変換
                         item.get('created_at'),
                         item.get('brand_name'),
                         item.get('item_condition'),
@@ -9502,7 +9502,7 @@ def import_backup():
                         resolve_user_id(item.get('updated_by')) if item.get('updated_by') else None,  # 外部キー制約対応
                         item.get('updated_at'),
                         item.get('notes'),
-                        item.get('show_in_proxy_service', 0),
+                        bool(item.get('show_in_proxy_service', False)),  # PostgreSQLのboolean型に変換
                         item.get('kaika_product_code')
                     ))
                 else:
@@ -10170,14 +10170,14 @@ def import_user_backup():
                         item.get('listing_price', 0),
                         item.get('expected_shipping', 0),
                         item.get('expected_commission', 0),
-                        item.get('is_listed', False),
+                        bool(item.get('is_listed', False)),  # PostgreSQLのboolean型に変換
                         item.get('listing_date'),
                         item.get('sale_date'),
                         item.get('sale_price', 0),
                         item.get('shipping_cost', 0),
                         item.get('sales_destination'),
                         item.get('commission', 0),
-                        item.get('is_shipped', False),
+                        bool(item.get('is_shipped', False)),  # PostgreSQLのboolean型に変換
                         item.get('created_at'),
                         item.get('brand_name'),
                         item.get('item_condition'),
@@ -10190,7 +10190,7 @@ def import_user_backup():
                         current_user.id if item.get('updated_by') else None,  # ユーザー個別インポートでは現在のユーザーID
                         item.get('updated_at'),
                         item.get('notes'),
-                        item.get('show_in_proxy_service', 0),
+                        bool(item.get('show_in_proxy_service', False)),  # PostgreSQLのboolean型に変換
                         item.get('kaika_product_code')
                     ))
                 else:
