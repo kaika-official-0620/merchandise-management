@@ -88,15 +88,14 @@ def allowed_file(filename):
 # データベース設定（PostgreSQL or SQLite）
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# 起動時デバッグ: 環境変数の状態を詳細に出力
+# 起動時デバッグ: 環境変数の状態を出力（センシティブな情報は隠す）
 print("=" * 60)
-print("[STARTUP DEBUG] Environment Variables Check")
-print(f"[DEBUG] DATABASE_URL is set: {DATABASE_URL is not None}")
-print(f"[DEBUG] DATABASE_URL length: {len(DATABASE_URL) if DATABASE_URL else 0}")
+print("[STARTUP] Environment Check")
+print(f"[INFO] DATABASE_URL is set: {DATABASE_URL is not None}")
 if DATABASE_URL:
-    print(f"[DEBUG] DATABASE_URL starts with: {DATABASE_URL[:30]}...")
-print(f"[DEBUG] RENDER env: {os.environ.get('RENDER', 'not set')}")
-print(f"[DEBUG] All env vars starting with DATA: {[k for k in os.environ.keys() if 'DATA' in k.upper()]}")
+    # URLスキームのみ表示（ユーザー名やパスワードは隠す）
+    print(f"[INFO] Database type: {'PostgreSQL' if DATABASE_URL.startswith('postgres') else 'Other'}")
+print(f"[INFO] RENDER environment: {os.environ.get('RENDER', 'false')}")
 print("=" * 60)
 
 if DATABASE_URL:
@@ -117,6 +116,8 @@ if DATABASE_URL:
     
     def init_db():
         conn = get_db()
+        # autocommitモードを有効化（ALTER TABLEの失敗が他のコマンドに影響しないように）
+        conn.autocommit = True
         cur = conn.cursor()
         
         # ユーザーテーブル
@@ -460,12 +461,6 @@ if DATABASE_URL:
         except:
             pass
         
-        # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
-        try:
-            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
-        except:
-            pass
-        
         # 買取明細書明細テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS invoice_items (
@@ -481,6 +476,12 @@ if DATABASE_URL:
                 amount INTEGER DEFAULT 0
             )
         ''')
+        
+        # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+        except:
+            pass
         
         # サービス書類テーブル
         cur.execute('''
@@ -984,7 +985,7 @@ if DATABASE_URL:
                 VALUES (%s, %s, %s, %s, %s)
             ''', ('admin', 'admin@example.com', generate_password_hash('admin123'), 'admin', '管理者'))
         
-        conn.commit()
+        # autocommitモードなのでcommit()は不要だが、明示的にリソースを解放
         cur.close()
         conn.close()
 
