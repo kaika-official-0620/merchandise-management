@@ -13,24 +13,26 @@
     {% if inquiries %}
     <div class="inquiry-list">
         {% for inquiry in inquiries %}
-        <a href="{{ url_for('inquiry_view', id=inquiry.id) }}" class="inquiry-card">
-            <div class="inquiry-header">
-                <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
-                <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
-            </div>
-            <div class="inquiry-title">
-                {{ inquiry.title }}
-                {% if inquiry.image_path %}
-                <span class="attachment-icon" title="画像添付あり">📷</span>
-                {% endif %}
-                {% if inquiry.unread_replies and inquiry.unread_replies > 0 %}
-                <span class="unread-badge">{{ inquiry.unread_replies }}件の返信</span>
-                {% endif %}
-            </div>
-            <div class="inquiry-meta">
-                <span class="inquiry-date">{{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
-            </div>
-        </a>
+        <div class="inquiry-card-wrapper">
+            <a href="{{ url_for('inquiry_view', id=inquiry.id) }}" class="inquiry-card">
+                <div class="inquiry-header">
+                    <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
+                    <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
+                </div>
+                <div class="inquiry-title">
+                    {{ inquiry.title }}
+                    {% if inquiry.image_path %}
+                    <span class="attachment-icon" title="画像添付あり">📷</span>
+                    {% endif %}
+                </div>
+                <div class="inquiry-meta">
+                    <span class="inquiry-date">作成: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
+                </div>
+            </a>
+            <form action="{{ url_for('inquiry_delete', id=inquiry.id) }}" method="POST" class="inquiry-delete-form" onsubmit="return confirm('この問い合わせを削除しますか？');">
+                <button type="submit" class="btn-delete-inquiry" title="削除">🗑️</button>
+            </form>
+        </div>
         {% endfor %}
     </div>
     {% else %}
@@ -53,21 +55,52 @@
     gap: 1rem;
 }
 
-.inquiry-card {
-    display: block;
+.inquiry-card-wrapper {
+    position: relative;
+    display: flex;
+    align-items: stretch;
     background: white;
     border-radius: 12px;
-    padding: 1.25rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    text-decoration: none;
-    color: inherit;
-    transition: all 0.2s;
     border: 1px solid #e2e8f0;
+    transition: all 0.2s;
 }
 
-.inquiry-card:hover {
+.inquiry-card-wrapper:hover {
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     border-color: #2563eb;
+}
+
+.inquiry-card {
+    display: block;
+    flex: 1;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 12px 0 0 12px;
+}
+
+.inquiry-delete-form {
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    border-left: 1px solid #e2e8f0;
+}
+
+.btn-delete-inquiry {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    opacity: 0.5;
+}
+
+.btn-delete-inquiry:hover {
+    background: #fee2e2;
+    opacity: 1;
 }
 
 .inquiry-header {

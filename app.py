@@ -17700,66 +17700,56 @@ INQUIRY_STATUS = {
 @login_required
 def inquiry_list():
     """ユーザーの問い合わせ一覧"""
-    print(f"[DEBUG] inquiry_list called by user_id={current_user.id}", flush=True)
     inquiries = []
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # テーブル存在確認
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'inquiries'
-                )
-            """)
-            table_exists = cur.fetchone()[0]
-            print(f"[DEBUG] inquiries table exists: {table_exists}", flush=True)
-            
-            if not table_exists:
-                cur.close()
-                conn.close()
-                flash('問い合わせ機能が初期化されていません', 'warning')
-                return render_template('inquiry/list.html', 
-                                     inquiries=[],
-                                     categories=INQUIRY_CATEGORIES,
-                                     statuses=INQUIRY_STATUS)
-            
+            # シンプルなクエリで取得
             cur.execute('''
-                SELECT i.id, i.user_id, i.category, i.title, i.content, i.image_path, 
-                       i.status, i.created_at, i.updated_at,
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = TRUE 
-                        AND created_at > COALESCE(
-                            (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = FALSE),
-                            i.created_at
-                        )) as unread_replies
-                FROM inquiries i
-                WHERE i.user_id = %s
-                ORDER BY i.updated_at DESC
+                SELECT id, user_id, category, title, content, image_path, 
+                       status, created_at, updated_at
+                FROM inquiries
+                WHERE user_id = %s
+                ORDER BY created_at DESC
             ''', (current_user.id,))
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute('''
-                SELECT i.*, 
-                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 1 
-                        AND created_at > COALESCE(
-                            (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 0),
-                            i.created_at
-                        )) as unread_replies
-                FROM inquiries i
-                WHERE i.user_id = ?
-                ORDER BY i.updated_at DESC
+                SELECT * FROM inquiries
+                WHERE user_id = ?
+                ORDER BY created_at DESC
             ''', (current_user.id,))
         
-        inquiries = [dict(row) for row in cur.fetchall()]
-        print(f"[DEBUG] inquiry_list: found {len(inquiries)} inquiries", flush=True)
+        rows = cur.fetchall()
+        for row in rows:
+            inq = dict(row)
+            # datetime を文字列に変換
+            if inq.get('created_at') and hasattr(inq['created_at'], 'strftime'):
+                inq['created_at'] = inq['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            if inq.get('updated_at') and hasattr(inq['updated_at'], 'strftime'):
+                inq['updated_at'] = inq['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+            inquiries.append(inq)
+        
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"[ERROR] inquiry_list: {e}", flush=True)
         import traceback
-        traceback.print_exc()
+        error_details = traceback.format_exc()
+        return f'''
+        <html>
+        <head><title>Inquiry List Error</title>
+        <style>body {{ font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }}
+        pre {{ background: #16213e; padding: 15px; border-radius: 8px; }}</style>
+        </head>
+        <body>
+        <h1>問い合わせ一覧エラー</h1>
+        <p>Error: {str(e)}</p>
+        <pre>{error_details}</pre>
+        <a href="/" style="color: #4fc3f7;">トップに戻る</a>
+        </body></html>
+        '''
     
     return render_template('inquiry/list.html', 
                          inquiries=inquiries,
@@ -17931,6 +17921,48 @@ def inquiry_view(id):
         print(f"[ERROR] inquiry_view: {e}", flush=True)
         flash('問い合わせの読み込みでエラーが発生しました', 'error')
         return redirect(url_for('inquiry_list'))
+
+@app.route('/inquiry/<int:id>/delete', methods=['POST'])
+@login_required
+def inquiry_delete(id):
+    """問い合わせを削除"""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            # 自分の問い合わせか確認
+            cur.execute('SELECT id FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
+            if not cur.fetchone():
+                flash('お問い合わせが見つかりません', 'error')
+                cur.close()
+                conn.close()
+                return redirect(url_for('inquiry_list'))
+            
+            # 返信も削除
+            cur.execute('DELETE FROM inquiry_replies WHERE inquiry_id = %s', (id,))
+            # 問い合わせを削除
+            cur.execute('DELETE FROM inquiries WHERE id = %s AND user_id = %s', (id, current_user.id))
+            conn.commit()
+        else:
+            cur = conn.cursor()
+            cur.execute('SELECT id FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
+            if not cur.fetchone():
+                flash('お問い合わせが見つかりません', 'error')
+                cur.close()
+                conn.close()
+                return redirect(url_for('inquiry_list'))
+            
+            cur.execute('DELETE FROM inquiry_replies WHERE inquiry_id = ?', (id,))
+            cur.execute('DELETE FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
+            conn.commit()
+        
+        cur.close()
+        conn.close()
+        flash('お問い合わせを削除しました', 'success')
+    except Exception as e:
+        flash(f'削除エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('inquiry_list'))
 
 @app.route('/inquiry/<int:id>/reply', methods=['POST'])
 @login_required
