@@ -12373,17 +12373,28 @@ def user_invoice_send(id):
 @login_required
 def user_mitsumori_list():
     """見積依頼書一覧（ユーザー用）"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
-    
-    mitsumori_list = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
+    mitsumori_list = []
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+        
+        for row in cur.fetchall():
+            item = dict(row)
+            # datetime を文字列に変換
+            for key in ['created_at', 'updated_at', 'issue_date', 'valid_until']:
+                if item.get(key) and hasattr(item[key], 'strftime'):
+                    item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
+            mitsumori_list.append(item)
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] user_mitsumori_list: {e}", flush=True)
     
     return render_template('mitsumori_list.html', mitsumori_list=mitsumori_list)
 
@@ -12765,17 +12776,27 @@ def user_mitsumori_delete(id):
 @login_required
 def user_keisan_list():
     """計算書一覧（ユーザー用）"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
-    
-    keisan_list = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
+    keisan_list = []
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+        
+        for row in cur.fetchall():
+            item = dict(row)
+            for key in ['created_at', 'updated_at', 'issue_date']:
+                if item.get(key) and hasattr(item[key], 'strftime'):
+                    item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
+            keisan_list.append(item)
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] user_keisan_list: {e}", flush=True)
     
     return render_template('keisan_list.html', keisan_list=keisan_list)
 
@@ -15322,51 +15343,60 @@ def disposal_options():
         flash('このページにアクセスする権限がありません', 'error')
         return redirect(url_for('index'))
     
-    conn = get_db()
+    items = []
+    user_info = {}
     
-    if DATABASE_URL:
-        from psycopg2.extras import RealDictCursor
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        conn = get_db()
         
-        # 未払い期間を取得
-        cur.execute("""
-            SELECT overdue_since FROM users WHERE id = %s
-        """, (current_user.id,))
-        user_info = cur.fetchone()
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 未払い期間を取得
+            cur.execute("""
+                SELECT overdue_since FROM users WHERE id = %s
+            """, (current_user.id,))
+            user_info = cur.fetchone() or {}
+            if user_info:
+                user_info = dict(user_info)
+            
+            # ユーザーの商品一覧を取得
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
+                WHERE m.user_id = %s AND m.sale_date IS NULL
+                ORDER BY m.created_at DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            
+            # 未払い期間を取得
+            cur.execute("""
+                SELECT overdue_since FROM users WHERE id = ?
+            """, (current_user.id,))
+            result = cur.fetchone()
+            user_info = {'overdue_since': result[0]} if result else {}
+            
+            # ユーザーの商品一覧を取得
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
+                WHERE m.user_id = ? AND m.sale_date IS NULL
+                ORDER BY m.created_at DESC
+            """, (current_user.id,))
+            items = [dict(row) for row in cur.fetchall()]
         
-        # ユーザーの商品一覧を取得
-        cur.execute("""
-            SELECT m.*, 
-                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
-            FROM merchandise m
-            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
-            WHERE m.user_id = %s AND m.sale_date IS NULL
-            ORDER BY m.created_at DESC
-        """, (current_user.id,))
-        items = [dict(row) for row in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        
-        # 未払い期間を取得
-        cur.execute("""
-            SELECT overdue_since FROM users WHERE id = ?
-        """, (current_user.id,))
-        user_info = cur.fetchone()
-        user_info = {'overdue_since': user_info[0]} if user_info else {}
-        
-        # ユーザーの商品一覧を取得
-        cur.execute("""
-            SELECT m.*, 
-                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status
-            FROM merchandise m
-            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed'
-            WHERE m.user_id = ? AND m.sale_date IS NULL
-            ORDER BY m.created_at DESC
-        """, (current_user.id,))
-        items = [dict(row) for row in cur.fetchall()]
-    
-    cur.close()
-    conn.close()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] disposal_options: {e}", flush=True)
     
     # 未払い期間を計算
     overdue_since = user_info.get('overdue_since') if user_info else None
@@ -16955,29 +16985,39 @@ def init_scheduler():
 @login_required
 def user_kaitori_shoudaku_list():
     """買取承諾書一覧（ユーザー用）"""
-    conn = get_db()
-    
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('''
-            SELECT * FROM user_kaitori_shoudaku 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC
-        ''', (current_user.id,))
-        kaitori_list = [dict(row) for row in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.execute('''
-            SELECT * FROM user_kaitori_shoudaku 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC
-        ''', (current_user.id,))
-        rows = cur.fetchall()
-        columns = [d[0] for d in cur.description] if cur.description else []
-        kaitori_list = [dict(zip(columns, row)) for row in rows]
-    
-    cur.close()
-    conn.close()
+    kaitori_list = []
+    try:
+        conn = get_db()
+        
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('''
+                SELECT * FROM user_kaitori_shoudaku 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC
+            ''', (current_user.id,))
+            rows = cur.fetchall()
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT * FROM user_kaitori_shoudaku 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC
+            ''', (current_user.id,))
+            rows = cur.fetchall()
+        
+        for row in rows:
+            item = dict(row)
+            for key in ['created_at', 'updated_at', 'issue_date']:
+                if item.get(key) and hasattr(item[key], 'strftime'):
+                    item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
+            kaitori_list.append(item)
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] user_kaitori_shoudaku_list: {e}", flush=True)
     
     return render_template('kaitori_shoudaku_list.html', kaitori_list=kaitori_list)
 
