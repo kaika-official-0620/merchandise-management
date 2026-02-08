@@ -89,16 +89,68 @@
         <div class="form-section">
             <h2>代行仕入れサービス</h2>
             <div class="form-group">
-                <label for="proxy_service_budget">利用可能金額</label>
-                <div class="budget-input-group">
-                    <span class="budget-prefix">¥</span>
-                    <input type="number" id="proxy_service_budget" name="proxy_service_budget" 
-                           value="{{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }}"
-                           min="0" step="1000" class="form-control budget-input">
+                <label>現在の利用可能金額</label>
+                <div class="current-budget">
+                    <span class="budget-amount">¥{{ "{:,}".format(user.proxy_service_budget if user and user.proxy_service_budget else 0) }}</span>
                 </div>
-                <small>このユーザーが代行仕入れサービスで使用できる上限金額（0=利用不可）</small>
+                <input type="hidden" id="proxy_service_budget" name="proxy_service_budget" 
+                       value="{{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }}">
             </div>
+            
+            <div class="budget-adjustment">
+                <div class="form-group adjustment-group">
+                    <label for="budget_increase">増額</label>
+                    <div class="budget-input-group">
+                        <span class="budget-prefix increase">+¥</span>
+                        <input type="number" id="budget_increase" name="budget_increase" 
+                               value="0" min="0" step="1000" class="form-control budget-input"
+                               onchange="updateBudget()">
+                    </div>
+                </div>
+                
+                <div class="form-group adjustment-group">
+                    <label for="budget_decrease">減額</label>
+                    <div class="budget-input-group">
+                        <span class="budget-prefix decrease">-¥</span>
+                        <input type="number" id="budget_decrease" name="budget_decrease" 
+                               value="0" min="0" step="1000" class="form-control budget-input"
+                               onchange="updateBudget()">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>変更後の金額</label>
+                <div class="new-budget">
+                    <span id="new_budget_display">¥{{ "{:,}".format(user.proxy_service_budget if user and user.proxy_service_budget else 0) }}</span>
+                </div>
+            </div>
+            <small>このユーザーが代行仕入れサービスで使用できる上限金額（0=利用不可）</small>
         </div>
+        
+        <script>
+        function updateBudget() {
+            const currentBudget = {{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }};
+            const increase = parseInt(document.getElementById('budget_increase').value) || 0;
+            const decrease = parseInt(document.getElementById('budget_decrease').value) || 0;
+            
+            let newBudget = currentBudget + increase - decrease;
+            if (newBudget < 0) newBudget = 0;
+            
+            document.getElementById('proxy_service_budget').value = newBudget;
+            document.getElementById('new_budget_display').textContent = '¥' + newBudget.toLocaleString();
+            
+            // 変更があった場合は色を変える
+            const displayEl = document.getElementById('new_budget_display');
+            if (newBudget > currentBudget) {
+                displayEl.style.color = '#059669';
+            } else if (newBudget < currentBudget) {
+                displayEl.style.color = '#dc2626';
+            } else {
+                displayEl.style.color = '#1e293b';
+            }
+        }
+        </script>
         
         <div class="form-section">
             <h2>パスワード{% if user %}変更{% endif %}</h2>
@@ -202,6 +254,62 @@
 .tuition-exempt-label input[type="checkbox"]:checked + span {
     color: #059669;
     font-weight: 600;
+}
+
+.current-budget {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+
+.budget-amount {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.budget-adjustment {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.adjustment-group {
+    margin-bottom: 0;
+}
+
+.budget-prefix.increase {
+    background: #ecfdf5;
+    border-color: #10b981;
+    color: #059669;
+}
+
+.budget-prefix.decrease {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #dc2626;
+}
+
+.new-budget {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 2px solid #3b82f6;
+}
+
+#new_budget_display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+@media (max-width: 600px) {
+    .budget-adjustment {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 

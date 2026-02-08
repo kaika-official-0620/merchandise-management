@@ -8,6 +8,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1a1a2e">
+    <!-- PWA / ホーム画面追加時の設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="開花在庫管理">
+    <meta name="application-name" content="開花在庫管理">
 </head>
 <body>
     {% if current_user.is_authenticated %}
