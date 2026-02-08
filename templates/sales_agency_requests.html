@@ -225,7 +225,7 @@
                     {% for item in req.items %}
                     <div class="request-item">
                         {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                        <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name }}" onerror="this.style.display='none'">
                         {% else %}
                         <div style="width: 40px; height: 40px; background: #e2e8f0; border-radius: 4px;"></div>
                         {% endif %}
