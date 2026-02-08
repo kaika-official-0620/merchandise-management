@@ -9322,6 +9322,9 @@ def import_backup():
     import_mode = request.form.get('import_mode', 'merge')
     
     conn = get_db()
+    # PostgreSQLの場合はautocommitモードを有効化（各INSERT文を即座にコミット）
+    if DATABASE_URL:
+        conn.autocommit = True
     cur = conn.cursor()
     
     try:
@@ -9406,7 +9409,7 @@ def import_backup():
                             ))
                     imported_counts['users'] += 1
                 except Exception as e:
-                    conn.rollback()  # トランザクションをリセット
+                    if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                     print(f"User import error: {e}")
         
         # ユーザーIDマッピングを取得（username → 新user_id）
@@ -9546,7 +9549,7 @@ def import_backup():
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 import traceback
                 print(f"Merchandise import error: {e}")
                 print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
@@ -9597,7 +9600,7 @@ def import_backup():
                     ))
                 imported_counts['customers'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Customer import error: {e}")
         
         # 問い合わせをインポート（v3.1追加）
@@ -9644,7 +9647,7 @@ def import_backup():
                     inquiry_id_map[old_inquiry_id] = new_id
                 imported_counts['inquiries'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Inquiry import error: {e}")
         
         # 問い合わせ返信をインポート（v3.1追加）
@@ -9682,7 +9685,7 @@ def import_backup():
                     ))
                 imported_counts['inquiry_replies'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Inquiry reply import error: {e}")
         
         # 管理者用買取承諾書（法人版）をインポート（v3.1追加）
@@ -9749,7 +9752,7 @@ def import_backup():
                     admin_kaitori_id_map[old_kaitori_id] = new_id
                 imported_counts['admin_kaitori_shoudaku'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Admin kaitori shoudaku import error: {e}")
         
         # 管理者用買取承諾書明細をインポート（v3.1追加）
@@ -9795,7 +9798,7 @@ def import_backup():
                     ))
                 imported_counts['admin_kaitori_shoudaku_items'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Admin kaitori shoudaku item import error: {e}")
         
         # 処分申請をインポート（v3.1追加）
@@ -9845,7 +9848,7 @@ def import_backup():
                     ))
                 imported_counts['item_disposal_requests'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Item disposal request import error: {e}")
         
         # 代行サービス設定をインポート（v3.2追加、v3.3でauction_name対応）
@@ -9892,7 +9895,7 @@ def import_backup():
                     ))
                 imported_counts['proxy_service_settings'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Proxy service settings import error: {e}")
         
         # 代行サービス公開ユーザーをインポート（v3.2追加）
@@ -9925,7 +9928,7 @@ def import_backup():
                     ))
                 imported_counts['proxy_service_users'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Proxy service user import error: {e}")
         
         # 代行サービス入札履歴をインポート（v3.2追加）
@@ -9957,7 +9960,7 @@ def import_backup():
                     ))
                 imported_counts['proxy_service_bids'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Proxy service bid import error: {e}")
         
         # 販売代行申請をインポート（v3.2追加）
@@ -10004,7 +10007,7 @@ def import_backup():
                     sales_agency_id_map[old_sar_id] = new_id
                 imported_counts['sales_agency_requests'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 print(f"Sales agency request import error: {e}")
         
         # 販売代行申請商品をインポート（v3.2追加）
@@ -10034,10 +10037,13 @@ def import_backup():
                     ))
                 imported_counts['sales_agency_request_items'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL:  # SQLiteの場合のみrollback
+                    conn.rollback()
                 print(f"Sales agency request item import error: {e}")
         
-        conn.commit()
+        # SQLiteの場合のみcommit（PostgreSQLはautocommitモード）
+        if not DATABASE_URL:
+            conn.commit()
         error_count = len(imported_counts.get('errors', []))
         msg = f"インポート完了: ユーザー {imported_counts['users']}件, 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
         if imported_counts.get('inquiries', 0) > 0:
@@ -10059,7 +10065,8 @@ def import_backup():
             flash(msg, 'success')
         
     except Exception as e:
-        conn.rollback()
+        if not DATABASE_URL:  # SQLiteの場合のみrollback
+            conn.rollback()
         import traceback
         traceback.print_exc()
         flash(f'インポートエラー: {str(e)}', 'error')
@@ -10119,6 +10126,9 @@ def import_user_backup():
         return redirect(url_for('index'))
     
     conn = get_db()
+    # PostgreSQLの場合はautocommitモードを有効化（各INSERT文を即座にコミット）
+    if DATABASE_URL:
+        conn.autocommit = True
     cur = conn.cursor()
     
     try:
@@ -10217,7 +10227,7 @@ def import_user_backup():
                     ))
                 imported_counts['merchandise'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 import traceback
                 print(f"Merchandise import error: {e}")
                 print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
@@ -10259,10 +10269,13 @@ def import_user_backup():
                     ))
                 imported_counts['customers'] += 1
             except Exception as e:
-                conn.rollback()  # トランザクションをリセット
+                if not DATABASE_URL:  # SQLiteの場合のみrollback
+                    conn.rollback()
                 print(f"Customer import error: {e}")
         
-        conn.commit()
+        # SQLiteの場合のみcommit（PostgreSQLはautocommitモード）
+        if not DATABASE_URL:
+            conn.commit()
         error_count = len(imported_counts.get('errors', []))
         msg = f"インポート完了: 商品 {imported_counts['merchandise']}件, 顧客 {imported_counts['customers']}件"
         if error_count > 0:
@@ -10273,7 +10286,8 @@ def import_user_backup():
             flash(msg, 'success')
         
     except Exception as e:
-        conn.rollback()
+        if not DATABASE_URL:  # SQLiteの場合のみrollback
+            conn.rollback()
         import traceback
         traceback.print_exc()
         flash(f'インポートエラー: {str(e)}', 'error')
