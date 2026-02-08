@@ -18736,11 +18736,30 @@ def sales_agency_apply():
 @login_required
 def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
+    print(f"[DEBUG] sales_agency_my_requests called by user_id={current_user.id}", flush=True)
     requests = []
     try:
+        print("[DEBUG] Getting DB connection...", flush=True)
         conn = get_db()
+        print("[DEBUG] DB connection established", flush=True)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            # テーブルが存在するか確認
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'sales_agency_requests'
+                )
+            """)
+            table_exists = cur.fetchone()[0]
+            print(f"[DEBUG] sales_agency_requests table exists: {table_exists}", flush=True)
+            if not table_exists:
+                print("[ERROR] sales_agency_requests table does not exist!", flush=True)
+                cur.close()
+                conn.close()
+                flash('データベーステーブルが初期化されていません。管理者に連絡してください。', 'error')
+                return redirect(url_for('index'))
+            
             cur.execute('''
                 SELECT sar.id, sar.user_id, sar.service_type, sar.status, sar.admin_note,
                        sar.created_at, sar.processed_at, sar.processed_by, sar.result_notified,
@@ -18750,6 +18769,7 @@ def sales_agency_my_requests():
                 WHERE sar.user_id = %s
                 ORDER BY sar.created_at DESC
             ''', (current_user.id,))
+            print("[DEBUG] Query executed successfully", flush=True)
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
