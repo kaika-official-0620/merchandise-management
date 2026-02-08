@@ -56,6 +56,61 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
 
+# グローバルエラーハンドラー（エラーをブラウザに詳細表示）
+@app.errorhandler(500)
+def internal_error(error):
+    import traceback
+    error_details = traceback.format_exc()
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>500 Internal Server Error</title>
+        <style>
+            body {{ font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }}
+            h1 {{ color: #e94560; }}
+            pre {{ background: #16213e; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }}
+            .error-type {{ color: #f39c12; }}
+        </style>
+    </head>
+    <body>
+        <h1>500 Internal Server Error</h1>
+        <p class="error-type">Error: {error}</p>
+        <h3>Traceback:</h3>
+        <pre>{error_details}</pre>
+    </body>
+    </html>
+    '''
+    return html, 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    error_details = traceback.format_exc()
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Error - {type(e).__name__}</title>
+        <style>
+            body {{ font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }}
+            h1 {{ color: #e94560; }}
+            pre {{ background: #16213e; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }}
+            .error-type {{ color: #f39c12; font-size: 1.2em; }}
+            .error-msg {{ color: #fff; margin: 10px 0; }}
+        </style>
+    </head>
+    <body>
+        <h1>Application Error</h1>
+        <p class="error-type">{type(e).__name__}</p>
+        <p class="error-msg">{str(e)}</p>
+        <h3>Traceback:</h3>
+        <pre>{error_details}</pre>
+    </body>
+    </html>
+    '''
+    return html, 500
+
 # Flask-Login設定
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -17645,12 +17700,34 @@ INQUIRY_STATUS = {
 @login_required
 def inquiry_list():
     """ユーザーの問い合わせ一覧"""
+    print(f"[DEBUG] inquiry_list called by user_id={current_user.id}", flush=True)
+    inquiries = []
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            # テーブル存在確認
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'inquiries'
+                )
+            """)
+            table_exists = cur.fetchone()[0]
+            print(f"[DEBUG] inquiries table exists: {table_exists}", flush=True)
+            
+            if not table_exists:
+                cur.close()
+                conn.close()
+                flash('問い合わせ機能が初期化されていません', 'warning')
+                return render_template('inquiry/list.html', 
+                                     inquiries=[],
+                                     categories=INQUIRY_CATEGORIES,
+                                     statuses=INQUIRY_STATUS)
+            
             cur.execute('''
-                SELECT i.*, 
+                SELECT i.id, i.user_id, i.category, i.title, i.content, i.image_path, 
+                       i.status, i.created_at, i.updated_at,
                        (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = TRUE 
                         AND created_at > COALESCE(
                             (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = FALSE),
@@ -17676,11 +17753,13 @@ def inquiry_list():
             ''', (current_user.id,))
         
         inquiries = [dict(row) for row in cur.fetchall()]
+        print(f"[DEBUG] inquiry_list: found {len(inquiries)} inquiries", flush=True)
         cur.close()
         conn.close()
     except Exception as e:
         print(f"[ERROR] inquiry_list: {e}", flush=True)
-        inquiries = []
+        import traceback
+        traceback.print_exc()
     
     return render_template('inquiry/list.html', 
                          inquiries=inquiries,
