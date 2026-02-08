@@ -17856,7 +17856,7 @@ def admin_inquiries():
             cur = conn.cursor(cursor_factory=RealDictCursor)
             if status_filter:
                 cur.execute('''
-                    SELECT i.id, i.user_id, i.category, i.subject, i.content, i.status,
+                    SELECT i.id, i.user_id, i.category, i.title, i.content, i.status,
                            i.created_at, i.updated_at,
                            u.display_name, u.username,
                            (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
@@ -17871,7 +17871,7 @@ def admin_inquiries():
                 ''', (status_filter,))
             else:
                 cur.execute('''
-                    SELECT i.id, i.user_id, i.category, i.subject, i.content, i.status,
+                    SELECT i.id, i.user_id, i.category, i.title, i.content, i.status,
                            i.created_at, i.updated_at,
                            u.display_name, u.username,
                            (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id) as reply_count
