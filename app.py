@@ -9446,7 +9446,9 @@ def import_backup():
         
         # 商品をインポート
         merchandise_list = backup_data.get('merchandise', [])
-        print(f"DEBUG: Total merchandise to import: {len(merchandise_list)}")
+        print(f"DEBUG: Total merchandise to import: {len(merchandise_list)}", flush=True)
+        print(f"DEBUG: user_id_map = {user_id_map}", flush=True)
+        print(f"DEBUG: old_user_id_to_username = {old_user_id_to_username}", flush=True)
         for item in merchandise_list:
             try:
                 # user_idを解決（旧環境のIDを新環境のIDにマッピング）
@@ -9457,7 +9459,7 @@ def import_backup():
                 else:
                     user_id = resolve_user_id(old_user_id)
                 
-                print(f"DEBUG: Importing item: {item.get('product_name')} (old_user_id={old_user_id}, new_user_id={user_id})")
+                print(f"DEBUG: Importing item: {item.get('product_name')} (old_user_id={old_user_id}, new_user_id={user_id})", flush=True)
                 
                 if DATABASE_URL:
                     cur.execute('''
@@ -9548,12 +9550,16 @@ def import_backup():
                         item.get('kaika_product_code')
                     ))
                 imported_counts['merchandise'] += 1
+                print(f"DEBUG: Successfully imported: {item.get('product_name')}", flush=True)
             except Exception as e:
                 if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 import traceback
-                print(f"Merchandise import error: {e}")
-                print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
+                import sys
+                print(f"Merchandise import error: {e}", flush=True)
+                print(f"Item data: {item.get('product_name')} (id={item.get('id')}, user_id={item.get('user_id')})", flush=True)
                 traceback.print_exc()
+                sys.stdout.flush()
+                sys.stderr.flush()
                 if 'errors' not in imported_counts:
                     imported_counts['errors'] = []
                 imported_counts['errors'].append(f"{item.get('product_name')}: {str(e)}")
@@ -10059,8 +10065,14 @@ def import_backup():
         if error_count > 0:
             msg += f" (エラー {error_count}件)"
             flash(msg, 'warning')
-            # エラー詳細をログに出力
-            print(f"Import errors: {imported_counts.get('errors', [])}")
+            # エラー詳細をflashとログに出力
+            errors = imported_counts.get('errors', [])
+            if errors:
+                error_summary = '; '.join(errors[:3])  # 最初の3件のみ表示
+                if len(errors) > 3:
+                    error_summary += f' ... 他{len(errors)-3}件'
+                flash(f"エラー詳細: {error_summary}", 'error')
+            print(f"Import errors: {errors}", flush=True)
         else:
             flash(msg, 'success')
         
@@ -10226,12 +10238,16 @@ def import_user_backup():
                         item.get('kaika_product_code')
                     ))
                 imported_counts['merchandise'] += 1
+                print(f"DEBUG: Successfully imported (user): {item.get('product_name')}", flush=True)
             except Exception as e:
                 if not DATABASE_URL: conn.rollback()  # SQLiteの場合のみrollback
                 import traceback
-                print(f"Merchandise import error: {e}")
-                print(f"Item data: {item.get('product_name')} (id={item.get('id')})")
+                import sys
+                print(f"Merchandise import error (user): {e}", flush=True)
+                print(f"Item data: {item.get('product_name')} (id={item.get('id')}, user_id={item.get('user_id')})", flush=True)
                 traceback.print_exc()
+                sys.stdout.flush()
+                sys.stderr.flush()
                 if 'errors' not in imported_counts:
                     imported_counts['errors'] = []
                 imported_counts['errors'].append(f"{item.get('product_name')}: {str(e)}")
