@@ -17811,29 +17811,58 @@ def inquiry_new():
             conn = get_db()
             if DATABASE_URL:
                 cur = conn.cursor()
+                # テーブル存在確認
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'inquiries'
+                    )
+                """)
+                if not cur.fetchone()[0]:
+                    flash('問い合わせテーブルが存在しません。管理者に連絡してください。', 'error')
+                    cur.close()
+                    conn.close()
+                    return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
+                
                 cur.execute('''
                     INSERT INTO inquiries (user_id, category, title, content, image_path)
                     VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
                 ''', (current_user.id, category, title, content, image_path))
+                new_id = cur.fetchone()[0]
+                conn.commit()
             else:
                 cur = conn.cursor()
                 cur.execute('''
                     INSERT INTO inquiries (user_id, category, title, content, image_path)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (current_user.id, category, title, content, image_path))
+                new_id = cur.lastrowid
+                conn.commit()
             
-            conn.commit()
             cur.close()
             conn.close()
             
-            flash('お問い合わせを送信しました', 'success')
+            flash(f'お問い合わせを送信しました (ID: {new_id})', 'success')
             return redirect(url_for('inquiry_list'))
         except Exception as e:
             import traceback
-            print(f"Inquiry creation error: {e}")
-            traceback.print_exc()
+            error_details = traceback.format_exc()
             flash(f'エラーが発生しました: {str(e)}', 'error')
-            return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
+            # エラー詳細を画面に表示
+            return f'''
+            <html>
+            <head><title>Inquiry Error</title>
+            <style>body {{ font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }}
+            pre {{ background: #16213e; padding: 15px; border-radius: 8px; }}</style>
+            </head>
+            <body>
+            <h1>問い合わせ作成エラー</h1>
+            <p>Error: {str(e)}</p>
+            <pre>{error_details}</pre>
+            <a href="/inquiry/new" style="color: #4fc3f7;">戻る</a>
+            </body></html>
+            '''
     
     return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
 
