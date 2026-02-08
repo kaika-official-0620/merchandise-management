@@ -9497,7 +9497,7 @@ def import_backup():
                         item.get('supplier_detail'),
                         item.get('id_document_path'),
                         item.get('consent_form_path'),
-                        item.get('updated_by'),
+                        resolve_user_id(item.get('updated_by')) if item.get('updated_by') else None,  # 外部キー制約対応
                         item.get('updated_at'),
                         item.get('notes'),
                         item.get('show_in_proxy_service', 0),
@@ -9541,7 +9541,7 @@ def import_backup():
                         item.get('supplier_detail'),
                         item.get('id_document_path'),
                         item.get('consent_form_path'),
-                        item.get('updated_by'),
+                        resolve_user_id(item.get('updated_by')) if item.get('updated_by') else None,  # 外部キー制約対応
                         item.get('updated_at'),
                         item.get('notes'),
                         1 if item.get('show_in_proxy_service') else 0,
@@ -10175,7 +10175,7 @@ def import_user_backup():
                         item.get('supplier_detail'),
                         item.get('id_document_path'),
                         item.get('consent_form_path'),
-                        item.get('updated_by'),
+                        current_user.id if item.get('updated_by') else None,  # ユーザー個別インポートでは現在のユーザーID
                         item.get('updated_at'),
                         item.get('notes'),
                         item.get('show_in_proxy_service', 0),
@@ -10219,7 +10219,7 @@ def import_user_backup():
                         item.get('supplier_detail'),
                         item.get('id_document_path'),
                         item.get('consent_form_path'),
-                        item.get('updated_by'),
+                        current_user.id if item.get('updated_by') else None,  # ユーザー個別インポートでは現在のユーザーID
                         item.get('updated_at'),
                         item.get('notes'),
                         1 if item.get('show_in_proxy_service') else 0,
