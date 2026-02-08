@@ -17899,14 +17899,16 @@ def admin_inquiries():
                 JOIN users u ON i.user_id = u.id
                 WHERE i.status = 'new'
             """)
-            new_count = cur.fetchone()['count']
+            result = cur.fetchone()
+            new_count = result['count'] if result and isinstance(result, dict) else (result[0] if result else 0)
         else:
             cur.execute("""
                 SELECT COUNT(*) FROM inquiries i
                 JOIN users u ON i.user_id = u.id
                 WHERE i.status = 'new'
             """)
-            new_count = cur.fetchone()[0]
+            result = cur.fetchone()
+            new_count = result[0] if result else 0
         
         cur.close()
         conn.close()
