@@ -12,7 +12,7 @@
 </div>
 
 <div class="info-box">
-    <p>開花から法人向けに送付する見積依頼書です。</p>
+    <p>ユーザーが作成した見積依頼書の一覧です。</p>
 </div>
 
 <div class="table-container">
@@ -20,10 +20,10 @@
         <thead>
             <tr>
                 <th>書類No.</th>
+                <th>作成者</th>
                 <th>宛先（会社名）</th>
                 <th>件名</th>
                 <th>発行日</th>
-                <th>有効期限</th>
                 <th>合計金額</th>
                 <th>ステータス</th>
                 <th>操作</th>
@@ -33,14 +33,16 @@
             {% for doc in mitsumori_list %}
             <tr>
                 <td class="doc-no">{{ doc.document_no }}</td>
-                <td>{{ doc.company_name }}</td>
+                <td class="user-name">{{ doc.user_name or doc.username or '-' }}</td>
+                <td>{{ doc.company_name or '-' }}</td>
                 <td>{{ doc.subject or '-' }}</td>
                 <td>{{ doc.issue_date }}</td>
-                <td>{{ doc.valid_until or '-' }}</td>
-                <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
                 <td>
                     {% if doc.status == 'completed' %}
-                        <span class="status-badge status-completed">完了</span>
+                        <span class="status-badge status-completed">送信済</span>
+                    {% elif doc.status == 'sent' %}
+                        <span class="status-badge status-sent">送信済</span>
                     {% else %}
                         <span class="status-badge status-draft">下書き</span>
                     {% endif %}
@@ -48,10 +50,6 @@
                 <td class="actions">
                     <a href="{{ url_for('admin_mitsumori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('admin_mitsumori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
-                    {% if doc.status == 'draft' %}
-                        <a href="{{ url_for('admin_mitsumori_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
-                    {% endif %}
-                    <a href="{{ url_for('admin_mitsumori_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この見積依頼書を削除しますか？')">削除</a>
                 </td>
             </tr>
             {% else %}
@@ -95,7 +93,13 @@
 }
 
 .status-completed { background: #d4edda; color: #155724; }
+.status-sent { background: #d4edda; color: #155724; }
 .status-draft { background: #fff3cd; color: #856404; }
+
+.user-name { 
+    font-weight: 500; 
+    color: #2563eb;
+}
 
 .btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
 .btn-info { background: #17a2b8; color: white; }

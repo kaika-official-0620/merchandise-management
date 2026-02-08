@@ -14360,8 +14360,47 @@ def admin_seisan_pdf(id):
 @login_required
 @admin_required
 def admin_mitsumori_list():
-    """見積依頼書一覧"""
-    return render_template('admin/mitsumori_list.html', mitsumori_list=[])
+    """見積依頼書一覧（ユーザーが作成した見積依頼書を表示）"""
+    mitsumori_list = []
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('''
+                SELECT m.*, u.display_name as user_name, u.username
+                FROM user_mitsumori m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            ''')
+            mitsumori_list = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT m.*, u.display_name as user_name, u.username
+                FROM user_mitsumori m
+                LEFT JOIN users u ON m.user_id = u.id
+                ORDER BY m.created_at DESC
+            ''')
+            mitsumori_list = [dict(row) for row in cur.fetchall()]
+        
+        # datetime を文字列に変換
+        for m in mitsumori_list:
+            if m.get('issue_date') and hasattr(m['issue_date'], 'strftime'):
+                m['issue_date'] = m['issue_date'].strftime('%Y-%m-%d')
+            if m.get('valid_until') and hasattr(m['valid_until'], 'strftime'):
+                m['valid_until'] = m['valid_until'].strftime('%Y-%m-%d')
+            if m.get('created_at') and hasattr(m['created_at'], 'strftime'):
+                m['created_at'] = m['created_at'].strftime('%Y-%m-%d %H:%M')
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] admin_mitsumori_list: {e}", flush=True)
+        traceback.print_exc()
+    
+    return render_template('admin/mitsumori_list.html', mitsumori_list=mitsumori_list)
 
 @app.route('/admin/mitsumori/add', methods=['GET', 'POST'])
 @login_required
@@ -14384,8 +14423,60 @@ def admin_mitsumori_add():
 @admin_required
 def admin_mitsumori_view(id):
     """見積依頼書詳細"""
-    flash('この機能は準備中です', 'info')
-    return redirect(url_for('admin_mitsumori_list'))
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('''
+                SELECT m.*, u.display_name as user_name, u.username
+                FROM user_mitsumori m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.id = %s
+            ''', (id,))
+            mitsumori = cur.fetchone()
+            if mitsumori:
+                mitsumori = dict(mitsumori)
+                cur.execute('SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no', (id,))
+                items = [dict(row) for row in cur.fetchall()]
+            else:
+                items = []
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT m.*, u.display_name as user_name, u.username
+                FROM user_mitsumori m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.id = ?
+            ''', (id,))
+            mitsumori = cur.fetchone()
+            if mitsumori:
+                mitsumori = dict(mitsumori)
+                cur.execute('SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no', (id,))
+                items = [dict(row) for row in cur.fetchall()]
+            else:
+                items = []
+        
+        cur.close()
+        conn.close()
+        
+        if not mitsumori:
+            flash('見積依頼書が見つかりません', 'error')
+            return redirect(url_for('admin_mitsumori_list'))
+        
+        # datetime を文字列に変換
+        if mitsumori.get('issue_date') and hasattr(mitsumori['issue_date'], 'strftime'):
+            mitsumori['issue_date'] = mitsumori['issue_date'].strftime('%Y-%m-%d')
+        if mitsumori.get('valid_until') and hasattr(mitsumori['valid_until'], 'strftime'):
+            mitsumori['valid_until'] = mitsumori['valid_until'].strftime('%Y-%m-%d')
+        
+        return render_template('admin/mitsumori_view.html', mitsumori=mitsumori, items=items)
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] admin_mitsumori_view: {e}", flush=True)
+        traceback.print_exc()
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('admin_mitsumori_list'))
 
 @app.route('/admin/mitsumori/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
