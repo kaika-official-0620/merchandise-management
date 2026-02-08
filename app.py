@@ -2622,7 +2622,7 @@ def index():
     except Exception as e:
         print(f"Error fetching pending requests: {e}")
     
-    # 販売代行サービス申請を取得
+    # 販売代行サービス申請を取得（承認待ち・承認済みの両方）
     sales_agency_items = {}
     try:
         conn3 = get_db()
@@ -2632,7 +2632,8 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status = 'pending'
+                WHERE sar.status IN ('pending', 'approved')
+                  AND sar.service_type IN ('wholesale', 'auction')
             """)
         else:
             cur3 = conn3.cursor()
@@ -2640,7 +2641,8 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status = 'pending'
+                WHERE sar.status IN ('pending', 'approved')
+                  AND sar.service_type IN ('wholesale', 'auction')
             """)
         for req in cur3.fetchall():
             req_dict = dict(req)
@@ -18796,10 +18798,15 @@ def sales_agency_my_requests():
         import traceback
         traceback.print_exc()
     
-    return render_template('sales_agency_requests.html',
-                         requests=requests,
-                         service_types=SALES_AGENCY_SERVICE_TYPES,
-                         statuses=SALES_AGENCY_STATUS)
+    try:
+        return render_template('sales_agency_requests.html',
+                             requests=requests,
+                             service_types=SALES_AGENCY_SERVICE_TYPES,
+                             statuses=SALES_AGENCY_STATUS)
+    except Exception as e:
+        print(f"[ERROR] sales_agency_my_requests template: {e}", flush=True)
+        flash('ページの読み込みでエラーが発生しました', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/admin/sales-agency-requests')
 @login_required
