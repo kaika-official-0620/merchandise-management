@@ -2622,6 +2622,34 @@ def index():
     except Exception as e:
         print(f"Error fetching pending requests: {e}")
     
+    # 販売代行サービス申請を取得
+    sales_agency_items = {}
+    try:
+        conn3 = get_db()
+        if DATABASE_URL:
+            cur3 = conn3.cursor(cursor_factory=RealDictCursor)
+            cur3.execute("""
+                SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
+                FROM sales_agency_request_items sari
+                JOIN sales_agency_requests sar ON sari.request_id = sar.id
+                WHERE sar.status = 'pending'
+            """)
+        else:
+            cur3 = conn3.cursor()
+            cur3.execute("""
+                SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
+                FROM sales_agency_request_items sari
+                JOIN sales_agency_requests sar ON sari.request_id = sar.id
+                WHERE sar.status = 'pending'
+            """)
+        for req in cur3.fetchall():
+            req_dict = dict(req)
+            sales_agency_items[req_dict['merchandise_id']] = req_dict
+        cur3.close()
+        conn3.close()
+    except Exception as e:
+        print(f"Error fetching sales agency requests: {e}", flush=True)
+    
     # アイテムに計算フィールド追加
     processed_items = []
     for item in items:
@@ -2648,6 +2676,14 @@ def index():
         else:
             item_dict['pending_sale_request'] = False
             item_dict['sale_request'] = None
+        
+        # 販売代行サービス申請中かどうかを判定
+        if item_id in sales_agency_items:
+            item_dict['pending_sales_agency'] = True
+            item_dict['sales_agency_request'] = sales_agency_items[item_id]
+        else:
+            item_dict['pending_sales_agency'] = False
+            item_dict['sales_agency_request'] = None
         
         # 削除可能かどうかを判定（オーナーは常に削除可能、管理者は1日以内のみ削除可能）
         if current_user.is_owner():
@@ -12446,26 +12482,49 @@ def user_mitsumori_add():
     # GETリクエスト
     today = datetime.now().strftime('%Y-%m-%d')
     now = datetime.now()
+    my_merchandise = []
     
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
-                   (current_user.id, now.strftime('%Y-%m-01')))
-        result = cur.fetchone()
-        count = (result['count'] if result else 0) + 1
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
-                   (current_user.id, now.strftime('%Y-%m-01')))
-        result = dict(cur.fetchone())
-        count = (result['count'] if result else 0) + 1
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = %s AND issue_date >= %s", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = cur.fetchone()
+            count = (result['count'] if result else 0) + 1
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
+                       (current_user.id, now.strftime('%Y-%m-01')))
+            result = cur.fetchone()
+            count = (dict(result)['count'] if result else 0) + 1
+        
+        document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
+        
+        # ユーザーの商品一覧を取得（未売却のみ）
+        if DATABASE_URL:
+            cur.execute("""
+                SELECT id, product_name, brand_name, listing_price, photo_path 
+                FROM merchandise 
+                WHERE user_id = %s AND sale_date IS NULL 
+                ORDER BY id DESC
+            """, (current_user.id,))
+        else:
+            cur.execute("""
+                SELECT id, product_name, brand_name, listing_price, photo_path 
+                FROM merchandise 
+                WHERE user_id = ? AND sale_date IS NULL 
+                ORDER BY id DESC
+            """, (current_user.id,))
+        my_merchandise = [dict(row) for row in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] user_mitsumori_add GET: {e}", flush=True)
+        document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-0001"
     
-    document_no = f"UM-{now.strftime('%Y%m')}-{current_user.id}-{count:04d}"
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('mitsumori_form.html', mitsumori=None, items=[], today=today, document_no=document_no)
+    return render_template('mitsumori_form.html', mitsumori=None, items=[], today=today, document_no=document_no, my_merchandise=my_merchandise)
 
 @app.route('/mitsumori/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -12571,10 +12630,27 @@ def user_mitsumori_edit(id):
     
     items = [dict(row) for row in cur.fetchall()]
     
+    # ユーザーの商品一覧を取得（未売却のみ）
+    if DATABASE_URL:
+        cur.execute("""
+            SELECT id, product_name, brand_name, listing_price, photo_path 
+            FROM merchandise 
+            WHERE user_id = %s AND sale_date IS NULL 
+            ORDER BY id DESC
+        """, (current_user.id,))
+    else:
+        cur.execute("""
+            SELECT id, product_name, brand_name, listing_price, photo_path 
+            FROM merchandise 
+            WHERE user_id = ? AND sale_date IS NULL 
+            ORDER BY id DESC
+        """, (current_user.id,))
+    my_merchandise = [dict(row) for row in cur.fetchall()]
+    
     cur.close()
     conn.close()
     
-    return render_template('mitsumori_form.html', mitsumori=mitsumori, items=items, today=None, document_no=mitsumori['document_no'])
+    return render_template('mitsumori_form.html', mitsumori=mitsumori, items=items, today=None, document_no=mitsumori['document_no'], my_merchandise=my_merchandise)
 
 @app.route('/mitsumori/view/<int:id>')
 @login_required
@@ -15428,60 +15504,78 @@ def submit_disposal_request():
 @login_required
 def long_term_items():
     """長期在庫商品（仕入れ日から3ヶ月以上経過）の一覧・処分オプションページ"""
-    conn = get_db()
+    items = []
     
-    # 3ヶ月前の日付を計算
-    three_months_ago = datetime.now() - timedelta(days=90)
-    three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
-    
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        conn = get_db()
         
-        # 仕入れ日から3ヶ月以上経過した未売却商品を取得
-        cur.execute("""
-            SELECT m.*, 
-                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                   EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date)) as days_since_purchase
-            FROM merchandise m
-            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-            WHERE m.user_id = %s 
-              AND m.sale_date IS NULL
-              AND m.purchase_date IS NOT NULL
-              AND m.purchase_date <= %s
-            ORDER BY m.purchase_date ASC
-        """, (current_user.id, three_months_ago_str))
-        items = [dict(row) for row in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.row_factory = sqlite3.Row
+        # 3ヶ月前の日付を計算
+        three_months_ago = datetime.now() - timedelta(days=90)
+        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
         
-        # 仕入れ日から3ヶ月以上経過した未売却商品を取得
-        cur.execute("""
-            SELECT m.*, 
-                   dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                   CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
-            FROM merchandise m
-            LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-            WHERE m.user_id = ? 
-              AND m.sale_date IS NULL
-              AND m.purchase_date IS NOT NULL
-              AND m.purchase_date <= ?
-            ORDER BY m.purchase_date ASC
-        """, (current_user.id, three_months_ago_str))
-        items = [dict(row) for row in cur.fetchall()]
-    
-    cur.close()
-    conn.close()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 仕入れ日から3ヶ月以上経過した未売却商品を取得
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                       EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date)) as days_since_purchase
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= %s
+                ORDER BY m.purchase_date ASC
+            """, (current_user.id, three_months_ago_str))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            
+            # 仕入れ日から3ヶ月以上経過した未売却商品を取得
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                       CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = ? 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= ?
+                ORDER BY m.purchase_date ASC
+            """, (current_user.id, three_months_ago_str))
+            items = [dict(row) for row in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] long_term_items: {e}", flush=True)
     
     # 各商品の経過日数を計算
     for item in items:
         if item.get('purchase_date'):
-            purchase_date = item['purchase_date']
-            if isinstance(purchase_date, str):
-                purchase_date = datetime.strptime(purchase_date[:10], '%Y-%m-%d')
-            days = (datetime.now() - datetime.combine(purchase_date, datetime.min.time()) if hasattr(purchase_date, 'year') and not hasattr(purchase_date, 'hour') else (datetime.now() - purchase_date)).days
-            item['days_since_purchase'] = days
-            item['months_since_purchase'] = days // 30
+            try:
+                purchase_date = item['purchase_date']
+                # 文字列の場合はdatetimeに変換
+                if isinstance(purchase_date, str):
+                    purchase_date = datetime.strptime(purchase_date[:10], '%Y-%m-%d').date()
+                # datetime型の場合はdate部分を取得
+                elif hasattr(purchase_date, 'date') and callable(purchase_date.date):
+                    purchase_date = purchase_date.date()
+                # date型はそのまま使用
+                
+                # 経過日数を計算
+                today = datetime.now().date()
+                days = (today - purchase_date).days
+                item['days_since_purchase'] = days
+                item['months_since_purchase'] = days // 30
+            except Exception as e:
+                print(f"[ERROR] Date calculation error for item {item.get('id')}: {e}", flush=True)
+                item['days_since_purchase'] = 0
+                item['months_since_purchase'] = 0
     
     return render_template('long_term_items.html', items=items)
 
@@ -17509,38 +17603,42 @@ INQUIRY_STATUS = {
 @login_required
 def inquiry_list():
     """ユーザーの問い合わせ一覧"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('''
-            SELECT i.*, 
-                   (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = TRUE 
-                    AND created_at > COALESCE(
-                        (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = FALSE),
-                        i.created_at
-                    )) as unread_replies
-            FROM inquiries i
-            WHERE i.user_id = %s
-            ORDER BY i.updated_at DESC
-        ''', (current_user.id,))
-    else:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute('''
-            SELECT i.*, 
-                   (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 1 
-                    AND created_at > COALESCE(
-                        (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 0),
-                        i.created_at
-                    )) as unread_replies
-            FROM inquiries i
-            WHERE i.user_id = ?
-            ORDER BY i.updated_at DESC
-        ''', (current_user.id,))
-    
-    inquiries = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    conn.close()
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('''
+                SELECT i.*, 
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = TRUE 
+                        AND created_at > COALESCE(
+                            (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = FALSE),
+                            i.created_at
+                        )) as unread_replies
+                FROM inquiries i
+                WHERE i.user_id = %s
+                ORDER BY i.updated_at DESC
+            ''', (current_user.id,))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT i.*, 
+                       (SELECT COUNT(*) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 1 
+                        AND created_at > COALESCE(
+                            (SELECT MAX(created_at) FROM inquiry_replies WHERE inquiry_id = i.id AND is_admin_reply = 0),
+                            i.created_at
+                        )) as unread_replies
+                FROM inquiries i
+                WHERE i.user_id = ?
+                ORDER BY i.updated_at DESC
+            ''', (current_user.id,))
+        
+        inquiries = [dict(row) for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] inquiry_list: {e}", flush=True)
+        inquiries = []
     
     return render_template('inquiry/list.html', 
                          inquiries=inquiries,
@@ -17822,7 +17920,8 @@ def admin_inquiries():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        flash('問い合わせテーブルの初期化中です。しばらくお待ちください。', 'info')
+        print(f"[ERROR] admin_inquiries error: {e}", flush=True)
+        flash(f'問い合わせの読み込みでエラーが発生しました: {str(e)[:100]}', 'error')
         return render_template('admin/inquiries.html',
                              inquiries=[],
                              categories=INQUIRY_CATEGORIES,
@@ -18463,6 +18562,7 @@ def sales_agency_apply():
     """販売代行サービス申請"""
     service_type = request.form.get('service_type')
     merchandise_ids = request.form.getlist('merchandise_ids')
+    print(f"[DEBUG] sales_agency_apply: service_type={service_type}, merchandise_ids={merchandise_ids}", flush=True)
     
     if not service_type or service_type not in SALES_AGENCY_SERVICE_TYPES:
         flash('サービス種別を選択してください', 'error')
@@ -18504,6 +18604,7 @@ def sales_agency_apply():
                 ''', (request_id, int(m_id)))
         
         conn.commit()
+        print(f"[DEBUG] sales_agency_apply: request_id={request_id} created successfully", flush=True)
         cur.close()
         conn.close()
         
@@ -18542,53 +18643,56 @@ def sales_agency_apply():
 @login_required
 def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
-    conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('''
-            SELECT sar.*, u.display_name as processor_name
-            FROM sales_agency_requests sar
-            LEFT JOIN users u ON sar.processed_by = u.id
-            WHERE sar.user_id = %s
-            ORDER BY sar.created_at DESC
-        ''', (current_user.id,))
-    else:
-        cur = conn.cursor()
-        cur.execute('''
-            SELECT sar.*, u.display_name as processor_name
-            FROM sales_agency_requests sar
-            LEFT JOIN users u ON sar.processed_by = u.id
-            WHERE sar.user_id = ?
-            ORDER BY sar.created_at DESC
-        ''', (current_user.id,))
-    
-    requests_raw = cur.fetchall()
     requests = []
-    
-    for req in requests_raw:
-        req_dict = dict(req)
-        # 関連商品を取得
+    try:
+        conn = get_db()
         if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute('''
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                FROM sales_agency_request_items sari
-                JOIN merchandise m ON sari.merchandise_id = m.id
-                WHERE sari.request_id = %s
-            ''', (req_dict['id'],))
+                SELECT sar.*, u.display_name as processor_name
+                FROM sales_agency_requests sar
+                LEFT JOIN users u ON sar.processed_by = u.id
+                WHERE sar.user_id = %s
+                ORDER BY sar.created_at DESC
+            ''', (current_user.id,))
         else:
+            cur = conn.cursor()
             cur.execute('''
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                FROM sales_agency_request_items sari
-                JOIN merchandise m ON sari.merchandise_id = m.id
-                WHERE sari.request_id = ?
-            ''', (req_dict['id'],))
+                SELECT sar.*, u.display_name as processor_name
+                FROM sales_agency_requests sar
+                LEFT JOIN users u ON sar.processed_by = u.id
+                WHERE sar.user_id = ?
+                ORDER BY sar.created_at DESC
+            ''', (current_user.id,))
         
-        items = [dict(item) for item in cur.fetchall()]
-        req_dict['items'] = items
-        requests.append(req_dict)
-    
-    cur.close()
-    conn.close()
+        requests_raw = cur.fetchall()
+        
+        for req in requests_raw:
+            req_dict = dict(req)
+            # 関連商品を取得
+            if DATABASE_URL:
+                cur.execute('''
+                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                    FROM sales_agency_request_items sari
+                    JOIN merchandise m ON sari.merchandise_id = m.id
+                    WHERE sari.request_id = %s
+                ''', (req_dict['id'],))
+            else:
+                cur.execute('''
+                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
+                    FROM sales_agency_request_items sari
+                    JOIN merchandise m ON sari.merchandise_id = m.id
+                    WHERE sari.request_id = ?
+                ''', (req_dict['id'],))
+            
+            items = [dict(item) for item in cur.fetchall()]
+            req_dict['items'] = items
+            requests.append(req_dict)
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] sales_agency_my_requests: {e}", flush=True)
     
     return render_template('sales_agency_requests.html',
                          requests=requests,
@@ -18604,6 +18708,7 @@ def admin_sales_agency_requests():
         return redirect(url_for('index'))
     
     status_filter = request.args.get('status', 'all')
+    print(f"[DEBUG] admin_sales_agency_requests called, status_filter={status_filter}", flush=True)
     
     # デフォルト値
     requests_list = []
@@ -18685,6 +18790,7 @@ def admin_sales_agency_requests():
                 ''')
         
         requests_raw = cur.fetchall()
+        print(f"[DEBUG] admin_sales_agency_requests: fetched {len(requests_raw)} requests", flush=True)
         
         for req in requests_raw:
             req_dict = dict(req)

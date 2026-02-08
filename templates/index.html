@@ -1454,6 +1454,23 @@
     border-radius: 12px;
 }
 
+/* 承認待ちバッジ */
+.badge-waiting {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    border-radius: 20px;
+    animation: pulse-waiting 2s infinite;
+}
+
+@keyframes pulse-waiting {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 /* 売却申請ボタン */
 .btn-sale-request {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
@@ -2096,8 +2113,11 @@
                         {% else %}
                         {# ユーザー向け #}
                         {% if not item.sale_date %}
-                            {% if item.pending_sale_request %}
-                            {# 申請中の場合は修正ボタン #}
+                            {% if item.pending_sales_agency %}
+                            {# 販売代行申請中の場合は承認待ちバッジ #}
+                            <span class="badge badge-waiting">承認待ち</span>
+                            {% elif item.pending_sale_request %}
+                            {# 売却申請中の場合は修正ボタン #}
                             <button class="btn btn-sm btn-edit-request" onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
                                 申請修正
                             </button>
@@ -2241,8 +2261,11 @@
             {% else %}
             {# ユーザー向け #}
             {% if not item.sale_date %}
-                {% if item.pending_sale_request %}
-                {# 申請中の場合は修正ボタン #}
+                {% if item.pending_sales_agency %}
+                {# 販売代行申請中の場合は承認待ちバッジ #}
+                <span class="badge badge-waiting">承認待ち</span>
+                {% elif item.pending_sale_request %}
+                {# 売却申請中の場合は修正ボタン #}
                 <button class="btn btn-sm btn-edit-request" onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
                     申請修正
                 </button>
@@ -3322,6 +3345,14 @@ document.getElementById('salesAgencyModal').addEventListener('click', function(e
 
 .sales-agency-close-btn:hover {
     color: #1e293b;
+}
+
+.sales-agency-modal-content form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .sales-agency-modal-body {

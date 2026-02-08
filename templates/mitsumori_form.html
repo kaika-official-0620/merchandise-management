@@ -78,6 +78,9 @@
                     <tr>
                         <td colspan="3">
                             <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                            {% if my_merchandise %}
+                            <button type="button" class="btn btn-info" id="select-merchandise" style="margin-left: 8px;">📦 商品から選択</button>
+                            {% endif %}
                         </td>
                     </tr>
                 </tfoot>
@@ -97,6 +100,48 @@
         <button type="submit" name="status" value="completed" class="btn btn-primary">完了として保存</button>
     </div>
 </form>
+
+<!-- 商品選択モーダル -->
+{% if my_merchandise %}
+<div id="merchandiseModal" class="merchandise-modal">
+    <div class="merchandise-modal-content">
+        <div class="merchandise-modal-header">
+            <h3>📦 商品から選択</h3>
+            <button type="button" class="merchandise-modal-close" onclick="closeMerchandiseModal()">&times;</button>
+        </div>
+        <div class="merchandise-modal-body">
+            <div class="merchandise-search">
+                <input type="text" id="merchandiseSearch" placeholder="商品名・ブランド名で検索..." class="form-control">
+            </div>
+            <div class="merchandise-list" id="merchandiseList">
+                {% for item in my_merchandise %}
+                <div class="merchandise-item" data-id="{{ item.id }}" data-name="{{ item.product_name }}" data-brand="{{ item.brand_name or '' }}">
+                    <div class="merchandise-check">
+                        <input type="checkbox" id="merch_{{ item.id }}" class="merchandise-checkbox">
+                    </div>
+                    <div class="merchandise-photo">
+                        {% if item.photo_path %}
+                        <img src="{{ url_for('static', filename='uploads/' + item.photo_path) }}" alt="">
+                        {% else %}
+                        <div class="no-photo">📷</div>
+                        {% endif %}
+                    </div>
+                    <div class="merchandise-info">
+                        <div class="merchandise-name">{{ item.product_name }}</div>
+                        <div class="merchandise-brand">{{ item.brand_name or '-' }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="merchandise-modal-footer">
+            <span class="selected-count">0件選択中</span>
+            <button type="button" class="btn btn-secondary" onclick="closeMerchandiseModal()">キャンセル</button>
+            <button type="button" class="btn btn-primary" onclick="addSelectedMerchandise()">選択した商品を追加</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <style>
 .mitsumori-form {
@@ -217,7 +262,179 @@
 .btn-primary:hover { background: #2563eb; }
 .btn-secondary { background: #6c757d; color: white; }
 .btn-danger { background: #dc3545; color: white; }
+.btn-info { background: #059669; color: white; }
+.btn-info:hover { background: #047857; }
 .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+/* 商品選択モーダル */
+.merchandise-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.merchandise-modal.open {
+    display: flex;
+}
+
+.merchandise-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.merchandise-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+}
+
+.merchandise-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.merchandise-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+}
+
+.merchandise-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    min-height: 0;
+}
+
+.merchandise-search {
+    margin-bottom: 1rem;
+}
+
+.merchandise-search input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.merchandise-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.merchandise-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.merchandise-item:hover {
+    border-color: #059669;
+    background: #f0fdf4;
+}
+
+.merchandise-item.selected {
+    border-color: #059669;
+    background: #d1fae5;
+}
+
+.merchandise-check {
+    flex-shrink: 0;
+}
+
+.merchandise-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.merchandise-photo {
+    width: 50px;
+    height: 50px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f1f5f9;
+}
+
+.merchandise-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.merchandise-photo .no-photo {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #94a3b8;
+}
+
+.merchandise-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.merchandise-name {
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.merchandise-brand {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.merchandise-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 0 0 12px 12px;
+}
+
+.selected-count {
+    margin-right: auto;
+    font-size: 0.9rem;
+    color: #059669;
+    font-weight: 600;
+}
 
 /* スマホ用スタイル */
 @media (max-width: 768px) {
@@ -348,6 +565,111 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.item-row').forEach(row => {
         attachRowEvents(row);
     });
+    
+    // 商品選択モーダル
+    const selectMerchandiseBtn = document.getElementById('select-merchandise');
+    if (selectMerchandiseBtn) {
+        selectMerchandiseBtn.addEventListener('click', openMerchandiseModal);
+    }
+    
+    // 商品アイテムのクリックでチェックボックス切り替え
+    document.querySelectorAll('.merchandise-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            if (e.target.type !== 'checkbox') {
+                const checkbox = this.querySelector('.merchandise-checkbox');
+                checkbox.checked = !checkbox.checked;
+            }
+            this.classList.toggle('selected', this.querySelector('.merchandise-checkbox').checked);
+            updateSelectedCount();
+        });
+    });
+    
+    // 検索機能
+    const searchInput = document.getElementById('merchandiseSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('.merchandise-item').forEach(item => {
+                const name = item.dataset.name.toLowerCase();
+                const brand = item.dataset.brand.toLowerCase();
+                if (name.includes(query) || brand.includes(query)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    }
 });
+
+// モーダル操作
+function openMerchandiseModal() {
+    document.getElementById('merchandiseModal').classList.add('open');
+    // チェック状態をリセット
+    document.querySelectorAll('.merchandise-checkbox').forEach(cb => {
+        cb.checked = false;
+        cb.closest('.merchandise-item').classList.remove('selected');
+    });
+    updateSelectedCount();
+}
+
+function closeMerchandiseModal() {
+    document.getElementById('merchandiseModal').classList.remove('open');
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.merchandise-checkbox:checked').length;
+    document.querySelector('.selected-count').textContent = count + '件選択中';
+}
+
+function addSelectedMerchandise() {
+    const itemsBody = document.getElementById('items-body');
+    const selectedItems = document.querySelectorAll('.merchandise-checkbox:checked');
+    
+    selectedItems.forEach(checkbox => {
+        const item = checkbox.closest('.merchandise-item');
+        const name = item.dataset.name;
+        const brand = item.dataset.brand;
+        const displayName = brand ? `${name}（${brand}）` : name;
+        
+        // 空の行があれば使う、なければ新規追加
+        let emptyRow = null;
+        document.querySelectorAll('.item-row input[name="item_name[]"]').forEach(input => {
+            if (!input.value.trim() && !emptyRow) {
+                emptyRow = input.closest('.item-row');
+            }
+        });
+        
+        if (emptyRow) {
+            emptyRow.querySelector('input[name="item_name[]"]').value = displayName;
+        } else {
+            const rowCount = itemsBody.querySelectorAll('.item-row').length;
+            const newRow = document.createElement('tr');
+            newRow.className = 'item-row';
+            newRow.innerHTML = `
+                <td class="item-no">${rowCount + 1}</td>
+                <td><input type="text" name="item_name[]" class="form-control" value="${displayName}"></td>
+                <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+            `;
+            itemsBody.appendChild(newRow);
+            
+            // 削除ボタンにイベント追加
+            newRow.querySelector('.remove-row').addEventListener('click', function() {
+                newRow.remove();
+                renumberRows();
+            });
+        }
+    });
+    
+    renumberRows();
+    closeMerchandiseModal();
+}
+
+function renumberRows() {
+    const rows = document.querySelectorAll('#items-body .item-row');
+    rows.forEach((row, index) => {
+        row.querySelector('.item-no').textContent = index + 1;
+    });
+}
 </script>
 {% endblock %}
