@@ -12112,8 +12112,8 @@ def user_invoice_add():
         
         for i, name in enumerate(product_names):
             if name.strip():
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 subtotal += amount
                 
@@ -12252,8 +12252,8 @@ def user_invoice_edit(id):
         
         for i, name in enumerate(product_names):
             if name.strip():
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 subtotal += amount
                 
@@ -12485,8 +12485,8 @@ def user_mitsumori_add():
         items_data = []
         for i, name in enumerate(item_names):
             if name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 total_amount += amount
                 items_data.append({
@@ -12643,8 +12643,8 @@ def user_mitsumori_edit(id):
         items_data = []
         for i, name in enumerate(item_names):
             if name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 total_amount += amount
                 items_data.append({
@@ -12883,8 +12883,8 @@ def user_keisan_add():
         items_data = []
         for i, name in enumerate(item_names):
             if name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 total_amount += amount
                 items_data.append({
@@ -13019,8 +13019,8 @@ def user_keisan_edit(id):
         items_data = []
         for i, name in enumerate(item_names):
             if name:
-                qty = int(quantities[i]) if quantities[i] else 1
-                price = int(unit_prices[i]) if unit_prices[i] else 0
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                price = int(unit_prices[i]) if i < len(unit_prices) and unit_prices[i] else 0
                 amount = qty * price
                 total_amount += amount
                 items_data.append({
@@ -14166,7 +14166,7 @@ def admin_kaitori_add():
             # 商品明細を保存
             for i, item_name in enumerate(item_names):
                 if item_name.strip():
-                    amount = int(amounts[i]) if amounts[i] else 0
+                    amount = int(amounts[i]) if i < len(amounts) and amounts[i] else 0
                     brand = brand_names[i] if i < len(brand_names) else ''
                     p_date = purchase_dates[i] if i < len(purchase_dates) else None
                     condition = item_conditions[i] if i < len(item_conditions) else ''
