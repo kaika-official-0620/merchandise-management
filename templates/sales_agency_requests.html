@@ -208,6 +208,11 @@
 <div class="sales-agency-history-container">
     <a href="{{ url_for('index') }}" class="back-link">← 商品一覧に戻る</a>
     
+    <!-- デバッグ情報 -->
+    <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;">
+        申請データ件数: {{ requests|length }}件
+    </div>
+    
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}

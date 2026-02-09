@@ -39,10 +39,14 @@
                 <td>{{ doc.issue_date }}</td>
                 <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
                 <td>
-                    {% if doc.status == 'completed' %}
-                        <span class="status-badge status-completed">送信済</span>
+                    {% if doc.status == 'approved' %}
+                        <span class="status-badge status-approved">承認済</span>
+                    {% elif doc.status == 'rejected' %}
+                        <span class="status-badge status-rejected">却下</span>
                     {% elif doc.status == 'sent' %}
-                        <span class="status-badge status-sent">送信済</span>
+                        <span class="status-badge status-new">新規</span>
+                    {% elif doc.status == 'completed' %}
+                        <span class="status-badge status-completed">完了</span>
                     {% else %}
                         <span class="status-badge status-draft">下書き</span>
                     {% endif %}
@@ -50,6 +54,14 @@
                 <td class="actions">
                     <a href="{{ url_for('admin_mitsumori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('admin_mitsumori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status == 'sent' %}
+                    <form action="{{ url_for('admin_mitsumori_approve', id=doc.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-approve">承認</button>
+                    </form>
+                    <form action="{{ url_for('admin_mitsumori_reject', id=doc.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-reject">却下</button>
+                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}
@@ -95,11 +107,19 @@
 .status-completed { background: #d4edda; color: #155724; }
 .status-sent { background: #d4edda; color: #155724; }
 .status-draft { background: #fff3cd; color: #856404; }
+.status-new { background: #fee2e2; color: #dc2626; font-weight: 600; }
+.status-approved { background: #d1fae5; color: #059669; }
+.status-rejected { background: #e2e8f0; color: #64748b; }
 
 .user-name { 
     font-weight: 500; 
     color: #2563eb;
 }
+
+.btn-approve { background: #10b981; color: white; }
+.btn-approve:hover { background: #059669; }
+.btn-reject { background: #6b7280; color: white; }
+.btn-reject:hover { background: #4b5563; }
 
 .btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
 .btn-info { background: #17a2b8; color: white; }

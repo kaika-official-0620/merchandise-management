@@ -22,12 +22,16 @@
     </div>
 
     <!-- 見積依頼書 -->
-    <div class="doc-type-card">
-        <h3>見積依頼書</h3>
-        <p class="doc-type-desc">開花から法人向けの見積依頼書。</p>
+    <div class="doc-type-card {% if mitsumori_new_count > 0 %}has-new{% endif %}">
+        <h3>
+            見積依頼書
+            {% if mitsumori_new_count > 0 %}
+            <span class="new-badge">{{ mitsumori_new_count }}</span>
+            {% endif %}
+        </h3>
+        <p class="doc-type-desc">ユーザーからの見積依頼書を確認。</p>
         <div class="doc-type-actions">
             <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
         </div>
         <div class="doc-type-count">
             <span class="count-number">{{ mitsumori_count }}</span> 件
@@ -180,6 +184,34 @@
     margin: 0 0 8px 0;
     font-size: 1.25rem;
     color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.doc-type-card.has-new {
+    border-color: #ef4444;
+    border-width: 2px;
+}
+
+.new-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 50%;
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
 }
 
 .doc-type-desc {

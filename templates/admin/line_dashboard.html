@@ -11,13 +11,14 @@
     <div class="line-card settings-card">
         <h2>API設定</h2>
         <form method="POST" action="{{ url_for('admin_line_settings') }}">
-            <div class="form-group toggle-group">
-                <label class="toggle-label">
-                    <input type="checkbox" name="is_enabled" {% if settings.is_enabled %}checked{% endif %}>
-                    <span class="toggle-switch"></span>
-                </label>
+            <div class="form-group line-toggle-group">
                 <div class="toggle-info">
-                    <span class="toggle-text">LINE連携を有効にする</span>
+                    <span class="toggle-text">LINE連携</span>
+                </div>
+                <div class="line-toggle-buttons">
+                    <button type="button" class="line-toggle-btn off {% if not settings.is_enabled %}active{% endif %}" onclick="setLineEnabled(false)">無効</button>
+                    <button type="button" class="line-toggle-btn on {% if settings.is_enabled %}active{% endif %}" onclick="setLineEnabled(true)">有効</button>
+                    <input type="hidden" name="is_enabled" id="is_enabled_input" value="{% if settings.is_enabled %}on{% endif %}">
                 </div>
             </div>
             
@@ -246,6 +247,69 @@
 .webhook-url input {
     flex: 1;
     background: #f8fafc;
+}
+
+/* LINE有効/無効トグルボタン */
+.line-toggle-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1.25rem;
+}
+
+.line-toggle-group .toggle-info {
+    flex: 1;
+}
+
+.line-toggle-group .toggle-text {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.line-toggle-buttons {
+    display: flex;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.line-toggle-btn {
+    padding: 10px 24px;
+    border: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.line-toggle-btn.off {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.line-toggle-btn.off.active {
+    background: #ef4444;
+    color: white;
+}
+
+.line-toggle-btn.on {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.line-toggle-btn.on.active {
+    background: #10b981;
+    color: white;
+}
+
+.line-toggle-btn:hover:not(.active) {
+    background: #cbd5e1;
 }
 
 /* トグルスイッチ */
@@ -550,6 +614,24 @@ function copyWebhookUrl() {
     input.select();
     document.execCommand('copy');
     alert('URLをコピーしました');
+}
+
+function setLineEnabled(isEnabled) {
+    const input = document.getElementById('is_enabled_input');
+    const buttons = document.querySelectorAll('.line-toggle-btn');
+    
+    // hidden inputの値を設定
+    input.value = isEnabled ? 'on' : '';
+    
+    // ボタンのactive状態を更新
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+        if (isEnabled && btn.classList.contains('on')) {
+            btn.classList.add('active');
+        } else if (!isEnabled && btn.classList.contains('off')) {
+            btn.classList.add('active');
+        }
+    });
 }
 
 function toggleScheduled(id) {

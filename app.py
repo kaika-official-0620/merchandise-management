@@ -13893,8 +13893,12 @@ def admin_documents_dashboard():
         cur.execute("SELECT COUNT(*) as count FROM shikiriosho")
         seisan_count = cur.fetchone()['count']
         
-        # 見積依頼書カウント（管理者向けは今後実装）
-        mitsumori_count = 0
+        # 見積依頼書カウント（ユーザーからの送信済み）
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE status = 'sent'")
+        mitsumori_new_count = cur.fetchone()['count']
+        
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori")
+        mitsumori_count = cur.fetchone()['count']
         
         # 買取明細書カウント
         cur.execute("SELECT COUNT(*) as count FROM invoices")
@@ -13941,8 +13945,14 @@ def admin_documents_dashboard():
         result = cur.fetchone()
         seisan_count = result[0] if result else 0
         
-        # 見積依頼書カウント（管理者向けは今後実装）
-        mitsumori_count = 0
+        # 見積依頼書カウント（ユーザーからの送信済み）
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE status = 'sent'")
+        result = cur.fetchone()
+        mitsumori_new_count = result[0] if result else 0
+        
+        cur.execute("SELECT COUNT(*) as count FROM user_mitsumori")
+        result = cur.fetchone()
+        mitsumori_count = result[0] if result else 0
         
         # 買取明細書カウント
         cur.execute("SELECT COUNT(*) as count FROM invoices")
@@ -13992,6 +14002,7 @@ def admin_documents_dashboard():
     return render_template('admin/documents_dashboard.html',
         seisan_count=seisan_count,
         mitsumori_count=mitsumori_count,
+        mitsumori_new_count=mitsumori_new_count,
         kaitori_count=kaitori_count,
         pending_invoices=pending_invoices,
         user_mitsumori_summary=user_mitsumori_summary,
@@ -14491,7 +14502,64 @@ def admin_mitsumori_edit(id):
 @admin_required
 def admin_mitsumori_delete(id):
     """見積依頼書削除"""
-    flash('この機能は準備中です', 'info')
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s', (id,))
+            cur.execute('DELETE FROM user_mitsumori WHERE id = %s', (id,))
+        else:
+            cur = conn.cursor()
+            cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?', (id,))
+            cur.execute('DELETE FROM user_mitsumori WHERE id = ?', (id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('見積依頼書を削除しました', 'success')
+    except Exception as e:
+        flash(f'削除エラー: {str(e)}', 'error')
+    return redirect(url_for('admin_mitsumori_list'))
+
+@app.route('/admin/mitsumori/<int:id>/approve', methods=['POST'])
+@login_required
+@admin_required
+def admin_mitsumori_approve(id):
+    """見積依頼書承認"""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("UPDATE user_mitsumori SET status = 'approved' WHERE id = %s", (id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("UPDATE user_mitsumori SET status = 'approved' WHERE id = ?", (id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('見積依頼書を承認しました', 'success')
+    except Exception as e:
+        flash(f'承認エラー: {str(e)}', 'error')
+    return redirect(url_for('admin_mitsumori_list'))
+
+@app.route('/admin/mitsumori/<int:id>/reject', methods=['POST'])
+@login_required
+@admin_required
+def admin_mitsumori_reject(id):
+    """見積依頼書却下"""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("UPDATE user_mitsumori SET status = 'rejected' WHERE id = %s", (id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("UPDATE user_mitsumori SET status = 'rejected' WHERE id = ?", (id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('見積依頼書を却下しました', 'info')
+    except Exception as e:
+        flash(f'却下エラー: {str(e)}', 'error')
     return redirect(url_for('admin_mitsumori_list'))
 
 @app.route('/admin/mitsumori/<int:id>/pdf')
@@ -19013,6 +19081,7 @@ def sales_agency_my_requests():
             ''', (current_user.id,))
         
         requests_raw = cur.fetchall()
+        print(f"[DEBUG] sales_agency_my_requests: found {len(requests_raw)} requests for user_id={current_user.id}", flush=True)
         
         for req in requests_raw:
             req_dict = dict(req)
