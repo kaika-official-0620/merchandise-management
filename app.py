@@ -19147,8 +19147,8 @@ def sales_agency_my_requests():
                     WHERE sari.request_id = ?
                 ''', (req_dict['id'],))
             
-            items = [dict(item) for item in cur.fetchall()]
-            req_dict['items'] = items
+            request_items = [dict(item) for item in cur.fetchall()]
+            req_dict['request_items'] = request_items
             requests.append(req_dict)
         
         cur.close()
@@ -19160,7 +19160,7 @@ def sales_agency_my_requests():
     
     print(f"[DEBUG] sales_agency_my_requests: requests count = {len(requests)}", flush=True)
     for i, req in enumerate(requests):
-        print(f"[DEBUG] Request {i}: id={req.get('id')}, service_type={req.get('service_type')}, status={req.get('status')}, items_count={len(req.get('items', []))}", flush=True)
+        print(f"[DEBUG] Request {i}: id={req.get('id')}, service_type={req.get('service_type')}, status={req.get('status')}, items_count={len(req.get('request_items', []))}", flush=True)
     
     # エラーハンドリングを削除し、グローバルエラーハンドラーに任せる
     return render_template('sales_agency_requests.html',

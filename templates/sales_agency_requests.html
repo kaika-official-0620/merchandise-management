@@ -234,13 +234,13 @@
                 <div class="request-info">
                     <span class="request-service">{{ service_types.get(req.service_type, req.service_type) }}</span>
                     <span class="request-date">申請日: {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
-                    <span class="request-item-count">{{ req.items|length }}点</span>
+                    <span class="request-item-count">{{ req.request_items|length }}点</span>
                 </div>
                 <span class="request-status {{ req.status }}">{{ statuses.get(req.status, req.status) }}</span>
             </div>
             <div class="request-body">
                 <div class="request-items">
-                    {% for item in req.items %}
+                    {% for item in req.request_items %}
                     <div class="request-item">
                         {% if item.photo_path %}
                         <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name }}" onerror="this.style.display='none'">
