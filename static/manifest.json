@@ -1,7 +1,7 @@
 {
-    "name": "物販管理システム",
-    "short_name": "物販管理",
-    "description": "物販商品の仕入れ・販売を管理するシステム",
+    "name": "開花在庫管理",
+    "short_name": "開花在庫管理",
+    "description": "株式会社開花の在庫管理システム",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#f8fafc",
