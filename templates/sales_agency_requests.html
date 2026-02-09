@@ -210,7 +210,18 @@
     
     <!-- デバッグ情報 -->
     <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;">
-        申請データ件数: {{ requests|length }}件
+        <p><strong>現在のユーザー:</strong> {{ current_user.display_name or current_user.username }} (ID: {{ current_user.id }})</p>
+        <p><strong>あなたの申請:</strong> {{ requests|length }}件</p>
+        {% if all_requests_debug %}
+        <details style="margin-top: 10px;">
+            <summary style="cursor: pointer; color: #b45309;">DBの全申請データを確認（デバッグ用）</summary>
+            <div style="margin-top: 8px; background: #fff; padding: 8px; border-radius: 4px; font-size: 0.8rem;">
+                {% for r in all_requests_debug %}
+                <p>ID:{{ r.id }} | ユーザーID:{{ r.user_id }} | サービス:{{ r.service_type }} | ステータス:{{ r.status }}</p>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
     </div>
     
     {% if requests %}

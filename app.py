@@ -19037,6 +19037,7 @@ def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
     print(f"[DEBUG] sales_agency_my_requests called by user_id={current_user.id}", flush=True)
     requests = []
+    all_requests_debug = []
     try:
         print("[DEBUG] Getting DB connection...", flush=True)
         conn = get_db()
@@ -19083,6 +19084,17 @@ def sales_agency_my_requests():
         requests_raw = cur.fetchall()
         print(f"[DEBUG] sales_agency_my_requests: found {len(requests_raw)} requests for user_id={current_user.id}", flush=True)
         
+        # デバッグ: 全申請を確認
+        all_requests_debug = []
+        if DATABASE_URL:
+            cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
+            all_requests_debug = [dict(r) for r in cur.fetchall()]
+            print(f"[DEBUG] All recent requests in DB: {all_requests_debug}", flush=True)
+        else:
+            cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
+            all_requests_debug = [dict(r) for r in cur.fetchall()]
+            print(f"[DEBUG] All recent requests in DB: {all_requests_debug}", flush=True)
+        
         for req in requests_raw:
             req_dict = dict(req)
             # datetime を文字列に変換
@@ -19125,7 +19137,8 @@ def sales_agency_my_requests():
         return render_template('sales_agency_requests.html',
                              requests=requests,
                              service_types=SALES_AGENCY_SERVICE_TYPES,
-                             statuses=SALES_AGENCY_STATUS)
+                             statuses=SALES_AGENCY_STATUS,
+                             all_requests_debug=all_requests_debug)
     except Exception as e:
         print(f"[ERROR] sales_agency_my_requests template: {e}", flush=True)
         import traceback
