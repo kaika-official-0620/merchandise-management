@@ -699,9 +699,13 @@
     height: 80vh;
     display: flex;
     overflow-x: auto;
+    overflow-y: hidden;
     scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
 }
 
 .item-lightbox-scroll-container::-webkit-scrollbar {
@@ -717,6 +721,7 @@
     justify-content: center;
     align-items: center;
     scroll-snap-align: start;
+    scroll-snap-stop: always;
 }
 
 .item-lightbox-scroll-container .lightbox-slide img {
@@ -724,6 +729,9 @@
     max-height: 100%;
     border-radius: 8px;
     object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .item-lightbox-footer {
@@ -3015,22 +3023,30 @@ function openItemLightbox(photos, index, productName) {
     document.getElementById('itemLightbox').classList.add('active');
     document.body.style.overflow = 'hidden';
     
-    // 指定したインデックスにスクロール
-    setTimeout(() => {
+    // 指定したインデックスにスクロール（レイアウト確定後に実行）
+    requestAnimationFrame(() => {
         const slideWidth = container.offsetWidth;
         container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
         updateItemLightboxCounter();
-    }, 10);
+    });
     
-    // スクロールイベントでカウンター更新
-    container.onscroll = function() {
-        const slideWidth = container.offsetWidth;
-        const newIndex = Math.round(container.scrollLeft / slideWidth);
-        if (newIndex !== itemLightboxIndex) {
-            itemLightboxIndex = newIndex;
-            updateItemLightboxCounter();
-        }
+    // スクロールイベントでカウンター更新（パッシブリスナーでスムーズに）
+    let scrollTimeout;
+    const handleScroll = function() {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== itemLightboxIndex && newIndex >= 0 && newIndex < itemLightboxPhotos.length) {
+                itemLightboxIndex = newIndex;
+                updateItemLightboxCounter();
+            }
+        }, 50);
     };
+    
+    // 既存のイベントリスナーを削除してから追加
+    container.onscroll = null;
+    container.addEventListener('scroll', handleScroll, { passive: true });
 }
 
 function closeItemLightbox() {
@@ -3063,14 +3079,22 @@ function itemLightboxPrev() {
     const container = document.getElementById('itemLightboxScrollContainer');
     itemLightboxIndex = (itemLightboxIndex - 1 + itemLightboxPhotos.length) % itemLightboxPhotos.length;
     const slideWidth = container.offsetWidth;
-    container.scrollTo({ left: slideWidth * itemLightboxIndex, behavior: 'smooth' });
+    container.scrollTo({ 
+        left: slideWidth * itemLightboxIndex, 
+        behavior: 'smooth' 
+    });
+    updateItemLightboxCounter();
 }
 
 function itemLightboxNext() {
     const container = document.getElementById('itemLightboxScrollContainer');
     itemLightboxIndex = (itemLightboxIndex + 1) % itemLightboxPhotos.length;
     const slideWidth = container.offsetWidth;
-    container.scrollTo({ left: slideWidth * itemLightboxIndex, behavior: 'smooth' });
+    container.scrollTo({ 
+        left: slideWidth * itemLightboxIndex, 
+        behavior: 'smooth' 
+    });
+    updateItemLightboxCounter();
 }
 
 // キーボードナビゲーション
