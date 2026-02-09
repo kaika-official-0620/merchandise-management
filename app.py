@@ -18966,17 +18966,23 @@ def sales_agency_apply():
     
     try:
         conn = get_db()
+        print(f"[DEBUG] sales_agency_apply: got DB connection, DATABASE_URL is set: {DATABASE_URL is not None}", flush=True)
         if DATABASE_URL:
             cur = conn.cursor()
+            print(f"[DEBUG] sales_agency_apply: inserting into sales_agency_requests for user_id={current_user.id}, service_type={service_type}", flush=True)
             # 申請を作成
             cur.execute('''
                 INSERT INTO sales_agency_requests (user_id, service_type)
                 VALUES (%s, %s) RETURNING id
             ''', (current_user.id, service_type))
-            request_id = cur.fetchone()[0]
+            result = cur.fetchone()
+            print(f"[DEBUG] sales_agency_apply: INSERT result = {result}", flush=True)
+            request_id = result[0]
+            print(f"[DEBUG] sales_agency_apply: request_id = {request_id}", flush=True)
             
             # 商品を紐付け
             for m_id in merchandise_ids:
+                print(f"[DEBUG] sales_agency_apply: inserting item request_id={request_id}, merchandise_id={m_id}", flush=True)
                 cur.execute('''
                     INSERT INTO sales_agency_request_items (request_id, merchandise_id)
                     VALUES (%s, %s)
@@ -18997,6 +19003,15 @@ def sales_agency_apply():
         
         conn.commit()
         print(f"[DEBUG] sales_agency_apply: request_id={request_id} created successfully", flush=True)
+        
+        # 確認用：挿入後にデータを再取得して確認
+        if DATABASE_URL:
+            cur.execute("SELECT id, user_id, service_type, status FROM sales_agency_requests WHERE id = %s", (request_id,))
+        else:
+            cur.execute("SELECT id, user_id, service_type, status FROM sales_agency_requests WHERE id = ?", (request_id,))
+        check_row = cur.fetchone()
+        print(f"[DEBUG] sales_agency_apply: verification after insert: {check_row}", flush=True)
+        
         cur.close()
         conn.close()
         
@@ -19049,9 +19064,10 @@ def sales_agency_my_requests():
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables 
                     WHERE table_name = 'sales_agency_requests'
-                )
+                ) as table_exists
             """)
-            table_exists = cur.fetchone()[0]
+            result = cur.fetchone()
+            table_exists = result['table_exists'] if isinstance(result, dict) else result[0]
             print(f"[DEBUG] sales_agency_requests table exists: {table_exists}", flush=True)
             if not table_exists:
                 print("[ERROR] sales_agency_requests table does not exist!", flush=True)
@@ -19087,10 +19103,25 @@ def sales_agency_my_requests():
         # デバッグ: 全申請を確認
         try:
             cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
-            all_requests_debug = [dict(r) for r in cur.fetchall()]
-            print(f"[DEBUG] All recent requests in DB: {all_requests_debug}", flush=True)
+            raw_debug = cur.fetchall()
+            print(f"[DEBUG] Raw debug data count: {len(raw_debug)}", flush=True)
+            all_requests_debug = []
+            for r in raw_debug:
+                d = dict(r)
+                # datetime変換
+                if d.get('created_at') and hasattr(d['created_at'], 'strftime'):
+                    d['created_at'] = d['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                all_requests_debug.append(d)
+            print(f"[DEBUG] All recent sales_agency_requests in DB: {all_requests_debug}", flush=True)
+            
+            # 売却申請（sale_requests）も確認
+            cur.execute("SELECT COUNT(*) as cnt FROM sale_requests")
+            sale_req_count = cur.fetchone()
+            print(f"[DEBUG] sale_requests count: {sale_req_count}", flush=True)
         except Exception as debug_err:
             print(f"[DEBUG] Error fetching all requests: {debug_err}", flush=True)
+            import traceback
+            traceback.print_exc()
         
         for req in requests_raw:
             req_dict = dict(req)
