@@ -19085,15 +19085,12 @@ def sales_agency_my_requests():
         print(f"[DEBUG] sales_agency_my_requests: found {len(requests_raw)} requests for user_id={current_user.id}", flush=True)
         
         # デバッグ: 全申請を確認
-        all_requests_debug = []
-        if DATABASE_URL:
+        try:
             cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
             all_requests_debug = [dict(r) for r in cur.fetchall()]
             print(f"[DEBUG] All recent requests in DB: {all_requests_debug}", flush=True)
-        else:
-            cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
-            all_requests_debug = [dict(r) for r in cur.fetchall()]
-            print(f"[DEBUG] All recent requests in DB: {all_requests_debug}", flush=True)
+        except Exception as debug_err:
+            print(f"[DEBUG] Error fetching all requests: {debug_err}", flush=True)
         
         for req in requests_raw:
             req_dict = dict(req)
