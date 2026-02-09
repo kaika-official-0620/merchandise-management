@@ -19158,21 +19158,16 @@ def sales_agency_my_requests():
         import traceback
         traceback.print_exc()
     
-    try:
-        print(f"[DEBUG] sales_agency_my_requests: requests count = {len(requests)}", flush=True)
-        for i, req in enumerate(requests):
-            print(f"[DEBUG] Request {i}: id={req.get('id')}, service_type={req.get('service_type')}, status={req.get('status')}, items_count={len(req.get('items', []))}", flush=True)
-        return render_template('sales_agency_requests.html',
-                             requests=requests,
-                             service_types=SALES_AGENCY_SERVICE_TYPES,
-                             statuses=SALES_AGENCY_STATUS,
-                             all_requests_debug=all_requests_debug)
-    except Exception as e:
-        print(f"[ERROR] sales_agency_my_requests template: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        flash('ページの読み込みでエラーが発生しました', 'error')
-        return redirect(url_for('index'))
+    print(f"[DEBUG] sales_agency_my_requests: requests count = {len(requests)}", flush=True)
+    for i, req in enumerate(requests):
+        print(f"[DEBUG] Request {i}: id={req.get('id')}, service_type={req.get('service_type')}, status={req.get('status')}, items_count={len(req.get('items', []))}", flush=True)
+    
+    # エラーハンドリングを削除し、グローバルエラーハンドラーに任せる
+    return render_template('sales_agency_requests.html',
+                         requests=requests,
+                         service_types=SALES_AGENCY_SERVICE_TYPES,
+                         statuses=SALES_AGENCY_STATUS,
+                         all_requests_debug=all_requests_debug)
 
 @app.route('/admin/sales-agency-requests')
 @login_required
