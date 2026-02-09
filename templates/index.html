@@ -2193,7 +2193,8 @@
          data-listing-price="{{ item.listing_price or 0 }}"
          data-sale-price="{{ item.sale_price or 0 }}"
          data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
-         data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+         data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+         data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
         <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
             <div class="card-photo">
                 {% if item.all_photos and item.all_photos|length > 1 %}
@@ -3148,8 +3149,11 @@ function loadSalesAgencyItems() {
                        item.classList.contains('sold-item') ||
                        item.querySelector('[class*="sold"]') !== null;
         
-        // 売却済みでない商品のみ
-        if (!isSold) {
+        // 承認済みの販売代行申請があるかチェック
+        const isAgencyApproved = item.getAttribute('data-agency-approved') === 'true';
+        
+        // 売却済みでなく、承認済み販売代行申請がない商品のみ
+        if (!isSold && !isAgencyApproved) {
             const nameEl = item.querySelector('.card-name, .item-name, h3');
             const brandEl = item.querySelector('.card-brand, .brand-name');
             const priceEl = item.querySelector('.listing-price, .card-listing-price');

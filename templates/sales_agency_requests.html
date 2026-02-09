@@ -208,24 +208,6 @@
 <div class="sales-agency-history-container">
     <a href="{{ url_for('index') }}" class="back-link">← 商品一覧に戻る</a>
     
-    <!-- デバッグ情報 -->
-    <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem;">
-        <p><strong>現在のユーザー:</strong> {{ current_user.display_name or current_user.username }} (ID: {{ current_user.id }})</p>
-        <p><strong>あなたの申請:</strong> {{ requests|length }}件</p>
-        <details style="margin-top: 10px;" open>
-            <summary style="cursor: pointer; color: #b45309;">DBの全申請データを確認（デバッグ用）</summary>
-            <div style="margin-top: 8px; background: #fff; padding: 8px; border-radius: 4px; font-size: 0.8rem;">
-                {% if all_requests_debug %}
-                {% for r in all_requests_debug %}
-                <p>ID:{{ r.id }} | ユーザーID:{{ r.user_id }} | サービス:{{ r.service_type }} | ステータス:{{ r.status }}</p>
-                {% endfor %}
-                {% else %}
-                <p style="color: #dc2626;">DBに申請データがありません</p>
-                {% endif %}
-            </div>
-        </details>
-    </div>
-    
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}

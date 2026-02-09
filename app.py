@@ -19050,32 +19050,11 @@ def sales_agency_apply():
 @login_required
 def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
-    print(f"[DEBUG] sales_agency_my_requests called by user_id={current_user.id}", flush=True)
     requests = []
-    all_requests_debug = []
     try:
-        print("[DEBUG] Getting DB connection...", flush=True)
         conn = get_db()
-        print("[DEBUG] DB connection established", flush=True)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # テーブルが存在するか確認
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'sales_agency_requests'
-                ) as table_exists
-            """)
-            result = cur.fetchone()
-            table_exists = result['table_exists'] if isinstance(result, dict) else result[0]
-            print(f"[DEBUG] sales_agency_requests table exists: {table_exists}", flush=True)
-            if not table_exists:
-                print("[ERROR] sales_agency_requests table does not exist!", flush=True)
-                cur.close()
-                conn.close()
-                flash('データベーステーブルが初期化されていません。管理者に連絡してください。', 'error')
-                return redirect(url_for('index'))
-            
             cur.execute('''
                 SELECT sar.id, sar.user_id, sar.service_type, sar.status, sar.admin_note,
                        sar.created_at, sar.processed_at, sar.processed_by, sar.result_notified,
@@ -19085,7 +19064,6 @@ def sales_agency_my_requests():
                 WHERE sar.user_id = %s
                 ORDER BY sar.created_at DESC
             ''', (current_user.id,))
-            print("[DEBUG] Query executed successfully", flush=True)
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
@@ -19098,30 +19076,6 @@ def sales_agency_my_requests():
             ''', (current_user.id,))
         
         requests_raw = cur.fetchall()
-        print(f"[DEBUG] sales_agency_my_requests: found {len(requests_raw)} requests for user_id={current_user.id}", flush=True)
-        
-        # デバッグ: 全申請を確認
-        try:
-            cur.execute("SELECT id, user_id, service_type, status, created_at FROM sales_agency_requests ORDER BY created_at DESC LIMIT 10")
-            raw_debug = cur.fetchall()
-            print(f"[DEBUG] Raw debug data count: {len(raw_debug)}", flush=True)
-            all_requests_debug = []
-            for r in raw_debug:
-                d = dict(r)
-                # datetime変換
-                if d.get('created_at') and hasattr(d['created_at'], 'strftime'):
-                    d['created_at'] = d['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-                all_requests_debug.append(d)
-            print(f"[DEBUG] All recent sales_agency_requests in DB: {all_requests_debug}", flush=True)
-            
-            # 売却申請（sale_requests）も確認
-            cur.execute("SELECT COUNT(*) as cnt FROM sale_requests")
-            sale_req_count = cur.fetchone()
-            print(f"[DEBUG] sale_requests count: {sale_req_count}", flush=True)
-        except Exception as debug_err:
-            print(f"[DEBUG] Error fetching all requests: {debug_err}", flush=True)
-            import traceback
-            traceback.print_exc()
         
         for req in requests_raw:
             req_dict = dict(req)
@@ -19158,16 +19112,10 @@ def sales_agency_my_requests():
         import traceback
         traceback.print_exc()
     
-    print(f"[DEBUG] sales_agency_my_requests: requests count = {len(requests)}", flush=True)
-    for i, req in enumerate(requests):
-        print(f"[DEBUG] Request {i}: id={req.get('id')}, service_type={req.get('service_type')}, status={req.get('status')}, items_count={len(req.get('request_items', []))}", flush=True)
-    
-    # エラーハンドリングを削除し、グローバルエラーハンドラーに任せる
     return render_template('sales_agency_requests.html',
                          requests=requests,
                          service_types=SALES_AGENCY_SERVICE_TYPES,
-                         statuses=SALES_AGENCY_STATUS,
-                         all_requests_debug=all_requests_debug)
+                         statuses=SALES_AGENCY_STATUS)
 
 @app.route('/admin/sales-agency-requests')
 @login_required
