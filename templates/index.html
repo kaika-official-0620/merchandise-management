@@ -705,7 +705,12 @@
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     overscroll-behavior-x: contain;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
+    cursor: grab;
+}
+
+.item-lightbox-scroll-container:active {
+    cursor: grabbing;
 }
 
 .item-lightbox-scroll-container::-webkit-scrollbar {
@@ -721,7 +726,8 @@
     justify-content: center;
     align-items: center;
     scroll-snap-align: start;
-    scroll-snap-stop: always;
+    scroll-snap-stop: normal;
+    touch-action: pan-x;
 }
 
 .item-lightbox-scroll-container .lightbox-slide img {
@@ -729,9 +735,10 @@
     max-height: 100%;
     border-radius: 8px;
     object-fit: contain;
-    pointer-events: none;
+    pointer-events: auto;
     user-select: none;
     -webkit-user-drag: none;
+    touch-action: pan-x;
 }
 
 .item-lightbox-footer {
@@ -813,6 +820,8 @@
         width: 36px;
         height: 36px;
         font-size: 1rem;
+        opacity: 0.3;
+        pointer-events: none;
     }
     
     .item-lightbox-prev {
@@ -827,6 +836,10 @@
         top: 10px;
         right: 10px;
         position: fixed;
+    }
+    
+    .item-lightbox-scroll-container {
+        cursor: default;
     }
 }
 
@@ -3047,6 +3060,47 @@ function openItemLightbox(photos, index, productName) {
     // 既存のイベントリスナーを削除してから追加
     container.onscroll = null;
     container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // タッチイベントでスワイプ操作を改善
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isScrolling = false;
+    
+    const handleTouchStart = function(e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isScrolling = false;
+    };
+    
+    const handleTouchMove = function(e) {
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        const deltaX = Math.abs(touchX - touchStartX);
+        const deltaY = Math.abs(touchY - touchStartY);
+        
+        // 横方向のスワイプが縦方向より大きい場合のみスクロール
+        if (deltaX > deltaY && deltaX > 10) {
+            isScrolling = true;
+        }
+    };
+    
+    const handleTouchEnd = function(e) {
+        if (isScrolling) {
+            // スワイプ操作が完了したことを示す
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== itemLightboxIndex && newIndex >= 0 && newIndex < itemLightboxPhotos.length) {
+                itemLightboxIndex = newIndex;
+                updateItemLightboxCounter();
+            }
+        }
+        isScrolling = false;
+    };
+    
+    // タッチイベントリスナーを追加
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
 }
 
 function closeItemLightbox() {
