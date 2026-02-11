@@ -197,10 +197,14 @@
     border-radius: 10px;
     padding: 1rem;
     margin-bottom: 1.5rem;
+    margin-left: 0;
+    margin-right: 0;
 }
 
 .date-filter-form {
     width: 100%;
+    margin: 0;
+    padding: 0;
 }
 
 .date-filter-row {
@@ -218,6 +222,7 @@
     gap: 0.25rem;
     margin: 0;
     padding: 0;
+    flex: 0 0 auto;
 }
 
 .date-input-group label {
@@ -488,12 +493,26 @@
     }
     
     .date-filter-row {
-        flex-direction: column;
+        flex-direction: row;
         gap: 0.5rem;
+        align-items: flex-end;
+    }
+    
+    .date-input-group {
+        flex: 1 1 auto;
+        min-width: 0;
     }
     
     .date-separator {
-        display: none;
+        display: inline-block;
+        padding-bottom: 8px;
+        flex-shrink: 0;
+    }
+    
+    .date-filter-section {
+        padding: 0.75rem;
+        margin-left: 0;
+        margin-right: 0;
     }
 }
 </style>

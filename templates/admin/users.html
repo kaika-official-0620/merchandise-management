@@ -217,6 +217,38 @@
     .admin-table {
         min-width: 1200px;
     }
+    
+    .fee-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .fee-table .admin-table {
+        min-width: auto;
+        max-width: none;
+        width: auto;
+        table-layout: auto;
+    }
+    
+    .fee-table .admin-table th,
+    .fee-table .admin-table td {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    
+    .fee-table .admin-table th:first-child,
+    .fee-table .admin-table td:first-child {
+        padding-right: 0.3rem;
+    }
+    
+    .fee-table .admin-table th:last-child,
+    .fee-table .admin-table td:last-child {
+        padding-left: 0.3rem;
+    }
 }
 
 .fee-badge {
