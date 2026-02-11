@@ -12,6 +12,7 @@ import zipfile
 import shutil
 import tempfile
 import time
+import calendar
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -2160,9 +2161,10 @@ def permission_required(permission):
 def calculate_profit(sale_price, purchase_price, shipping_cost, commission):
     return sale_price - purchase_price - shipping_cost - commission
 
-def calculate_profit_rate(profit, sale_price):
-    if sale_price > 0:
-        return round((profit / sale_price) * 100, 1)
+def calculate_profit_rate(profit, purchase_price):
+    """利益率を計算（利益 ÷ 仕入れ金額 × 100）"""
+    if purchase_price > 0:
+        return round((profit / purchase_price) * 100, 1)
     return 0
 
 def calculate_expected_profit(listing_price, purchase_price, expected_shipping, expected_commission):
@@ -2770,7 +2772,7 @@ def index():
                 item_dict.get('shipping_cost', 0) or 0,
                 item_dict.get('commission', 0) or 0
             )
-            item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('sale_price', 0) or 0)
+            item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('purchase_price', 0) or 0)
         else:
             item_dict['expected_profit'] = calculate_expected_profit(
                 item_dict.get('listing_price', 0) or 0,
@@ -3625,8 +3627,16 @@ def user_analytics():
             sale_date_filter += f" AND sale_date >= '{start_month}-01'"
             purchase_date_filter += f" AND purchase_date >= '{start_month}-01'"
         if end_month:
-            sale_date_filter += f" AND sale_date <= '{end_month}-31'"
-            purchase_date_filter += f" AND purchase_date <= '{end_month}-31'"
+            # 月の最終日を正しく計算
+            try:
+                year, month = map(int, end_month.split('-'))
+                last_day = calendar.monthrange(year, month)[1]
+                end_date = f"{end_month}-{last_day:02d}"
+            except (ValueError, IndexError):
+                # パースに失敗した場合は31日を使用（フォールバック）
+                end_date = f"{end_month}-31"
+            sale_date_filter += f" AND sale_date <= '{end_date}'"
+            purchase_date_filter += f" AND purchase_date <= '{end_date}'"
         
         # 月別売上・利益推移
         cur.execute(f"""
@@ -3670,8 +3680,8 @@ def user_analytics():
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
-                CASE WHEN SUM(sale_price) > 0 
-                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                CASE WHEN SUM(purchase_price) > 0 
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(purchase_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
             WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
@@ -3775,8 +3785,16 @@ def user_analytics():
             sale_date_filter += f" AND sale_date >= '{start_month}-01'"
             purchase_date_filter += f" AND purchase_date >= '{start_month}-01'"
         if end_month:
-            sale_date_filter += f" AND sale_date <= '{end_month}-31'"
-            purchase_date_filter += f" AND purchase_date <= '{end_month}-31'"
+            # 月の最終日を正しく計算
+            try:
+                year, month = map(int, end_month.split('-'))
+                last_day = calendar.monthrange(year, month)[1]
+                end_date = f"{end_month}-{last_day:02d}"
+            except (ValueError, IndexError):
+                # パースに失敗した場合は31日を使用（フォールバック）
+                end_date = f"{end_month}-31"
+            sale_date_filter += f" AND sale_date <= '{end_date}'"
+            purchase_date_filter += f" AND purchase_date <= '{end_date}'"
         
         # 月別売上・利益推移
         cur.execute(f"""
@@ -3820,8 +3838,8 @@ def user_analytics():
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
-                CASE WHEN SUM(sale_price) > 0 
-                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
+                CASE WHEN SUM(purchase_price) > 0 
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(purchase_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
             WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
@@ -4507,7 +4525,7 @@ def view_item(id):
             item_dict.get('shipping_cost', 0) or 0,
             item_dict.get('commission', 0) or 0
         )
-        item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('sale_price', 0) or 0)
+        item_dict['profit_rate'] = calculate_profit_rate(item_dict['profit'], item_dict.get('purchase_price', 0) or 0)
     else:
         item_dict['expected_profit'] = calculate_expected_profit(
             item_dict.get('listing_price', 0) or 0,
@@ -4644,7 +4662,7 @@ def export_csv():
             item_dict.get('shipping_cost', 0) or 0,
             item_dict.get('commission', 0) or 0
         )
-        profit_rate = calculate_profit_rate(profit, item_dict.get('sale_price', 0) or 0)
+        profit_rate = calculate_profit_rate(profit, item_dict.get('purchase_price', 0) or 0)
         
         if is_shared_view:
             owner_name = shared_users.get(item_dict.get('user_id'), '不明')
@@ -4853,12 +4871,36 @@ def admin_dashboard():
 @permission_required('users')
 def admin_users():
     conn = get_db()
+    
+    # 検索クエリパラメータを取得
+    search_query = request.args.get('search', '').strip()
+    
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+        if search_query:
+            # PostgreSQL用の検索クエリ（ユーザー名、表示名、メールで検索）
+            cur.execute("""
+                SELECT * FROM users 
+                WHERE username ILIKE %s 
+                   OR display_name ILIKE %s 
+                   OR email ILIKE %s
+                ORDER BY created_at DESC
+            """, (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
+        else:
+            cur.execute("SELECT * FROM users ORDER BY created_at DESC")
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+        if search_query:
+            # SQLite用の検索クエリ（ユーザー名、表示名、メールで検索）
+            cur.execute("""
+                SELECT * FROM users 
+                WHERE username LIKE ? 
+                   OR display_name LIKE ? 
+                   OR email LIKE ?
+                ORDER BY created_at DESC
+            """, (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
+        else:
+            cur.execute("SELECT * FROM users ORDER BY created_at DESC")
         
     users = [dict(u) for u in cur.fetchall()]
     
@@ -4921,7 +4963,7 @@ def admin_users():
     cur.close()
     conn.close()
     
-    return render_template('admin/users.html', users=users)
+    return render_template('admin/users.html', users=users, search_query=search_query)
 
 @app.route('/admin/users/<int:id>/toggle_admin')
 @login_required
@@ -5484,8 +5526,8 @@ def admin_analytics():
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                           CASE WHEN SUM(sale_price) > 0 
-                                THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(sale_price) * 100, 1)
+                           CASE WHEN SUM(purchase_price) > 0 
+                                THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
                     WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
@@ -5690,8 +5732,8 @@ def admin_analytics():
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
-                           CASE WHEN SUM(sale_price) > 0 
-                                THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(sale_price) * 100, 1)
+                           CASE WHEN SUM(purchase_price) > 0 
+                                THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
                     WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
@@ -10534,9 +10576,9 @@ def admin_items():
             
             item['profit'] = calculate_profit(sale_price, purchase_price, shipping_cost, commission)
             
-            # 利益率計算
-            if sale_price > 0:
-                item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
+            # 利益率計算（利益 ÷ 仕入れ金額 × 100）
+            if purchase_price > 0:
+                item['profit_rate'] = round((item['profit'] / purchase_price) * 100, 1)
             else:
                 item['profit_rate'] = 0
         
@@ -10697,9 +10739,9 @@ def admin_user_products():
             
             item['profit'] = calculate_profit(sale_price, purchase_price, shipping_cost, commission)
             
-            # 利益率計算
-            if sale_price > 0:
-                item['profit_rate'] = round((item['profit'] / sale_price) * 100, 1)
+            # 利益率計算（利益 ÷ 仕入れ金額 × 100）
+            if purchase_price > 0:
+                item['profit_rate'] = round((item['profit'] / purchase_price) * 100, 1)
             else:
                 item['profit_rate'] = 0
         

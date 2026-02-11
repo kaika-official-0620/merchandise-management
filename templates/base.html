@@ -376,7 +376,7 @@
                         <div class="formula-item">
                             <span class="formula-label">利益率</span>
                             <span class="formula-eq">=</span>
-                            <span class="formula-value">利益 ÷ 売上 × 100</span>
+                            <span class="formula-value">利益 ÷ 仕入れ金額 × 100</span>
                         </div>
                     </div>
                 </div>
@@ -1204,8 +1204,8 @@
             // 利益計算
             const profit = salePrice - purchasePrice - platformFee - saleTypeFee - photoPackingFee - shipping;
             
-            // 利益率計算
-            const profitRate = salePrice > 0 ? (profit / salePrice * 100) : 0;
+            // 利益率計算（利益 ÷ 仕入れ金額 × 100）
+            const profitRate = purchasePrice > 0 ? (profit / purchasePrice * 100) : 0;
             
             // 結果表示
             document.getElementById('resultPlatformFee').textContent = '¥' + platformFee.toLocaleString();
@@ -1298,8 +1298,8 @@
                 }
             }
             
-            // 利益率計算
-            const profitRate = requiredPrice > 0 ? (targetProfit / requiredPrice * 100) : 0;
+            // 利益率計算（利益 ÷ 仕入れ金額 × 100）
+            const profitRate = purchasePrice > 0 ? (targetProfit / purchasePrice * 100) : 0;
             
             document.getElementById('resultRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             
@@ -1361,31 +1361,34 @@
             let requiredPrice = 0;
             let profit = 0;
             
-            // 利益率の式: 利益率 = 利益 / 売上 × 100
+            // 利益率の式: 利益率 = 利益 / 仕入れ金額 × 100
+            // 利益 = 利益率 × 仕入れ金額 / 100
             // 利益 = 売上 - 仕入額 - 手数料 - 送料
             // 手数料 = 売上 × 手数料率%
             // 
-            // 利益率 × 売上 / 100 = 売上 - 仕入額 - 売上 × 手数料率% - 送料
-            // 売上 × (利益率/100 + 手数料率/100) = 売上 - 仕入額 - 送料
-            // 売上 × (1 - 利益率/100 - 手数料率/100) = 仕入額 + 送料
-            // 売上 = (仕入額 + 送料) / (1 - 利益率/100 - 手数料率/100)
+            // 売上 = 仕入額 + 利益率 × 仕入額 / 100 + 手数料 + 送料
+            // 売上 = 仕入額 × (1 + 利益率 / 100) + 売上 × 手数料率% + 送料
+            // 売上 × (1 - 手数料率%) = 仕入額 × (1 + 利益率 / 100) + 送料
+            // 売上 = (仕入額 × (1 + 利益率 / 100) + 送料) / (1 - 手数料率%)
             
             if (usePhotoPacking) {
                 // 撮影梱包代行ありの場合、反復計算で求める
-                // 25000円以上: 利益 = 売上 × (1 - 手数料率% - 2%) - 仕入額 - 送料
-                // 25000円未満: 利益 = 売上 × (1 - 手数料率%) - 仕入額 - 500 - 送料
+                // 25000円以上: 手数料 = 売上 × (手数料率% + 2%)
+                // 25000円未満: 手数料 = 売上 × 手数料率% + 500
                 
                 // 25000円以上として計算（売上の(手数料率+2)%が費用）
                 const combinedRate = totalFeeRate + 2;
-                const denominator1 = 1 - targetProfitRate / 100 - combinedRate / 100;
+                const denominator1 = 1 - combinedRate / 100;
+                const numerator1 = purchasePrice * (1 + targetProfitRate / 100) + shipping;
                 let priceHigh = denominator1 > 0 
-                    ? Math.ceil((purchasePrice + shipping) / denominator1)
+                    ? Math.ceil(numerator1 / denominator1)
                     : 0;
                 
                 // 25000円未満として計算（売上の手数料率% + 500円が費用）
-                const denominator2 = 1 - targetProfitRate / 100 - totalFeeRate / 100;
+                const denominator2 = 1 - totalFeeRate / 100;
+                const numerator2 = purchasePrice * (1 + targetProfitRate / 100) + 500 + shipping;
                 let priceLow = denominator2 > 0 
-                    ? Math.ceil((purchasePrice + 500 + shipping) / denominator2)
+                    ? Math.ceil(numerator2 / denominator2)
                     : 0;
                 
                 // どちらの計算結果を使うか判定
@@ -1399,9 +1402,10 @@
                 }
             } else {
                 // 撮影梱包代行なしの場合
-                const denominator = 1 - targetProfitRate / 100 - totalFeeRate / 100;
+                const denominator = 1 - totalFeeRate / 100;
+                const numerator = purchasePrice * (1 + targetProfitRate / 100) + shipping;
                 requiredPrice = denominator > 0 
-                    ? Math.ceil((purchasePrice + shipping) / denominator)
+                    ? Math.ceil(numerator / denominator)
                     : 0;
             }
             
@@ -1409,20 +1413,22 @@
             if (saleType === 'wholesale' && requiredPrice >= 30000) {
                 if (usePhotoPacking) {
                     const combinedRate = totalFeeRate + 2;
-                    const denominator = 1 - targetProfitRate / 100 - combinedRate / 100;
+                    const denominator = 1 - combinedRate / 100;
+                    const numerator = purchasePrice * (1 + targetProfitRate / 100);
                     requiredPrice = denominator > 0 
-                        ? Math.ceil(purchasePrice / denominator)
+                        ? Math.ceil(numerator / denominator)
                         : 0;
                 } else {
-                    const denominator = 1 - targetProfitRate / 100 - totalFeeRate / 100;
+                    const denominator = 1 - totalFeeRate / 100;
+                    const numerator = purchasePrice * (1 + targetProfitRate / 100);
                     requiredPrice = denominator > 0 
-                        ? Math.ceil(purchasePrice / denominator)
+                        ? Math.ceil(numerator / denominator)
                         : 0;
                 }
             }
             
-            // 想定利益を計算
-            profit = Math.floor(requiredPrice * targetProfitRate / 100);
+            // 想定利益を計算（利益率 × 仕入れ金額 / 100）
+            profit = Math.floor(purchasePrice * targetProfitRate / 100);
             
             document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             document.getElementById('resultRateProfit').textContent = '¥' + profit.toLocaleString();

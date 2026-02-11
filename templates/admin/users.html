@@ -7,6 +7,22 @@
     <a href="{{ url_for('admin_add_user') }}" class="btn btn-primary">+ ユーザー作成</a>
 </div>
 
+<!-- 検索フォーム -->
+<div class="search-section">
+    <form method="GET" action="{{ url_for('admin_users') }}" class="search-form">
+        <div class="search-input-group">
+            <input type="text" 
+                   name="search" 
+                   value="{{ search_query or '' }}" 
+                   placeholder="ユーザー名、表示名、メールアドレスで検索..." 
+                   class="search-input">
+            <button type="submit" class="btn btn-search">検索</button>
+            {% if search_query %}
+            <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">クリア</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
 
 <div class="admin-section">
     <div class="admin-table-container">
@@ -119,7 +135,13 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="13" class="empty-cell">ユーザーがいません</td>
+                    <td colspan="13" class="empty-cell">
+                        {% if search_query %}
+                        検索条件に一致するユーザーが見つかりませんでした
+                        {% else %}
+                        ユーザーがいません
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -192,6 +214,62 @@
 </div>
 
 <style>
+/* 検索セクション */
+.search-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.search-form {
+    width: 100%;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.625rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn-search {
+    padding: 0.625rem 1.5rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-search:hover {
+    background: #2563eb;
+}
+
+.empty-cell {
+    text-align: center;
+    padding: 2rem;
+    color: #64748b;
+}
+
 .badge-owner {
     background: #b91c1c;
     color: white;
