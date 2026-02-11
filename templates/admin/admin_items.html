@@ -291,15 +291,58 @@
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(0,0,0,0.95);
     z-index: 9999;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
 }
 .lightbox-gallery.active {
     display: flex;
+}
+.lightbox-gallery-scroll-container {
+    width: 100%;
+    height: 80vh;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+    cursor: grab;
+}
+.lightbox-gallery-scroll-container:active {
+    cursor: grabbing;
+}
+.lightbox-gallery-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+.lightbox-gallery-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+    touch-action: pan-x;
+}
+.lightbox-gallery-slide img {
+    max-width: 90%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: pan-x;
 }
 .lightbox-gallery-content {
     max-width: 90vw;
@@ -332,6 +375,7 @@
     padding: 20px 15px;
     cursor: pointer;
     z-index: 10001;
+    transition: background 0.2s;
 }
 .lightbox-gallery-nav:hover {
     background: rgba(255,255,255,0.3);
@@ -349,6 +393,10 @@
     transform: translateX(-50%);
     color: white;
     font-size: 1rem;
+    font-weight: bold;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
 }
 
 /* ステータスバッジ */
@@ -568,6 +616,33 @@
     .filter-panel-footer {
         position: sticky;
         bottom: 0;
+    }
+    
+    /* スマホ用ライトボックス調整 */
+    .lightbox-gallery-nav {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        opacity: 0.3;
+        pointer-events: none;
+    }
+    
+    .lightbox-gallery-prev {
+        left: 10px;
+    }
+    
+    .lightbox-gallery-next {
+        right: 10px;
+    }
+    
+    .lightbox-gallery-close {
+        top: 10px;
+        right: 10px;
+        position: fixed;
+    }
+    
+    .lightbox-gallery-scroll-container {
+        cursor: default;
     }
 }
 
@@ -1440,9 +1515,86 @@ function openLightboxGallery(photos, index) {
     if (!photos || photos.length === 0) return;
     currentPhotos = photos;
     currentIndex = index;
-    updateLightboxImage();
+    
+    // スクロールコンテナに画像を挿入
+    const container = document.getElementById('lightboxGalleryScrollContainer');
+    container.innerHTML = '';
+    
+    photos.forEach((photo, i) => {
+        const slide = document.createElement('div');
+        slide.className = 'lightbox-gallery-slide';
+        slide.innerHTML = `<img src="/static/${photo}" alt="">`;
+        container.appendChild(slide);
+    });
+    
     document.getElementById('lightboxGallery').classList.add('active');
     document.body.style.overflow = 'hidden';
+    
+    // 指定したインデックスにスクロール（レイアウト確定後に実行）
+    requestAnimationFrame(() => {
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+        updateLightboxCounter();
+    });
+    
+    // スクロールイベントでカウンター更新（パッシブリスナーでスムーズに）
+    let scrollTimeout;
+    const handleScroll = function() {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                currentIndex = newIndex;
+                updateLightboxCounter();
+            }
+        }, 50);
+    };
+    
+    // 既存のイベントリスナーを削除してから追加
+    container.onscroll = null;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // タッチイベントでスワイプ操作を改善
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isScrolling = false;
+    
+    const handleTouchStart = function(e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isScrolling = false;
+    };
+    
+    const handleTouchMove = function(e) {
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        const deltaX = Math.abs(touchX - touchStartX);
+        const deltaY = Math.abs(touchY - touchStartY);
+        
+        // 横方向のスワイプが縦方向より大きい場合のみスクロール
+        if (deltaX > deltaY && deltaX > 10) {
+            isScrolling = true;
+        }
+    };
+    
+    const handleTouchEnd = function(e) {
+        if (isScrolling) {
+            // スワイプ操作が完了したことを示す
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                currentIndex = newIndex;
+                updateLightboxCounter();
+            }
+        }
+        isScrolling = false;
+    };
+    
+    // タッチイベントリスナーを追加
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
 }
 
 function closeLightboxGallery() {
@@ -1451,18 +1603,28 @@ function closeLightboxGallery() {
 }
 
 function lightboxGalleryPrev() {
+    const container = document.getElementById('lightboxGalleryScrollContainer');
     currentIndex = (currentIndex - 1 + currentPhotos.length) % currentPhotos.length;
-    updateLightboxImage();
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ 
+        left: slideWidth * currentIndex, 
+        behavior: 'smooth' 
+    });
+    updateLightboxCounter();
 }
 
 function lightboxGalleryNext() {
+    const container = document.getElementById('lightboxGalleryScrollContainer');
     currentIndex = (currentIndex + 1) % currentPhotos.length;
-    updateLightboxImage();
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ 
+        left: slideWidth * currentIndex, 
+        behavior: 'smooth' 
+    });
+    updateLightboxCounter();
 }
 
-function updateLightboxImage() {
-    const img = document.getElementById('lightboxGalleryImage');
-    img.src = '/static/' + currentPhotos[currentIndex];
+function updateLightboxCounter() {
     document.getElementById('lightboxGalleryCounter').textContent = 
         (currentIndex + 1) + ' / ' + currentPhotos.length;
     
@@ -1487,40 +1649,12 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowRight') lightboxGalleryNext();
 });
 
-// スワイプによる画像切り替え（スマホ対応）
-let touchStartX = 0;
-let touchEndX = 0;
-let touchStartY = 0;
-let touchEndY = 0;
-const swipeThreshold = 50;
-
-document.getElementById('lightboxGallery')?.addEventListener('touchstart', function(e) {
-    touchStartX = e.changedTouches[0].screenX;
-    touchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-
-document.getElementById('lightboxGallery')?.addEventListener('touchend', function(e) {
-    touchEndX = e.changedTouches[0].screenX;
-    touchEndY = e.changedTouches[0].screenY;
-    handleLightboxSwipe();
-}, { passive: true });
-
-function handleLightboxSwipe() {
-    const diffX = touchStartX - touchEndX;
-    const diffY = touchStartY - touchEndY;
-    
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
-        if (diffX > 0) {
-            lightboxGalleryNext();
-        } else {
-            lightboxGalleryPrev();
-        }
-    }
-}
-
-// 背景クリックで閉じる
+// 背景クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
 document.getElementById('lightboxGallery')?.addEventListener('click', function(e) {
-    if (e.target === this) closeLightboxGallery();
+    // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+    if (e.target === this || e.target.classList.contains('lightbox-gallery-close')) {
+        closeLightboxGallery();
+    }
 });
 
 // スワイプカルーセルのインジケーター更新
@@ -1571,8 +1705,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="lightbox-gallery-close" onclick="closeLightboxGallery()">×</button>
     <button class="lightbox-gallery-nav lightbox-gallery-prev" onclick="lightboxGalleryPrev()">‹</button>
     <button class="lightbox-gallery-nav lightbox-gallery-next" onclick="lightboxGalleryNext()">›</button>
-    <div class="lightbox-gallery-content">
-        <img id="lightboxGalleryImage" class="lightbox-gallery-img" src="" alt="">
+    <div class="lightbox-gallery-scroll-container" id="lightboxGalleryScrollContainer">
     </div>
     <div class="lightbox-gallery-counter" id="lightboxGalleryCounter"></div>
 </div>
