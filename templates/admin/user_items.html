@@ -3,252 +3,283 @@
 
 {% block content %}
 <style>
-/* モバイル用カード表示 */
-.mobile-cards {
-    display: none;
-}
-
-.item-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    overflow: hidden;
-}
-
-.item-card.card-sold {
-    opacity: 0.7;
-    background: #f8f8f8;
-}
-
-.card-header {
-    display: flex;
-    padding: 12px;
-    gap: 12px;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.card-photo {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
-}
-
-.card-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 6px;
-}
-
-.card-photo .no-photo {
-    width: 100%;
-    height: 100%;
-    background: #f1f5f9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #94a3b8;
-    border-radius: 6px;
-    font-size: 0.8rem;
-}
-
-.card-title {
-    flex: 1;
-    min-width: 0;
-}
-
-.card-id {
-    font-size: 0.7rem;
-    color: #64748b;
-}
-
-.card-title h3 {
-    margin: 4px 0;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #1e293b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.card-store {
-    font-size: 0.75rem;
-    color: #64748b;
-}
-
-.card-body {
-    padding: 12px;
-}
-
-.card-info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-}
-
-.card-info-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.card-info-label {
-    font-size: 0.65rem;
-    color: #94a3b8;
-}
-
-.card-info-value {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.card-info-value.profit-positive {
-    color: #10b981;
-}
-
-.card-info-value.profit-negative {
-    color: #ef4444;
-}
-
-.card-footer {
-    padding: 8px 12px;
-    background: #f8fafc;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.card-actions {
-    display: flex;
-    gap: 6px;
-}
-
-.card-actions .btn {
-    padding: 4px 10px;
-    font-size: 0.75rem;
-}
-
-.action-cell {
-    white-space: nowrap;
-}
-
-.action-cell .btn {
-    padding: 4px 8px;
-    font-size: 0.75rem;
-    margin-right: 4px;
-}
-
-.btn-edit {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-edit:hover {
-    background: #2563eb;
-}
-
-.btn-danger {
-    background: #ef4444;
-    color: white;
-}
-
-.btn-danger:hover {
-    background: #dc2626;
-}
-
-/* モーダル */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background: white;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-    border-radius: 12px;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.modal-header h2 {
-    margin: 0;
-    font-size: 1.125rem;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #64748b;
-}
-
-.modal-close:hover {
-    color: #1e293b;
-}
-
-.modal-body {
-    padding: 1rem;
-}
-
-.modal-footer {
-    padding: 1rem;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-}
-
-.badge {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.badge-sold {
-    background: #dbeafe;
-    color: #1e40af;
-}
-
-.badge-listed {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.badge-pending {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-/* スマホ（768px以下）*/
-@media (max-width: 768px) {
-    .admin-table-container {
+    /* モバイル用カード表示 */
+    .mobile-cards {
         display: none;
     }
-    
-    .mobile-cards {
-        display: block;
+
+    .item-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        overflow: hidden;
     }
-}
+
+    .item-card.card-sold {
+        opacity: 0.7;
+        background: #f8f8f8;
+    }
+
+    .card-header {
+        display: flex;
+        padding: 12px;
+        gap: 12px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .card-photo {
+        width: 60px;
+        height: 60px;
+        flex-shrink: 0;
+    }
+
+    .card-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+
+    .card-photo .no-photo {
+        width: 100%;
+        height: 100%;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        border-radius: 6px;
+        font-size: 0.8rem;
+    }
+
+    .card-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .card-id {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+
+    .card-title h3 {
+        margin: 4px 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card-store {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .card-body {
+        padding: 12px;
+    }
+
+    .card-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .card-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-info-label {
+        font-size: 0.65rem;
+        color: #94a3b8;
+    }
+
+    .card-info-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .card-info-value.profit-positive {
+        color: #10b981;
+    }
+
+    .card-info-value.profit-negative {
+        color: #ef4444;
+    }
+
+    .card-footer {
+        padding: 8px 12px;
+        background: #f8fafc;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .card-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .card-actions .btn {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+
+    .action-cell {
+        white-space: nowrap;
+    }
+
+    .action-cell .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        margin-right: 4px;
+    }
+
+    .btn-edit {
+        background: #3b82f6;
+        color: white;
+    }
+
+    .btn-edit:hover {
+        background: #2563eb;
+    }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+    .badge-sold {
+        background: #ef4444;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #dc2626;
+    }
+
+    /* モーダル */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.125rem;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+    }
+
+    .modal-close:hover {
+        color: #1e293b;
+    }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .modal-footer {
+        padding: 1rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .badge-sold {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .badge-listed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .badge-pending {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    /* スマホ（768px以下）*/
+    @media (max-width: 768px) {
+        .admin-table-container {
+            display: none;
+        }
+
+
+        .mobile-cards {
+            display: block;
+        }
+
+        .card-header {
+            position: relative;
+            padding-right: 40px;
+            /* バッジ分の余白 */
+        }
+
+        /* Status Badge Overlay */
+        .card-status {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 10;
+        }
+
+        .card-status .badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .badge-sold {
+            background: #ef4444;
+            color: white;
+        }
+    }
 </style>
 
 <div class="page-header">
@@ -313,7 +344,8 @@
                     <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                     <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                     {% if item.can_delete %}
-                    <button class="btn btn-sm btn-danger" onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                    <button class="btn btn-sm btn-danger"
+                        onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
                     {% endif %}
                 </td>
             </tr>
@@ -343,6 +375,15 @@
                 <h3>{{ item.product_name or '-' }}</h3>
                 <span class="card-store">{{ item.store_name or '-' }}</span>
             </div>
+            <div class="card-status">
+                {% if item.sale_date %}
+                <span class="badge badge-sold">売却済</span>
+                {% elif item.is_listed %}
+                <span class="badge badge-listed">出品中</span>
+                {% else %}
+                <span class="badge badge-pending">未出品</span>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body">
             <div class="card-info-grid">
@@ -360,7 +401,8 @@
                 </div>
                 <div class="card-info-item">
                     <span class="card-info-label">売上金</span>
-                    <span class="card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
+                    <span class="card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
+                        else %}-{% endif %}</span>
                 </div>
             </div>
         </div>
@@ -369,25 +411,20 @@
                 <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
                 <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                 {% if item.can_delete %}
-                <button class="btn btn-sm btn-danger" onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                <button class="btn btn-sm btn-danger"
+                    onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
                 {% endif %}
             </div>
-            {% if item.sale_date %}
-            <span class="badge badge-sold">売却済</span>
-            {% elif item.is_listed %}
-            <span class="badge badge-listed">出品中</span>
-            {% else %}
-            <span class="badge badge-pending">未出品</span>
-            {% endif %}
         </div>
     </div>
-    {% else %}
-    <div class="item-card">
-        <div class="card-body" style="text-align: center; padding: 2rem;">
-            商品がありません
-        </div>
+</div>
+{% else %}
+<div class="item-card">
+    <div class="card-body" style="text-align: center; padding: 2rem;">
+        商品がありません
     </div>
-    {% endfor %}
+</div>
+{% endfor %}
 </div>
 
 <!-- 削除確認モーダル -->
@@ -411,26 +448,25 @@
 </div>
 
 <script>
-function openDeleteModal(itemId, itemName) {
-    const modal = document.getElementById('delete-modal');
-    const form = document.getElementById('delete-form');
-    const nameEl = document.getElementById('delete-item-name');
-    
-    form.action = '/admin/items/' + itemId + '/delete';
-    nameEl.textContent = '商品: ' + itemName;
-    modal.style.display = 'flex';
-}
+    function openDeleteModal(itemId, itemName) {
+        const modal = document.getElementById('delete-modal');
+        const form = document.getElementById('delete-form');
+        const nameEl = document.getElementById('delete-item-name');
 
-function closeDeleteModal() {
-    document.getElementById('delete-modal').style.display = 'none';
-}
-
-// モーダル外クリックで閉じる
-document.getElementById('delete-modal')?.addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeDeleteModal();
+        form.action = '/admin/items/' + itemId + '/delete';
+        nameEl.textContent = '商品: ' + itemName;
+        modal.style.display = 'flex';
     }
-});
+
+    function closeDeleteModal() {
+        document.getElementById('delete-modal').style.display = 'none';
+    }
+
+    // モーダル外クリックで閉じる
+    document.getElementById('delete-modal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeDeleteModal();
+        }
+    });
 </script>
 {% endblock %}
-
