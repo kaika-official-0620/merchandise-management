@@ -919,34 +919,31 @@ function downloadCurrentImage(event) {
 }
 
 // すべての画像をダウンロード
+// すべての画像をダウンロード（サーバーでZIP圧縮してダウンロード）
 function downloadAllImages(event) {
     event.stopPropagation();
     const button = event.target;
     const originalText = button.textContent;
+    
+    // ボタンを一時的に無効化
+    button.disabled = true;
     button.classList.add('downloading');
+    button.textContent = '準備中...';
     
-    {% if item.all_photos and item.all_photos|length > 0 %}
-    const total = downloadPhotos.length;
-    let downloaded = 0;
+    // ZIPダウンロードURLへ遷移
+    // iOSなどのスマホでも確実にダウンロードさせるため、直接遷移またはiframeを使用
+    const downloadUrl = "{{ url_for('download_all_images', id=item.id) }}";
     
-    downloadPhotos.forEach((photoPath, index) => {
-        setTimeout(() => {
-            const filename = photoPath.split('/').pop();
-            button.textContent = `保存中... (${index + 1}/${total})`;
-            
-            downloadImage('{{ url_for("static", filename="") }}' + photoPath, filename, null);
-            
-            downloaded++;
-            if (downloaded === total) {
-                button.classList.remove('downloading');
-                button.textContent = '保存完了！';
-                setTimeout(() => {
-                    button.textContent = originalText;
-                }, 2000);
-            }
-        }, index * 500); // 500ms間隔でダウンロード
-    });
-    {% endif %}
+    // 新しいタブで開くのではなく、現在のウィンドウで遷移させることでダウンロードダイアログを出す
+    // （iOS Safariでは window.location.href が最も安定している）
+    window.location.href = downloadUrl;
+    
+    // ダウンロード開始を検知できないため、タイマーでボタンを戻す
+    setTimeout(() => {
+        button.disabled = false;
+        button.classList.remove('downloading');
+        button.textContent = originalText;
+    }, 3000);
 }
 
 // 画像をダウンロードする共通関数

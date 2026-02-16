@@ -19404,6 +19404,85 @@ def shutdown_scheduler():
         scheduler.shutdown(wait=False)
         print(f"[{datetime.now()}] Scheduler stopped")
 
+@app.route('/item/<int:id>/download_all')
+@login_required
+def download_all_images(id):
+    import io
+    import zipfile
+    
+    # DB接続
+    conn = get_db()
+    item = None
+    
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM merchandise WHERE id = %s", (id,))
+            item_data = cur.fetchone()
+            if item_data:
+                item = dict(item_data)
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM merchandise WHERE id = ?", (id,))
+            item_data = cur.fetchone()
+            if item_data:
+                item = dict(item_data)
+    except Exception as e:
+        print(f"DB Error: {e}")
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        conn.close()
+    
+    if not item:
+        flash('商品が見つかりません', 'error')
+        return redirect(request.referrer or url_for('index'))
+        
+    photos = []
+    if item.get('photo_path'):
+        photos.append(item['photo_path'])
+        
+    if item.get('additional_photos'):
+        try:
+            additional = json.loads(item['additional_photos'])
+            if isinstance(additional, list):
+                photos.extend(additional)
+        except:
+            pass
+            
+    if not photos:
+        flash('画像がありません', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for i, photo_path in enumerate(photos):
+            filename = os.path.basename(photo_path)
+            abs_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            if os.path.exists(abs_path):
+                ext = os.path.splitext(filename)[1]
+                zip_filename = f"image_{i+1:03d}{ext}"
+                try:
+                    zf.write(abs_path, zip_filename)
+                except Exception as e:
+                    print(f"Error adding file to zip: {e}")
+    
+    memory_file.seek(0)
+    
+    # ファイル名生成（英数字のみ）
+    safe_name = "".join([c for c in item.get('product_name', '') if c.isalnum() or c in (' ', '-', '_')]).strip()
+    if not safe_name:
+        safe_name = f"item_{id}"
+        
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f"{safe_name}_images.zip"
+    )
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 
