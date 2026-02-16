@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}管理者ダッシュボード - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>管理者ダッシュボード</h1>
+</div>
+
+<div class="admin-nav">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item active">概要</a>
+    <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書{% if unread_invoice_count > 0 %}<span class="badge-count">{{ unread_invoice_count }}</span>{% endif %}</a>
+    <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
+    <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>
+    <a href="{{ url_for('admin_backup') }}" class="admin-nav-item">バックアップ</a>
+</div>
+
+<!-- 全体統計 -->
+<div class="admin-stats-grid">
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総商品数</div>
+        <div class="stat-content">
+            <span class="stat-value">{{ overall_stats.total_items or 0 }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総仕入額</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_purchase or 0) }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総売上</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_sales or 0) }}</span>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">総利益</div>
+        <div class="stat-content">
+            <span class="stat-value {% if overall_stats.total_profit and overall_stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                ¥{{ "{:,}".format(overall_stats.total_profit or 0) }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- ユーザー別統計 -->
+<div class="admin-section">
+    <h2>ユーザー別パフォーマンス</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ユーザー名</th>
+                    <th>権限</th>
+                    <th>商品数</th>
+                    <th>総仕入</th>
+                    <th>総売上</th>
+                    <th>総利益</th>
+                    <th>売却率</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for us in user_stats %}
+                <tr>
+                    <td>
+                        <strong>{{ us.user.display_name or us.user.username }}</strong>
+                        <small>@{{ us.user.username }}</small>
+                    </td>
+                    <td>
+                        {% if us.user.role == 'admin' %}
+                        <span class="badge badge-admin">管理者</span>
+                        {% else %}
+                        <span class="badge badge-user">ユーザー</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ us.stats.item_count or 0 }}</td>
+                    <td>¥{{ "{:,}".format(us.stats.total_purchase or 0) }}</td>
+                    <td>¥{{ "{:,}".format(us.stats.total_sales or 0) }}</td>
+                    <td class="{% if us.stats.total_profit and us.stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(us.stats.total_profit or 0) }}
+                    </td>
+                    <td>
+                        {% if us.stats.item_count and us.stats.item_count > 0 %}
+                        {{ ((us.stats.sold_count or 0) / us.stats.item_count * 100)|round(1) }}%
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin_user_items', id=us.user.id) }}" class="btn btn-sm">商品一覧</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 人気ブランド & 店舗統計 -->
+<div class="admin-grid-2">
+    <div class="admin-section">
+        <h2>人気ブランド（利益率順）</h2>
+        <div class="admin-list">
+            {% for brand in popular_brands %}
+            <div class="admin-list-item">
+                <span class="list-rank">{{ loop.index }}</span>
+                <span class="list-name">{{ brand.brand_name or '(ブランド名なし)' }}</span>
+                <span class="list-value">
+                    <span class="{% if brand.profit_rate and brand.profit_rate > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        {{ brand.profit_rate or 0 }}%
+                    </span>
+                    <small>（{{ brand.count }}件 / 利益¥{{ "{:,}".format(brand.total_profit or 0) }}）</small>
+                </span>
+            </div>
+            {% else %}
+            <p class="empty-message">データがありません</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="admin-section">
+        <h2>店舗別仕入・売上</h2>
+        <div class="admin-list">
+            {% for store in store_stats %}
+            <div class="admin-list-item">
+                <span class="list-rank">{{ loop.index }}</span>
+                <span class="list-name">{{ store.store_name or '(店舗名なし)' }}</span>
+                <span class="list-value">仕入¥{{ "{:,}".format(store.total_purchase or 0) }} / 売上¥{{ "{:,}".format(store.total_sales or 0) }}</span>
+            </div>
+            {% else %}
+            <p class="empty-message">データがありません</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
