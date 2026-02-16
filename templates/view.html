@@ -1,0 +1,983 @@
+{% extends "base.html" %}
+{% block title %}{{ item.product_name }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.condition-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 8px;
+}
+.condition-N { background: #dbeafe; color: #1d4ed8; }
+.condition-S { background: #d1fae5; color: #059669; }
+.condition-A { background: #fef3c7; color: #d97706; }
+.condition-AB { background: #fed7aa; color: #c2410c; }
+.condition-B { background: #fecaca; color: #dc2626; }
+
+/* コピーボタン */
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    margin-left: 8px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    color: #64748b;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    vertical-align: middle;
+}
+
+.copy-btn:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.copy-btn.copied {
+    background: #d1fae5;
+    border-color: #10b981;
+    color: #059669;
+}
+
+.copy-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.copy-value-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.product-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.product-title-wrapper h2 {
+    margin: 0;
+}
+
+/* コピー成功トースト */
+.copy-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #1e293b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.copy-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* 画像保存ボタン */
+.image-download-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+}
+
+.download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #475569;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.download-btn:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    border-color: #cbd5e1;
+}
+
+.download-btn:active {
+    transform: scale(0.98);
+}
+
+.download-btn.downloading {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+/* ギャラリー表示 */
+.gallery-container {
+    margin-bottom: 20px;
+}
+
+/* 横スクロール形式のメイン画像 */
+.main-photo-scroll {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 15px;
+}
+
+.main-photo-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.main-photo-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.main-photo-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-snap-align: start;
+    cursor: pointer;
+}
+
+.main-photo-slide img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-counter {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    z-index: 5;
+}
+
+.thumbnail-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.thumbnail-strip::-webkit-scrollbar {
+    height: 6px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.thumbnail-item {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.thumbnail-item:hover {
+    border-color: #667eea;
+}
+
+.thumbnail-item.active {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.thumbnail-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ライトボックス - 横スクロール形式 */
+.lightbox {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    z-index: 1000;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.lightbox.active {
+    display: flex;
+}
+
+.lightbox-content {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
+    height: 100%;
+}
+
+.lightbox-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.lightbox-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-slide img {
+    max-width: 90%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    z-index: 1001;
+}
+
+.lightbox-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lightbox-prev {
+    left: 20px;
+}
+
+.lightbox-next {
+    right: 20px;
+}
+
+.lightbox-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
+    z-index: 1001;
+}
+
+.no-image-large {
+    width: 100%;
+    height: 200px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 1.5rem;
+}
+
+/* スマホ用レイアウト */
+@media (max-width: 768px) {
+    .view-container {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .view-image {
+        order: 1;
+        margin-bottom: 15px;
+        margin-top: 10px;
+    }
+    
+    .view-details {
+        order: 2;
+    }
+    
+    .gallery-container {
+        margin-bottom: 10px;
+    }
+    
+    .main-photo-scroll {
+        max-width: 250px;
+        margin: 0 auto 10px;
+    }
+    
+    .main-photo-scroll-container {
+        border-radius: 8px;
+    }
+    
+    .photo-counter {
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        bottom: 5px;
+        right: 5px;
+    }
+    
+    .thumbnail-strip {
+        gap: 6px;
+        padding: 8px 0;
+        justify-content: center;
+    }
+    
+    .thumbnail-item {
+        width: 45px;
+        height: 45px;
+        border-radius: 6px;
+    }
+    
+    .no-image-large {
+        height: 120px;
+        font-size: 1.2rem;
+        max-width: 200px;
+        margin: 0 auto;
+    }
+    
+    /* ライトボックス調整 */
+    .lightbox-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .lightbox-prev {
+        left: 10px;
+    }
+    
+    .lightbox-next {
+        right: 10px;
+    }
+    
+    .lightbox-close {
+        width: 36px;
+        height: 36px;
+        font-size: 1.2rem;
+        top: 10px;
+        right: 10px;
+    }
+}
+
+/* さらに小さい画面用 */
+@media (max-width: 480px) {
+    .main-photo-scroll {
+        max-width: 200px;
+    }
+    
+    .thumbnail-item {
+        width: 40px;
+        height: 40px;
+    }
+}
+</style>
+<div class="page-actions">
+    <div class="header-actions">
+        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-primary">編集</a>
+        {% if current_user.is_admin() or current_user.is_owner() %}
+        <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">一覧に戻る</a>
+        {% else %}
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">一覧に戻る</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="view-container">
+    <div class="view-image">
+        {% if item.all_photos and item.all_photos|length > 0 %}
+        <div class="gallery-container">
+            <div class="main-photo-scroll">
+                <div class="main-photo-scroll-container" id="mainPhotoScrollContainer">
+                    {% for photo in item.all_photos %}
+                    <div class="main-photo-slide" onclick="openLightbox({{ loop.index0 }})">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if item.all_photos|length > 1 %}
+                <span class="photo-counter" id="photoCounter">1 / {{ item.all_photos|length }}</span>
+                {% endif %}
+            </div>
+            <div class="image-download-buttons">
+                <button class="download-btn" onclick="downloadCurrentImage(event)">この画像を保存</button>
+                {% if item.all_photos|length > 1 %}
+                <button class="download-btn" onclick="downloadAllImages(event)">すべて保存 ({{ item.all_photos|length }}枚)</button>
+                {% endif %}
+            </div>
+            {% if item.all_photos|length > 1 %}
+            <div class="thumbnail-strip">
+                {% for photo in item.all_photos %}
+                <div class="thumbnail-item {% if loop.first %}active{% endif %}" onclick="scrollToPhoto({{ loop.index0 }})">
+                    <img src="{{ url_for('static', filename=photo) }}" alt="写真{{ loop.index }}">
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="no-image-large">写真なし</div>
+        {% endif %}
+    </div>
+    
+    <div class="view-details">
+        <div class="product-title-wrapper">
+        <h2>{{ item.product_name }}</h2>
+            <button class="copy-btn" onclick="copyToClipboard('{{ item.product_name }}', this)">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                コピー
+            </button>
+        </div>
+        
+        <div class="detail-section">
+            <h3>基本情報</h3>
+            <dl class="detail-list">
+                <dt>管理No</dt>
+                <dd>{{ item.id }}</dd>
+                <dt>仕入日</dt>
+                <dd>{{ item.purchase_date or '-' }}</dd>
+                <dt>開花商品番号</dt>
+                <dd>{{ item.kaika_product_code or '-' }}</dd>
+                <dt>ブランド</dt>
+                <dd>
+                    <span class="copy-value-wrapper">
+                        {{ item.brand_name or '-' }}
+                        {% if item.brand_name %}
+                        <button class="copy-btn" onclick="copyToClipboard('{{ item.brand_name }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                        {% endif %}
+                    </span>
+                </dd>
+                <dt>型番</dt>
+                <dd>
+                    <span class="copy-value-wrapper">
+                        {{ item.model_number or '-' }}
+                        {% if item.model_number %}
+                        <button class="copy-btn" onclick="copyToClipboard('{{ item.model_number }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                        {% endif %}
+                    </span>
+                </dd>
+                <dt>商品状態</dt>
+                <dd>
+                    {% if item.item_condition %}
+                    <span class="copy-value-wrapper">
+                    <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                    {% if item.item_condition == 'N' %}新品
+                    {% elif item.item_condition == 'S' %}新品ではないが傷なし
+                    {% elif item.item_condition == 'A' %}未使用に近い
+                    {% elif item.item_condition == 'AB' %}傷・汚れあり（小）
+                    {% elif item.item_condition == 'B' %}傷・汚れあり（大）
+                    {% endif %}
+                        <button class="copy-btn" onclick="copyCondition('{{ item.item_condition }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                    </span>
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>仕入先</dt>
+                <dd>{{ item.store_name or '-' }}</dd>
+                {% if item.store_name == '個人' %}
+                <dt>仕入先詳細</dt>
+                <dd>{{ item.supplier_detail or '-' }}</dd>
+                <dt>身分証</dt>
+                <dd>
+                    {% if item.id_document_path %}
+                    <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                <dt>同意書</dt>
+                <dd>
+                    {% if item.consent_form_path %}
+                    <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank" class="btn btn-sm">表示</a>
+                    {% else %}-{% endif %}
+                </dd>
+                {% endif %}
+                <dt>仕入額</dt>
+                <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
+                <dt>支払方法</dt>
+                <dd>{{ item.payment_method or '-' }}</dd>
+            </dl>
+        </div>
+        
+        <div class="detail-section">
+            <h3>出品情報</h3>
+            <dl class="detail-list">
+                <dt>ステータス</dt>
+                <dd>
+                    {% if item.sale_date %}
+                    <span class="badge badge-sold">売却済み</span>
+                    {% elif item.is_listed %}
+                    <span class="badge badge-listed">出品中</span>
+                    {% else %}
+                    <span class="badge badge-pending">未出品</span>
+                    {% endif %}
+                </dd>
+                <dt>出品日</dt>
+                <dd>{{ item.listing_date or '-' }}</dd>
+                <dt>出品価格</dt>
+                <dd>
+                    <span class="copy-value-wrapper">
+                        ¥{{ "{:,}".format(item.listing_price or 0) }}
+                        {% if item.listing_price and item.listing_price > 0 %}
+                        <button class="copy-btn" onclick="copyToClipboard('{{ item.listing_price }}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            コピー
+                        </button>
+                        {% endif %}
+                    </span>
+                </dd>
+                <dt>想定送料</dt>
+                <dd>¥{{ "{:,}".format(item.expected_shipping or 0) }}</dd>
+                <dt>想定手数料</dt>
+                <dd>¥{{ "{:,}".format(item.expected_commission or 0) }}</dd>
+                {% if not item.sale_date and item.expected_profit is defined %}
+                <dt>想定利益</dt>
+                <dd class="{% if item.expected_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                    ¥{{ "{:,}".format(item.expected_profit) }}
+                </dd>
+                {% endif %}
+            </dl>
+        </div>
+        
+        {% if item.sale_date %}
+        <div class="detail-section">
+            <h3>売却情報</h3>
+            <dl class="detail-list">
+                <dt>売却日</dt>
+                <dd>{{ item.sale_date }}</dd>
+                <dt>販売タイプ</dt>
+                <dd>
+                    {% set sale_types = (item.sale_type or 'normal').split(',') %}
+                    {% set type_names = [] %}
+                    {% for st in sale_types %}
+                        {% if st == 'photo_packing' %}{% set _ = type_names.append('撮影梱包等代行') %}
+                        {% elif st == 'wholesale' %}{% set _ = type_names.append('業者卸販売') %}
+                        {% elif st == 'multi_listing' %}{% set _ = type_names.append('同時出品') %}
+                        {% elif st == 'auction' %}{% set _ = type_names.append('オークション流し') %}
+                        {% elif st == 'normal' %}{% set _ = type_names.append('通常') %}
+                        {% endif %}
+                    {% endfor %}
+                    {{ type_names|join(' + ') }}
+                </dd>
+                <dt>売上金</dt>
+                <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
+                <dt>送料</dt>
+                <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
+                <dt>販売先（メモ）</dt>
+                <dd>{{ item.sales_destination or '-' }}</dd>
+                <dt>手数料</dt>
+                <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
+                <dt>発送状態</dt>
+                <dd>
+                    {% if item.is_shipped %}
+                    <span class="badge badge-shipped">発送済み</span>
+                    {% else %}
+                    <span class="badge badge-pending">未発送</span>
+                    {% endif %}
+                </dd>
+                <dt>利益</dt>
+                <dd class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}" style="font-weight: bold; font-size: 1.2em;">
+                    ¥{{ "{:,}".format(item.profit) }}
+                </dd>
+                <dt>利益率</dt>
+                <dd>{{ item.profit_rate }}%</dd>
+            </dl>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ライトボックス -->
+{% if item.all_photos and item.all_photos|length > 0 %}
+<div class="lightbox" id="lightbox" onclick="closeLightboxOnBackground(event)">
+    <button class="lightbox-close" onclick="closeLightbox()">×</button>
+    {% if item.all_photos|length > 1 %}
+    <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()">‹</button>
+    <button class="lightbox-nav lightbox-next" onclick="lightboxNext()">›</button>
+    {% endif %}
+    <div class="lightbox-content">
+        <div class="lightbox-scroll-container" id="lightboxScrollContainer">
+            {% for photo in item.all_photos %}
+            <div class="lightbox-slide">
+                <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% if item.all_photos|length > 1 %}
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+    {% endif %}
+</div>
+
+<script>
+const photos = {{ item.all_photos | tojson }};
+let currentPhotoIndex = 0;
+
+// メイン画像のスクロールコンテナ
+const mainPhotoScrollContainer = document.getElementById('mainPhotoScrollContainer');
+
+// スクロール位置から現在のインデックスを更新
+if (mainPhotoScrollContainer) {
+    mainPhotoScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = mainPhotoScrollContainer.offsetWidth;
+        const newIndex = Math.round(mainPhotoScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updatePhotoCounter();
+            updateThumbnails();
+        }
+    });
+}
+
+// 特定の写真にスクロール
+function scrollToPhoto(index) {
+    currentPhotoIndex = index;
+    const slideWidth = mainPhotoScrollContainer.offsetWidth;
+    mainPhotoScrollContainer.scrollTo({ left: slideWidth * index, behavior: 'smooth' });
+    updatePhotoCounter();
+    updateThumbnails();
+}
+
+// カウンターを更新
+function updatePhotoCounter() {
+    const counter = document.getElementById('photoCounter');
+    if (counter) {
+        counter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
+    }
+}
+
+// サムネイルのアクティブ状態を更新
+function updateThumbnails() {
+    document.querySelectorAll('.thumbnail-item').forEach((thumb, i) => {
+        thumb.classList.toggle('active', i === currentPhotoIndex);
+    });
+}
+
+// ライトボックス
+function openLightbox(index) {
+    currentPhotoIndex = index;
+    const lightbox = document.getElementById('lightbox');
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    
+    // 指定インデックスにスクロール
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+    
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (index + 1) + ' / ' + photos.length;
+    }
+    
+    lightbox.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // 表示後にスクロール位置を再調整
+    setTimeout(() => {
+        const containerWidth = scrollContainer.offsetWidth;
+        scrollContainer.scrollTo({ left: containerWidth * index, behavior: 'instant' });
+    }, 10);
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function closeLightboxOnBackground(event) {
+    if (event.target.classList.contains('lightbox')) {
+        closeLightbox();
+    }
+}
+
+function lightboxPrev() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    currentPhotoIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
+}
+
+function lightboxNext() {
+    const scrollContainer = document.getElementById('lightboxScrollContainer');
+    currentPhotoIndex = (currentPhotoIndex + 1) % photos.length;
+    const slideWidth = scrollContainer.offsetWidth;
+    scrollContainer.scrollTo({ left: slideWidth * currentPhotoIndex, behavior: 'smooth' });
+    updateLightboxCounter();
+    // メイン画像も同期
+    scrollToPhoto(currentPhotoIndex);
+}
+
+function updateLightboxCounter() {
+    const lightboxCounter = document.getElementById('lightboxCounter');
+    if (lightboxCounter) {
+        lightboxCounter.textContent = (currentPhotoIndex + 1) + ' / ' + photos.length;
+    }
+}
+
+// ライトボックスのスクロール監視
+const lightboxScrollContainer = document.getElementById('lightboxScrollContainer');
+if (lightboxScrollContainer) {
+    lightboxScrollContainer.addEventListener('scroll', function() {
+        const slideWidth = lightboxScrollContainer.offsetWidth;
+        const newIndex = Math.round(lightboxScrollContainer.scrollLeft / slideWidth);
+        if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photos.length) {
+            currentPhotoIndex = newIndex;
+            updateLightboxCounter();
+            // メイン画像も同期
+            if (mainPhotoScrollContainer) {
+                const mainSlideWidth = mainPhotoScrollContainer.offsetWidth;
+                mainPhotoScrollContainer.scrollTo({ left: mainSlideWidth * currentPhotoIndex, behavior: 'instant' });
+                updateThumbnails();
+            }
+        }
+    });
+}
+
+// キーボードナビゲーション
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('lightbox');
+    if (!lightbox.classList.contains('active')) return;
+    
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    if (e.key === 'ArrowRight') lightboxNext();
+});
+</script>
+{% endif %}
+
+<!-- コピー機能 -->
+<div class="copy-toast" id="copyToast">コピーしました！</div>
+<script>
+// クリップボードにコピー
+function copyToClipboard(text, button) {
+    navigator.clipboard.writeText(text).then(() => {
+        showCopyFeedback(button);
+    }).catch(err => {
+        // フォールバック
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCopyFeedback(button);
+    });
+}
+
+// 商品状態をコピー（日本語テキストで）
+function copyCondition(condition, button) {
+    const conditionTexts = {
+        'N': '新品',
+        'S': '新品ではないが傷なし',
+        'A': '未使用に近い',
+        'AB': '傷・汚れあり（小）',
+        'B': '傷・汚れあり（大）'
+    };
+    const text = conditionTexts[condition] || condition;
+    copyToClipboard(text, button);
+}
+
+// コピー成功のフィードバック表示
+function showCopyFeedback(button) {
+    // ボタンの状態を変更
+    button.classList.add('copied');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> コピー済';
+    
+    // トースト表示
+    const toast = document.getElementById('copyToast');
+    toast.classList.add('show');
+    
+    // 1.5秒後に元に戻す
+    setTimeout(() => {
+        button.classList.remove('copied');
+        button.innerHTML = originalText;
+        toast.classList.remove('show');
+    }, 1500);
+}
+
+// 画像ダウンロード用の写真配列（ライトボックスがない場合用）
+{% if item.all_photos and item.all_photos|length > 0 %}
+const downloadPhotos = {{ item.all_photos | tojson }};
+let downloadCurrentIndex = 0;
+
+// 現在の画像インデックスを更新（ライトボックスがある場合はそちらを使用）
+function updateDownloadIndex(index) {
+    downloadCurrentIndex = index;
+}
+{% endif %}
+
+// 現在表示中の画像をダウンロード
+function downloadCurrentImage(event) {
+    event.stopPropagation();
+    const button = event.target;
+    button.classList.add('downloading');
+    button.textContent = 'ダウンロード中...';
+    
+    {% if item.all_photos and item.all_photos|length > 0 %}
+    // currentPhotoIndexはライトボックス用の変数（存在すれば使用）
+    const index = typeof currentPhotoIndex !== 'undefined' ? currentPhotoIndex : downloadCurrentIndex;
+    const photoPath = downloadPhotos[index];
+    const filename = photoPath.split('/').pop();
+    
+    downloadImage('{{ url_for("static", filename="") }}' + photoPath, filename, button);
+    {% endif %}
+}
+
+// すべての画像をダウンロード
+// すべての画像をダウンロード（サーバーでZIP圧縮してダウンロード）
+function downloadAllImages(event) {
+    event.stopPropagation();
+    const button = event.target;
+    const originalText = button.textContent;
+    
+    // ボタンを一時的に無効化
+    button.disabled = true;
+    button.classList.add('downloading');
+    button.textContent = '準備中...';
+    
+    // ZIPダウンロードURLへ遷移
+    // iOSなどのスマホでも確実にダウンロードさせるため、直接遷移またはiframeを使用
+    const downloadUrl = "{{ url_for('download_all_images', id=item.id) }}";
+    
+    // 新しいタブで開くのではなく、現在のウィンドウで遷移させることでダウンロードダイアログを出す
+    // （iOS Safariでは window.location.href が最も安定している）
+    window.location.href = downloadUrl;
+    
+    // ダウンロード開始を検知できないため、タイマーでボタンを戻す
+    setTimeout(() => {
+        button.disabled = false;
+        button.classList.remove('downloading');
+        button.textContent = originalText;
+    }, 3000);
+}
+
+// 画像をダウンロードする共通関数
+function downloadImage(url, filename, button) {
+    fetch(url)
+        .then(response => response.blob())
+        .then(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            
+            if (button) {
+                button.classList.remove('downloading');
+                button.textContent = '保存完了！';
+                setTimeout(() => {
+                    button.textContent = 'この画像を保存';
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Download error:', error);
+            if (button) {
+                button.classList.remove('downloading');
+                button.textContent = 'エラー';
+                setTimeout(() => {
+                    button.textContent = 'この画像を保存';
+                }, 2000);
+            }
+        });
+}
+</script>
+{% endblock %}
+

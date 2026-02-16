@@ -1,0 +1,637 @@
+{% extends "base.html" %}
+
+{% block title %}{% if shikiriosho %}精算書編集{% else %}精算書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>{% if shikiriosho %}精算書編集{% else %}精算書作成{% endif %}</h1>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+</div>
+
+<form method="POST" class="shikiriosho-form">
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>No.</label>
+                <input type="text" value="{{ shikiriosho.document_no if shikiriosho else document_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="issue_date">請求日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ shikiriosho.issue_date if shikiriosho else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="due_date">支払期限</label>
+                <input type="date" id="due_date" name="due_date" value="{{ shikiriosho.due_date if shikiriosho }}" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="tax_rate">消費税率（%）</label>
+                <select id="tax_rate" name="tax_rate" class="form-control">
+                    <option value="10" {% if not shikiriosho or shikiriosho.tax_rate == 10 %}selected{% endif %}>10%（内税）</option>
+                    <option value="8" {% if shikiriosho and shikiriosho.tax_rate == 8 %}selected{% endif %}>8%（軽減税率）</option>
+                    <option value="0" {% if shikiriosho and shikiriosho.tax_rate == 0 %}selected{% endif %}>0%（非課税）</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>宛先</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="recipient_id">登録ユーザーから選択</label>
+                <select id="recipient_id" name="recipient_id" class="form-control">
+                    <option value="">-- ユーザーを選択 --</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if shikiriosho and shikiriosho.recipient_id == user.id %}selected{% endif %}>
+                        {{ user.display_name or user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="recipient_name">または直接入力（御中）</label>
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ shikiriosho.recipient_name if shikiriosho else '' }}" placeholder="会社名・団体名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="contact_name">お名前</label>
+                <input type="text" id="contact_name" name="contact_name" value="{{ shikiriosho.contact_name if shikiriosho else '' }}" placeholder="担当者名" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="personal_number">個人番号</label>
+                <input type="text" id="personal_number" name="personal_number" value="{{ shikiriosho.personal_number if shikiriosho else '' }}" placeholder="管理用番号" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>明細</h3>
+        <div class="product-selector">
+            <label>登録商品から追加：</label>
+            <select id="product-filter" class="form-control" style="max-width: 150px;">
+                <option value="">すべて</option>
+                <option value="sold">売却済みのみ</option>
+                <option value="inventory">在庫のみ</option>
+            </select>
+            <select id="product-select" class="form-control">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="6%">No.</th>
+                        <th width="30%">商品名／品名 *</th>
+                        <th width="14%">仕入れ日</th>
+                        <th width="16%">商品番号</th>
+                        <th width="16%">金額(税込)</th>
+                        <th width="5%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ item.item_no }}</td>
+                            <td><input type="text" name="item_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="date" name="product_date[]" value="{{ item.product_date or '' }}" class="form-control"></td>
+                            <td><input type="text" name="product_code[]" value="{{ item.product_code or '' }}" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="amount[]" value="{{ item.amount }}" class="form-control item-amount-input" min="0"></td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(5) %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ i + 1 }}</td>
+                            <td><input type="text" name="item_name[]" class="form-control item-name"></td>
+                            <td><input type="date" name="product_date[]" class="form-control"></td>
+                            <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="amount[]" class="form-control item-amount-input" min="0"></td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>合計点数</strong></td>
+                        <td id="item-count">0 点</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>小計</strong></td>
+                        <td id="subtotal">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>内税(10%)</strong></td>
+                        <td id="tax-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row total-final">
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>合計（税込）</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ shikiriosho.notes if shikiriosho else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="sent" class="btn btn-primary">保存して送信</button>
+    </div>
+</form>
+
+<style>
+.shikiriosho-form {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    color: #333;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control.readonly {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8f9fa;
+    font-weight: 500;
+}
+
+.items-table .form-control {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.item-amount {
+    font-weight: 500;
+    text-align: right;
+}
+
+.totals-row td {
+    border: none;
+    padding: 8px 10px;
+}
+
+.totals-row .text-right {
+    text-align: right;
+}
+
+.total-final td {
+    font-size: 18px;
+    color: #007bff;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+}
+
+/* スマホ対応 */
+@media (max-width: 768px) {
+    .shikiriosho-form {
+        max-width: 100%;
+    }
+    
+    .admin-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+    
+    .admin-header h1 {
+        font-size: 1rem;
+    }
+    
+    .form-section {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .form-section h3 {
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    
+    .form-group label {
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+    
+    .form-control {
+        padding: 6px;
+        font-size: 0.8rem;
+    }
+    
+    input[type="date"].form-control {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+        min-width: 110px;
+        width: auto;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .items-table {
+        min-width: 500px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        padding: 4px 3px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table th {
+        font-size: 0.65rem;
+    }
+    
+    .items-table .form-control {
+        padding: 4px 3px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table input[type="date"].form-control {
+        padding: 4px 2px;
+        font-size: 0.7rem;
+        min-width: 85px;
+        width: 85px;
+    }
+    
+    .product-selector {
+        flex-wrap: wrap;
+        padding: 8px;
+        gap: 6px;
+    }
+    
+    .product-selector label {
+        flex: 1 1 100%;
+        font-size: 0.75rem;
+    }
+    
+    .product-selector select,
+    .product-selector .form-control {
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 100%;
+        font-size: 0.75rem;
+        padding: 6px;
+    }
+    
+    .product-selector #product-filter {
+        max-width: 80px !important;
+    }
+    
+    .product-selector #product-select {
+        max-width: 120px;
+    }
+    
+    .product-selector .btn {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    
+    .totals-row td {
+        padding: 4px 6px;
+        font-size: 0.75rem;
+    }
+    
+    .total-final td {
+        font-size: 0.9rem;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+    
+    .btn-sm {
+        padding: 2px 4px;
+        font-size: 0.6rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsBody = document.getElementById('items-body');
+    const addRowBtn = document.getElementById('add-row');
+    const taxRateSelect = document.getElementById('tax_rate');
+    const productSelect = document.getElementById('product-select');
+    const productFilter = document.getElementById('product-filter');
+    const addProductBtn = document.getElementById('add-product-btn');
+    const recipientSelect = document.getElementById('recipient_id');
+    
+    let products = [];
+    
+    // 商品一覧を取得
+    async function loadProducts(userId) {
+        try {
+            let url = '/api/admin/products';
+            const params = new URLSearchParams();
+            
+            if (userId) {
+                params.append('user_id', userId);
+            }
+            
+            // フィルター条件を追加
+            const filterValue = productFilter.value;
+            if (filterValue === 'sold') {
+                params.append('sold_only', '1');
+            } else if (filterValue === 'inventory') {
+                params.append('inventory_only', '1');
+            }
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            const response = await fetch(url);
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    }
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+            const soldLabel = product.sale_date ? ' [売却済]' : '';
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}${soldLabel}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // フィルター変更時に商品一覧を更新
+    productFilter.addEventListener('change', function() {
+        loadProducts(recipientSelect ? recipientSelect.value : null);
+    });
+    
+    // 宛先変更時に商品一覧を更新
+    if (recipientSelect) {
+        recipientSelect.addEventListener('change', function() {
+            loadProducts(this.value);
+        });
+        // 初期ロード
+        loadProducts(recipientSelect.value);
+    } else {
+        loadProducts();
+    }
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+        const today = new Date().toISOString().split('T')[0];
+        
+        addRow(product.product_name, today, '', price);
+        productSelect.value = '';
+    });
+    
+    // 行を追加
+    function addRow(name = '', date = '', code = '', amount = 0) {
+        const rowCount = itemsBody.querySelectorAll('.item-row').length;
+        const newRow = document.createElement('tr');
+        newRow.className = 'item-row';
+        newRow.innerHTML = `
+            <td class="item-no">${rowCount + 1}</td>
+            <td><input type="text" name="item_name[]" value="${name}" class="form-control item-name"></td>
+            <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
+            <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
+            <td><input type="number" name="amount[]" value="${amount}" class="form-control item-amount-input" min="0"></td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+        `;
+        itemsBody.appendChild(newRow);
+        attachRowEvents(newRow);
+        renumberRows();
+        calculateTotals();
+    }
+    
+    addRowBtn.addEventListener('click', function() {
+        addRow();
+    });
+    
+    // 行を削除
+    function attachRowEvents(row) {
+        const removeBtn = row.querySelector('.remove-row');
+        const amountInput = row.querySelector('.item-amount-input');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            renumberRows();
+            calculateTotals();
+        });
+        
+        if (amountInput) {
+            amountInput.addEventListener('input', function() {
+                calculateTotals();
+            });
+        }
+    }
+    
+    // 行番号を振り直す
+    function renumberRows() {
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach((row, index) => {
+            row.querySelector('.item-no').textContent = index + 1;
+        });
+    }
+    
+    // 合計を計算（内税方式）
+    function calculateTotals() {
+        let total = 0;
+        let itemCount = 0;
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach(row => {
+            const amountInput = row.querySelector('.item-amount-input');
+            const nameInput = row.querySelector('.item-name');
+            if (amountInput) {
+                const amount = parseInt(amountInput.value) || 0;
+                total += amount;
+                if (nameInput && nameInput.value.trim()) {
+                    itemCount++;
+                }
+            }
+        });
+        
+        // 内税計算（税込金額から税額を逆算）
+        const taxRate = parseFloat(taxRateSelect.value) || 10;
+        const taxAmount = Math.floor(total * taxRate / (100 + taxRate));
+        const subtotal = total; // 税込金額をそのまま小計として表示
+        
+        document.getElementById('item-count').textContent = itemCount + ' 点';
+        document.getElementById('subtotal').textContent = '¥' + subtotal.toLocaleString();
+        document.getElementById('tax-amount').textContent = taxAmount.toLocaleString();
+        document.getElementById('total-amount').textContent = '¥' + total.toLocaleString();
+    }
+    
+    // 既存の行にイベントを付与
+    document.querySelectorAll('.item-row').forEach(row => {
+        attachRowEvents(row);
+    });
+    
+    // 税率変更時に再計算
+    taxRateSelect.addEventListener('change', calculateTotals);
+    
+    // 初期計算
+    calculateTotals();
+});
+</script>
+{% endblock %}
+

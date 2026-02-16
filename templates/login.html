@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}ログイン - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1 class="company-name">株式会社 開花</h1>
+            <p>ログインしてください</p>
+        </div>
+        
+        <style>
+        .company-name {
+            font-size: 1.5rem;
+            color: #667eea;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+        
+        @media (max-width: 400px) {
+            .company-name {
+                font-size: 1.3rem;
+            }
+            
+            .auth-card {
+                padding: 2rem 1.5rem;
+            }
+        }
+        </style>
+        
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="username">ユーザー名</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">パスワード</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">ログイン</button>
+        </form>
+        
+        <div class="auth-footer">
+            <p style="color: #64748b; font-size: 0.9rem;">アカウントは管理者にお問い合わせください</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

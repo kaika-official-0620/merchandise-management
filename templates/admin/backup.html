@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}バックアップ・リストア - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>バックアップ・リストア</h1>
+</div>
+
+
+<div class="backup-grid">
+    <!-- エクスポート -->
+    <div class="admin-section">
+        <h2>データエクスポート（バックアップ）</h2>
+        <p class="section-desc">現在のデータをダウンロードします。定期的にバックアップを取ることをお勧めします。</p>
+        
+        <div class="backup-options">
+            <div class="backup-option">
+                <div class="backup-content">
+                    <h3>データのみバックアップ（JSON）</h3>
+                    <p>全ユーザー、全商品、全顧客データを含む（画像なし）</p>
+                    <a href="{{ url_for('export_backup') }}" class="btn btn-secondary">JSONダウンロード</a>
+                </div>
+            </div>
+            <div class="backup-option highlight">
+                <div class="backup-content">
+                    <h3>完全バックアップ（ZIP）推奨</h3>
+                    <p>全データ＋画像ファイルを含む完全バックアップ</p>
+                    <a href="{{ url_for('export_backup_with_images') }}" class="btn btn-primary">ZIPダウンロード</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- インポート -->
+    <div class="admin-section">
+        <h2>データインポート（リストア）</h2>
+        <p class="section-desc">バックアップファイルからデータを復元します。</p>
+        
+        <form method="POST" action="{{ url_for('import_backup') }}" enctype="multipart/form-data" class="import-form">
+            <div class="form-group">
+                <label for="backup_file">バックアップファイル（.json または .zip）</label>
+                <input type="file" id="backup_file" name="backup_file" accept=".json,.zip" required>
+                <small>ZIP形式の場合、画像も自動で復元されます</small>
+            </div>
+            
+            <div class="form-group">
+                <label>インポートモード</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="import_mode" value="merge" checked>
+                        <span class="radio-label">
+                            <strong>追加（マージ）</strong>
+                            <small>既存データを保持し、新しいデータを追加</small>
+                        </span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="import_mode" value="replace">
+                        <span class="radio-label">
+                            <strong>置換（上書き）</strong>
+                            <small>※ 既存データを削除し、バックアップで置換</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" onclick="return confirm('データをインポートしますか？')">
+                インポート実行
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 注意事項 -->
+<div class="admin-section warning-section">
+    <h2>注意事項</h2>
+    <ul class="warning-list">
+        <li><strong>JSONバックアップ</strong>: データのみ（写真パスは保存されますが、ファイル自体は含まれません）</li>
+        <li><strong>ZIPバックアップ</strong>: データ＋画像ファイルを含む完全バックアップ（推奨）</li>
+        <li>「置換」モードでインポートすると、現在のデータがすべて削除されます</li>
+        <li>バックアップファイルは安全な場所に保管してください</li>
+        <li>定期的なバックアップを強くお勧めします（週1回以上）</li>
+    </ul>
+</div>
+
+<!-- バックアップ履歴のヒント -->
+<div class="admin-section">
+    <h2>おすすめのバックアップ運用</h2>
+    <div class="tip-grid">
+        <div class="tip-card">
+            <h4>定期バックアップ</h4>
+            <p>週に1回以上、全データバックアップを取得</p>
+        </div>
+        <div class="tip-card">
+            <h4>複数世代保持</h4>
+            <p>最新3〜5世代のバックアップを保持</p>
+        </div>
+        <div class="tip-card">
+            <h4>クラウド保存</h4>
+            <p>Google DriveやDropboxなどに保存</p>
+        </div>
+        <div class="tip-card">
+            <h4>変更前バックアップ</h4>
+            <p>大きな変更前には必ずバックアップ</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

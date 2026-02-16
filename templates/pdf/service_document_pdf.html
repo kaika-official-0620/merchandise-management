@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>サービス書類 - {{ doc.document_no }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Yu Gothic', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+            font-size: 12pt;
+            line-height: 1.6;
+            color: #333;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px double #333;
+        }
+        
+        .doc-title {
+            font-size: 24pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .doc-no {
+            font-family: monospace;
+            color: #666;
+        }
+        
+        .company-info {
+            text-align: right;
+            margin-bottom: 30px;
+        }
+        
+        .company-name {
+            font-size: 16pt;
+            font-weight: bold;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            background: #f0f0f0;
+            padding: 8px 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px 15px;
+            text-align: left;
+        }
+        
+        th {
+            background: #f5f5f5;
+            width: 150px;
+            font-weight: 500;
+        }
+        
+        .amount-section {
+            background: #f0f8ff;
+            padding: 20px;
+            text-align: center;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+        }
+        
+        .amount-label {
+            font-size: 14pt;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .amount-value {
+            font-size: 28pt;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .notes {
+            background: #fff9e6;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            color: #666;
+            font-size: 10pt;
+        }
+        
+        @media print {
+            body {
+                padding: 20px;
+            }
+            
+            .no-print {
+                display: none;
+            }
+        }
+        
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .print-btn:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn no-print" onclick="window.print()">🖨️ 印刷する</button>
+    
+    <div class="header">
+        <div class="doc-title">
+            {% if doc.service_type == 'photo_packing' %}撮影梱包等代行サービス 依頼書
+            {% elif doc.service_type == 'wholesale' %}業者卸販売 契約書
+            {% elif doc.service_type == 'multi_listing' %}同時出品サービス 依頼書
+            {% elif doc.service_type == 'auction' %}オークション代行 委託書
+            {% endif %}
+        </div>
+        <div class="doc-no">書類番号: {{ doc.document_no }}</div>
+    </div>
+    
+    <div class="company-info">
+        <div class="company-name">株式会社 開花</div>
+        <div>作成日: {{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else '-' }}</div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">顧客情報</div>
+        <table>
+            <tr>
+                <th>顧客名</th>
+                <td>{{ doc.customer_name }}</td>
+            </tr>
+            <tr>
+                <th>連絡先</th>
+                <td>{{ doc.contact or '-' }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">商品情報</div>
+        <table>
+            <tr>
+                <th>商品名</th>
+                <td>{{ doc.product_name }}</td>
+            </tr>
+            <tr>
+                <th>商品説明</th>
+                <td>{{ doc.product_description or '-' }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    {% if doc.service_data %}
+    <div class="section">
+        <div class="section-title">サービス詳細</div>
+        <table>
+            {% if doc.service_type == 'photo_packing' %}
+                <tr>
+                    <th>撮影枚数</th>
+                    <td>{{ doc.service_data.photo_count or '-' }}枚</td>
+                </tr>
+                <tr>
+                    <th>梱包サイズ</th>
+                    <td>
+                        {% if doc.service_data.packing_size == 'small' %}小（60サイズ以下）
+                        {% elif doc.service_data.packing_size == 'medium' %}中（80サイズ）
+                        {% elif doc.service_data.packing_size == 'large' %}大（100サイズ以上）
+                        {% else %}{{ doc.service_data.packing_size or '-' }}{% endif %}
+                    </td>
+                </tr>
+            {% elif doc.service_type == 'wholesale' %}
+                <tr>
+                    <th>数量</th>
+                    <td>{{ doc.service_data.quantity or 1 }}個</td>
+                </tr>
+                <tr>
+                    <th>卸単価</th>
+                    <td>¥{{ "{:,}".format((doc.service_data.wholesale_price or 0)|int) }}</td>
+                </tr>
+            {% elif doc.service_type == 'multi_listing' %}
+                <tr>
+                    <th>出品サイト</th>
+                    <td>
+                        {% if doc.service_data.listing_sites %}
+                            {% for site in doc.service_data.listing_sites %}
+                                {% if site == 'mercari' %}メルカリ
+                                {% elif site == 'yahoo' %}ヤフオク
+                                {% elif site == 'rakuma' %}ラクマ
+                                {% elif site == 'paypay' %}PayPayフリマ
+                                {% else %}{{ site }}{% endif %}
+                                {% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}-{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>希望販売価格</th>
+                    <td>¥{{ "{:,}".format((doc.service_data.listing_price or 0)|int) }}</td>
+                </tr>
+            {% elif doc.service_type == 'auction' %}
+                <tr>
+                    <th>最低落札価格</th>
+                    <td>¥{{ "{:,}".format((doc.service_data.min_bid or 0)|int) }}</td>
+                </tr>
+                <tr>
+                    <th>即決価格</th>
+                    <td>¥{{ "{:,}".format((doc.service_data.buy_now_price or 0)|int) }}</td>
+                </tr>
+                <tr>
+                    <th>出品期間</th>
+                    <td>{{ doc.service_data.auction_duration or 5 }}日間</td>
+                </tr>
+            {% endif %}
+        </table>
+    </div>
+    {% endif %}
+    
+    <div class="section">
+        <div class="amount-section">
+            <div class="amount-label">手数料（税込）</div>
+            <div class="amount-value">¥{{ "{:,}".format(doc.commission or 0) }}</div>
+        </div>
+    </div>
+    
+    {% if doc.notes %}
+    <div class="section">
+        <div class="section-title">備考</div>
+        <div class="notes">{{ doc.notes }}</div>
+    </div>
+    {% endif %}
+    
+    <div class="footer">
+        <p>この書類は株式会社 開花が発行しました。</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,1713 @@
+{% extends "base.html" %}
+{% block title %}管理者の商品 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+/* 検索ボタン */
+.search-toggle-container {
+    margin-bottom: 1rem;
+    flex: 1;
+}
+
+.search-text-short {
+    display: none;
+}
+
+.search-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: white;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #1e293b;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.search-toggle-btn:hover {
+    background: #f8fafc;
+    border-color: #2563eb;
+}
+
+.search-toggle-btn.active {
+    background: #2563eb;
+    color: white;
+    border-color: #2563eb;
+}
+
+.filter-count {
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    margin-left: 0.25rem;
+}
+
+/* フィルターパネル */
+.filter-panel {
+    display: none;
+    background: white;
+    border: 1px solid #d1d5db;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.filter-panel.open {
+    display: block;
+}
+
+.filter-tabs-header {
+    display: flex;
+    border-bottom: 1px solid #d1d5db;
+    background: #f8fafc;
+}
+
+.filter-tab-btn {
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    border: none;
+    border-right: 1px solid #e2e8f0;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.filter-tab-btn:last-child {
+    border-right: none;
+}
+
+.filter-tab-btn:hover {
+    background: #e2e8f0;
+}
+
+.filter-tab-btn.active {
+    background: white;
+    color: #1e293b;
+    border-bottom: 2px solid #2563eb;
+    margin-bottom: -1px;
+}
+
+.filter-tab-content {
+    display: none;
+    padding: 1rem;
+}
+
+.filter-tab-content.active {
+    display: block;
+}
+
+.filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-item label {
+    font-size: 0.8rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.filter-item input,
+.filter-item select {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #d1d5db;
+    font-size: 0.85rem;
+    min-width: 100px;
+}
+
+.filter-item input[type="number"] {
+    width: 80px;
+}
+
+.filter-item input[type="date"] {
+    width: 140px;
+}
+
+.filter-panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.filter-apply-btn {
+    padding: 0.5rem 1.25rem;
+    background: #2563eb;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.filter-apply-btn:hover {
+    background: #1d4ed8;
+}
+
+.filter-reset-btn {
+    padding: 0.5rem 1rem;
+    background: white;
+    color: #64748b;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.filter-reset-btn:hover {
+    background: #f1f5f9;
+}
+
+/* 検索＆アクションバー */
+.search-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.action-buttons-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* テーブルスタイル */
+.table-container {
+    background: white;
+    border-radius: 10px;
+    overflow-x: auto;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    margin-top: 1rem;
+}
+
+.data-table {
+    width: 100%;
+    min-width: 1400px;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    border: 1px solid #d1d5db;
+}
+
+.data-table th {
+    background: #f8fafc;
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    border: 1px solid #d1d5db;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.data-table th.sortable:hover {
+    background: #f1f5f9;
+}
+
+.data-table td {
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    vertical-align: middle;
+}
+
+.data-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.data-table tbody tr.row-sold {
+    background: #f8f8f8;
+    color: #94a3b8;
+}
+
+.data-table tbody tr.row-sold:hover {
+    background: #f1f1f1;
+}
+
+/* サムネイル */
+.table-thumb {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.table-thumb:hover {
+    transform: scale(1.1);
+}
+
+.no-thumb {
+    width: 50px;
+    height: 50px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+}
+
+/* 複数画像バッジ */
+.photo-cell {
+    position: relative;
+}
+.photo-count-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 0.6rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* ライトボックス */
+.lightbox-gallery {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.lightbox-gallery.active {
+    display: flex;
+}
+.lightbox-gallery-scroll-container {
+    width: 100%;
+    height: 80vh;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+    cursor: grab;
+}
+.lightbox-gallery-scroll-container:active {
+    cursor: grabbing;
+}
+.lightbox-gallery-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+.lightbox-gallery-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+    touch-action: pan-x;
+}
+.lightbox-gallery-slide img {
+    max-width: 90%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: pan-x;
+}
+.lightbox-gallery-content {
+    max-width: 90vw;
+    max-height: 85vh;
+}
+.lightbox-gallery-img {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+}
+.lightbox-gallery-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 2.5rem;
+    cursor: pointer;
+    z-index: 10001;
+}
+.lightbox-gallery-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 2rem;
+    padding: 20px 15px;
+    cursor: pointer;
+    z-index: 10001;
+    transition: background 0.2s;
+}
+.lightbox-gallery-nav:hover {
+    background: rgba(255,255,255,0.3);
+}
+.lightbox-gallery-prev {
+    left: 10px;
+}
+.lightbox-gallery-next {
+    right: 10px;
+}
+.lightbox-gallery-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 1rem;
+    font-weight: bold;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 15px;
+    border-radius: 20px;
+}
+
+/* ステータスバッジ */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.sold {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.listed {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-badge.unlisted {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+/* 金額表示 */
+.amount {
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.amount.positive {
+    color: #10b981;
+}
+
+.amount.negative {
+    color: #ef4444;
+}
+
+/* コンディションバッジ */
+.condition-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 28px;
+}
+
+.condition-N { background: #dbeafe; color: #1d4ed8; }
+.condition-S { background: #d1fae5; color: #059669; }
+.condition-A { background: #fef3c7; color: #d97706; }
+.condition-AB { background: #fed7aa; color: #c2410c; }
+.condition-B { background: #fecaca; color: #dc2626; }
+
+/* アクションボタン */
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell .btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    margin-right: 3px;
+}
+
+/* 所有者バッジ */
+.badge-admin {
+    background: #1e40af;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+/* 一括操作エリア */
+.bulk-actions {
+    background: #f8fafc;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+/* モーダル */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    border-radius: 12px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.125rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.modal-close:hover {
+    color: #1e293b;
+}
+
+.modal-body {
+    padding: 1rem;
+}
+
+.modal-footer {
+    padding: 1rem;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* 件数表示 */
+.table-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .search-action-bar {
+        flex-direction: row;
+        gap: 0.5rem;
+    }
+    
+    .search-text-full {
+        display: none;
+    }
+    
+    .search-text-short {
+        display: inline;
+    }
+    
+    .search-toggle-btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+    }
+    
+    .filter-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        overflow-y: auto;
+        margin: 0;
+    }
+    
+    .filter-tabs-header {
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .filter-tab-btn {
+        flex: 1;
+        padding: 0.75rem 0.5rem;
+        font-size: 0.8rem;
+        text-align: center;
+    }
+    
+    .filter-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-item input,
+    .filter-item select {
+        width: 100%;
+    }
+    
+    .filter-panel-footer {
+        position: sticky;
+        bottom: 0;
+    }
+    
+    /* スマホ用ライトボックス調整 */
+    .lightbox-gallery-nav {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        opacity: 0.3;
+        pointer-events: none;
+    }
+    
+    .lightbox-gallery-prev {
+        left: 10px;
+    }
+    
+    .lightbox-gallery-next {
+        right: 10px;
+    }
+    
+    .lightbox-gallery-close {
+        top: 10px;
+        right: 10px;
+        position: fixed;
+    }
+    
+    .lightbox-gallery-scroll-container {
+        cursor: default;
+    }
+}
+
+/* モバイル用カード表示 - 3列グリッド */
+.mobile-cards-wrapper {
+    display: none;
+}
+
+/* スマホ（768px以下）でカード表示に切り替え */
+@media (max-width: 768px) {
+    .table-container {
+        display: none;
+    }
+    
+    .mobile-cards-wrapper {
+        display: block;
+    }
+    
+    .swipe-indicator {
+        display: none;
+    }
+    
+    /* 3列グリッドで表示 */
+    .mobile-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        padding: 2px;
+        background: #f1f5f9;
+    }
+    
+    /* コンパクトなカード */
+    .admin-item-card {
+        background: white;
+        border: none;
+        border-radius: 0;
+        margin-bottom: 0;
+        overflow: hidden;
+        box-shadow: none;
+        cursor: pointer;
+    }
+    
+    /* 情報エリア（タップで詳細へ） */
+    .admin-item-card .admin-card-title,
+    .admin-item-card .admin-card-body {
+        cursor: pointer;
+    }
+    
+    .admin-item-card.card-sold {
+        opacity: 0.7;
+        background: #f8f8f8;
+    }
+    
+    /* カードヘッダー */
+    .admin-card-header {
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        gap: 0;
+        border-bottom: none;
+        position: relative;
+    }
+    
+    /* 正方形の画像 */
+    .admin-card-photo {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        background: #f8f8f8;
+    }
+    
+    .admin-card-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 0;
+        cursor: pointer;
+    }
+    
+    .admin-card-photo .no-photo {
+        width: 100%;
+        height: 100%;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 1.5rem;
+    }
+    
+    /* 複数画像は横スクロール */
+    .card-photo-scroll {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        gap: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .card-photo-scroll::-webkit-scrollbar {
+        display: none;
+    }
+    .card-photo-scroll img {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        min-width: 100%;
+        object-fit: cover;
+        border-radius: 0;
+        scroll-snap-align: start;
+        cursor: pointer;
+    }
+    
+    .admin-card-header.has-multi-photos .admin-card-photo {
+        width: 100%;
+    }
+    
+    /* チェックボックスを非表示（グリッドでは操作しにくい） */
+    .admin-card-checkbox {
+        display: none;
+    }
+    
+    /* 商品情報 - コンパクト */
+    .admin-card-title {
+        padding: 6px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .admin-card-id {
+        display: block;
+        font-size: 0.6rem;
+        color: #94a3b8;
+        margin-bottom: 2px;
+    }
+    
+    .admin-card-title h3 {
+        margin: 0;
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: #1e293b;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .admin-card-owner {
+        display: none;
+    }
+    
+    .admin-card-body {
+        padding: 0 6px 6px;
+    }
+    
+    /* 価格のみコンパクト表示 */
+    .admin-card-info-grid {
+        display: block;
+    }
+    
+    .admin-card-info-item {
+        display: none;
+    }
+    
+    /* 仕入価格のみ表示 */
+    .admin-card-info-item:first-child {
+        display: block;
+    }
+    
+    .admin-card-info-label {
+        display: none;
+    }
+    
+    .admin-card-info-value {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    .admin-card-info-value.positive {
+        color: #10b981;
+    }
+    
+    .admin-card-info-value.negative {
+        color: #ef4444;
+    }
+    
+    /* フッターを非表示 */
+    .admin-card-footer {
+        display: none;
+    }
+    
+    .btn-edit {
+        background: #3b82f6;
+        color: white;
+    }
+    
+    .btn-edit:hover {
+        background: #2563eb;
+    }
+}
+</style>
+
+<div class="page-header">
+    <h1>管理者の商品</h1>
+</div>
+
+<!-- 検索ボタン＆アクションボタン -->
+<div class="search-action-bar">
+    <div class="search-toggle-container">
+        <button class="search-toggle-btn" id="searchToggleBtn" onclick="toggleFilterPanel()">
+            <span class="search-icon">🔍</span>
+            <span class="search-text-full">検索・フィルター</span>
+            <span class="search-text-short">検索</span>
+            <span class="filter-count" id="filterCount" style="display: none;">0</span>
+        </button>
+    </div>
+    <div class="action-buttons-group">
+        <a href="{{ url_for('admin_add_item', mode='admin') }}" class="btn btn-primary">+ 管理者商品登録</a>
+    </div>
+</div>
+
+<!-- フィルターパネル -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-tabs-header">
+        <button class="filter-tab-btn active" onclick="showFilterTab('text', event)">テキスト検索</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
+    </div>
+    
+    <!-- テキスト検索 -->
+    <div class="filter-tab-content active" id="filter-text">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>No</label>
+                <input type="text" id="tab-filter-id" placeholder="No">
+            </div>
+            <div class="filter-item">
+                <label>商品名</label>
+                <input type="text" id="tab-filter-name" placeholder="商品名">
+            </div>
+            <div class="filter-item">
+                <label>ブランド</label>
+                <input type="text" id="tab-filter-brand" placeholder="ブランド">
+            </div>
+            <div class="filter-item">
+                <label>型番</label>
+                <input type="text" id="tab-filter-model" placeholder="型番">
+            </div>
+            <div class="filter-item">
+                <label>所有者</label>
+                <input type="text" id="tab-filter-owner" placeholder="所有者名">
+            </div>
+        </div>
+    </div>
+    
+    <!-- 状態フィルター -->
+    <div class="filter-tab-content" id="filter-status-tab">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>状態</label>
+                <select id="tab-filter-condition">
+                    <option value="">全て</option>
+                    <option value="N">N</option>
+                    <option value="S">S</option>
+                    <option value="A">A</option>
+                    <option value="AB">AB</option>
+                    <option value="B">B</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>販売状況</label>
+                <select id="tab-filter-status">
+                    <option value="">すべて</option>
+                    <option value="sold">売却済</option>
+                    <option value="listed">出品中</option>
+                    <option value="unlisted">未出品</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 金額フィルター -->
+    <div class="filter-tab-content" id="filter-price">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>仕入額</label>
+                <input type="number" id="tab-filter-purchase-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-purchase-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>売上</label>
+                <input type="number" id="tab-filter-sale-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-sale-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>利益</label>
+                <input type="number" id="tab-filter-profit-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-profit-max" placeholder="以下">
+            </div>
+        </div>
+    </div>
+    
+    <!-- フッターボタン -->
+    <div class="filter-panel-footer">
+        <button class="filter-reset-btn" onclick="resetAllFilters()">リセット</button>
+        <button class="filter-apply-btn" onclick="applyFilters()">検索</button>
+    </div>
+</div>
+
+{% if items %}
+<div class="bulk-actions">
+    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
+            <span>すべて選択</span>
+        </label>
+        <select name="target_user_id" required style="min-width: 200px;">
+            <option value="">転送先ユーザーを選択</option>
+            {% for user in users %}
+            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- 商品テーブル -->
+<div class="table-container">
+    <div class="table-scroll">
+        <table class="data-table" id="itemsTable">
+            <thead>
+                <tr>
+                    <th style="width: 40px;"></th>
+                    <th style="width: 60px;">写真</th>
+                    <th class="sortable" data-sort="id">No</th>
+                    <th class="sortable" data-sort="product_name">商品名</th>
+                    <th class="sortable" data-sort="brand_name">ブランド</th>
+                    <th>型番</th>
+                    <th>状態</th>
+                    <th class="sortable" data-sort="store_name">仕入先</th>
+                    <th>登録者</th>
+                    <th>最終更新者</th>
+                    <th class="sortable" data-sort="purchase_date">仕入日</th>
+                    <th class="sortable" data-sort="purchase_price">仕入額</th>
+                    <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable" data-sort="sale_price">売上</th>
+                    <th class="sortable" data-sort="profit">利益</th>
+                    <th>販売状況</th>
+                    <th style="width: 100px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="{% if item.sale_date %}row-sold{% endif %}" 
+                    data-id="{{ item.id }}"
+                    data-name="{{ item.product_name or '' }}"
+                    data-brand="{{ item.brand_name or '' }}"
+                    data-model="{{ item.model_number or '' }}"
+                    data-condition="{{ item.item_condition or '' }}"
+                    data-store="{{ item.store_name or '' }}"
+                    data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
+                    data-date="{{ item.purchase_date or '' }}"
+                    data-purchase-price="{{ item.purchase_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}"
+                    data-sale-price="{{ item.sale_price or 0 }}"
+                    data-profit="{{ item.profit or 0 }}"
+                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    <td>
+                        <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
+                    </td>
+                    <td class="photo-cell">
+                        {% if item.all_photos and item.all_photos|length > 0 %}
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
+                             data-photos='{{ item.all_photos | tojson }}'
+                             onclick="openLightboxFromData(this, 0)">
+                        {% if item.all_photos|length > 1 %}
+                        <span class="photo-count-badge">{{ item.all_photos|length }}</span>
+                        {% endif %}
+                        {% else %}
+                        <div class="no-thumb">-</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.id }}</td>
+                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td>{{ item.model_number or '-' }}</td>
+                    <td>
+                        {% if item.item_condition %}
+                        <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition }}</span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>{{ item.store_name or '-' }}</td>
+                    <td><span class="badge-admin">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
+                    <td>{{ item.updated_by_name or '-' }}</td>
+                    <td>{{ item.purchase_date or '-' }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td class="amount">
+                        {% if item.listing_price %}
+                        ¥{{ "{:,}".format(item.listing_price) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.profit or 0) }}
+                        {% if item.profit_rate %}<small>({{ item.profit_rate }}%)</small>{% endif %}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% if item.sale_date %}
+                        <span class="status-badge sold">売却済</span>
+                        {% elif item.is_listed %}
+                        <span class="status-badge listed">出品中</span>
+                        {% else %}
+                        <span class="status-badge unlisted">未出品</span>
+                        {% endif %}
+                    </td>
+                    <td class="action-cell">
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <button class="btn btn-sm btn-primary" onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
+                        {% if item.can_delete %}
+                        <button class="btn btn-sm btn-danger" onclick="confirmDelete({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="17" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        管理者の商品がありません
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="table-info">
+        <span id="filtered-count">{{ items|length }}件表示</span>
+        <span>全{{ items|length }}件中</span>
+    </div>
+</div>
+
+<!-- スマホ用カード表示（横スワイプカルーセル） -->
+<div class="mobile-cards-wrapper">
+    <div class="swipe-indicator">
+        <span class="current-index">1</span> / <span class="total-count">{{ items|length }}</span>
+        <span class="swipe-hint">← スワイプで移動 →</span>
+    </div>
+    <div class="mobile-cards" id="mobileCards">
+        {% for item in items %}
+        <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
+            <div class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
+                <div class="admin-card-checkbox">
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form" class="item-checkbox">
+                </div>
+                <div class="admin-card-photo">
+                    {% if item.all_photos and item.all_photos|length > 1 %}
+                    <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
+                        {% for photo in item.all_photos %}
+                        <img src="{{ url_for('static', filename=photo) }}" alt="" 
+                             onclick="openLightboxFromParent(this, {{ loop.index0 }})">
+                        {% endfor %}
+                    </div>
+                    {% elif item.all_photos and item.all_photos|length == 1 %}
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
+                         data-photos='{{ item.all_photos | tojson }}'
+                         onclick="openLightboxFromData(this, 0)">
+                    {% else %}
+                    <div class="no-photo">-</div>
+                    {% endif %}
+                </div>
+                <div class="admin-card-title">
+                    <span class="admin-card-id">{{ item.kaika_product_code or '-' }}</span>
+                    <h3>{{ item.product_name or '-' }}</h3>
+                    <span class="admin-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
+                </div>
+            </div>
+            <div class="admin-card-body">
+                <div class="admin-card-info-grid">
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">仕入</span>
+                        <span class="admin-card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">出品</span>
+                        <span class="admin-card-info-value">{% if item.listing_price %}¥{{ "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">売上</span>
+                        <span class="admin-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-card-footer">
+                {% if item.sale_date %}
+                <span class="status-badge sold">売却済</span>
+                {% elif item.is_listed %}
+                <span class="status-badge listed">出品中</span>
+                {% else %}
+                <span class="status-badge unlisted">未出品</span>
+                {% endif %}
+                <div class="admin-card-actions">
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="admin-item-card">
+            <div class="admin-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                管理者の商品がありません
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 転送モーダル -->
+<div id="transfer-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品を転送</h2>
+            <button type="button" class="modal-close" onclick="closeTransferModal()">&times;</button>
+        </div>
+        <form id="transfer-form" method="POST">
+            <div class="modal-body">
+                <p id="transfer-item-name" style="margin-bottom: 1rem; font-weight: 500;"></p>
+                <div class="form-group">
+                    <label for="modal-target-user">転送先ユーザー</label>
+                    <select id="modal-target-user" name="target_user_id" required>
+                        <option value="">選択してください</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeTransferModal()">キャンセル</button>
+                <button type="submit" class="btn btn-primary">転送する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 削除確認モーダル -->
+<div id="delete-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>商品削除の確認</h2>
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <form id="delete-form" method="POST">
+            <div class="modal-body">
+                <p style="margin-bottom: 1rem;">⚠️ この操作は取り消せません。本当に商品を削除しますか？</p>
+                <p id="delete-item-name" style="font-weight: 500;"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button type="submit" class="btn btn-danger">削除する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// フィルターパネル開閉
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    const btn = document.getElementById('searchToggleBtn');
+    panel.classList.toggle('open');
+    btn.classList.toggle('active');
+}
+
+// フィルタータブ切り替え
+function showFilterTab(tabName, e) {
+    document.querySelectorAll('.filter-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.filter-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    let contentId;
+    switch(tabName) {
+        case 'text': contentId = 'filter-text'; break;
+        case 'status': contentId = 'filter-status-tab'; break;
+        case 'price': contentId = 'filter-price'; break;
+    }
+    
+    document.getElementById(contentId).classList.add('active');
+    if (e && e.target) {
+        e.target.classList.add('active');
+    }
+}
+
+// 全フィルターをリセット
+function resetAllFilters() {
+    document.getElementById('tab-filter-id').value = '';
+    document.getElementById('tab-filter-name').value = '';
+    document.getElementById('tab-filter-brand').value = '';
+    document.getElementById('tab-filter-model').value = '';
+    document.getElementById('tab-filter-owner').value = '';
+    document.getElementById('tab-filter-condition').value = '';
+    document.getElementById('tab-filter-status').value = '';
+    document.getElementById('tab-filter-purchase-min').value = '';
+    document.getElementById('tab-filter-purchase-max').value = '';
+    document.getElementById('tab-filter-sale-min').value = '';
+    document.getElementById('tab-filter-sale-max').value = '';
+    document.getElementById('tab-filter-profit-min').value = '';
+    document.getElementById('tab-filter-profit-max').value = '';
+    
+    filterTable();
+    updateFilterCount();
+}
+
+// フィルター適用
+function applyFilters() {
+    filterTable();
+    updateFilterCount();
+    document.getElementById('filterPanel').classList.remove('open');
+    document.getElementById('searchToggleBtn').classList.remove('active');
+}
+
+// フィルター数をカウント
+function updateFilterCount() {
+    let count = 0;
+    
+    if (document.getElementById('tab-filter-id')?.value) count++;
+    if (document.getElementById('tab-filter-name')?.value) count++;
+    if (document.getElementById('tab-filter-brand')?.value) count++;
+    if (document.getElementById('tab-filter-model')?.value) count++;
+    if (document.getElementById('tab-filter-owner')?.value) count++;
+    if (document.getElementById('tab-filter-condition')?.value) count++;
+    if (document.getElementById('tab-filter-status')?.value) count++;
+    if (document.getElementById('tab-filter-purchase-min')?.value) count++;
+    if (document.getElementById('tab-filter-purchase-max')?.value) count++;
+    if (document.getElementById('tab-filter-sale-min')?.value) count++;
+    if (document.getElementById('tab-filter-sale-max')?.value) count++;
+    if (document.getElementById('tab-filter-profit-min')?.value) count++;
+    if (document.getElementById('tab-filter-profit-max')?.value) count++;
+    
+    const countEl = document.getElementById('filterCount');
+    if (count > 0) {
+        countEl.textContent = count;
+        countEl.style.display = 'inline';
+    } else {
+        countEl.style.display = 'none';
+    }
+}
+
+// テーブルフィルター機能
+function filterTable() {
+    const filterId = (document.getElementById('tab-filter-id')?.value || '').toLowerCase();
+    const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
+    const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
+    const filterModel = (document.getElementById('tab-filter-model')?.value || '').toLowerCase();
+    const filterOwner = (document.getElementById('tab-filter-owner')?.value || '').toLowerCase();
+    const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
+    const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+    
+    const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
+    const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
+    const filterSaleMin = document.getElementById('tab-filter-sale-min')?.value || '';
+    const filterSaleMax = document.getElementById('tab-filter-sale-max')?.value || '';
+    const filterProfitMin = document.getElementById('tab-filter-profit-min')?.value || '';
+    const filterProfitMax = document.getElementById('tab-filter-profit-max')?.value || '';
+    
+    let visibleCount = 0;
+    
+    function checkPriceRange(value, min, max) {
+        const numValue = parseInt(value) || 0;
+        if (min !== '' && numValue < parseInt(min)) return false;
+        if (max !== '' && numValue > parseInt(max)) return false;
+        return true;
+    }
+    
+    const rows = document.querySelectorAll('#itemsTable tbody tr');
+    rows.forEach(row => {
+        if (!row.dataset.id) return;
+        
+        const id = row.dataset.id;
+        const name = (row.dataset.name || '').toLowerCase();
+        const brand = (row.dataset.brand || '').toLowerCase();
+        const model = (row.dataset.model || '').toLowerCase();
+        const owner = (row.dataset.owner || '').toLowerCase();
+        const condition = row.dataset.condition || '';
+        const status = row.dataset.status || '';
+        const purchasePrice = row.dataset.purchasePrice || '0';
+        const salePrice = row.dataset.salePrice || '0';
+        const profit = row.dataset.profit || '0';
+        
+        let show = true;
+        
+        if (filterId && !id.includes(filterId)) show = false;
+        if (filterName && !name.includes(filterName)) show = false;
+        if (filterBrand && !brand.includes(filterBrand)) show = false;
+        if (filterModel && !model.includes(filterModel)) show = false;
+        if (filterOwner && !owner.includes(filterOwner)) show = false;
+        if (filterCondition && condition !== filterCondition) show = false;
+        if (filterStatus && status !== filterStatus) show = false;
+        
+        if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
+        if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
+        if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) show = false;
+        
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    const countEl = document.getElementById('filtered-count');
+    if (countEl) countEl.textContent = visibleCount + '件表示';
+}
+
+function openTransferModal(itemId, itemName) {
+    const modal = document.getElementById('transfer-modal');
+    const form = document.getElementById('transfer-form');
+    const nameEl = document.getElementById('transfer-item-name');
+    
+    form.action = '/admin/items/' + itemId + '/transfer';
+    nameEl.textContent = '商品: ' + itemName;
+    modal.style.display = 'flex';
+}
+
+function closeTransferModal() {
+    document.getElementById('transfer-modal').style.display = 'none';
+}
+
+function confirmDelete(itemId, itemName) {
+    const modal = document.getElementById('delete-modal');
+    const form = document.getElementById('delete-form');
+    const nameEl = document.getElementById('delete-item-name');
+    
+    form.action = '/admin/items/' + itemId + '/delete';
+    nameEl.textContent = '商品: ' + itemName;
+    modal.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').style.display = 'none';
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+function confirmBulkTransfer() {
+    const checked = document.querySelectorAll('.item-checkbox:checked');
+    const form = document.getElementById('bulk-transfer-form');
+    const targetUser = form.querySelector('select[name="target_user_id"]').value;
+    
+    if (checked.length === 0) {
+        alert('転送する商品を選択してください');
+        return false;
+    }
+    
+    if (!targetUser) {
+        alert('転送先ユーザーを選択してください');
+        return false;
+    }
+    
+    return confirm(checked.length + '件の商品を転送しますか？');
+}
+
+// モーダル外クリックで閉じる
+document.getElementById('transfer-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeTransferModal();
+    }
+});
+
+document.getElementById('delete-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeDeleteModal();
+    }
+});
+
+// ソート機能
+let sortDirection = {};
+
+document.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', function() {
+        const column = this.dataset.sort;
+        sortDirection[column] = !sortDirection[column];
+        sortTable(column, sortDirection[column]);
+    });
+});
+
+function sortTable(column, ascending) {
+    const tbody = document.querySelector('#itemsTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    rows.sort((a, b) => {
+        if (!a.dataset.id) return 1;
+        if (!b.dataset.id) return -1;
+        
+        let aVal, bVal;
+        
+        switch(column) {
+            case 'id':
+            case 'purchase_price':
+            case 'listing_price':
+            case 'sale_price':
+            case 'profit':
+                aVal = parseInt(a.dataset[column.replace('_', '')] || a.dataset[column] || '0') || 0;
+                bVal = parseInt(b.dataset[column.replace('_', '')] || b.dataset[column] || '0') || 0;
+                break;
+            default:
+                aVal = a.dataset[column.replace('_', '')] || '';
+                bVal = b.dataset[column.replace('_', '')] || '';
+        }
+        
+        if (ascending) {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+    
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+// ========== ライトボックス機能 ==========
+let currentPhotos = [];
+let currentIndex = 0;
+
+// data属性から画像リストを取得して開く
+function openLightboxFromData(element, index) {
+    try {
+        const photosData = element.getAttribute('data-photos');
+        if (photosData) {
+            const photos = JSON.parse(photosData);
+            openLightboxGallery(photos, index);
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
+
+// 親要素のdata属性から画像リストを取得して開く
+function openLightboxFromParent(element, index) {
+    try {
+        const parent = element.closest('[data-photos]');
+        if (parent) {
+            const photosData = parent.getAttribute('data-photos');
+            if (photosData) {
+                const photos = JSON.parse(photosData);
+                openLightboxGallery(photos, index);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to parse photos data:', e);
+    }
+}
+
+function openLightboxGallery(photos, index) {
+    if (!photos || photos.length === 0) return;
+    currentPhotos = photos;
+    currentIndex = index;
+    
+    // スクロールコンテナに画像を挿入
+    const container = document.getElementById('lightboxGalleryScrollContainer');
+    container.innerHTML = '';
+    
+    photos.forEach((photo, i) => {
+        const slide = document.createElement('div');
+        slide.className = 'lightbox-gallery-slide';
+        slide.innerHTML = `<img src="/static/${photo}" alt="">`;
+        container.appendChild(slide);
+    });
+    
+    document.getElementById('lightboxGallery').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // 指定したインデックスにスクロール（レイアウト確定後に実行）
+    requestAnimationFrame(() => {
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+        updateLightboxCounter();
+    });
+    
+    // スクロールイベントでカウンター更新（パッシブリスナーでスムーズに）
+    let scrollTimeout;
+    const handleScroll = function() {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                currentIndex = newIndex;
+                updateLightboxCounter();
+            }
+        }, 50);
+    };
+    
+    // 既存のイベントリスナーを削除してから追加
+    container.onscroll = null;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // タッチイベントでスワイプ操作を改善
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isScrolling = false;
+    
+    const handleTouchStart = function(e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isScrolling = false;
+    };
+    
+    const handleTouchMove = function(e) {
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        const deltaX = Math.abs(touchX - touchStartX);
+        const deltaY = Math.abs(touchY - touchStartY);
+        
+        // 横方向のスワイプが縦方向より大きい場合のみスクロール
+        if (deltaX > deltaY && deltaX > 10) {
+            isScrolling = true;
+        }
+    };
+    
+    const handleTouchEnd = function(e) {
+        if (isScrolling) {
+            // スワイプ操作が完了したことを示す
+            const slideWidth = container.offsetWidth;
+            const newIndex = Math.round(container.scrollLeft / slideWidth);
+            if (newIndex !== currentIndex && newIndex >= 0 && newIndex < currentPhotos.length) {
+                currentIndex = newIndex;
+                updateLightboxCounter();
+            }
+        }
+        isScrolling = false;
+    };
+    
+    // タッチイベントリスナーを追加
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
+function closeLightboxGallery() {
+    document.getElementById('lightboxGallery').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function lightboxGalleryPrev() {
+    const container = document.getElementById('lightboxGalleryScrollContainer');
+    currentIndex = (currentIndex - 1 + currentPhotos.length) % currentPhotos.length;
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ 
+        left: slideWidth * currentIndex, 
+        behavior: 'smooth' 
+    });
+    updateLightboxCounter();
+}
+
+function lightboxGalleryNext() {
+    const container = document.getElementById('lightboxGalleryScrollContainer');
+    currentIndex = (currentIndex + 1) % currentPhotos.length;
+    const slideWidth = container.offsetWidth;
+    container.scrollTo({ 
+        left: slideWidth * currentIndex, 
+        behavior: 'smooth' 
+    });
+    updateLightboxCounter();
+}
+
+function updateLightboxCounter() {
+    document.getElementById('lightboxGalleryCounter').textContent = 
+        (currentIndex + 1) + ' / ' + currentPhotos.length;
+    
+    // ナビゲーションボタンの表示制御
+    const prevBtn = document.querySelector('.lightbox-gallery-prev');
+    const nextBtn = document.querySelector('.lightbox-gallery-next');
+    if (currentPhotos.length <= 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+    } else {
+        prevBtn.style.display = 'block';
+        nextBtn.style.display = 'block';
+    }
+}
+
+// キーボード操作
+document.addEventListener('keydown', function(e) {
+    const lightbox = document.getElementById('lightboxGallery');
+    if (!lightbox || !lightbox.classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightboxGallery();
+    if (e.key === 'ArrowLeft') lightboxGalleryPrev();
+    if (e.key === 'ArrowRight') lightboxGalleryNext();
+});
+
+// 背景クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
+document.getElementById('lightboxGallery')?.addEventListener('click', function(e) {
+    // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+    if (e.target === this || e.target.classList.contains('lightbox-gallery-close')) {
+        closeLightboxGallery();
+    }
+});
+
+// スワイプカルーセルのインジケーター更新
+document.addEventListener('DOMContentLoaded', function() {
+    const mobileCards = document.getElementById('mobileCards');
+    const currentIndex = document.querySelector('.current-index');
+    const totalCount = document.querySelector('.total-count');
+    
+    if (mobileCards && currentIndex) {
+        mobileCards.addEventListener('scroll', function() {
+            const cardWidth = mobileCards.offsetWidth;
+            const scrollLeft = mobileCards.scrollLeft;
+            const index = Math.round(scrollLeft / cardWidth) + 1;
+            currentIndex.textContent = index;
+        });
+    }
+    
+    // カードタップで詳細ページに移動（画像エリア以外）
+    document.querySelectorAll('.mobile-cards .admin-item-card').forEach(function(card) {
+        // 画像エリア内のクリックは伝搬を止める
+        card.querySelectorAll('.admin-card-photo, .card-photo-scroll').forEach(function(photoArea) {
+            photoArea.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        });
+        
+        // カード全体のクリックで詳細ページへ
+        card.addEventListener('click', function(e) {
+            // 画像エリア、チェックボックス、ボタンからのクリックは処理しない
+            if (e.target.closest('.admin-card-photo') || e.target.closest('.card-photo-scroll') || 
+                e.target.closest('.admin-card-checkbox') || e.target.closest('button') ||
+                e.target.closest('a') || e.target.closest('input')) {
+                return;
+            }
+            
+            // カード内の詳細リンクを取得してそのURLに移動
+            const detailLink = card.querySelector('a[href*="/view/"]');
+            if (detailLink) {
+                window.location.href = detailLink.href;
+            }
+        });
+    });
+});
+</script>
+
+<!-- ライトボックス -->
+<div class="lightbox-gallery" id="lightboxGallery">
+    <button class="lightbox-gallery-close" onclick="closeLightboxGallery()">×</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-prev" onclick="lightboxGalleryPrev()">‹</button>
+    <button class="lightbox-gallery-nav lightbox-gallery-next" onclick="lightboxGalleryNext()">›</button>
+    <div class="lightbox-gallery-scroll-container" id="lightboxGalleryScrollContainer">
+    </div>
+    <div class="lightbox-gallery-counter" id="lightboxGalleryCounter"></div>
+</div>
+
+{% endblock %}

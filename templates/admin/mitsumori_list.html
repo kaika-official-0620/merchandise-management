@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}見積依頼書管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>見積依頼書管理</h1>
+    <div class="admin-nav-buttons">
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">← 書類管理</a>
+        <a href="{{ url_for('admin_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+</div>
+
+<div class="info-box">
+    <p>ユーザーが作成した見積依頼書の一覧です。</p>
+</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類No.</th>
+                <th>作成者</th>
+                <th>宛先（会社名）</th>
+                <th>件名</th>
+                <th>発行日</th>
+                <th>合計金額</th>
+                <th>ステータス</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in mitsumori_list %}
+            <tr>
+                <td class="doc-no">{{ doc.document_no }}</td>
+                <td class="user-name">{{ doc.user_name or doc.username or '-' }}</td>
+                <td>{{ doc.company_name or '-' }}</td>
+                <td>{{ doc.subject or '-' }}</td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                <td>
+                    {% if doc.status == 'approved' %}
+                        <span class="status-badge status-approved">承認済</span>
+                    {% elif doc.status == 'rejected' %}
+                        <span class="status-badge status-rejected">却下</span>
+                    {% elif doc.status == 'sent' %}
+                        <span class="status-badge status-new">新規</span>
+                    {% elif doc.status == 'completed' %}
+                        <span class="status-badge status-completed">完了</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_mitsumori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    <a href="{{ url_for('admin_mitsumori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status == 'sent' %}
+                    <form action="{{ url_for('admin_mitsumori_approve', id=doc.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-approve">承認</button>
+                    </form>
+                    <form action="{{ url_for('admin_mitsumori_reject', id=doc.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-reject">却下</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="text-center text-muted">見積依頼書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.admin-nav-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.info-box {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.info-box p {
+    margin: 0;
+    color: #1e40af;
+    font-size: 0.9rem;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-completed { background: #d4edda; color: #155724; }
+.status-sent { background: #d4edda; color: #155724; }
+.status-draft { background: #fff3cd; color: #856404; }
+.status-new { background: #fee2e2; color: #dc2626; font-weight: 600; }
+.status-approved { background: #d1fae5; color: #059669; }
+.status-rejected { background: #e2e8f0; color: #64748b; }
+
+.user-name { 
+    font-weight: 500; 
+    color: #2563eb;
+}
+
+.btn-approve { background: #10b981; color: white; }
+.btn-approve:hover { background: #059669; }
+.btn-reject { background: #6b7280; color: white; }
+.btn-reject:hover { background: #4b5563; }
+
+.btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
+.btn-info { background: #17a2b8; color: white; }
+.btn-pdf { background: #dc3545; color: white; }
+.btn-primary { background: #3b82f6; color: white; }
+
+.actions { white-space: nowrap; }
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 800px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}

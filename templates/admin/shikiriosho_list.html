@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}精算書管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>精算書管理</h1>
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>精算書番号</th>
+                <th>宛先</th>
+                <th>発行日</th>
+                <th>税込合計</th>
+                <th>ステータス</th>
+                <th>既読</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in shikiriosho_list %}
+            <tr>
+                <td class="doc-no">{{ doc.document_no }}</td>
+                <td>
+                    {% if doc.recipient_display_name %}
+                        {{ doc.recipient_display_name }}
+                    {% elif doc.recipient_name %}
+                        {{ doc.recipient_name }}
+                    {% else %}
+                        <span class="text-muted">未設定</span>
+                    {% endif %}
+                </td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        <span class="status-badge status-sent">送信済</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        {% if doc.is_read %}
+                            <span class="read-badge read">既読</span>
+                        {% else %}
+                            <span class="read-badge unread">未読</span>
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_shikiriosho_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    {% if doc.status == 'draft' %}
+                        <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                        <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center text-muted">精算書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-sent {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.read-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.read-badge.read {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.read-badge.unread {
+    background: #007bff;
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin: 2px;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}
+
+

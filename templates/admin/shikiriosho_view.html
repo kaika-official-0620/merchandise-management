@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}精算書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>精算書詳細</h1>
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+        {% if shikiriosho.status == 'draft' %}
+        <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
+        <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+        {% endif %}
+        <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
+    </div>
+</div>
+
+<div class="document-container">
+    <div class="document-header">
+        <div class="document-title">
+            <h2>見積依頼書</h2>
+        </div>
+        <div class="document-info">
+            <table>
+                <tr>
+                    <th>精算書番号</th>
+                    <td>{{ shikiriosho.document_no }}</td>
+                </tr>
+                <tr>
+                    <th>発行日</th>
+                    <td>{{ shikiriosho.issue_date }}</td>
+                </tr>
+                {% if shikiriosho.due_date %}
+                <tr>
+                    <th>支払期限</th>
+                    <td>{{ shikiriosho.due_date }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <th>ステータス</th>
+                    <td>
+                        {% if shikiriosho.status == 'sent' %}
+                            <span class="status-badge status-sent">送信済</span>
+                            {% if shikiriosho.is_read %}
+                                <span class="read-badge read">既読</span>
+                            {% else %}
+                                <span class="read-badge unread">未読</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="status-badge status-draft">下書き</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="document-recipient">
+        <div class="recipient-name">
+            {% if shikiriosho.recipient_display_name %}
+                {{ shikiriosho.recipient_display_name }} 様
+            {% elif shikiriosho.recipient_name %}
+                {{ shikiriosho.recipient_name }} 様
+            {% else %}
+                <span class="text-muted">宛先未設定</span>
+            {% endif %}
+        </div>
+        <div class="document-message">
+            下記のとおり、お見積り申し上げます
+        </div>
+    </div>
+
+    <div class="document-total-box">
+        <span class="total-label">税込合計金額</span>
+        <span class="total-value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</span>
+    </div>
+
+    <table class="document-items">
+        <thead>
+            <tr>
+                <th width="5%">No</th>
+                <th width="35%">品名</th>
+                <th width="20%">規格</th>
+                <th width="10%">数量</th>
+                <th width="15%">単価</th>
+                <th width="15%">金額</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.item_no }}</td>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.specification or '-' }}</td>
+                <td class="text-right">{{ item.quantity }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 10) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" rowspan="3" class="footer-notes">
+                    {% if shikiriosho.notes %}
+                    <strong>備考：</strong><br>
+                    {{ shikiriosho.notes|replace('\n', '<br>')|safe }}
+                    {% endif %}
+                </td>
+                <td class="text-right"><strong>小計</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(shikiriosho.subtotal) }}</td>
+            </tr>
+            <tr>
+                <td class="text-right"><strong>消費税（{{ shikiriosho.tax_rate }}%）</strong></td>
+                <td class="text-right">¥{{ "{:,}".format(shikiriosho.tax_amount) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td class="text-right"><strong>合計</strong></td>
+                <td class="text-right"><strong>¥{{ "{:,}".format(shikiriosho.total_amount) }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="document-footer">
+        <div class="company-info">
+            <p><strong>株式会社 開花</strong></p>
+        </div>
+    </div>
+</div>
+
+<style>
+.document-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+}
+
+.document-title h2 {
+    font-size: 28px;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 3px double #333;
+}
+
+.document-info table {
+    border-collapse: collapse;
+}
+
+.document-info th,
+.document-info td {
+    padding: 5px 10px;
+    text-align: left;
+}
+
+.document-info th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-recipient {
+    margin-bottom: 30px;
+}
+
+.recipient-name {
+    font-size: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333;
+    display: inline-block;
+    min-width: 200px;
+}
+
+.document-message {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.document-total-box {
+    background: #f8f9fa;
+    border: 2px solid #333;
+    padding: 15px 30px;
+    display: inline-block;
+    margin-bottom: 30px;
+}
+
+.total-label {
+    font-size: 14px;
+    margin-right: 20px;
+}
+
+.total-value {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.document-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+
+.document-items th,
+.document-items td {
+    border: 1px solid #333;
+    padding: 10px;
+}
+
+.document-items th {
+    background: #f8f9fa;
+    font-weight: normal;
+}
+
+.document-items .text-center {
+    text-align: center;
+}
+
+.document-items .text-right {
+    text-align: right;
+}
+
+.empty-row td {
+    height: 30px;
+}
+
+.footer-notes {
+    vertical-align: top;
+    font-size: 12px;
+    border-right: none !important;
+}
+
+.total-row td {
+    background: #f8f9fa;
+    font-size: 16px;
+}
+
+.document-footer {
+    text-align: right;
+    margin-top: 40px;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-sent {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.read-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    margin-left: 5px;
+}
+
+.read-badge.read {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.read-badge.unread {
+    background: #007bff;
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-pdf {
+    background: #e74c3c;
+    color: white;
+}
+
+@media print {
+    .admin-header {
+        display: none;
+    }
+    .document-container {
+        box-shadow: none;
+        padding: 0;
+    }
+}
+</style>
+{% endblock %}
+

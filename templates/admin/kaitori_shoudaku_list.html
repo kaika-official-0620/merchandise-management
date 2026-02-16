@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}買取承諾書一覧（法人版） - 物販管理システム{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">買取承諾書一覧（法人版）</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('admin_kaitori_shoudaku_add') }}" class="btn btn-primary">新規作成</a>
+    </div>
+</div>
+
+{% if kaitori_list %}
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類番号</th>
+                <th>会社名</th>
+                <th>担当者</th>
+                <th>発行日</th>
+                <th>合計金額</th>
+                <th>作成者</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for kaitori in kaitori_list %}
+            <tr>
+                <td>{{ kaitori.document_no }}</td>
+                <td>{{ kaitori.company_name }}</td>
+                <td>{{ kaitori.contact_name or '-' }}</td>
+                <td>{{ kaitori.issue_date }}</td>
+                <td>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
+                <td>{{ kaitori.admin_name or '-' }}</td>
+                <td>
+                    <a href="{{ url_for('admin_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">詳細</a>
+                    <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-sm btn-export" target="_blank">PDF</a>
+                    <a href="{{ url_for('admin_kaitori_shoudaku_delete', id=kaitori.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('削除してもよろしいですか？')">削除</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>買取承諾書がありません</p>
+    <a href="{{ url_for('admin_kaitori_shoudaku_add') }}" class="btn btn-primary">最初の買取承諾書を作成</a>
+</div>
+{% endif %}
+
+<style>
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}

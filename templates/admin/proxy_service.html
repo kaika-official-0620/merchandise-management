@@ -1,0 +1,1278 @@
+{% extends "base.html" %}
+{% block title %}{{ settings.auction_name or 'オークション' }} - 代行仕入れサービス管理{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 一覧</a>
+        {{ settings.auction_name or 'オークション' }}
+    </h1>
+    <div class="header-actions">
+        <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+        <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
+        <button onclick="deleteAuction()" class="btn btn-outline-danger">削除</button>
+    </div>
+</div>
+
+<div class="proxy-admin-container">
+    <!-- 設定フォーム -->
+    <div class="settings-card">
+        <h2>基本設定</h2>
+        <form method="POST" action="{{ url_for('admin_proxy_service_settings', auction_id=auction_id) }}">
+            <div class="form-group">
+                <label>オークション名（管理用）</label>
+                <input type="text" name="auction_name" value="{{ settings.auction_name or 'オークション' }}" class="form-control" required>
+                <p class="form-hint">管理画面での識別用の名前</p>
+            </div>
+            <div class="form-group toggle-group">
+                <div class="toggle-info">
+                    <span class="toggle-text">ページを公開する</span>
+                    <p class="form-hint">オフにするとページは非公開になります</p>
+                </div>
+                <div class="toggle-buttons">
+                    <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false)">非公開</button>
+                    <button type="button" class="toggle-btn on {% if settings.is_public %}active{% endif %}" onclick="setPublic(true)">公開</button>
+                    <input type="hidden" name="is_public" id="is_public_input" value="{% if settings.is_public %}on{% endif %}">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>ページタイトル</label>
+                <input type="text" name="page_title" value="{{ settings.page_title or '代行仕入れサービス' }}" class="form-control">
+            </div>
+            
+            <div class="form-group">
+                <label>ページ説明文</label>
+                <textarea name="page_description" class="form-control" rows="3">{{ settings.page_description or '' }}</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>販売方式</label>
+                <div class="sale-mode-options">
+                    <label class="radio-label">
+                        <input type="radio" name="sale_mode" value="auction" {% if not settings.sale_mode or settings.sale_mode == 'auction' %}checked{% endif %}>
+                        <span class="radio-text">
+                            <strong>オークション</strong>
+                            <small>入札形式で最高額を競います</small>
+                        </span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="sale_mode" value="fixed" {% if settings.sale_mode == 'fixed' %}checked{% endif %}>
+                        <span class="radio-text">
+                            <strong>即決・早い者勝ち</strong>
+                            <small>固定価格で先着順に購入できます</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>開始日時</label>
+                <input type="datetime-local" name="start_datetime" class="form-control" 
+                       value="{% if settings.start_datetime %}{% if settings.start_datetime is string %}{{ settings.start_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+                <p class="form-hint">この日時以降に公開されます（空欄で即時公開）</p>
+            </div>
+            
+            <div class="form-group">
+                <label>終了日時</label>
+                <input type="datetime-local" name="end_datetime" class="form-control"
+                       value="{% if settings.end_datetime %}{% if settings.end_datetime is string %}{{ settings.end_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.end_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+                <p class="form-hint">この日時に終了します（空欄で無期限）</p>
+            </div>
+            
+            <div class="form-group">
+                <label>サービス利用対象ユーザー</label>
+                <p class="form-hint">チェックしたユーザーのみがこのサービスを利用（閲覧・入札）できます</p>
+                <div class="select-all-container">
+                    <label class="checkbox-label select-all">
+                        <input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this)">
+                        <span class="checkbox-name">すべて選択</span>
+                    </label>
+                </div>
+                <div class="user-checkboxes">
+                    {% for user in users %}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="selected_users" value="{{ user.id }}" 
+                               class="user-checkbox"
+                               {% if user.is_selected %}checked{% endif %}>
+                        <span class="checkbox-name">{{ user.display_name or user.username }}</span>
+                        <span class="checkbox-role {% if user.role == 'owner' %}owner{% elif user.role == 'admin' %}admin{% else %}user{% endif %}">
+                            {% if user.role == 'owner' %}オーナー{% elif user.role == 'admin' %}管理者{% else %}ユーザー{% endif %}
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">設定を保存</button>
+        </form>
+    </div>
+    
+    <!-- 公開中の商品一覧 -->
+    <div class="items-card">
+        <h2>公開中の商品 <span class="item-count" id="published-count">{{ items|length }}件</span></h2>
+        
+        <!-- 検索・フィルター -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <input type="text" id="published-search" class="filter-input" placeholder="商品名・ブランドで検索..." onkeyup="filterPublishedItems()">
+                </div>
+                <div class="filter-group">
+                    <select id="published-owner-filter" class="filter-select" onchange="filterPublishedItems()">
+                        <option value="">全ての登録者</option>
+                        {% for user in users %}
+                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="published-bid-filter" class="filter-select" onchange="filterPublishedItems()">
+                        <option value="">入札状態</option>
+                        <option value="has-bid">入札あり</option>
+                        <option value="no-bid">入札なし</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearPublishedFilters()">クリア</button>
+            </div>
+        </div>
+        
+        {% if items %}
+        <div class="proxy-items-grid" id="published-items-grid">
+            {% for item in items %}
+            <div class="proxy-item-card published-item" 
+                 data-name="{{ (item.product_name or '')|lower }}"
+                 data-brand="{{ (item.brand_name or '')|lower }}"
+                 data-owner="{{ item.owner_name }}"
+                 data-has-bid="{{ 'yes' if item.highest_bid else 'no' }}">
+                <div class="item-photo">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                    {% else %}
+                    <div class="no-photo">No Image</div>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    <div class="item-name">{{ item.product_name or '-' }}</div>
+                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    {% if item.highest_bid %}
+                    <div class="item-bid-info">
+                        <span class="bid-amount">最高入札: ¥{{ "{:,}".format(item.highest_bid) }}</span>
+                        <span class="bid-count">({{ item.bid_count }}件)</span>
+                    </div>
+                    <div class="item-bidder">入札者: {{ item.highest_bidder }}</div>
+                    {% else %}
+                    <div class="item-no-bid">入札なし</div>
+                    {% endif %}
+                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
+                        公開解除
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            公開中の商品はありません。<br>
+            商品一覧から「代行サービスに掲載」をクリックして商品を追加してください。
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 商品を追加 -->
+    <div class="add-items-card">
+        <h2>商品を追加 <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
+        
+        <!-- 検索・フィルター -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <input type="text" id="available-search" class="filter-input" placeholder="商品名・ブランドで検索..." onkeyup="filterAvailableItems()">
+                </div>
+                <div class="filter-group">
+                    <select id="available-owner-filter" class="filter-select" onchange="filterAvailableItems()">
+                        <option value="">全ての登録者</option>
+                        {% for user in users %}
+                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select id="available-price-filter" class="filter-select" onchange="filterAvailableItems()">
+                        <option value="">価格帯</option>
+                        <option value="0-10000">〜¥10,000</option>
+                        <option value="10000-50000">¥10,000〜¥50,000</option>
+                        <option value="50000-100000">¥50,000〜¥100,000</option>
+                        <option value="100000-">¥100,000〜</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearAvailableFilters()">クリア</button>
+            </div>
+        </div>
+        
+        <!-- 一括操作バー -->
+        <div class="bulk-action-bar" id="available-bulk-bar" style="display: none;">
+            <label class="checkbox-label select-all-inline">
+                <input type="checkbox" id="selectAllAvailable" onchange="toggleAllAvailableItems(this)">
+                <span>表示中をすべて選択</span>
+            </label>
+            <span class="selected-count" id="available-selected-count">0件選択中</span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="bulkAddItems()">
+                選択した商品を一括掲載
+            </button>
+        </div>
+        
+        {% if available_items %}
+        <div class="proxy-items-grid" id="available-items-grid">
+            {% for item in available_items %}
+            <div class="proxy-item-card available available-item" id="available-{{ item.id }}"
+                 data-id="{{ item.id }}"
+                 data-name="{{ (item.product_name or '')|lower }}"
+                 data-brand="{{ (item.brand_name or '')|lower }}"
+                 data-owner="{{ item.owner_name }}"
+                 data-price="{{ item.listing_price or 0 }}">
+                <div class="item-checkbox">
+                    <input type="checkbox" class="available-item-checkbox" data-id="{{ item.id }}" onchange="updateAvailableSelection()">
+                </div>
+                <div class="item-photo">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                    {% else %}
+                    <div class="no-photo">No Image</div>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    <div class="item-name">{{ item.product_name or '-' }}</div>
+                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-price">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
+                        掲載する
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            選択可能な商品がありません。
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 入札履歴 -->
+    <div class="bids-card">
+        <h2>入札履歴 <span class="item-count">直近50件</span></h2>
+        {% if bids %}
+        <div class="bids-table-container">
+            <table class="bids-table">
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th>入札者</th>
+                        <th>入札額</th>
+                        <th>日時</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bid in bids %}
+                    <tr>
+                        <td>{{ bid.product_name }}</td>
+                        <td>{{ bid.bidder_name }}</td>
+                        <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
+                        <td class="bid-time">{% if bid.created_at %}{% if bid.created_at is string %}{{ bid.created_at[5:16].replace('-', '/').replace('T', ' ').replace(' ', ' ') }}{% else %}{{ bid.created_at.strftime('%m/%d %H:%M') }}{% endif %}{% else %}-{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-message">まだ入札がありません</div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+/* 一覧へ戻るリンク */
+.back-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: normal;
+    margin-right: 0.5rem;
+}
+
+.back-link:hover {
+    color: var(--primary);
+}
+
+/* 削除ボタン */
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* 検索・フィルターセクション */
+.filter-section {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+}
+
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 150px;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filter-select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.filter-row .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .filter-group {
+        min-width: 100%;
+    }
+    
+    .filter-row .btn {
+        width: 100%;
+    }
+}
+
+/* 販売方式選択 */
+.sale-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.radio-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.radio-label:hover {
+    background: #f1f5f9;
+}
+
+.radio-label input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #2563eb;
+    margin-top: 2px;
+}
+
+.radio-label input[type="radio"]:checked + .radio-text {
+    color: #1e40af;
+}
+
+.radio-label:has(input:checked) {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.radio-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.radio-text strong {
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+.radio-text small {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+.proxy-admin-container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+}
+
+.bids-card {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.bids-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bids-table-container {
+    overflow-x: auto;
+}
+
+.bids-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.bids-table th,
+.bids-table td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bids-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.bids-table .bid-amount {
+    font-weight: 700;
+    color: #16a34a;
+}
+
+.bids-table .bid-time {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.settings-card, .items-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.settings-card h2, .items-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.item-count {
+    font-size: 0.85rem;
+    font-weight: normal;
+    color: #64748b;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #1e293b;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+/* 公開設定ボタン */
+.toggle-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.toggle-info {
+    flex: 1;
+}
+
+.toggle-info .toggle-text {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.toggle-info .form-hint {
+    margin-top: 0;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 0;
+    flex-shrink: 0;
+}
+
+.toggle-btn {
+    padding: 0.6rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: 2px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.toggle-btn:first-child {
+    border-radius: 8px 0 0 8px;
+    border-right: 1px solid #e2e8f0;
+}
+
+.toggle-btn:last-of-type {
+    border-radius: 0 8px 8px 0;
+    border-left: 1px solid #e2e8f0;
+}
+
+.toggle-btn.off.active {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+
+.toggle-btn.on.active {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #16a34a;
+}
+
+.toggle-btn:hover:not(.active) {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+@media (max-width: 480px) {
+    .toggle-group {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .toggle-buttons {
+        align-self: flex-end;
+    }
+}
+
+/* ユーザーチェックボックス */
+.user-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.checkbox-label:hover {
+    background: #f1f5f9;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+.checkbox-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.checkbox-role {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.checkbox-role.owner {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.checkbox-role.admin {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.checkbox-role.user {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.select-all-container {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.checkbox-label.select-all {
+    background: #f1f5f9;
+}
+
+.checkbox-label.select-all .checkbox-name {
+    color: #64748b;
+}
+
+/* 商品追加カード */
+.add-items-card {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.add-items-card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* 一括操作バー */
+.bulk-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: #eff6ff;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #bfdbfe;
+}
+
+.select-all-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0;
+    background: none;
+    margin: 0;
+}
+
+.select-all-inline input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2563eb;
+}
+
+.selected-count {
+    font-weight: 600;
+    color: #2563eb;
+}
+
+/* 商品カードのチェックボックス */
+.item-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+}
+
+.item-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #2563eb;
+    cursor: pointer;
+}
+
+.proxy-item-card.available {
+    position: relative;
+    border: 1px dashed #d1d5db;
+    background: white;
+}
+
+.proxy-item-card.available.selected {
+    border: 2px solid #2563eb;
+    background: #eff6ff;
+}
+
+.proxy-item-card .item-price {
+    font-weight: 700;
+    color: #2563eb;
+    font-size: 1rem;
+}
+
+/* 商品グリッド */
+.proxy-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.proxy-item-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+
+.proxy-item-card .item-photo {
+    height: 150px;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.proxy-item-card .item-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.proxy-item-card .no-photo {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.proxy-item-card .item-info {
+    padding: 0.75rem;
+}
+
+.proxy-item-card .item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.proxy-item-card .item-brand {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.proxy-item-card .item-start-price {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-bid-info {
+    background: #f0fdf4;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-bid-info .bid-amount {
+    font-weight: 700;
+    color: #16a34a;
+    font-size: 0.9rem;
+}
+
+.proxy-item-card .item-bid-info .bid-count {
+    font-size: 0.75rem;
+    color: #4ade80;
+    margin-left: 0.25rem;
+}
+
+.proxy-item-card .item-bidder {
+    font-size: 0.75rem;
+    color: #16a34a;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-no-bid {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-owner {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+.proxy-item-card .item-actions {
+    padding: 0 0.75rem 0.75rem;
+}
+
+.empty-message {
+    text-align: center;
+    color: #94a3b8;
+    padding: 3rem 1rem;
+    line-height: 1.8;
+}
+
+@media (max-width: 1024px) {
+    .proxy-admin-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .proxy-items-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
+<script>
+const AUCTION_ID = {{ auction_id }};
+
+function toggleProxyItem(itemId, btn) {
+    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // ページをリロードして最新状態を表示
+            location.reload();
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
+
+function addProxyItem(itemId, btn) {
+    btn.disabled = true;
+    btn.textContent = '処理中...';
+    
+    // 現在のフィルター状態を保存
+    saveAvailableFilters();
+    
+    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // ページをリロードして最新状態を表示（フィルター状態付き）
+            reloadWithFilters();
+        } else {
+            btn.disabled = false;
+            btn.textContent = '掲載する';
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = '掲載する';
+        alert('エラーが発生しました');
+    });
+}
+
+// フィルター状態を保存
+function saveAvailableFilters() {
+    const filters = {
+        search: document.getElementById('available-search').value,
+        owner: document.getElementById('available-owner-filter').value,
+        price: document.getElementById('available-price-filter').value
+    };
+    sessionStorage.setItem('proxyAvailableFilters', JSON.stringify(filters));
+}
+
+// フィルター状態を復元
+function restoreAvailableFilters() {
+    const saved = sessionStorage.getItem('proxyAvailableFilters');
+    if (saved) {
+        try {
+            const filters = JSON.parse(saved);
+            if (filters.search) document.getElementById('available-search').value = filters.search;
+            if (filters.owner) document.getElementById('available-owner-filter').value = filters.owner;
+            if (filters.price) document.getElementById('available-price-filter').value = filters.price;
+            filterAvailableItems();
+        } catch(e) {}
+    }
+}
+
+// フィルター状態を維持してリロード
+function reloadWithFilters() {
+    location.reload();
+}
+
+// 選択状態の更新
+function updateAvailableSelection() {
+    const checkboxes = document.querySelectorAll('.available-item-checkbox');
+    const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
+    const bulkBar = document.getElementById('available-bulk-bar');
+    const countSpan = document.getElementById('available-selected-count');
+    
+    // 選択された商品にハイライトを追加
+    checkboxes.forEach(cb => {
+        const card = cb.closest('.proxy-item-card');
+        if (cb.checked) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    });
+    
+    // 一括操作バーの表示/非表示
+    if (checkedBoxes.length > 0) {
+        bulkBar.style.display = 'flex';
+        countSpan.textContent = checkedBoxes.length + '件選択中';
+    } else {
+        bulkBar.style.display = 'none';
+    }
+    
+    // 全選択チェックボックスの状態を更新
+    const selectAll = document.getElementById('selectAllAvailable');
+    const visibleCheckboxes = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox');
+    const visibleChecked = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox:checked');
+    selectAll.checked = visibleCheckboxes.length > 0 && visibleCheckboxes.length === visibleChecked.length;
+}
+
+// 表示中の商品をすべて選択/解除
+function toggleAllAvailableItems(checkbox) {
+    const visibleItems = document.querySelectorAll('.available-item:not([style*="display: none"]) .available-item-checkbox');
+    visibleItems.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateAvailableSelection();
+}
+
+// 一括掲載
+function bulkAddItems() {
+    const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
+    const itemIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
+    
+    if (itemIds.length === 0) {
+        alert('商品を選択してください');
+        return;
+    }
+    
+    if (!confirm(itemIds.length + '件の商品を一括で掲載しますか？')) {
+        return;
+    }
+    
+    // フィルター状態を保存
+    saveAvailableFilters();
+    
+    fetch(`/admin/proxy-service/${AUCTION_ID}/bulk-toggle`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            item_ids: itemIds,
+            action: 'add'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            reloadWithFilters();
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
+
+function toggleAllUsers(checkbox) {
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    userCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+}
+
+// 初期状態でチェックボックスの状態を確認
+document.addEventListener('DOMContentLoaded', function() {
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllUsers');
+    const allChecked = Array.from(userCheckboxes).every(cb => cb.checked);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allChecked && userCheckboxes.length > 0;
+    }
+    
+    // フィルター状態を復元
+    restoreAvailableFilters();
+    
+    // 一括操作バーを初期表示
+    const bulkBar = document.getElementById('available-bulk-bar');
+    if (bulkBar) {
+        bulkBar.style.display = 'none';
+    }
+});
+
+// 公開/非公開ボタン切り替え
+function setPublic(isPublic) {
+    const input = document.getElementById('is_public_input');
+    const buttons = document.querySelectorAll('.toggle-btn');
+    
+    // hidden inputの値を設定
+    input.value = isPublic ? 'on' : '';
+    
+    // ボタンのactive状態を更新
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (isPublic) {
+        document.querySelector('.toggle-btn.on').classList.add('active');
+    } else {
+        document.querySelector('.toggle-btn.off').classList.add('active');
+    }
+}
+
+// 公開中商品のフィルタリング
+function filterPublishedItems() {
+    const searchText = document.getElementById('published-search').value.toLowerCase();
+    const ownerFilter = document.getElementById('published-owner-filter').value;
+    const bidFilter = document.getElementById('published-bid-filter').value;
+    
+    const items = document.querySelectorAll('.published-item');
+    let visibleCount = 0;
+    
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const brand = item.dataset.brand || '';
+        const owner = item.dataset.owner || '';
+        const hasBid = item.dataset.hasBid;
+        
+        let show = true;
+        
+        // テキスト検索
+        if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+            show = false;
+        }
+        
+        // 登録者フィルター
+        if (ownerFilter && owner !== ownerFilter) {
+            show = false;
+        }
+        
+        // 入札状態フィルター
+        if (bidFilter === 'has-bid' && hasBid !== 'yes') {
+            show = false;
+        } else if (bidFilter === 'no-bid' && hasBid !== 'no') {
+            show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    document.getElementById('published-count').textContent = visibleCount + '件';
+}
+
+// 公開中フィルターをクリア
+function clearPublishedFilters() {
+    document.getElementById('published-search').value = '';
+    document.getElementById('published-owner-filter').value = '';
+    document.getElementById('published-bid-filter').value = '';
+    filterPublishedItems();
+}
+
+// 追加可能商品のフィルタリング
+function filterAvailableItems() {
+    const searchText = document.getElementById('available-search').value.toLowerCase();
+    const ownerFilter = document.getElementById('available-owner-filter').value;
+    const priceFilter = document.getElementById('available-price-filter').value;
+    
+    const items = document.querySelectorAll('.available-item');
+    let visibleCount = 0;
+    
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const brand = item.dataset.brand || '';
+        const owner = item.dataset.owner || '';
+        const price = parseInt(item.dataset.price) || 0;
+        
+        let show = true;
+        
+        // テキスト検索
+        if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+            show = false;
+        }
+        
+        // 登録者フィルター
+        if (ownerFilter && owner !== ownerFilter) {
+            show = false;
+        }
+        
+        // 価格帯フィルター
+        if (priceFilter) {
+            const [min, max] = priceFilter.split('-').map(v => v === '' ? null : parseInt(v));
+            if (min !== null && price < min) show = false;
+            if (max !== null && price > max) show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    document.getElementById('available-count').textContent = visibleCount + '件選択可能';
+}
+
+// 追加可能フィルターをクリア
+function clearAvailableFilters() {
+    document.getElementById('available-search').value = '';
+    document.getElementById('available-owner-filter').value = '';
+    document.getElementById('available-price-filter').value = '';
+    sessionStorage.removeItem('proxyAvailableFilters');
+    filterAvailableItems();
+}
+
+// オークション終了・落札確定
+function deleteAuction() {
+    if (!confirm('このオークションを削除しますか？\n\n掲載中の商品は未掲載状態に戻ります。')) {
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/proxy-service/{{ auction_id }}/delete';
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function finalizeAuction() {
+    if (!confirm('オークションを終了し、落札者に商品を割り当てますか？\n\nこの操作は取り消せません。入札のあった商品は落札者の商品一覧に移動します。')) {
+        return;
+    }
+    
+    fetch('/admin/proxy-service/{{ auction_id }}/finalize', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.error || 'エラーが発生しました');
+        }
+    })
+    .catch(err => {
+        alert('エラーが発生しました');
+    });
+}
+</script>
+{% endblock %}

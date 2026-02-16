@@ -1,0 +1,3807 @@
+{% extends "base.html" %}
+{% block title %}商品一覧 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+    /* 統計サマリー */
+    .stats-summary {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .stats-item {
+        flex: 1;
+        min-width: 100px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        text-align: center;
+    }
+
+    .stats-label {
+        display: block;
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-bottom: 0.25rem;
+    }
+
+    .stats-value {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    /* PC用は通常表示、スマホ用は省略表示 */
+    .stats-value .short-value {
+        display: none;
+    }
+
+    .stats-value .full-value {
+        display: inline;
+    }
+
+    .stats-profit .stats-value {
+        color: #10b981;
+    }
+
+    .stats-loss .stats-value {
+        color: #ef4444;
+    }
+
+    .stats-inventory {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #f59e0b;
+    }
+
+    .stats-inventory .stats-label {
+        color: #92400e;
+    }
+
+    .stats-inventory .stats-value {
+        color: #b45309;
+        font-weight: 700;
+    }
+
+    @media (max-width: 768px) {
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.3rem;
+        }
+
+        .stats-item {
+            min-width: 0;
+            padding: 0.4rem 0.3rem;
+        }
+
+        .stats-label {
+            font-size: 0.6rem;
+            letter-spacing: -0.5px;
+        }
+
+        .stats-value {
+            font-size: 0.75rem;
+            letter-spacing: -0.5px;
+            word-break: break-all;
+        }
+
+        /* PC用の値を隠してスマホ用を表示 */
+        .stats-value .full-value {
+            display: none;
+        }
+
+        .stats-value .short-value {
+            display: inline;
+        }
+    }
+
+    /* 代行仕入れサービス利用可能残高 */
+    .proxy-service-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #f59e0b;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .proxy-service-card .proxy-icon {
+        font-size: 1.25rem;
+    }
+
+    .proxy-service-card .proxy-label {
+        font-size: 0.9rem;
+        color: #92400e;
+    }
+
+    .proxy-service-card .proxy-value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #d97706;
+        margin-left: 0.5rem;
+    }
+
+    /* お知らせエリア */
+    .announcement-area {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        padding: 12px 20px;
+        margin-bottom: 15px;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .announcement-slider {
+        flex: 1;
+    }
+
+    .announcement-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-5px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .announcement-badge {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .announcement-important .announcement-badge {
+        background: #ef4444;
+    }
+
+    .announcement-warning .announcement-badge {
+        background: #f59e0b;
+    }
+
+    .announcement-success .announcement-badge {
+        background: #10b981;
+    }
+
+    .announcement-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .announcement-content {
+        font-size: 0.85rem;
+        opacity: 0.9;
+    }
+
+    .announcement-nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 15px;
+    }
+
+    .ann-nav-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: background 0.2s;
+    }
+
+    .ann-nav-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    #annCounter {
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+
+    /* 検索＆アクションバー */
+    .search-action-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .search-action-bar .search-toggle-container {
+        margin-bottom: 0;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .action-buttons .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+
+    .btn-export {
+        background: #f8fafc;
+        border: 1px solid #d1d5db;
+        color: #374151;
+    }
+
+    .btn-export:hover {
+        background: #e5e7eb;
+    }
+
+    .btn-sales-agency {
+        background: #059669;
+        border: 1px solid #047857;
+        color: white;
+    }
+
+    .btn-sales-agency:hover {
+        background: #047857;
+    }
+
+    /* 検索ボタン */
+    .search-toggle-container {
+        margin-bottom: 1rem;
+        flex: 1;
+    }
+
+    /* スマホ用テキスト切り替え */
+    .search-text-short {
+        display: none;
+    }
+
+    .search-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #1e293b;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .search-toggle-btn:hover {
+        background: #f8fafc;
+        border-color: #2563eb;
+    }
+
+    .search-toggle-btn.active {
+        background: #2563eb;
+        color: white;
+        border-color: #2563eb;
+    }
+
+    .search-toggle-btn .search-icon {
+        font-size: 1rem;
+    }
+
+    .filter-count {
+        background: #ef4444;
+        color: white;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 10px;
+        margin-left: 0.25rem;
+    }
+
+    /* フィルターパネル */
+    .filter-panel {
+        display: none;
+        background: white;
+        border: 1px solid #d1d5db;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .filter-panel.open {
+        display: block;
+    }
+
+    .filter-tabs-header {
+        display: flex;
+        border-bottom: 1px solid #d1d5db;
+        background: #f8fafc;
+    }
+
+    .filter-tab-btn {
+        padding: 0.75rem 1.25rem;
+        background: transparent;
+        border: none;
+        border-right: 1px solid #e2e8f0;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: #64748b;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .filter-tab-btn:last-child {
+        border-right: none;
+    }
+
+    .filter-tab-btn:hover {
+        background: #e2e8f0;
+    }
+
+    .filter-tab-btn.active {
+        background: white;
+        color: #1e293b;
+        border-bottom: 2px solid #2563eb;
+        margin-bottom: -1px;
+    }
+
+    .filter-tab-content {
+        display: none;
+        padding: 1rem;
+    }
+
+    .filter-tab-content.active {
+        display: block;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .filter-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-item label {
+        font-size: 0.8rem;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .filter-item input,
+    .filter-item select {
+        padding: 0.4rem 0.6rem;
+        border: 1px solid #d1d5db;
+        font-size: 0.85rem;
+        min-width: 100px;
+    }
+
+    .filter-item input[type="number"] {
+        width: 80px;
+    }
+
+    .filter-item input[type="date"] {
+        width: 140px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-left: auto;
+    }
+
+    .filter-clear-btn {
+        padding: 0.4rem 0.75rem;
+        background: #f1f5f9;
+        border: 1px solid #d1d5db;
+        font-size: 0.8rem;
+        cursor: pointer;
+        color: #64748b;
+    }
+
+    .filter-clear-btn:hover {
+        background: #e2e8f0;
+    }
+
+    .filter-panel-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+
+    .filter-apply-btn {
+        padding: 0.5rem 1.25rem;
+        background: #2563eb;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .filter-apply-btn:hover {
+        background: #1d4ed8;
+    }
+
+    .filter-reset-btn {
+        padding: 0.5rem 1rem;
+        background: white;
+        color: #64748b;
+        border: 1px solid #d1d5db;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    .filter-reset-btn:hover {
+        background: #f1f5f9;
+    }
+
+    /* 登録者セル */
+    .owner-cell {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .owner-name {
+        color: #2563eb;
+        font-weight: 500;
+    }
+
+    /* 代行サービスボタン */
+    .btn-proxy {
+        background: #f0f9ff;
+        border: 1px solid #0ea5e9;
+        color: #0284c7;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+    }
+
+    .btn-proxy:hover {
+        background: #e0f2fe;
+    }
+
+    .btn-proxy.active {
+        background: #0ea5e9;
+        color: white;
+    }
+
+    .status-badge.proxy {
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: 0.65rem;
+        padding: 2px 5px;
+        margin-left: 3px;
+    }
+
+    @media (max-width: 768px) {
+        .search-action-bar {
+            flex-direction: row;
+            gap: 0.5rem;
+        }
+
+        .search-action-bar .search-toggle-container {
+            flex: 1;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.4rem;
+            flex-shrink: 0;
+        }
+
+        .action-buttons .btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        /* スマホでは「検索」のみ表示 */
+        .search-text-full {
+            display: none;
+        }
+
+        .search-text-short {
+            display: inline;
+        }
+
+        .search-toggle-btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .announcement-area {
+            flex-direction: column;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .announcement-item {
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .announcement-nav {
+            margin-left: 0;
+        }
+
+        .filter-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            overflow-y: auto;
+            margin: 0;
+        }
+
+        .filter-tabs-header {
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .filter-tab-btn {
+            flex: 1;
+            padding: 0.75rem 0.5rem;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .filter-group {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .filter-item {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .filter-item input,
+        .filter-item select {
+            width: 100%;
+        }
+
+        .filter-panel-footer {
+            position: sticky;
+            bottom: 0;
+        }
+    }
+
+    /* テーブルスタイル */
+    .table-container {
+        background: white;
+        border-radius: 10px;
+        overflow-x: auto;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-top: 1rem;
+    }
+
+    .data-table {
+        width: 100%;
+        min-width: 1400px;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        border: 1px solid #d1d5db;
+    }
+
+    .data-table th {
+        background: #f8fafc;
+        padding: 12px 10px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border: 1px solid #d1d5db;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .data-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .data-table th.sortable:hover {
+        background: #f1f5f9;
+    }
+
+    .data-table th .filter-icon {
+        margin-left: 5px;
+        opacity: 0.5;
+    }
+
+    .data-table td {
+        padding: 10px;
+        border: 1px solid #d1d5db;
+        vertical-align: middle;
+    }
+
+    .data-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .data-table tbody tr.row-sold {
+        background: #f8f8f8;
+        color: #94a3b8;
+    }
+
+    .data-table tbody tr.row-sold:hover {
+        background: #f1f1f1;
+    }
+
+    /* サムネイル */
+    .table-thumb {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .table-thumb:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .no-thumb {
+        width: 50px;
+        height: 50px;
+        background: #f1f5f9;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+    }
+
+    /* 画像カウントバッジ（PC） */
+    .photo-cell {
+        position: relative;
+        display: inline-block;
+    }
+
+    .photo-count-badge {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 0.65rem;
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+
+    /* 商品一覧ライトボックス（横スクロール形式） */
+    .item-lightbox {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 9999;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .item-lightbox.active {
+        display: flex;
+    }
+
+    .item-lightbox-scroll-container {
+        width: 100%;
+        height: 80vh;
+        display: flex;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x pan-y;
+        cursor: grab;
+    }
+
+    .item-lightbox-scroll-container:active {
+        cursor: grabbing;
+    }
+
+    .item-lightbox-scroll-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    .item-lightbox-scroll-container .lightbox-slide {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        min-width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        scroll-snap-align: start;
+        scroll-snap-stop: normal;
+        touch-action: pan-x;
+    }
+
+    .item-lightbox-scroll-container .lightbox-slide img {
+        max-width: 90%;
+        max-height: 100%;
+        border-radius: 8px;
+        object-fit: contain;
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+        touch-action: pan-x;
+    }
+
+    .item-lightbox-footer {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .item-lightbox-close {
+        position: absolute;
+        top: -40px;
+        right: 0;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .item-lightbox-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .item-lightbox-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .item-lightbox-nav:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .item-lightbox-prev {
+        left: -60px;
+    }
+
+    .item-lightbox-next {
+        right: -60px;
+    }
+
+    .item-lightbox-counter {
+        color: white;
+        margin-top: 15px;
+        font-size: 0.9rem;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 6px 15px;
+        border-radius: 20px;
+    }
+
+    .item-lightbox-info {
+        color: white;
+        margin-top: 10px;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    /* スマホ用ライトボックス調整 */
+    @media (max-width: 768px) {
+        .item-lightbox-nav {
+            width: 36px;
+            height: 36px;
+            font-size: 1rem;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .item-lightbox-prev {
+            left: 10px;
+        }
+
+        .item-lightbox-next {
+            right: 10px;
+        }
+
+        .item-lightbox-close {
+            top: 10px;
+            right: 10px;
+            position: fixed;
+        }
+
+        .item-lightbox-scroll-container {
+            cursor: default;
+        }
+    }
+
+    /* ステータスバッジ */
+    .status-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-badge.sold {
+        background: #ef4444;
+        color: white;
+    }
+
+    .status-badge.pending-sale {
+        background: #fef3c7;
+        color: #92400e;
+        animation: pulse-badge 2s infinite;
+    }
+
+    @keyframes pulse-badge {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.7;
+        }
+    }
+
+    .status-badge.listed {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .status-badge.unlisted {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    /* 金額表示 */
+    .amount {
+        text-align: right;
+        font-family: 'Consolas', monospace;
+    }
+
+    .amount.positive {
+        color: #10b981;
+    }
+
+    .amount.negative {
+        color: #ef4444;
+    }
+
+    /* コンディションバッジ */
+    .condition-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-align: center;
+        min-width: 28px;
+    }
+
+    .condition-N {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .condition-S {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .condition-A {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .condition-AB {
+        background: #fed7aa;
+        color: #c2410c;
+    }
+
+    .condition-B {
+        background: #fecaca;
+        color: #dc2626;
+    }
+
+    /* アクションボタン */
+    .action-cell {
+        white-space: nowrap;
+    }
+
+    .action-cell .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        margin-right: 3px;
+    }
+
+    /* フィルター行 */
+    .filter-row input,
+    .filter-row select {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+
+    .filter-row input:focus,
+    .filter-row select:focus {
+        outline: none;
+        border-color: #2563eb;
+    }
+
+    /* 料金フィルター */
+    .price-filter {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .price-filter input {
+        width: 100%;
+        min-width: 50px;
+        max-width: 70px;
+        padding: 2px 4px;
+        font-size: 0.7rem;
+        text-align: right;
+    }
+
+    .price-filter span {
+        display: none;
+    }
+
+    .price-filter input::-webkit-outer-spin-button,
+    .price-filter input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .price-filter input[type=number] {
+        -moz-appearance: textfield;
+    }
+
+    /* テーブルスクロール - PC用 */
+    .table-scroll {
+        /* PCではページ全体でスクロール */
+    }
+
+    /* ====================
+   レスポンシブ表示切替
+   ==================== */
+
+    /* スマホ用カード表示 - 3列グリッド */
+    .mobile-cards-wrapper {
+        display: none;
+    }
+
+    .mobile-only {
+        display: none;
+    }
+
+    /* スマホ（768px以下）*/
+    @media (max-width: 768px) {
+
+        /* PCのテーブルを非表示 */
+        .table-container {
+            display: none;
+        }
+
+        /* スマホ用カード表示を有効化 */
+        .mobile-cards-wrapper {
+            display: block;
+        }
+
+        /* スワイプインジケーターを非表示 */
+        .swipe-indicator {
+            display: none;
+        }
+
+        /* 3列グリッドで表示 */
+        .mobile-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            padding: 2px;
+            background: #f1f5f9;
+        }
+
+        .mobile-only {
+            display: block;
+        }
+
+        .desktop-only {
+            display: none;
+        }
+
+        /* フィルターバーを横スクロール可能に */
+        .filter-bar {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 10px;
+        }
+
+        .filter-buttons {
+            flex-wrap: nowrap;
+        }
+
+        /* コンパクトなカード */
+        .item-card {
+            background: white;
+            border: none;
+            border-radius: 0;
+            margin-bottom: 0;
+            box-shadow: none;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        /* 情報エリア（タップで詳細へ） */
+        .item-card .card-title,
+        .item-card .card-prices {
+            cursor: pointer;
+        }
+
+        /* カードヘッダー */
+        .card-header {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            gap: 0;
+            background: white;
+            border-bottom: none;
+            position: relative;
+        }
+
+        .card-header.has-multi-photos {
+            flex-wrap: nowrap;
+        }
+
+        .card-header.has-multi-photos .card-photo {
+            margin-bottom: 0;
+        }
+
+        /* 正方形の画像 */
+        .card-photo {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            background: #f1f5f9;
+            order: -1;
+        }
+
+        .card-photo-single {
+            width: 100%;
+            height: 100%;
+        }
+
+        .card-photo-single img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0;
+        }
+
+        /* 複数画像は横スクロール */
+        .card-photo-scroll {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            gap: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .card-photo-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .card-header.has-multi-photos .card-photo {
+            width: 100%;
+        }
+
+        .card-header.has-multi-photos .card-photo-scroll {
+            width: 100%;
+            padding-bottom: 0;
+        }
+
+        .card-photo-scroll .scroll-thumb,
+        .card-header.has-multi-photos .card-photo-scroll .scroll-thumb {
+            flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
+            min-width: 100%;
+            object-fit: cover;
+            border-radius: 0;
+            scroll-snap-align: start;
+            cursor: pointer;
+        }
+
+        .card-photo .no-photo {
+            border-radius: 0;
+            font-size: 1.5rem;
+        }
+
+        /* ステータスバッジを画像上に配置 */
+        .card-status {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 10;
+        }
+
+        .card-status .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 商品情報 - コンパクト */
+        .card-title {
+            padding: 6px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .card-id {
+            display: none;
+        }
+
+        .card-title h3 {
+            font-size: 0.7rem;
+            font-weight: 500;
+            margin: 0;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .card-brand {
+            display: none;
+        }
+
+        /* カード本体の詳細情報 - コンパクト */
+        .card-body {
+            padding: 0 6px 6px;
+            background: white;
+        }
+
+        .card-row {
+            display: none;
+        }
+
+        /* 価格表示 - コンパクト */
+        .card-prices {
+            display: block;
+        }
+
+        .card-prices .price-item {
+            display: none;
+        }
+
+        /* 仕入価格のみ表示 */
+        .card-prices .price-item:first-child {
+            display: block;
+        }
+
+        .card-prices .price-item .price-label {
+            display: none;
+        }
+
+        .card-prices .price-item .price-value {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .card-prices.three-col {
+            grid-template-columns: 1fr;
+        }
+
+        .price-item {
+            padding: 10px 8px;
+        }
+
+        .price-label {
+            font-size: 0.75rem;
+        }
+
+        .price-value {
+            font-size: 1rem;
+        }
+
+        /* アクションボタン - 縦並び */
+        .card-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px 16px 20px;
+            background: white;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .card-actions .btn {
+            padding: 12px;
+            font-size: 0.9rem;
+            width: 100%;
+            text-align: center;
+        }
+    }
+
+    /* カードスタイル */
+    .item-card {
+        background: white;
+        border-radius: 0;
+        border: 1px solid #d1d5db;
+        box-shadow: none;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .item-card:active {
+        transform: scale(0.98);
+    }
+
+    .item-card.card-sold {
+        background: #f8f8f8;
+        opacity: 0.8;
+    }
+
+    .card-header {
+        display: flex;
+        align-items: flex-start;
+        padding: 12px;
+        gap: 12px;
+        background: #fafafa;
+        border-bottom: 1px solid #f0f0f0;
+        overflow: hidden;
+    }
+
+    /* スマホで複数画像がある場合のカードヘッダー調整 */
+    .card-header.has-multi-photos {
+        flex-wrap: wrap;
+    }
+
+    .card-header.has-multi-photos .card-photo {
+        width: 100%;
+        height: auto;
+        order: -1;
+        margin-bottom: 8px;
+    }
+
+    .card-header.has-multi-photos .card-photo-scroll {
+        width: 100%;
+        padding-bottom: 0;
+    }
+
+    .card-header.has-multi-photos .card-photo-scroll .scroll-thumb {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        min-width: 100%;
+        border-radius: 8px;
+    }
+
+    .card-photo {
+        width: 70px;
+        height: 70px;
+        flex-shrink: 0;
+        position: relative;
+    }
+
+    .card-photo-single img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    /* 横スクロール画像（1枚ずつスワイプ） */
+    .card-photo-scroll {
+        display: flex;
+        gap: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        width: 100%;
+        height: 100%;
+    }
+
+    .card-photo-scroll::-webkit-scrollbar {
+        display: none;
+    }
+
+    .card-photo-scroll .scroll-thumb {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 100%;
+        min-width: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+        scroll-snap-align: start;
+        cursor: pointer;
+    }
+
+    .card-photo .no-photo {
+        width: 100%;
+        height: 100%;
+        background: #e2e8f0;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: #94a3b8;
+    }
+
+    .card-photo-count {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 0.6rem;
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+
+    .card-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .card-id {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .card-title h3 {
+        margin: 2px 0 4px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card-brand {
+        font-size: 0.85rem;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .card-status {
+        flex-shrink: 0;
+    }
+
+    .card-body {
+        padding: 12px;
+    }
+
+    .card-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        font-size: 0.85rem;
+    }
+
+    .card-label {
+        color: #64748b;
+    }
+
+    .card-value {
+        color: #1e293b;
+        font-weight: 500;
+    }
+
+    .card-prices {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .card-prices.three-col {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .price-item {
+        background: #f8fafc;
+        padding: 8px 6px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .price-item.profit {
+        grid-column: 1 / -1;
+        background: #f0fdf4;
+    }
+
+    .price-label {
+        display: block;
+        font-size: 0.7rem;
+        color: #94a3b8;
+        margin-bottom: 2px;
+    }
+
+    .price-value {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .price-value.positive {
+        color: #10b981;
+    }
+
+    .price-value.negative {
+        color: #ef4444;
+    }
+
+    .card-actions {
+        display: flex;
+        gap: 8px;
+        padding: 10px 12px;
+        background: #fafafa;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .card-actions .btn {
+        flex: 1;
+        text-align: center;
+        padding: 8px;
+        font-size: 0.85rem;
+    }
+
+    .empty-card {
+        text-align: center;
+        padding: 40px 20px;
+        color: #94a3b8;
+        background: white;
+        border-radius: 12px;
+    }
+
+    /* 承認待ちバッジ */
+    .badge-waiting {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border-radius: 20px;
+        animation: pulse-waiting 2s infinite;
+    }
+
+    @keyframes pulse-waiting {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.7;
+        }
+    }
+
+    /* 代行中バッジ */
+    .badge-agency {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+        border-radius: 20px;
+    }
+
+    /* 売却申請ボタン */
+    .btn-sale-request {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+        color: white !important;
+        border: none !important;
+        font-weight: 600;
+    }
+
+    .btn-sale-request:hover {
+        background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    }
+
+    /* 申請修正ボタン */
+    .btn-edit-request {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+        color: white !important;
+        border: none !important;
+        font-weight: 600;
+    }
+
+    .btn-edit-request:hover {
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    }
+
+    /* 売却申請モーダル */
+    .sale-request-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sale-request-modal.open {
+        display: flex;
+    }
+
+    .sale-request-content {
+        background: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .sale-request-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .sale-request-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .sale-request-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 1.25rem;
+        cursor: pointer;
+    }
+
+    .sale-request-body {
+        padding: 1.5rem;
+    }
+
+    .sale-request-product {
+        background: #f8fafc;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .sale-request-form .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .sale-request-form label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .sale-request-form label small {
+        font-weight: 400;
+        color: #64748b;
+    }
+
+    .sale-request-form input[type="number"],
+    .sale-request-form input[type="file"] {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 1rem;
+    }
+
+    .sale-request-form input[type="number"]:focus {
+        outline: none;
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    }
+
+    .file-upload-area {
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 1.5rem;
+        text-align: center;
+        background: #f8fafc;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .file-upload-area:hover {
+        border-color: #f59e0b;
+        background: #fffbeb;
+    }
+
+    .file-upload-area.has-file {
+        border-color: #10b981;
+        background: #ecfdf5;
+    }
+
+    .file-upload-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .file-upload-text {
+        color: #64748b;
+        font-size: 0.9rem;
+    }
+
+    .file-upload-name {
+        color: #10b981;
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+
+    .sale-request-footer {
+        display: flex;
+        gap: 1rem;
+        padding: 1.25rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .sale-request-footer .btn {
+        flex: 1;
+        padding: 0.875rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .sale-request-footer .btn-cancel {
+        background: #f1f5f9;
+        border: none;
+        color: #64748b;
+    }
+
+    .sale-request-footer .btn-submit {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border: none;
+        color: white;
+    }
+
+    .sale-request-footer .btn-submit:hover {
+        background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    }
+
+    /* スマホ用フィルター */
+    .mobile-filter {
+        display: none;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+
+    @media (max-width: 768px) {
+        .mobile-filter {
+            display: flex;
+            flex-direction: column;
+        }
+    }
+
+    .mobile-search {
+        flex: 1;
+    }
+
+    .mobile-search input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 1rem;
+        background: white;
+    }
+
+    .mobile-search input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .mobile-filter-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .mobile-filter-buttons select {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        background: white;
+    }
+
+    /* スマホ用料金フィルター */
+    .mobile-price-filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .mobile-price-filter {
+        flex: 1;
+        min-width: 140px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+
+    .mobile-price-filter label {
+        display: block;
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-bottom: 4px;
+    }
+
+    .mobile-price-range {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .mobile-price-range input {
+        flex: 1;
+        padding: 6px 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        text-align: right;
+        max-width: 70px;
+    }
+
+    .mobile-price-range input:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .mobile-price-range span {
+        color: #94a3b8;
+        font-size: 0.8rem;
+    }
+
+    .mobile-price-range input::-webkit-outer-spin-button,
+    .mobile-price-range input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .mobile-price-range input[type=number] {
+        -moz-appearance: textfield;
+    }
+
+    /* 件数表示 */
+    .table-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+</style>
+
+
+<!-- お知らせエリア -->
+{% if announcements %}
+<div class="announcement-area">
+    <div class="announcement-slider" id="announcementSlider">
+        {% for ann in announcements %}
+        <div class="announcement-item announcement-{{ ann.announcement_type }}" {% if not loop.first
+            %}style="display: none;" {% endif %}>
+            <span class="announcement-badge">
+                {% if ann.announcement_type == 'important' %}重要
+                {% elif ann.announcement_type == 'warning' %}注意
+                {% elif ann.announcement_type == 'success' %}完了
+                {% else %}お知らせ
+                {% endif %}
+            </span>
+            <span class="announcement-title">{{ ann.title }}</span>
+            <span class="announcement-content">{{ ann.content }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% if announcements|length > 1 %}
+    <div class="announcement-nav">
+        <button onclick="prevAnnouncement()" class="ann-nav-btn">&lt;</button>
+        <span id="annCounter">1/{{ announcements|length }}</span>
+        <button onclick="nextAnnouncement()" class="ann-nav-btn">&gt;</button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- 代行仕入れサービス利用可能残高 -->
+{% if proxy_service_info and proxy_service_info.budget > 0 %}
+<div class="proxy-service-card">
+    <span class="proxy-icon">🛒</span>
+    <span class="proxy-label">利用可能残高:</span>
+    <span class="proxy-value">¥{{ "{:,}".format(proxy_service_info.remaining) }}</span>
+</div>
+{% endif %}
+
+<!-- 統計サマリー -->
+<div class="stats-summary">
+    <div class="stats-item">
+        <span class="stats-label">総登録</span>
+        <span class="stats-value">{{ stats.total_items or 0 }}</span>
+    </div>
+    <div class="stats-item">
+        <span class="stats-label">販売済</span>
+        <span class="stats-value">{{ stats.sold_count or 0 }}</span>
+    </div>
+    <div class="stats-item">
+        <span class="stats-label">総仕入</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_purchase or 0) }}</span>
+            <span class="short-value">{% if (stats.total_purchase or 0) >= 100000000 %}¥{{
+                "%.1f"|format((stats.total_purchase or 0) / 100000000) }}億{% elif (stats.total_purchase or 0) >= 10000
+                %}¥{{ "%.1f"|format((stats.total_purchase or 0) / 10000) }}万{% else %}¥{{
+                "{:,}".format(stats.total_purchase or 0) }}{% endif %}</span>
+        </span>
+    </div>
+    <div class="stats-item stats-inventory">
+        <span class="stats-label">保管額</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.inventory_value or 0) }}</span>
+            <span class="short-value">{% if (stats.inventory_value or 0) >= 100000000 %}¥{{
+                "%.1f"|format((stats.inventory_value or 0) / 100000000) }}億{% elif (stats.inventory_value or 0) >= 10000
+                %}¥{{ "%.1f"|format((stats.inventory_value or 0) / 10000) }}万{% else %}¥{{
+                "{:,}".format(stats.inventory_value or 0) }}{% endif %}</span>
+        </span>
+    </div>
+    <div class="stats-item">
+        <span class="stats-label">総売上</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_sales or 0) }}</span>
+            <span class="short-value">{% if (stats.total_sales or 0) >= 100000000 %}¥{{ "%.1f"|format((stats.total_sales
+                or 0) / 100000000) }}億{% elif (stats.total_sales or 0) >= 10000 %}¥{{ "%.1f"|format((stats.total_sales
+                or 0) / 10000) }}万{% else %}¥{{ "{:,}".format(stats.total_sales or 0) }}{% endif %}</span>
+        </span>
+    </div>
+    <div class="stats-item {% if (stats.total_profit or 0) >= 0 %}stats-profit{% else %}stats-loss{% endif %}">
+        <span class="stats-label">総利益</span>
+        <span class="stats-value">
+            <span class="full-value">¥{{ "{:,}".format(stats.total_profit or 0) }}</span>
+            <span class="short-value">{% if (stats.total_profit or 0) >= 100000000 or (stats.total_profit or 0) <=
+                    -100000000 %}¥{{ "%.1f" |format((stats.total_profit or 0) / 100000000) }}億{% elif
+                    (stats.total_profit or 0)>= 10000 or (stats.total_profit or 0) <= -10000 %}¥{{ "%.1f"
+                        |format((stats.total_profit or 0) / 10000) }}万{% else %}¥{{ "{:,}" .format(stats.total_profit or
+                        0) }}{% endif %}</span>
+            </span>
+    </div>
+</div>
+
+<!-- 検索ボタン＆アクションボタン -->
+<div class="search-action-bar">
+    <div class="search-toggle-container">
+        <button class="search-toggle-btn" id="searchToggleBtn" onclick="toggleFilterPanel()">
+            <span class="search-icon"></span>
+            <span class="search-text-full">検索・フィルター</span>
+            <span class="search-text-short">検索</span>
+            <span class="filter-count" id="filterCount" style="display: none;">0</span>
+        </button>
+    </div>
+    <div class="action-buttons">
+        <a href="{{ url_for('export_csv') }}" class="btn btn-export">CSV</a>
+        {% if not current_user.is_admin() %}
+        <button type="button" class="btn btn-sales-agency" onclick="openSalesAgencyModal()">販売代行</button>
+        {% endif %}
+        {% if current_user.is_admin() %}
+        <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ 登録</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- フィルターパネル -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-tabs-header">
+        <button class="filter-tab-btn active" onclick="showFilterTab('period', event)">期間</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('text', event)">テキスト検索</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
+    </div>
+
+    <!-- 期間フィルター -->
+    <div class="filter-tab-content active" id="filter-period">
+        <div class="filter-group">
+            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='today') }}"
+                class="filter-btn {% if filter_type == 'today' %}active{% endif %}">今日</a>
+            <a href="{{ url_for('index', filter='yesterday') }}"
+                class="filter-btn {% if filter_type == 'yesterday' %}active{% endif %}">昨日</a>
+            <a href="{{ url_for('index', filter='week') }}"
+                class="filter-btn {% if filter_type == 'week' %}active{% endif %}">今週</a>
+            <a href="{{ url_for('index', filter='month') }}"
+                class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
+            <div class="filter-item">
+                <label>日付指定</label>
+                <input type="date" id="tab-filter-date">
+            </div>
+        </div>
+    </div>
+
+    <!-- 状態フィルター -->
+    <div class="filter-tab-content" id="filter-status-tab">
+        <div class="filter-group">
+            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='sold') }}"
+                class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
+            <a href="{{ url_for('index', filter='unsold') }}"
+                class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
+            <div class="filter-item">
+                <label>状態</label>
+                <select id="tab-filter-condition">
+                    <option value="">全て</option>
+                    <option value="N">N</option>
+                    <option value="S">S</option>
+                    <option value="A">A</option>
+                    <option value="AB">AB</option>
+                    <option value="B">B</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>販売状況</label>
+                <select id="tab-filter-status">
+                    <option value="">すべて</option>
+                    <option value="sold">売却済</option>
+                    <option value="listed">出品中</option>
+                    <option value="unlisted">未出品</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- テキスト検索 -->
+    <div class="filter-tab-content" id="filter-text">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>No</label>
+                <input type="text" id="tab-filter-id" placeholder="No">
+            </div>
+            <div class="filter-item">
+                <label>商品名</label>
+                <input type="text" id="tab-filter-name" placeholder="商品名">
+            </div>
+            <div class="filter-item">
+                <label>ブランド</label>
+                <input type="text" id="tab-filter-brand" placeholder="ブランド">
+            </div>
+            <div class="filter-item">
+                <label>型番</label>
+                <input type="text" id="tab-filter-model" placeholder="型番">
+            </div>
+            <div class="filter-item">
+                <label>仕入先</label>
+                <select id="tab-filter-store">
+                    <option value="">すべて</option>
+                    <option value="個人">個人</option>
+                    <option value="代行サービス">代行サービス</option>
+                    <option value="オークション">オークション</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- 金額フィルター -->
+    <div class="filter-tab-content" id="filter-price">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>仕入額</label>
+                <input type="number" id="tab-filter-purchase-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-purchase-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>売上</label>
+                <input type="number" id="tab-filter-sale-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-sale-max" placeholder="以下">
+            </div>
+            <div class="filter-item">
+                <label>利益</label>
+                <input type="number" id="tab-filter-profit-min" placeholder="以上">
+                <span>〜</span>
+                <input type="number" id="tab-filter-profit-max" placeholder="以下">
+            </div>
+        </div>
+    </div>
+
+    <!-- フッターボタン -->
+    <div class="filter-panel-footer">
+        <button class="filter-reset-btn" onclick="resetAllFilters()">リセット</button>
+        <button class="filter-apply-btn" onclick="applyFilters()">検索</button>
+    </div>
+</div>
+
+<!-- 商品テーブル -->
+<div class="table-container">
+    <div class="table-scroll">
+        <table class="data-table" id="itemsTable">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">写真</th>
+                    <th class="sortable" data-sort="id">No</th>
+                    <th class="sortable" data-sort="product_name">商品名</th>
+                    <th class="sortable" data-sort="brand_name">ブランド</th>
+                    <th>型番</th>
+                    <th>状態</th>
+                    <th class="sortable" data-sort="store_name">仕入先</th>
+                    {% if is_shared_view %}<th>登録者</th>{% endif %}
+                    <th>最終更新者</th>
+                    <th class="sortable" data-sort="purchase_date">仕入日</th>
+                    <th class="sortable" data-sort="purchase_price">仕入額</th>
+                    <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable" data-sort="sale_price">売上</th>
+                    <th class="sortable" data-sort="profit">利益</th>
+                    <th>販売状況</th>
+                    <th style="width: 130px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="{% if item.sale_date %}row-sold{% endif %}" data-id="{{ item.id }}"
+                    data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
+                    data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
+                    data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
+                    data-purchase-price="{{ item.purchase_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    <td>
+                        {% if item.all_photos and item.all_photos|length > 0 %}
+                        <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}'
+                            data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
+                            <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="">
+                            {% if item.all_photos|length > 1 %}
+                            <span class="photo-count-badge">{{ item.all_photos|length }}</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="no-thumb">-</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ item.id }}</td>
+                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td>{{ item.brand_name or '-' }}</td>
+                    <td>{{ item.model_number or '-' }}</td>
+                    <td>
+                        {% if item.item_condition %}
+                        <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition
+                            }}</span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>{{ item.store_name or '-' }}</td>
+                    {% if is_shared_view %}<td class="owner-cell">{{ item.owner_name or '-' }}</td>{% endif %}
+                    <td class="owner-cell">{{ item.updated_by_name or '-' }}</td>
+                    <td>{{ item.purchase_date or '-' }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td class="amount">
+                        {% if item.listing_price %}
+                        ¥{{ "{:,}".format(item.listing_price) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td
+                        class="amount {% if item.sale_date %}{% if item.profit > 0 %}positive{% else %}negative{% endif %}{% elif item.expected_profit %}{% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                        {% if item.sale_date %}
+                        ¥{{ "{:,}".format(item.profit) }}
+                        <small>({{ item.profit_rate }}%)</small>
+                        {% elif item.expected_profit is defined %}
+                        <small>想定</small>¥{{ "{:,}".format(item.expected_profit) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% if item.sale_date %}
+                        <span class="status-badge sold">売却済</span>
+                        {% elif item.pending_sale_request %}
+                        <span class="status-badge pending-sale">申請中</span>
+                        {% elif item.is_listed %}
+                        <span class="status-badge listed">出品中</span>
+                        {% else %}
+                        <span class="status-badge unlisted">未出品</span>
+                        {% endif %}
+                        {% if item.show_in_proxy_service %}
+                        <span class="status-badge proxy">代行</span>
+                        {% endif %}
+                    </td>
+                    <td class="action-cell">
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        {% if current_user.is_admin() %}
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        {% if is_shared_view and not item.sale_date %}
+                        <button class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}"
+                            onclick="toggleProxyService({{ item.id }}, this)" title="代行サービスに掲載">
+                            {% if item.show_in_proxy_service %}掲載中{% else %}代行{% endif %}
+                        </button>
+                        {% endif %}
+                        {% if item.can_delete %}
+                        <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete"
+                            onclick="return confirm('削除しますか？')">×</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;"
+                            title="1日以上経過した商品はオーナーのみ削除可能">×</span>
+                        {% endif %}
+                        {% else %}
+                        {# ユーザー向け #}
+                        {% if not item.sale_date %}
+                        {% if item.pending_sales_agency %}
+                        {# 販売代行申請中の場合はステータスバッジ #}
+                        {% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}
+                        <span class="badge badge-agency">代行中</span>
+                        {% else %}
+                        <span class="badge badge-waiting">承認待ち</span>
+                        {% endif %}
+                        {% elif item.pending_sale_request %}
+                        {# 売却申請中の場合は修正ボタン #}
+                        <button class="btn btn-sm btn-edit-request"
+                            onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                            申請修正
+                        </button>
+                        {% else %}
+                        {# 未申請の場合は新規申請ボタン #}
+                        <button class="btn btn-sm btn-sale-request"
+                            onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                            売却申請
+                        </button>
+                        {% endif %}
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{% if is_shared_view %}16{% else %}15{% endif %}"
+                        style="text-align: center; padding: 40px; color: #94a3b8;">
+                        {% if current_user.is_admin() %}
+                        商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+                        {% else %}
+                        商品がありません。
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="table-info desktop-only">
+        <span id="filtered-count">{{ items|length }}件表示</span>
+        <span>全{{ stats.total_items or 0 }}件中</span>
+    </div>
+</div>
+
+<!-- スマホ用フィルター -->
+<div class="mobile-filter">
+    <div class="mobile-search">
+        <input type="text" id="mobile-search" placeholder="商品名・ブランドで検索" onkeyup="mobileFilter()">
+    </div>
+</div>
+
+<!-- スマホ用カード表示（横スワイプカルーセル） -->
+<div class="mobile-cards-wrapper">
+    <div class="swipe-indicator">
+        <span class="current-index">1</span> / <span class="total-count">{{ items|length }}</span>
+        <span class="swipe-hint">← スワイプで移動 →</span>
+    </div>
+    <div class="mobile-cards" id="mobileCards">
+        {% for item in items %}
+        <div class="item-card {% if item.sale_date %}card-sold{% endif %}" data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
+            data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
+            data-purchase-price="{{ item.purchase_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
+            data-sale-price="{{ item.sale_price or 0 }}"
+            data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+            data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
+            <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
+                <div class="card-photo">
+                    {% if item.all_photos and item.all_photos|length > 1 %}
+                    <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'
+                        data-name="{{ item.product_name | e }}">
+                        {% for photo in item.all_photos %}
+                        <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt=""
+                            onclick="openItemLightboxFromParent(this, {{ loop.index0 }})">
+                        {% endfor %}
+                    </div>
+                    {% elif item.all_photos and item.all_photos|length == 1 %}
+                    <div class="card-photo-single" data-photos='{{ item.all_photos | tojson }}'
+                        data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="">
+                    </div>
+                    {% else %}
+                    <div class="no-photo">-</div>
+                    {% endif %}
+                </div>
+                <div class="card-title">
+                    <span class="card-id">{{ item.kaika_product_code or '-' }}</span>
+                    <h3>{{ item.product_name or '-' }}</h3>
+                    <div class="card-brand">
+                        {{ item.brand_name or '-' }}
+                        {% if item.item_condition %}
+                        <span class="condition-badge condition-{{ item.item_condition }}">{{ item.item_condition
+                            }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-status">
+                    {% if item.sale_date %}
+                    <span class="status-badge sold">売却済</span>
+                    {% elif item.pending_sale_request %}
+                    <span class="status-badge pending-sale">申請中</span>
+                    {% elif item.is_listed %}
+                    <span class="status-badge listed">出品中</span>
+                    {% else %}
+                    <span class="status-badge unlisted">未出品</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="card-prices three-col">
+                    <div class="price-item">
+                        <span class="price-label">仕入</span>
+                        <span class="price-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                    </div>
+                    <div class="price-item">
+                        <span class="price-label">出品</span>
+                        <span class="price-value">{% if item.listing_price %}¥{{ "{:,}".format(item.listing_price) }}{%
+                            else %}-{% endif %}</span>
+                    </div>
+                    <div class="price-item">
+                        <span class="price-label">売上</span>
+                        <span class="price-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
+                            else %}-{% endif %}</span>
+                    </div>
+                    {% if item.sale_date %}
+                    <div class="price-item profit">
+                        <span class="price-label">利益</span>
+                        <span class="price-value {% if item.profit > 0 %}positive{% else %}negative{% endif %}">
+                            ¥{{ "{:,}".format(item.profit) }} ({{ item.profit_rate }}%)
+                        </span>
+                    </div>
+                    {% elif item.expected_profit is defined %}
+                    <div class="price-item profit">
+                        <span class="price-label">想定利益</span>
+                        <span
+                            class="price-value {% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}">
+                            ¥{{ "{:,}".format(item.expected_profit) }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                {% if current_user.is_admin() %}
+                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                {% if item.can_delete %}
+                <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete"
+                    onclick="return confirm('削除しますか？')">削除</a>
+                {% else %}
+                <span class="btn btn-sm btn-disabled" style="cursor: not-allowed; opacity: 0.5;"
+                    title="1日以上経過">削除不可</span>
+                {% endif %}
+                {% else %}
+                {# ユーザー向け #}
+                {% if not item.sale_date %}
+                {% if item.pending_sales_agency %}
+                {# 販売代行申請中の場合はステータスバッジ #}
+                {% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}
+                <span class="badge badge-agency">代行中</span>
+                {% else %}
+                <span class="badge badge-waiting">承認待ち</span>
+                {% endif %}
+                {% elif item.pending_sale_request %}
+                {# 売却申請中の場合は修正ボタン #}
+                <button class="btn btn-sm btn-edit-request"
+                    onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                    申請修正
+                </button>
+                {% else %}
+                {# 未申請の場合は新規申請ボタン #}
+                <button class="btn btn-sm btn-sale-request"
+                    onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                    売却申請
+                </button>
+                {% endif %}
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-card">
+            {% if current_user.is_admin() %}
+            商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
+            {% else %}
+            商品がありません。
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="table-info mobile-only">
+        <span id="filtered-count-mobile">{{ items|length }}件表示</span>
+        <span>全{{ stats.total_items or 0 }}件中</span>
+    </div>
+</div>
+
+<script>
+    // フィルターパネル開閉
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        const btn = document.getElementById('searchToggleBtn');
+        panel.classList.toggle('open');
+        btn.classList.toggle('active');
+    }
+
+    // フィルタータブ切り替え
+    function showFilterTab(tabName, e) {
+        // すべてのタブコンテンツを非表示
+        document.querySelectorAll('.filter-tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        // すべてのタブボタンを非アクティブに
+        document.querySelectorAll('.filter-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // タブ名からコンテンツIDを取得
+        let contentId;
+        switch (tabName) {
+            case 'period': contentId = 'filter-period'; break;
+            case 'status': contentId = 'filter-status-tab'; break;
+            case 'text': contentId = 'filter-text'; break;
+            case 'price': contentId = 'filter-price'; break;
+        }
+
+        // 選択したタブを表示
+        document.getElementById(contentId).classList.add('active');
+        if (e && e.target) {
+            e.target.classList.add('active');
+        }
+    }
+
+    // 全フィルターをリセット
+    function resetAllFilters() {
+        // テキストフィルター
+        document.getElementById('tab-filter-id').value = '';
+        document.getElementById('tab-filter-name').value = '';
+        document.getElementById('tab-filter-brand').value = '';
+        document.getElementById('tab-filter-model').value = '';
+        document.getElementById('tab-filter-store').value = '';
+        document.getElementById('tab-filter-date').value = '';
+
+        // セレクト
+        document.getElementById('tab-filter-condition').value = '';
+        document.getElementById('tab-filter-status').value = '';
+
+        // 金額フィルター
+        document.getElementById('tab-filter-purchase-min').value = '';
+        document.getElementById('tab-filter-purchase-max').value = '';
+        document.getElementById('tab-filter-sale-min').value = '';
+        document.getElementById('tab-filter-sale-max').value = '';
+        document.getElementById('tab-filter-profit-min').value = '';
+        document.getElementById('tab-filter-profit-max').value = '';
+
+        filterTable();
+        updateFilterCount();
+    }
+
+    // フィルター適用
+    function applyFilters() {
+        filterTable();
+        updateFilterCount();
+        // パネルを閉じる
+        document.getElementById('filterPanel').classList.remove('open');
+        document.getElementById('searchToggleBtn').classList.remove('active');
+    }
+
+    // フィルター数をカウント
+    function updateFilterCount() {
+        let count = 0;
+
+        if (document.getElementById('tab-filter-id')?.value) count++;
+        if (document.getElementById('tab-filter-name')?.value) count++;
+        if (document.getElementById('tab-filter-brand')?.value) count++;
+        if (document.getElementById('tab-filter-model')?.value) count++;
+        if (document.getElementById('tab-filter-store')?.value) count++;
+        if (document.getElementById('tab-filter-date')?.value) count++;
+        if (document.getElementById('tab-filter-condition')?.value) count++;
+        if (document.getElementById('tab-filter-status')?.value) count++;
+        if (document.getElementById('tab-filter-purchase-min')?.value) count++;
+        if (document.getElementById('tab-filter-purchase-max')?.value) count++;
+        if (document.getElementById('tab-filter-sale-min')?.value) count++;
+        if (document.getElementById('tab-filter-sale-max')?.value) count++;
+        if (document.getElementById('tab-filter-profit-min')?.value) count++;
+        if (document.getElementById('tab-filter-profit-max')?.value) count++;
+
+        const countEl = document.getElementById('filterCount');
+        if (count > 0) {
+            countEl.textContent = count;
+            countEl.style.display = 'inline';
+        } else {
+            countEl.style.display = 'none';
+        }
+    }
+
+    // テーブルフィルター機能（PC・スマホ両対応）
+    function filterTable() {
+        // タブからフィルター値を取得
+        const filterId = (document.getElementById('tab-filter-id')?.value || '').toLowerCase();
+        const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
+        const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
+        const filterModel = (document.getElementById('tab-filter-model')?.value || '').toLowerCase();
+        const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
+        const filterStore = document.getElementById('tab-filter-store')?.value || '';
+        const filterDate = document.getElementById('tab-filter-date')?.value || '';
+        const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+
+        // 料金フィルター
+        const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
+        const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
+        const filterSaleMin = document.getElementById('tab-filter-sale-min')?.value || '';
+        const filterSaleMax = document.getElementById('tab-filter-sale-max')?.value || '';
+        const filterProfitMin = document.getElementById('tab-filter-profit-min')?.value || '';
+        const filterProfitMax = document.getElementById('tab-filter-profit-max')?.value || '';
+
+        let visibleCount = 0;
+
+        // 料金範囲チェック関数
+        function checkPriceRange(value, min, max) {
+            const numValue = parseInt(value) || 0;
+            if (min !== '' && numValue < parseInt(min)) return false;
+            if (max !== '' && numValue > parseInt(max)) return false;
+            return true;
+        }
+
+        // フィルタリング共通関数
+        function shouldShow(element) {
+            if (!element.dataset.id) return false;
+
+            const id = element.dataset.id;
+            const name = (element.dataset.name || '').toLowerCase();
+            const brand = (element.dataset.brand || '').toLowerCase();
+            const model = (element.dataset.model || '').toLowerCase();
+            const condition = element.dataset.condition || '';
+            const store = element.dataset.store || '';
+            const date = element.dataset.date || '';
+            const status = element.dataset.status || '';
+            const purchasePrice = element.dataset.purchasePrice || '0';
+            const salePrice = element.dataset.salePrice || '0';
+            const profit = element.dataset.profit || '0';
+
+            if (filterId && !id.includes(filterId)) return false;
+            if (filterName && !name.includes(filterName)) return false;
+            if (filterBrand && !brand.includes(filterBrand)) return false;
+            if (filterModel && !model.includes(filterModel)) return false;
+            if (filterCondition && condition !== filterCondition) return false;
+            if (filterStore && store !== filterStore) return false;
+            if (filterDate && date !== filterDate) return false;
+            if (filterStatus && status !== filterStatus) return false;
+
+            // 料金フィルター
+            if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
+            if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) return false;
+            if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) return false;
+
+            return true;
+        }
+
+        // テーブル行をフィルタリング
+        const rows = document.querySelectorAll('#itemsTable tbody tr');
+        rows.forEach(row => {
+            if (!row.dataset.id) return;
+            const show = shouldShow(row);
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        // カードをフィルタリング
+        const cards = document.querySelectorAll('.item-card');
+        let mobileVisibleCount = 0;
+        cards.forEach(card => {
+            const show = shouldShow(card);
+            card.style.display = show ? '' : 'none';
+            if (show) mobileVisibleCount++;
+        });
+
+        // 件数表示を更新
+        const countEl = document.getElementById('filtered-count');
+        if (countEl) countEl.textContent = visibleCount + '件表示';
+
+        const mobileCountEl = document.getElementById('filtered-count-mobile');
+        if (mobileCountEl) mobileCountEl.textContent = mobileVisibleCount + '件表示';
+    }
+
+    // スマホ用フィルター機能
+    function mobileFilter() {
+        const searchText = (document.getElementById('mobile-search').value || '').toLowerCase();
+
+        const cards = document.querySelectorAll('.item-card');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const name = (card.dataset.name || '').toLowerCase();
+            const brand = (card.dataset.brand || '').toLowerCase();
+
+            let show = true;
+
+            // テキスト検索（商品名とブランド名）
+            if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+                show = false;
+            }
+
+            card.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        const mobileCountEl = document.getElementById('filtered-count-mobile');
+        if (mobileCountEl) mobileCountEl.textContent = visibleCount + '件表示';
+
+        // フィルター後にインジケーターを更新
+        updateSwipeIndicator();
+    }
+
+    // スワイプカルーセルのインジケーター更新
+    function updateSwipeIndicator() {
+        const mobileCards = document.getElementById('mobileCards');
+        const currentIndexEl = document.querySelector('.current-index');
+        const totalCountEl = document.querySelector('.total-count');
+
+        if (!mobileCards || !currentIndexEl) return;
+
+        // 表示されているカードのみカウント
+        const visibleCards = Array.from(mobileCards.querySelectorAll('.item-card')).filter(
+            card => card.style.display !== 'none'
+        );
+
+        if (visibleCards.length === 0) {
+            currentIndexEl.textContent = '0';
+            if (totalCountEl) totalCountEl.textContent = '0';
+            return;
+        }
+
+        const cardWidth = mobileCards.offsetWidth;
+        const scrollLeft = mobileCards.scrollLeft;
+
+        // 現在表示中のカードのインデックスを計算
+        let currentVisibleIndex = 1;
+        let accumulatedWidth = 0;
+
+        for (let i = 0; i < visibleCards.length; i++) {
+            if (accumulatedWidth + cardWidth / 2 >= scrollLeft) {
+                currentVisibleIndex = i + 1;
+                break;
+            }
+            accumulatedWidth += cardWidth;
+        }
+
+        currentIndexEl.textContent = currentVisibleIndex;
+        if (totalCountEl) totalCountEl.textContent = visibleCards.length;
+    }
+
+    // スワイプイベントリスナー設定
+    document.addEventListener('DOMContentLoaded', function () {
+        const mobileCards = document.getElementById('mobileCards');
+
+        if (mobileCards) {
+            // スクロール時にインジケーター更新
+            let scrollTimeout;
+            mobileCards.addEventListener('scroll', function () {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(updateSwipeIndicator, 50);
+            });
+
+            // 初期表示時にインジケーター更新
+            updateSwipeIndicator();
+        }
+    });
+
+    // ソート機能
+    let sortDirection = {};
+
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function () {
+            const column = this.dataset.sort;
+            sortDirection[column] = !sortDirection[column];
+            sortTable(column, sortDirection[column]);
+        });
+    });
+
+    function sortTable(column, ascending) {
+        const tbody = document.querySelector('#itemsTable tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        rows.sort((a, b) => {
+            if (!a.dataset.id) return 1;
+            if (!b.dataset.id) return -1;
+
+            let aVal, bVal;
+
+            switch (column) {
+                case 'id':
+                case 'purchase_price':
+                case 'listing_price':
+                case 'sale_price':
+                case 'profit':
+                    aVal = parseInt(a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
+                    bVal = parseInt(b.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
+                    break;
+                default:
+                    aVal = a.dataset[column.replace('_', '')] || '';
+                    bVal = b.dataset[column.replace('_', '')] || '';
+            }
+
+            if (ascending) {
+                return aVal > bVal ? 1 : -1;
+            } else {
+                return aVal < bVal ? 1 : -1;
+            }
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function getColumnIndex(column) {
+        const map = {
+            'id': 2,
+            'product_name': 3,
+            'brand_name': 4,
+            'item_condition': 5,
+            'store_name': 6,
+            'purchase_date': 7,
+            'purchase_price': 8,
+            'listing_price': 9,
+            'sale_price': 10,
+            'profit': 11
+        };
+        return map[column] || 2;
+    }
+
+    // お知らせスライダー
+    let currentAnnouncement = 0;
+    const announcementItems = document.querySelectorAll('.announcement-item');
+    const totalAnnouncements = announcementItems.length;
+
+    function showAnnouncement(index) {
+        announcementItems.forEach((item, i) => {
+            item.style.display = i === index ? 'flex' : 'none';
+        });
+        const counter = document.getElementById('annCounter');
+        if (counter) {
+            counter.textContent = (index + 1) + '/' + totalAnnouncements;
+        }
+    }
+
+    function nextAnnouncement() {
+        currentAnnouncement = (currentAnnouncement + 1) % totalAnnouncements;
+        showAnnouncement(currentAnnouncement);
+    }
+
+    function prevAnnouncement() {
+        currentAnnouncement = (currentAnnouncement - 1 + totalAnnouncements) % totalAnnouncements;
+        showAnnouncement(currentAnnouncement);
+    }
+
+    // 自動スライド（5秒ごと）
+    if (totalAnnouncements > 1) {
+        setInterval(nextAnnouncement, 5000);
+    }
+
+    // 代行サービス掲載切り替え
+    function toggleProxyService(itemId, btn) {
+        fetch(`/admin/proxy-service/toggle-item/${itemId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.new_value) {
+                        btn.classList.add('active');
+                        btn.textContent = '掲載中';
+                        // 販売状況セルに代行バッジを追加
+                        const row = btn.closest('tr');
+                        const statusCell = row.querySelector('td:nth-last-child(2)');
+                        if (!statusCell.querySelector('.status-badge.proxy')) {
+                            const badge = document.createElement('span');
+                            badge.className = 'status-badge proxy';
+                            badge.textContent = '代行';
+                            statusCell.appendChild(badge);
+                        }
+                    } else {
+                        btn.classList.remove('active');
+                        btn.textContent = '代行';
+                        // 代行バッジを削除
+                        const row = btn.closest('tr');
+                        const proxyBadge = row.querySelector('.status-badge.proxy');
+                        if (proxyBadge) proxyBadge.remove();
+                    }
+                } else {
+                    alert(data.error || 'エラーが発生しました');
+                }
+            })
+            .catch(err => {
+                alert('エラーが発生しました');
+            });
+    }
+
+    // ========== 売却申請機能 ==========
+    function openSaleRequestModal(itemId, productName, listingPrice) {
+        document.getElementById('saleRequestItemId').value = itemId;
+        document.getElementById('saleRequestProductName').textContent = productName;
+        document.getElementById('saleRequestPrice').value = listingPrice || '';
+        document.getElementById('saleRequestQrImage').value = '';
+        document.getElementById('fileUploadArea').classList.remove('has-file');
+        document.getElementById('fileUploadText').textContent = 'クリックまたはドラッグして画像を選択';
+        document.getElementById('fileUploadName').textContent = '';
+        document.getElementById('saleRequestModal').classList.add('open');
+    }
+
+    function closeSaleRequestModal() {
+        document.getElementById('saleRequestModal').classList.remove('open');
+    }
+
+    // ファイル選択時の処理
+    document.addEventListener('DOMContentLoaded', function () {
+        const fileInput = document.getElementById('saleRequestQrImage');
+        const uploadArea = document.getElementById('fileUploadArea');
+        const uploadText = document.getElementById('fileUploadText');
+        const uploadName = document.getElementById('fileUploadName');
+
+        if (fileInput) {
+            fileInput.addEventListener('change', function () {
+                if (this.files && this.files[0]) {
+                    uploadArea.classList.add('has-file');
+                    uploadText.textContent = '選択済み';
+                    uploadName.textContent = this.files[0].name;
+                } else {
+                    uploadArea.classList.remove('has-file');
+                    uploadText.textContent = 'クリックまたはドラッグして画像を選択';
+                    uploadName.textContent = '';
+                }
+            });
+
+            // ドラッグ&ドロップ
+            uploadArea.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                this.style.borderColor = '#f59e0b';
+            });
+
+            uploadArea.addEventListener('dragleave', function (e) {
+                e.preventDefault();
+                this.style.borderColor = '';
+            });
+
+            uploadArea.addEventListener('drop', function (e) {
+                e.preventDefault();
+                this.style.borderColor = '';
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileInput.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+    });
+
+    // モーダル外クリックで閉じる
+    document.getElementById('saleRequestModal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeSaleRequestModal();
+        }
+    });
+
+    // ========== 売却申請修正機能 ==========
+    function openEditRequestModal(requestId, productName, salePrice, qrImagePath) {
+        document.getElementById('editRequestId').value = requestId;
+        document.getElementById('editRequestProductName').textContent = productName;
+        document.getElementById('editRequestPrice').value = salePrice || '';
+        document.getElementById('editRequestQrImage').value = '';
+
+        const uploadArea = document.getElementById('editFileUploadArea');
+        const uploadText = document.getElementById('editFileUploadText');
+        const uploadName = document.getElementById('editFileUploadName');
+        const currentImage = document.getElementById('editCurrentImage');
+
+        uploadArea.classList.remove('has-file');
+        uploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
+        uploadName.textContent = '';
+
+        // 現在の画像を表示
+        if (qrImagePath) {
+            currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
+            currentImage.style.display = 'block';
+        } else {
+            currentImage.innerHTML = '';
+            currentImage.style.display = 'none';
+        }
+
+        document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
+        document.getElementById('editRequestModal').classList.add('open');
+    }
+
+    function closeEditRequestModal() {
+        document.getElementById('editRequestModal').classList.remove('open');
+    }
+
+    // 編集モーダルのファイル選択時の処理
+    document.addEventListener('DOMContentLoaded', function () {
+        const editFileInput = document.getElementById('editRequestQrImage');
+        const editUploadArea = document.getElementById('editFileUploadArea');
+        const editUploadText = document.getElementById('editFileUploadText');
+        const editUploadName = document.getElementById('editFileUploadName');
+
+        if (editFileInput) {
+            editFileInput.addEventListener('change', function () {
+                if (this.files && this.files[0]) {
+                    editUploadArea.classList.add('has-file');
+                    editUploadText.textContent = '新しい画像を選択済み';
+                    editUploadName.textContent = this.files[0].name;
+                } else {
+                    editUploadArea.classList.remove('has-file');
+                    editUploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
+                    editUploadName.textContent = '';
+                }
+            });
+        }
+    });
+
+    // モーダル外クリックで閉じる
+    document.getElementById('editRequestModal')?.addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeEditRequestModal();
+        }
+    });
+</script>
+
+{% if not current_user.is_admin() %}
+<!-- 売却申請モーダル -->
+<div class="sale-request-modal" id="saleRequestModal">
+    <div class="sale-request-content">
+        <div class="sale-request-header">
+            <h3>📦 売却申請</h3>
+            <button class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm"
+            onsubmit="this.action='/sale-request/submit/' + document.getElementById('saleRequestItemId').value;">
+            <input type="hidden" id="saleRequestItemId" name="item_id" value="">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="saleRequestProductName"></div>
+
+                <div class="sale-request-form">
+                    <div class="form-group">
+                        <label>売上金額（税込） <small>※必須</small></label>
+                        <input type="number" id="saleRequestPrice" name="sale_price" required min="1"
+                            placeholder="販売価格を入力">
+                    </div>
+
+                    <div class="form-group">
+                        <label>発送用QRコード画像 <small>（任意）</small></label>
+                        <div class="file-upload-area" id="fileUploadArea"
+                            onclick="document.getElementById('saleRequestQrImage').click();">
+                            <div class="file-upload-icon">📷</div>
+                            <div class="file-upload-text" id="fileUploadText">クリックまたはドラッグして画像を選択</div>
+                            <div class="file-upload-name" id="fileUploadName"></div>
+                        </div>
+                        <input type="file" id="saleRequestQrImage" name="qr_image" accept="image/*"
+                            style="display:none;">
+                    </div>
+                </div>
+            </div>
+            <div class="sale-request-footer">
+                <button type="button" class="btn btn-cancel" onclick="closeSaleRequestModal()">キャンセル</button>
+                <button type="submit" class="btn btn-submit">申請を送信</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 売却申請修正モーダル -->
+<div class="sale-request-modal" id="editRequestModal">
+    <div class="sale-request-content" style="background: white;">
+        <div class="sale-request-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+            <h3>📝 売却申請の修正</h3>
+            <button class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
+            <input type="hidden" id="editRequestId" name="request_id" value="">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="editRequestProductName"></div>
+
+                <div class="sale-request-form">
+                    <div class="form-group">
+                        <label>売上金額（税込） <small>※必須</small></label>
+                        <input type="number" id="editRequestPrice" name="sale_price" required min="1"
+                            placeholder="販売価格を入力">
+                    </div>
+
+                    <div class="form-group">
+                        <label>現在のQRコード画像</label>
+                        <div id="editCurrentImage" style="margin-bottom: 10px; display: none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>新しいQRコード画像 <small>（変更する場合のみ）</small></label>
+                        <div class="file-upload-area" id="editFileUploadArea"
+                            onclick="document.getElementById('editRequestQrImage').click();">
+                            <div class="file-upload-icon">📷</div>
+                            <div class="file-upload-text" id="editFileUploadText">クリックまたはドラッグして新しい画像を選択</div>
+                            <div class="file-upload-name" id="editFileUploadName"></div>
+                        </div>
+                        <input type="file" id="editRequestQrImage" name="qr_image" accept="image/*"
+                            style="display:none;">
+                    </div>
+                </div>
+            </div>
+            <div class="sale-request-footer" style="flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="btn btn-cancel" onclick="closeEditRequestModal()"
+                        style="flex: 1;">キャンセル</button>
+                    <button type="submit" class="btn"
+                        style="flex: 1; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; border: none;">修正を保存</button>
+                </div>
+                <button type="button" class="btn" onclick="cancelSaleRequest()"
+                    style="width: 100%; background: #fee2e2; color: #991b1b; border: none;">申請をキャンセル</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function cancelSaleRequest() {
+        if (confirm('売却申請をキャンセルしますか？')) {
+            const requestId = document.getElementById('editRequestId').value;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/sale-request/cancel/' + requestId;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+</script>
+{% endif %}
+
+<!-- 商品一覧用ライトボックス（横スクロール形式） -->
+<div class="item-lightbox" id="itemLightbox">
+    <button class="item-lightbox-close" onclick="closeItemLightbox()">×</button>
+    <button class="item-lightbox-nav item-lightbox-prev" onclick="itemLightboxPrev()">‹</button>
+    <button class="item-lightbox-nav item-lightbox-next" onclick="itemLightboxNext()">›</button>
+    <div class="item-lightbox-scroll-container" id="itemLightboxScrollContainer">
+        <!-- 画像は動的に挿入される -->
+    </div>
+    <div class="item-lightbox-footer">
+        <div class="item-lightbox-counter" id="itemLightboxCounter"></div>
+        <div class="item-lightbox-info" id="itemLightboxInfo"></div>
+    </div>
+</div>
+
+<script>
+    // 商品一覧用ライトボックス（横スクロール形式）
+    let itemLightboxPhotos = [];
+    let itemLightboxIndex = 0;
+    let itemLightboxName = '';
+
+    // data属性から画像リストを取得して開く
+    function openItemLightboxFromData(element, index) {
+        try {
+            const photosData = element.getAttribute('data-photos');
+            const productName = element.getAttribute('data-name') || '';
+            if (photosData) {
+                const photos = JSON.parse(photosData);
+                openItemLightbox(photos, index, productName);
+            }
+        } catch (e) {
+            console.error('Failed to parse photos data:', e);
+        }
+    }
+
+    // 親要素のdata属性から画像リストを取得して開く
+    function openItemLightboxFromParent(element, index) {
+        try {
+            const parent = element.closest('[data-photos]');
+            if (parent) {
+                const photosData = parent.getAttribute('data-photos');
+                const productName = parent.getAttribute('data-name') || '';
+                if (photosData) {
+                    const photos = JSON.parse(photosData);
+                    openItemLightbox(photos, index, productName);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse photos data:', e);
+        }
+    }
+
+    function openItemLightbox(photos, index, productName) {
+        if (!photos || photos.length === 0) return;
+
+        itemLightboxPhotos = photos;
+        itemLightboxIndex = index;
+        itemLightboxName = productName || '';
+
+        // スクロールコンテナに画像を挿入
+        const container = document.getElementById('itemLightboxScrollContainer');
+        container.innerHTML = '';
+
+        photos.forEach((photo, i) => {
+            const slide = document.createElement('div');
+            slide.className = 'lightbox-slide';
+            slide.innerHTML = `<img src="/static/${photo}" alt="">`;
+            container.appendChild(slide);
+        });
+
+        document.getElementById('itemLightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // 指定したインデックスにスクロール（レイアウト確定後に実行）
+        requestAnimationFrame(() => {
+            const slideWidth = container.offsetWidth;
+            container.scrollTo({ left: slideWidth * index, behavior: 'instant' });
+            updateItemLightboxCounter();
+        });
+
+        // スクロールイベントでカウンター更新（パッシブリスナーでスムーズに）
+        let scrollTimeout;
+        const handleScroll = function () {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const slideWidth = container.offsetWidth;
+                const newIndex = Math.round(container.scrollLeft / slideWidth);
+                if (newIndex !== itemLightboxIndex && newIndex >= 0 && newIndex < itemLightboxPhotos.length) {
+                    itemLightboxIndex = newIndex;
+                    updateItemLightboxCounter();
+                }
+            }, 50);
+        };
+
+        // 既存のイベントリスナーを削除してから追加
+        container.onscroll = null;
+        container.addEventListener('scroll', handleScroll, { passive: true });
+
+        // タッチイベントでスワイプ操作を改善
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isScrolling = false;
+
+        const handleTouchStart = function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            isScrolling = false;
+        };
+
+        const handleTouchMove = function (e) {
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            const deltaX = Math.abs(touchX - touchStartX);
+            const deltaY = Math.abs(touchY - touchStartY);
+
+            // 横方向のスワイプが縦方向より大きい場合のみスクロール
+            if (deltaX > deltaY && deltaX > 10) {
+                isScrolling = true;
+            }
+        };
+
+        const handleTouchEnd = function (e) {
+            if (isScrolling) {
+                // スワイプ操作が完了したことを示す
+                const slideWidth = container.offsetWidth;
+                const newIndex = Math.round(container.scrollLeft / slideWidth);
+                if (newIndex !== itemLightboxIndex && newIndex >= 0 && newIndex < itemLightboxPhotos.length) {
+                    itemLightboxIndex = newIndex;
+                    updateItemLightboxCounter();
+                }
+            }
+            isScrolling = false;
+        };
+
+        // タッチイベントリスナーを追加
+        container.addEventListener('touchstart', handleTouchStart, { passive: true });
+        container.addEventListener('touchmove', handleTouchMove, { passive: true });
+        container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    }
+
+    function closeItemLightbox() {
+        document.getElementById('itemLightbox').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function updateItemLightboxCounter() {
+        const counter = document.getElementById('itemLightboxCounter');
+        const info = document.getElementById('itemLightboxInfo');
+
+        counter.textContent = (itemLightboxIndex + 1) + ' / ' + itemLightboxPhotos.length;
+        info.textContent = itemLightboxName;
+
+        // 1枚しかない場合はナビゲーションボタンを非表示
+        const prevBtn = document.querySelector('.item-lightbox-prev');
+        const nextBtn = document.querySelector('.item-lightbox-next');
+        if (itemLightboxPhotos.length <= 1) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+            counter.style.display = 'none';
+        } else {
+            prevBtn.style.display = 'block';
+            nextBtn.style.display = 'block';
+            counter.style.display = 'block';
+        }
+    }
+
+    function itemLightboxPrev() {
+        const container = document.getElementById('itemLightboxScrollContainer');
+        itemLightboxIndex = (itemLightboxIndex - 1 + itemLightboxPhotos.length) % itemLightboxPhotos.length;
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({
+            left: slideWidth * itemLightboxIndex,
+            behavior: 'smooth'
+        });
+        updateItemLightboxCounter();
+    }
+
+    function itemLightboxNext() {
+        const container = document.getElementById('itemLightboxScrollContainer');
+        itemLightboxIndex = (itemLightboxIndex + 1) % itemLightboxPhotos.length;
+        const slideWidth = container.offsetWidth;
+        container.scrollTo({
+            left: slideWidth * itemLightboxIndex,
+            behavior: 'smooth'
+        });
+        updateItemLightboxCounter();
+    }
+
+    // キーボードナビゲーション
+    document.addEventListener('keydown', function (e) {
+        const lightbox = document.getElementById('itemLightbox');
+        if (!lightbox.classList.contains('active')) return;
+
+        if (e.key === 'Escape') closeItemLightbox();
+        if (e.key === 'ArrowLeft') itemLightboxPrev();
+        if (e.key === 'ArrowRight') itemLightboxNext();
+    });
+
+    // ライトボックス外クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
+    document.getElementById('itemLightbox').addEventListener('click', function (e) {
+        // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+        if (e.target === this || e.target.classList.contains('item-lightbox-close')) {
+            closeItemLightbox();
+        }
+    });
+
+    // カードタップで詳細ページに移動（画像エリア以外）
+    document.querySelectorAll('.mobile-cards .item-card').forEach(function (card) {
+        // 画像エリア内のクリックは伝搬を止める
+        card.querySelectorAll('.card-photo, .card-photo-scroll, .card-photo-single').forEach(function (photoArea) {
+            photoArea.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+        });
+
+        // カード全体のクリックで詳細ページへ
+        card.addEventListener('click', function (e) {
+            // 画像エリアやボタンからのクリックは処理しない
+            if (e.target.closest('.card-photo') || e.target.closest('.card-photo-scroll') ||
+                e.target.closest('.card-photo-single') || e.target.closest('button') ||
+                e.target.closest('a')) {
+                return;
+            }
+
+            const itemId = card.getAttribute('data-id');
+            if (itemId) {
+                window.location.href = '/view/' + itemId;
+            }
+        });
+    });
+
+    // =====================================================
+    // 販売代行サービス機能
+    // =====================================================
+    function openSalesAgencyModal() {
+        document.getElementById('salesAgencyModal').style.display = 'flex';
+        loadSalesAgencyItems();
+    }
+
+    function closeSalesAgencyModal() {
+        document.getElementById('salesAgencyModal').style.display = 'none';
+    }
+
+    // 販売代行用の商品データを保持
+    let salesAgencyAllItems = [];
+
+    function loadSalesAgencyItems() {
+        const container = document.getElementById('salesAgencyItemList');
+        container.innerHTML = '';
+        salesAgencyAllItems = [];
+
+        // 検索ボックスをクリア
+        const searchInput = document.getElementById('salesAgencySearch');
+        if (searchInput) searchInput.value = '';
+
+        // 売却済み以外の商品を取得（ページ内のアイテムから）
+        const items = document.querySelectorAll('.item-card[data-id]');
+
+        items.forEach(item => {
+            const id = item.getAttribute('data-id');
+            const isSold = item.querySelector('.status-sold') !== null ||
+                item.classList.contains('sold-item') ||
+                item.querySelector('[class*="sold"]') !== null;
+
+            // 承認済みの販売代行申請があるかチェック
+            const isAgencyApproved = item.getAttribute('data-agency-approved') === 'true';
+
+            // 売却済みでなく、承認済み販売代行申請がない商品のみ
+            if (!isSold && !isAgencyApproved) {
+                const nameEl = item.querySelector('.card-name, .item-name, h3');
+                const brandEl = item.querySelector('.card-brand, .brand-name');
+                const priceEl = item.querySelector('.listing-price, .card-listing-price');
+                const imgEl = item.querySelector('img');
+
+                salesAgencyAllItems.push({
+                    id: id,
+                    name: nameEl ? nameEl.textContent.trim() : '商品名不明',
+                    brand: brandEl ? brandEl.textContent.trim() : '',
+                    price: priceEl ? priceEl.textContent.trim() : '',
+                    image: imgEl ? imgEl.src : ''
+                });
+            }
+        });
+
+        renderSalesAgencyItems(salesAgencyAllItems);
+    }
+
+    function renderSalesAgencyItems(items) {
+        const container = document.getElementById('salesAgencyItemList');
+        container.innerHTML = '';
+
+        // フィルター件数を更新
+        const filterCountEl = document.getElementById('salesAgencyFilterCount');
+        if (filterCountEl) filterCountEl.textContent = items.length;
+
+        if (items.length === 0) {
+            container.innerHTML = '<p class="no-items-message">該当する商品がありません</p>';
+            return;
+        }
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'sales-agency-item';
+            div.setAttribute('data-item-id', item.id);
+            div.innerHTML = `
+            <label class="sales-agency-item-label">
+                <input type="checkbox" name="merchandise_ids" value="${item.id}" class="sales-agency-checkbox">
+                <div class="sales-agency-item-content">
+                    ${item.image ? `<img src="${item.image}" alt="${item.name}" class="sales-agency-item-img">` : '<div class="sales-agency-item-img-placeholder"></div>'}
+                    <div class="sales-agency-item-info">
+                        <div class="sales-agency-item-name">${item.name}</div>
+                        ${item.brand ? `<div class="sales-agency-item-brand">${item.brand}</div>` : ''}
+                        ${item.price ? `<div class="sales-agency-item-price">${item.price}</div>` : ''}
+                    </div>
+                </div>
+            </label>
+        `;
+            container.appendChild(div);
+        });
+
+        updateSelectedCount();
+    }
+
+    function filterSalesAgencyItems() {
+        const searchInput = document.getElementById('salesAgencySearch');
+        const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+        if (!searchTerm) {
+            renderSalesAgencyItems(salesAgencyAllItems);
+            return;
+        }
+
+        const filteredItems = salesAgencyAllItems.filter(item => {
+            const nameMatch = item.name.toLowerCase().includes(searchTerm);
+            const brandMatch = item.brand.toLowerCase().includes(searchTerm);
+            return nameMatch || brandMatch;
+        });
+
+        renderSalesAgencyItems(filteredItems);
+    }
+
+    function toggleSelectAll() {
+        const checkboxes = document.querySelectorAll('.sales-agency-checkbox');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+        checkboxes.forEach(cb => cb.checked = !allChecked);
+        selectAllBtn.textContent = allChecked ? '全選択' : '全解除';
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        const checked = document.querySelectorAll('.sales-agency-checkbox:checked').length;
+        document.getElementById('selectedCount').textContent = checked;
+    }
+
+    // チェックボックス変更時にカウント更新
+    document.addEventListener('change', function (e) {
+        if (e.target.classList.contains('sales-agency-checkbox')) {
+            updateSelectedCount();
+        }
+    });
+
+    // モーダル外クリックで閉じる
+    document.getElementById('salesAgencyModal').addEventListener('click', function (e) {
+        if (e.target === this) closeSalesAgencyModal();
+    });
+</script>
+
+<!-- 販売代行サービスモーダル -->
+<div id="salesAgencyModal" class="sales-agency-modal" style="display: none;">
+    <div class="sales-agency-modal-content">
+        <div class="sales-agency-modal-header">
+            <h2>販売代行サービス申請</h2>
+            <button type="button" class="sales-agency-close-btn" onclick="closeSalesAgencyModal()">&times;</button>
+        </div>
+
+        <form method="POST" action="{{ url_for('sales_agency_apply') }}">
+            <div class="sales-agency-modal-body">
+                <div class="sales-agency-service-section">
+                    <label class="sales-agency-section-label">サービス種別を選択</label>
+                    <div class="sales-agency-service-options">
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="wholesale" required>
+                            <span class="sales-agency-service-name">業者卸販売サービス</span>
+                        </label>
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="simultaneous">
+                            <span class="sales-agency-service-name">同時出品サービス</span>
+                        </label>
+                        <label class="sales-agency-service-option">
+                            <input type="radio" name="service_type" value="auction">
+                            <span class="sales-agency-service-name">業者オークション出品</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="sales-agency-items-section">
+                    <div class="sales-agency-items-header">
+                        <label class="sales-agency-section-label">商品を選択 (<span id="selectedCount">0</span>点選択中)</label>
+                        <button type="button" id="selectAllBtn" class="btn btn-sm btn-outline"
+                            onclick="toggleSelectAll()">全選択</button>
+                    </div>
+
+                    <!-- 検索・フィルター -->
+                    <div class="sales-agency-search-section">
+                        <div class="sales-agency-search-box">
+                            <input type="text" id="salesAgencySearch" placeholder="商品名・ブランド名で検索..."
+                                oninput="filterSalesAgencyItems()">
+                            <span class="sales-agency-search-icon">🔍</span>
+                        </div>
+                        <div class="sales-agency-filter-info">
+                            <span id="salesAgencyFilterCount">0</span>件表示
+                        </div>
+                    </div>
+
+                    <div id="salesAgencyItemList" class="sales-agency-item-list">
+                        <!-- 動的に商品リストが入る -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="sales-agency-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSalesAgencyModal()">キャンセル</button>
+                <button type="submit" class="btn btn-primary">申請する</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    /* 販売代行モーダル */
+    .sales-agency-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+
+    .sales-agency-modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+    }
+
+    .sales-agency-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        flex-shrink: 0;
+    }
+
+    .sales-agency-modal-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .sales-agency-close-btn {
+        background: none;
+        border: none;
+        font-size: 1.75rem;
+        color: #64748b;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .sales-agency-close-btn:hover {
+        color: #1e293b;
+    }
+
+    .sales-agency-modal-content form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .sales-agency-modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        min-height: 0;
+    }
+
+    .sales-agency-section-label {
+        display: block;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.75rem;
+    }
+
+    .sales-agency-service-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .sales-agency-service-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .sales-agency-service-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .sales-agency-service-option:hover {
+        border-color: #059669;
+        background: #f0fdf4;
+    }
+
+    .sales-agency-service-option input[type="radio"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #059669;
+    }
+
+    .sales-agency-service-option input[type="radio"]:checked+.sales-agency-service-name {
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .sales-agency-service-name {
+        font-size: 0.95rem;
+        color: #1e293b;
+    }
+
+    /* 検索・フィルターセクション */
+    .sales-agency-search-section {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        background: #f1f5f9;
+        border-radius: 8px;
+    }
+
+    .sales-agency-search-box {
+        flex: 1;
+        position: relative;
+    }
+
+    .sales-agency-search-box input {
+        width: 100%;
+        padding: 0.6rem 0.75rem 0.6rem 2.25rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        background: white;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .sales-agency-search-box input:focus {
+        outline: none;
+        border-color: #059669;
+        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    .sales-agency-search-box input::placeholder {
+        color: #9ca3af;
+    }
+
+    .sales-agency-search-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.9rem;
+        opacity: 0.5;
+    }
+
+    .sales-agency-filter-info {
+        font-size: 0.85rem;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .sales-agency-items-section {
+        margin-top: 1rem;
+    }
+
+    .sales-agency-items-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .btn-outline {
+        background: white;
+        border: 1px solid #d1d5db;
+        color: #374151;
+    }
+
+    .btn-outline:hover {
+        background: #f3f4f6;
+    }
+
+    .sales-agency-item-list {
+        max-height: min(300px, 35vh);
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    .sales-agency-item {
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .sales-agency-item:last-child {
+        border-bottom: none;
+    }
+
+    .sales-agency-item-label {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .sales-agency-item-label:hover {
+        background: #f8fafc;
+    }
+
+    .sales-agency-checkbox {
+        width: 18px;
+        height: 18px;
+        accent-color: #059669;
+        flex-shrink: 0;
+    }
+
+    .sales-agency-item-content {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sales-agency-item-img {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 6px;
+        flex-shrink: 0;
+    }
+
+    .sales-agency-item-img-placeholder {
+        width: 50px;
+        height: 50px;
+        background: #e2e8f0;
+        border-radius: 6px;
+        flex-shrink: 0;
+    }
+
+    .sales-agency-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .sales-agency-item-name {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sales-agency-item-brand {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .sales-agency-item-price {
+        font-size: 0.85rem;
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .sales-agency-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+        border-radius: 0 0 12px 12px;
+        flex-shrink: 0;
+    }
+
+    .no-items-message {
+        text-align: center;
+        padding: 2rem;
+        color: #64748b;
+    }
+
+    @media (max-width: 640px) {
+        .sales-agency-modal-content {
+            width: 95%;
+            max-height: 85vh;
+        }
+
+        .sales-agency-modal-header h2 {
+            font-size: 1.1rem;
+        }
+
+        .sales-agency-item-img {
+            width: 40px;
+            height: 40px;
+        }
+    }
+</style>
+{% endblock %}

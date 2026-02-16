@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物販管理システム - 営業資料</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --accent: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --bg: #f8fafc;
+            --white: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            color: var(--text);
+            line-height: 1.8;
+            background: var(--bg);
+        }
+        
+        /* ヒーローセクション */
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: rotate 30s linear infinite;
+        }
+        
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .hero .subtitle {
+            font-size: 1.5rem;
+            font-weight: 300;
+            opacity: 0.95;
+            margin-bottom: 30px;
+        }
+        
+        .hero .tagline {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 10px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+        }
+        
+        /* セクション共通 */
+        section {
+            padding: 80px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .section-title h2 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+        
+        .section-title p {
+            font-size: 1.1rem;
+            color: var(--text-light);
+        }
+        
+        /* 課題セクション */
+        .problems {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        }
+        
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+        
+        .problem-card {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        .problem-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .problem-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            color: #b45309;
+        }
+        
+        .problem-card p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        /* 解決セクション */
+        .solution {
+            background: white;
+        }
+        
+        .solution-content {
+            display: flex;
+            align-items: center;
+            gap: 60px;
+        }
+        
+        .solution-text {
+            flex: 1;
+        }
+        
+        .solution-text h3 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+        
+        .solution-text p {
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            color: var(--text-light);
+        }
+        
+        .solution-list {
+            list-style: none;
+        }
+        
+        .solution-list li {
+            padding: 12px 0;
+            padding-left: 35px;
+            position: relative;
+            font-size: 1.05rem;
+        }
+        
+        .solution-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .solution-image {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 40px;
+            color: white;
+            text-align: center;
+        }
+        
+        .solution-image .mock {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            color: var(--text);
+            text-align: left;
+        }
+        
+        /* 機能セクション */
+        .features {
+            background: var(--bg);
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 35px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+        
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+        }
+        
+        .feature-card p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        /* 管理者機能 */
+        .admin-features {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+        }
+        
+        .admin-features .section-title h2,
+        .admin-features .section-title p {
+            color: white;
+        }
+        
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+        
+        .admin-card {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .admin-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .admin-card ul {
+            list-style: none;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .admin-card li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .admin-card li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+        }
+        
+        /* メリット */
+        .benefits {
+            background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
+        }
+        
+        .benefit-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+        }
+        
+        .benefit-card {
+            background: white;
+            padding: 30px 20px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        
+        .benefit-number {
+            font-size: 3rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+        
+        .benefit-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+        
+        .benefit-card p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+        
+        /* 料金 */
+        .pricing {
+            background: white;
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .pricing-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .pricing-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .pricing-card.recommended {
+            border-color: var(--primary);
+            background: linear-gradient(180deg, #eff6ff 0%, white 100%);
+            position: relative;
+        }
+        
+        .pricing-card.recommended::before {
+            content: '人気';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary);
+            color: white;
+            padding: 5px 20px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        
+        .pricing-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+        }
+        
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .pricing-price span {
+            font-size: 1rem;
+            font-weight: normal;
+            color: var(--text-light);
+        }
+        
+        .pricing-desc {
+            color: var(--text-light);
+            margin-bottom: 25px;
+            font-size: 0.95rem;
+        }
+        
+        .pricing-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 30px;
+        }
+        
+        .pricing-features li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .pricing-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .pricing-btn {
+            display: block;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .pricing-btn.primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .pricing-btn.primary:hover {
+            background: var(--primary-dark);
+        }
+        
+        .pricing-btn.secondary {
+            background: #f1f5f9;
+            color: var(--text);
+        }
+        
+        .pricing-btn.secondary:hover {
+            background: #e2e8f0;
+        }
+        
+        /* FAQ */
+        .faq {
+            background: var(--bg);
+        }
+        
+        .faq-list {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .faq-item {
+            background: white;
+            margin-bottom: 15px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .faq-question {
+            padding: 20px 25px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .faq-question::after {
+            content: '+';
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+        
+        .faq-answer {
+            padding: 0 25px 20px;
+            color: var(--text-light);
+            display: none;
+        }
+        
+        .faq-item.open .faq-answer {
+            display: block;
+        }
+        
+        .faq-item.open .faq-question::after {
+            content: '−';
+        }
+        
+        /* CTA */
+        .cta {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 80px 40px;
+        }
+        
+        .cta h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        
+        .cta p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 35px;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        .cta-btn {
+            padding: 18px 40px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .cta-btn.primary {
+            background: white;
+            color: var(--primary);
+        }
+        
+        .cta-btn.primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .cta-btn.secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .cta-btn.secondary:hover {
+            background: white;
+            color: var(--primary);
+        }
+        
+        /* フッター */
+        footer {
+            background: #1e293b;
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        footer p {
+            opacity: 0.7;
+        }
+        
+        /* レスポンシブ */
+        @media (max-width: 1024px) {
+            .problem-grid,
+            .feature-grid,
+            .benefit-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .pricing-grid {
+                grid-template-columns: 1fr;
+                max-width: 400px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .hero .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            section {
+                padding: 50px 20px;
+            }
+            
+            .problem-grid,
+            .feature-grid,
+            .admin-grid,
+            .benefit-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .solution-content {
+                flex-direction: column;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+            }
+        }
+        
+        /* 印刷用 */
+        @media print {
+            .hero {
+                background: #667eea !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ヒーロー -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>📦 物販管理システム</h1>
+            <p class="subtitle">仕入れから販売まで、すべてを一元管理</p>
+            <div class="tagline">🚀 業務効率化 × 利益最大化 × データ分析</div>
+        </div>
+    </section>
+    
+    <!-- 課題 -->
+    <section class="problems">
+        <div class="section-title">
+            <h2>😰 こんなお悩みありませんか？</h2>
+            <p>物販ビジネスでよくある課題</p>
+        </div>
+        
+        <div class="problem-grid">
+            <div class="problem-card">
+                <div class="problem-icon">📊</div>
+                <h3>在庫管理が煩雑</h3>
+                <p>Excelやメモで管理していて、どこに何があるか分からなくなる</p>
+            </div>
+            <div class="problem-card">
+                <div class="problem-icon">💰</div>
+                <h3>利益が把握できない</h3>
+                <p>仕入れ値、手数料、送料...結局いくら儲かったの？</p>
+            </div>
+            <div class="problem-card">
+                <div class="problem-icon">📱</div>
+                <h3>外出先で確認できない</h3>
+                <p>仕入れ時に在庫確認したいのにPCがないと見られない</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- 解決策 -->
+    <section class="solution">
+        <div class="solution-content">
+            <div class="solution-text">
+                <h3>✨ すべて解決します</h3>
+                <p>物販管理システムは、物販ビジネスに必要な機能をすべて備えたクラウド型の管理システムです。</p>
+                
+                <ul class="solution-list">
+                    <li>スマホ・PC・タブレットどこからでもアクセス</li>
+                    <li>リアルタイムで在庫・売上を把握</li>
+                    <li>利益を自動計算で見える化</li>
+                    <li>チームで共有・複数人での運用も可能</li>
+                    <li>データは自動バックアップで安心</li>
+                </ul>
+            </div>
+            
+            <div class="solution-image">
+                <p style="margin-bottom: 20px; font-size: 1.2rem;">📱 スマホでも快適操作</p>
+                <div class="mock">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                        <span style="font-weight: bold;">今月の売上</span>
+                        <span style="color: #10b981; font-weight: bold;">¥1,234,567</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                        <span style="font-weight: bold;">今月の利益</span>
+                        <span style="color: #10b981; font-weight: bold;">¥345,678</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-weight: bold;">利益率</span>
+                        <span style="color: #2563eb; font-weight: bold;">28.0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- 主な機能 -->
+    <section class="features">
+        <div class="section-title">
+            <h2>🎯 主な機能</h2>
+            <p>物販ビジネスに必要な機能をすべて搭載</p>
+        </div>
+        
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">📦</div>
+                <h3>商品管理</h3>
+                <p>写真付きで商品を登録。仕入れ日、仕入れ先、仕入れ額などを一元管理できます。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💵</div>
+                <h3>利益自動計算</h3>
+                <p>売上、手数料、送料を入力するだけで利益と利益率を自動計算。収支が一目で分かります。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔍</div>
+                <h3>検索・フィルター</h3>
+                <p>「今日」「今週」「売却済」などワンクリックで絞り込み。目的の商品をすぐに見つけられます。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>CSV出力</h3>
+                <p>データをCSV形式でエクスポート。確定申告や会計ソフトとの連携もスムーズです。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <h3>自動バックアップ</h3>
+                <p>画像を含む完全バックアップ機能。万が一の時も安心してデータを復元できます。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <h3>マルチデバイス対応</h3>
+                <p>PC、スマホ、タブレットに対応。外出先でも在庫確認や登録が可能です。</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- 管理者機能 -->
+    <section class="admin-features">
+        <div class="section-title">
+            <h2>🔧 管理者・チーム向け機能</h2>
+            <p>複数人での運用やマーケティング分析に対応</p>
+        </div>
+        
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>👥 ユーザー管理</h3>
+                <ul>
+                    <li>複数ユーザーでの利用に対応</li>
+                    <li>管理者権限と一般ユーザー権限を設定</li>
+                    <li>ユーザーごとにデータを分離管理</li>
+                    <li>パスワード変更・アカウント管理</li>
+                </ul>
+            </div>
+            <div class="admin-card">
+                <h3>📈 マーケティング分析</h3>
+                <ul>
+                    <li>月別売上推移グラフ</li>
+                    <li>販売先別（メルカリ・ヤフオク等）統計</li>
+                    <li>仕入れ先別売上ランキング</li>
+                    <li>全ユーザーのパフォーマンス比較</li>
+                </ul>
+            </div>
+            <div class="admin-card">
+                <h3>🔍 データ閲覧</h3>
+                <ul>
+                    <li>管理者は全ユーザーのデータを閲覧可能</li>
+                    <li>チーム全体の売上・利益を把握</li>
+                    <li>人気商品・売れ筋の分析</li>
+                    <li>戦略立案のためのインサイト提供</li>
+                </ul>
+            </div>
+            <div class="admin-card">
+                <h3>🛡️ セキュリティ</h3>
+                <ul>
+                    <li>ログイン認証によるアクセス制限</li>
+                    <li>パスワードは暗号化して保存</li>
+                    <li>ユーザーは自分のデータのみアクセス</li>
+                    <li>完全バックアップ・復元機能</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+    
+    <!-- 導入メリット -->
+    <section class="benefits">
+        <div class="section-title">
+            <h2>📈 導入効果</h2>
+            <p>物販管理システムで得られる成果</p>
+        </div>
+        
+        <div class="benefit-grid">
+            <div class="benefit-card">
+                <div class="benefit-number">50%</div>
+                <h3>作業時間削減</h3>
+                <p>手作業での管理から解放</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-number">100%</div>
+                <h3>利益の見える化</h3>
+                <p>曖昧だった収支を完全把握</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-number">24h</div>
+                <h3>いつでもアクセス</h3>
+                <p>場所を選ばず確認・登録</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-number">∞</div>
+                <h3>スケーラブル</h3>
+                <p>商品数・ユーザー数無制限</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- 料金プラン -->
+    <section class="pricing">
+        <div class="section-title">
+            <h2>💳 料金プラン</h2>
+            <p>ビジネス規模に合わせて選べる3プラン</p>
+        </div>
+        
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>🌱 スターター</h3>
+                <div class="pricing-price">¥0<span>/月</span></div>
+                <p class="pricing-desc">個人で始める方に</p>
+                <ul class="pricing-features">
+                    <li>商品登録 100件まで</li>
+                    <li>1ユーザー</li>
+                    <li>基本機能すべて</li>
+                    <li>メールサポート</li>
+                </ul>
+                <a href="#" class="pricing-btn secondary">無料で始める</a>
+            </div>
+            
+            <div class="pricing-card recommended">
+                <h3>🚀 ビジネス</h3>
+                <div class="pricing-price">¥2,980<span>/月</span></div>
+                <p class="pricing-desc">本格的に運用したい方に</p>
+                <ul class="pricing-features">
+                    <li>商品登録 無制限</li>
+                    <li>5ユーザーまで</li>
+                    <li>全機能利用可能</li>
+                    <li>優先サポート</li>
+                    <li>データ分析機能</li>
+                </ul>
+                <a href="#" class="pricing-btn primary">申し込む</a>
+            </div>
+            
+            <div class="pricing-card">
+                <h3>🏢 エンタープライズ</h3>
+                <div class="pricing-price">¥9,800<span>/月</span></div>
+                <p class="pricing-desc">チームでの運用に</p>
+                <ul class="pricing-features">
+                    <li>商品登録 無制限</li>
+                    <li>ユーザー数 無制限</li>
+                    <li>専用サーバー</li>
+                    <li>電話サポート</li>
+                    <li>カスタマイズ対応</li>
+                </ul>
+                <a href="#" class="pricing-btn secondary">お問い合わせ</a>
+            </div>
+        </div>
+    </section>
+    
+    <!-- FAQ -->
+    <section class="faq">
+        <div class="section-title">
+            <h2>❓ よくある質問</h2>
+        </div>
+        
+        <div class="faq-list">
+            <div class="faq-item open">
+                <div class="faq-question">スマホからも使えますか？</div>
+                <div class="faq-answer">はい、スマホ・タブレット・PCすべてに対応しています。アプリのインストール不要で、ブラウザからアクセスするだけで利用できます。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">データは安全ですか？</div>
+                <div class="faq-answer">はい、データは暗号化されて保存されます。また、画像を含む完全バックアップ機能があり、いつでもデータを復元できます。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">複数人で使えますか？</div>
+                <div class="faq-answer">はい、ビジネスプラン以上で複数ユーザーに対応しています。管理者は全ユーザーのデータを閲覧でき、チーム全体のパフォーマンスを把握できます。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">確定申告に使えますか？</div>
+                <div class="faq-answer">はい、CSV出力機能があるため、確定申告や会計ソフトへのデータ連携が可能です。すべての取引履歴を出力できます。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">導入サポートはありますか？</div>
+                <div class="faq-answer">はい、ビジネスプラン以上で優先サポート、エンタープライズプランでは電話サポートと導入支援を提供しています。</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- CTA -->
+    <section class="cta">
+        <h2>🚀 今すぐ始めましょう</h2>
+        <p>まずは無料プランでお試しください。<br>クレジットカード登録不要ですぐにスタートできます。</p>
+        <div class="cta-buttons">
+            <a href="#" class="cta-btn primary">無料で始める</a>
+            <a href="#" class="cta-btn secondary">デモを見る</a>
+        </div>
+    </section>
+    
+    <!-- フッター -->
+    <footer>
+        <p>© 2024 物販管理システム All Rights Reserved.</p>
+    </footer>
+    
+    <script>
+        // FAQのアコーディオン
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', () => {
+                const item = question.parentElement;
+                item.classList.toggle('open');
+            });
+        });
+    </script>
+</body>
+</html>
+

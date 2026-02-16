@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}{{ 'ユーザー編集' if user else 'ユーザー作成' }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ 'ユーザー編集' if user else 'ユーザー作成' }}</h1>
+    <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">← 戻る</a>
+</div>
+
+
+<div class="form-container">
+    <form method="POST" class="user-form">
+        <div class="form-section">
+            <h2>アカウント情報</h2>
+            
+            {% if not user %}
+            <div class="form-group">
+                <label for="username">ユーザー名 *</label>
+                <input type="text" id="username" name="username" required 
+                       placeholder="半角英数字">
+                <small>ログインに使用します（変更不可）</small>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label>ユーザー名</label>
+                <div class="form-static">{{ user.username }}</div>
+                <small>ユーザー名は変更できません</small>
+            </div>
+            {% endif %}
+            
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" 
+                       value="{{ user.display_name if user else '' }}"
+                       placeholder="画面に表示される名前">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">メールアドレス *</label>
+                <input type="email" id="email" name="email" required
+                       value="{{ user.email if user else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="role">権限 *</label>
+                <select id="role" name="role" {% if user and user.id == current_user.id %}disabled{% endif %} onchange="togglePermissions()">
+                    <option value="user" {% if user and user.role == 'user' %}selected{% endif %}>一般ユーザー</option>
+                    <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>管理者</option>
+                    {% if current_user.is_owner() %}
+                    <option value="owner" {% if user and user.role == 'owner' %}selected{% endif %}>オーナー</option>
+                    {% endif %}
+                </select>
+                {% if user and user.id == current_user.id %}
+                <small>自分の権限は変更できません</small>
+                <input type="hidden" name="role" value="{{ user.role }}">
+                {% endif %}
+            </div>
+            
+            <!-- 管理者権限の詳細設定 -->
+            <div class="form-group permissions-section" id="permissions-section" style="display: none;">
+                <label>管理者権限の範囲</label>
+                <small class="mb-2" style="display: block; margin-bottom: 8px;">チェックなしの場合は全権限が付与されます</small>
+                <div class="permissions-grid">
+                    {% if permission_options %}
+                    {% for key, label in permission_options.items() %}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="admin_permissions" value="{{ key }}"
+                               {% if user and user.admin_permissions_list and key in user.admin_permissions_list %}checked{% endif %}>
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section tuition-section" id="tuition-section">
+            <h2>月謝設定</h2>
+            <div class="form-group">
+                <label class="checkbox-label tuition-exempt-label">
+                    <input type="checkbox" name="tuition_exempt" value="1"
+                           {% if user and user.tuition_exempt %}checked{% endif %}>
+                    <span>月謝免除にする</span>
+                </label>
+                <small>チェックすると、このユーザーは月謝の支払いが不要になります</small>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>代行仕入れサービス</h2>
+            <div class="form-group">
+                <label>現在の利用可能金額</label>
+                <div class="current-budget">
+                    <span class="budget-amount">¥{{ "{:,}".format(user.proxy_service_budget if user and user.proxy_service_budget else 0) }}</span>
+                </div>
+                <input type="hidden" id="proxy_service_budget" name="proxy_service_budget" 
+                       value="{{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }}">
+            </div>
+            
+            <div class="budget-adjustment">
+                <div class="form-group adjustment-group">
+                    <label for="budget_increase">増額</label>
+                    <div class="budget-input-group">
+                        <span class="budget-prefix increase">+¥</span>
+                        <input type="number" id="budget_increase" name="budget_increase" 
+                               value="0" min="0" step="1000" class="form-control budget-input"
+                               onchange="updateBudget()">
+                    </div>
+                </div>
+                
+                <div class="form-group adjustment-group">
+                    <label for="budget_decrease">減額</label>
+                    <div class="budget-input-group">
+                        <span class="budget-prefix decrease">-¥</span>
+                        <input type="number" id="budget_decrease" name="budget_decrease" 
+                               value="0" min="0" step="1000" class="form-control budget-input"
+                               onchange="updateBudget()">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>変更後の金額</label>
+                <div class="new-budget">
+                    <span id="new_budget_display">¥{{ "{:,}".format(user.proxy_service_budget if user and user.proxy_service_budget else 0) }}</span>
+                </div>
+            </div>
+            <small>このユーザーが代行仕入れサービスで使用できる上限金額（0=利用不可）</small>
+        </div>
+        
+        <script>
+        function updateBudget() {
+            const currentBudget = {{ user.proxy_service_budget if user and user.proxy_service_budget else 0 }};
+            const increase = parseInt(document.getElementById('budget_increase').value) || 0;
+            const decrease = parseInt(document.getElementById('budget_decrease').value) || 0;
+            
+            let newBudget = currentBudget + increase - decrease;
+            if (newBudget < 0) newBudget = 0;
+            
+            document.getElementById('proxy_service_budget').value = newBudget;
+            document.getElementById('new_budget_display').textContent = '¥' + newBudget.toLocaleString();
+            
+            // 変更があった場合は色を変える
+            const displayEl = document.getElementById('new_budget_display');
+            if (newBudget > currentBudget) {
+                displayEl.style.color = '#059669';
+            } else if (newBudget < currentBudget) {
+                displayEl.style.color = '#dc2626';
+            } else {
+                displayEl.style.color = '#1e293b';
+            }
+        }
+        </script>
+        
+        <div class="form-section">
+            <h2>パスワード{% if user %}変更{% endif %}</h2>
+            
+            {% if not user %}
+            <div class="form-group">
+                <label for="password">パスワード *</label>
+                <input type="password" id="password" name="password" required minlength="6">
+                <small>6文字以上</small>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合のみ入力（6文字以上）</small>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">{{ '更新' if user else '作成' }}</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: white;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.checkbox-label:hover {
+    background: #f1f5f9;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.checkbox-label span {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.permissions-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.budget-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.budget-prefix {
+    background: #f1f5f9;
+    border: 1px solid #d1d5db;
+    border-right: none;
+    padding: 10px 12px;
+    border-radius: 6px 0 0 6px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.budget-input {
+    border-radius: 0 6px 6px 0 !important;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.tuition-exempt-label {
+    background: #ecfdf5 !important;
+    border: 2px solid #10b981;
+    border-radius: 8px;
+    padding: 12px 16px !important;
+}
+
+.tuition-exempt-label:hover {
+    background: #d1fae5 !important;
+}
+
+.tuition-exempt-label input[type="checkbox"]:checked + span {
+    color: #059669;
+    font-weight: 600;
+}
+
+.current-budget {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+
+.budget-amount {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.budget-adjustment {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.adjustment-group {
+    margin-bottom: 0;
+}
+
+.budget-prefix.increase {
+    background: #ecfdf5;
+    border-color: #10b981;
+    color: #059669;
+}
+
+.budget-prefix.decrease {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #dc2626;
+}
+
+.new-budget {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 2px solid #3b82f6;
+}
+
+#new_budget_display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+@media (max-width: 600px) {
+    .budget-adjustment {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+function togglePermissions() {
+    const roleSelect = document.getElementById('role');
+    const permissionsSection = document.getElementById('permissions-section');
+    
+    if (roleSelect.value === 'admin') {
+        permissionsSection.style.display = 'block';
+    } else {
+        permissionsSection.style.display = 'none';
+    }
+}
+
+// ページ読み込み時に実行
+document.addEventListener('DOMContentLoaded', function() {
+    togglePermissions();
+});
+</script>
+{% endblock %}

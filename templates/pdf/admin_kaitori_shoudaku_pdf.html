@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>買取承諾書 - {{ kaitori.document_no if kaitori else '' }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+            font-size: 10px;
+            line-height: 1.4;
+            color: #333;
+            background: white;
+        }
+        
+        .container {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 8mm 12mm;
+        }
+        
+        .company-header {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .company-name {
+            font-size: 16px;
+            font-weight: 700;
+        }
+        
+        .company-info {
+            font-size: 9px;
+            color: #555;
+            margin-top: 3px;
+        }
+        
+        .license-info {
+            font-size: 9px;
+            color: #666;
+            margin-top: 3px;
+        }
+        
+        .document-title {
+            text-align: center;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0.3em;
+            margin: 15px 0;
+        }
+        
+        .transaction-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 10px;
+        }
+        
+        .transaction-type {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .transaction-type label {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        
+        .checkbox {
+            width: 12px;
+            height: 12px;
+            border: 1px solid #333;
+            display: inline-block;
+        }
+        
+        .checkbox.checked {
+            background: #333;
+        }
+        
+        .date-staff {
+            text-align: right;
+        }
+        
+        .date-staff-row {
+            margin-bottom: 3px;
+        }
+        
+        .notes-box {
+            border: 1px solid #333;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #fafafa;
+        }
+        
+        .notes-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+        
+        .notes-list {
+            list-style: none;
+            font-size: 9px;
+        }
+        
+        .notes-list li {
+            margin-bottom: 4px;
+            padding-left: 12px;
+            position: relative;
+        }
+        
+        .notes-list li:before {
+            content: "・";
+            position: absolute;
+            left: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 9px;
+        }
+        
+        th, td {
+            border: 1px solid #333;
+            padding: 5px 6px;
+        }
+        
+        th {
+            background: #f0f0f0;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .col-no { width: 25px; }
+        .col-name { }
+        .col-qty { width: 45px; }
+        .col-amount { width: 70px; }
+        .col-note { width: 80px; }
+        
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        
+        .total-row {
+            font-weight: 700;
+            background: #f5f5f5;
+        }
+        
+        .customer-section {
+            margin-top: 15px;
+            border: 2px solid #333;
+            padding: 10px;
+        }
+        
+        .customer-title {
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 5px;
+            background: #333;
+            color: white;
+            padding: 3px 8px;
+            margin: -10px -10px 10px -10px;
+        }
+        
+        .customer-instruction {
+            font-size: 9px;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        
+        .customer-form {
+            font-size: 9px;
+        }
+        
+        .form-row {
+            display: flex;
+            border-bottom: 1px solid #ccc;
+            min-height: 28px;
+        }
+        
+        .form-row:last-child {
+            border-bottom: none;
+        }
+        
+        .form-label {
+            width: 80px;
+            background: #f5f5f5;
+            padding: 5px;
+            font-weight: 600;
+            border-right: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+        }
+        
+        .form-value {
+            flex: 1;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .form-value-half {
+            flex: 1;
+            padding: 5px;
+            border-right: 1px solid #ccc;
+        }
+        
+        .form-value-half:last-child {
+            border-right: none;
+        }
+        
+        .birth-options {
+            display: flex;
+            gap: 10px;
+            font-size: 8px;
+        }
+        
+        .job-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 8px;
+        }
+        
+        .privacy-notes {
+            margin-top: 10px;
+            font-size: 8px;
+            color: #666;
+        }
+        
+        .privacy-notes li {
+            margin-bottom: 2px;
+        }
+        
+        .id-section {
+            margin-top: 10px;
+            border: 1px solid #333;
+        }
+        
+        .id-row {
+            display: flex;
+            border-bottom: 1px solid #333;
+        }
+        
+        .id-row:last-child {
+            border-bottom: none;
+        }
+        
+        .id-label {
+            width: 120px;
+            background: #f0f0f0;
+            padding: 5px;
+            font-size: 9px;
+        }
+        
+        .id-value {
+            flex: 1;
+            padding: 5px;
+            min-height: 25px;
+        }
+        
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            .container {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="company-header">
+            <div class="company-name">株式会社 開花</div>
+            <div class="company-info">
+                〒140-0015 東京都品川区西大井2-4-8 オーキッドレジデンス西大井602　TEL:080-6955-4906
+            </div>
+            <div class="license-info">東京都公安委員会 第 302162521174 号</div>
+        </div>
+        
+        <h1 class="document-title">買 取 承 諾 書</h1>
+        
+        <div class="transaction-info">
+            <div class="transaction-type">
+                <label><span class="checkbox {% if kaitori and kaitori.transaction_type == '出張' %}checked{% endif %}"></span> 出張</label>
+                <label><span class="checkbox {% if kaitori and kaitori.transaction_type == '店頭' %}checked{% endif %}"></span> 店頭</label>
+                <label><span class="checkbox {% if kaitori and kaitori.transaction_type == '郵送' %}checked{% endif %}"></span> 郵送</label>
+            </div>
+            <div class="date-staff">
+                <div class="date-staff-row">令和　　年　　月　　日</div>
+                <div class="date-staff-row">担当者：{{ kaitori.staff_name if kaitori and kaitori.staff_name else '' }}</div>
+                <div class="date-staff-row">来店時間：　　時　　分</div>
+            </div>
+        </div>
+        
+        <div class="notes-box">
+            <div class="notes-title">注意事項</div>
+            <ul class="notes-list">
+                <li>お売りいただく際は、身分証明書（運転免許証・保険証等）の提示が必要になります。</li>
+                <li>18歳未満の方は、保護者の方のご承諾がないと買取できません。</li>
+                <li>査定の為に品物の状態や動作の確認、試金や比重などを調べさせていただきますので予めご了承ください。</li>
+                <li>一度お売りいただいた品物は、返品いたしかねますので予めご了承ください。</li>
+                <li>写真と実物に大きな差異があった場合、コピー商品の場合は返却させていただきます。</li>
+            </ul>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-no"></th>
+                    <th class="col-name">品名</th>
+                    <th class="col-qty">数量</th>
+                    <th class="col-amount">金額</th>
+                    <th class="col-note">備考</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if items %}
+                    {% for item in items %}
+                    <tr>
+                        <td class="text-center">{{ item.item_no }}</td>
+                        <td>{{ item.product_name }}</td>
+                        <td class="text-center">{{ item.quantity }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
+                        <td>{{ item.notes if item.notes else '' }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for i in range(items|length, 15) %}
+                    <tr>
+                        <td class="text-center">{{ i + 1 }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    {% for i in range(15) %}
+                    <tr>
+                        <td class="text-center">{{ i + 1 }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+                <tr class="total-row">
+                    <td colspan="3" class="text-right">合計金額</td>
+                    <td class="text-right">¥{{ "{:,}".format(kaitori.total_amount if kaitori else 0) }}</td>
+                    <td>円</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="customer-section">
+            <div class="customer-title">お客様ご記入欄</div>
+            <div class="customer-instruction">上記の内容に同意していただける場合は、下記の太枠の中をご記入ください。</div>
+            
+            <div class="customer-form">
+                <div class="form-row">
+                    <div class="form-label">フリガナ</div>
+                    <div class="form-value-half">{{ kaitori.customer_name_kana if kaitori and kaitori.customer_name_kana else '' }}</div>
+                    <div class="form-label">生年月日</div>
+                    <div class="form-value-half">
+                        <div class="birth-options">
+                            <span>大正 / 昭和 / 平成 / 令和</span>
+                            <span>　　年　　月　　日</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">お名前</div>
+                    <div class="form-value">{{ kaitori.company_name if kaitori else '' }}</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">ご住所</div>
+                    <div class="form-value-half">〒　　　-　　　　{{ kaitori.company_address if kaitori else '' }}</div>
+                    <div class="form-label">電話番号</div>
+                    <div class="form-value-half">(　　　)　　　-　　　　</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">ご職業</div>
+                    <div class="form-value">
+                        <div class="job-options">
+                            <span>（会社員）</span>
+                            <span>（公務員）</span>
+                            <span>（自営業）</span>
+                            <span>（主婦）</span>
+                            <span>（学生）</span>
+                            <span>（その他）（　　　　）</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">振込先</div>
+                    <div class="form-value">
+                        銀行　現金　管轄　　　　支店　本店　普通　当座　No
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label"></div>
+                    <div class="form-value">
+                        口座名義人（カタカナ）　　　　　　　　　現金・振込（予定日）　　月　　日
+                    </div>
+                </div>
+            </div>
+            
+            <ul class="privacy-notes">
+                <li>本記入は法令に基づきお客様に記入していただくものであり、この内容をそれ以外の目的に使用することはありません。</li>
+                <li>ご記入いただいた個人情報は、厳正な管理のもとで保管いたします。</li>
+                <li>法令に基づき個人情報の提供を求められた場合を除き、第三者に提供することはございません。</li>
+            </ul>
+        </div>
+        
+        <div class="id-section">
+            <div class="id-row">
+                <div class="id-label">身分証明　免許証・保険証　その他（　　　）</div>
+                <div class="id-value"></div>
+            </div>
+            <div class="id-row">
+                <div class="id-label">番号</div>
+                <div class="id-value"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        window.onload = function() {
+            window.print();
+        };
+    </script>
+</body>
+</html>

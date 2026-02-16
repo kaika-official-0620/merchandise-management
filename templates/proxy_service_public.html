@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ settings.page_title or 'オークション' }} - 株式会社 開花</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+            padding: 2rem 1rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            color: rgba(255,255,255,0.8);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .countdown-bar {
+            background: #dc2626;
+            color: white;
+            padding: 0.75rem 1rem;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .countdown-bar.ending-soon {
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { background: #dc2626; }
+            50% { background: #b91c1c; }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        .items-count {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #64748b;
+        }
+        
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .item-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .item-photo {
+            height: 220px;
+            background: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .item-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s;
+        }
+        
+        .item-photo:hover img {
+            transform: scale(1.05);
+        }
+        
+        .item-photo .no-image {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .item-photo .zoom-hint {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .item-photo:hover .zoom-hint {
+            opacity: 1;
+        }
+        
+        .photo-count {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+        
+        /* 画像モーダル */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .image-modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+        }
+        
+        .modal-content img {
+            max-width: 90vw;
+            max-height: 80vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        .modal-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 2rem;
+            padding: 1rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        
+        .modal-nav:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .modal-nav.prev {
+            left: -60px;
+        }
+        
+        .modal-nav.next {
+            right: -60px;
+        }
+        
+        .modal-thumbnails {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .modal-thumbnail {
+            width: 60px;
+            height: 60px;
+            border-radius: 4px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        
+        .modal-thumbnail.active {
+            border-color: #2563eb;
+        }
+        
+        .modal-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .modal-item-info {
+            color: white;
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .modal-nav {
+                padding: 0.5rem;
+                font-size: 1.5rem;
+            }
+            
+            .modal-nav.prev {
+                left: 10px;
+            }
+            
+            .modal-nav.next {
+                right: 10px;
+            }
+        }
+        
+        .item-info {
+            padding: 1.25rem;
+        }
+        
+        .item-brand {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+        }
+        
+        .item-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+        
+        .item-condition {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            color: #64748b;
+            margin-bottom: 0.75rem;
+        }
+        
+        .start-price {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* 即決モード用スタイル */
+        .fixed-price {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .fixed-price .price-label {
+            font-size: 0.75rem;
+            color: #b45309;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        
+        .fixed-price .price-amount {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #d97706;
+        }
+        
+        .btn-purchase {
+            width: 100%;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+        
+        .btn-purchase:hover {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        
+        .btn-purchase:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-purchase.sold {
+            background: #64748b;
+            cursor: default;
+        }
+        
+        .item-card.sold {
+            opacity: 0.6;
+            position: relative;
+        }
+        
+        .item-card.sold::after {
+            content: '売り切れ';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 0.5rem 2rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+        
+        .current-bid {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .current-bid .bid-label {
+            font-size: 0.75rem;
+            color: #16a34a;
+            margin-bottom: 0.25rem;
+        }
+        
+        .current-bid .bid-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #16a34a;
+        }
+        
+        .current-bid .bidder-name {
+            font-size: 0.8rem;
+            color: #4ade80;
+            margin-top: 0.25rem;
+        }
+        
+        .no-bid {
+            background: #f8fafc;
+            border: 1px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .bid-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .bid-form input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+        
+        .bid-form input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        
+        .bid-form .bid-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .bid-form .bid-row input[type="number"] {
+            flex: 1;
+        }
+        
+        .btn-bid {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-bid:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn-bid:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        .bid-success {
+            background: #f0fdf4;
+            color: #16a34a;
+            padding: 0.75rem;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .bid-error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        
+        .bid-disabled {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            text-align: center;
+            font-weight: 500;
+            border: 1px solid #fecaca;
+        }
+        
+        .payment-warning-box {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border: 2px solid #ef4444;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .payment-warning-box h2 {
+            color: #991b1b;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .payment-warning-box p {
+            color: #7f1d1d;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        
+        .btn-payment {
+            display: inline-block;
+            background: #ef4444;
+            color: white;
+            padding: 0.6rem 1.5rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        .btn-payment:hover {
+            background: #dc2626;
+        }
+        
+        .empty-message {
+            text-align: center;
+            padding: 4rem 1rem;
+            color: #64748b;
+        }
+        
+        .empty-message h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #64748b;
+            font-size: 0.85rem;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 2rem;
+        }
+        
+        .contact-info {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .contact-info h2 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .contact-info p {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        
+        .user-info-bar {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .user-info-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .user-info-bar .user-name {
+            color: #16a34a;
+            font-weight: 600;
+        }
+        
+        .user-info-bar .budget-info {
+            background: #fef3c7;
+            color: #b45309;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        
+        .user-info-bar .budget-info strong {
+            font-size: 1rem;
+            color: #d97706;
+        }
+        
+        .user-info-bar .budget-info small {
+            color: #92400e;
+            opacity: 0.7;
+        }
+        
+        .user-info-bar .budget-info .no-budget {
+            color: #dc2626;
+        }
+        
+        .login-required {
+            background: white;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .login-required h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: #1e293b;
+        }
+        
+        .login-required p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+        
+        .btn-login {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        .btn-login:hover {
+            background: #1d4ed8;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .items-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .item-photo {
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>{{ settings.page_title or 'オークション' }}</h1>
+        {% if settings.page_description %}
+        <p>{{ settings.page_description }}</p>
+        {% endif %}
+    </header>
+    
+    {% if end_datetime %}
+    <div class="countdown-bar" id="countdownBar">
+        終了まで: <span id="countdown">計算中...</span>
+    </div>
+    {% endif %}
+    
+    <main class="container">
+        {% if current_user.is_authenticated %}
+        <div class="user-info-bar">
+            <span class="user-name">ログイン中: {{ current_user.display_name or current_user.username }}</span>
+            <span class="budget-info">
+                {% if current_user.proxy_service_budget > 0 %}
+                利用可能残高: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</strong>
+                <small>/ ¥{{ "{:,}".format(current_user.proxy_service_budget) }}</small>
+                {% else %}
+                利用可能残高: <strong class="no-budget">¥0</strong>
+                <small>（利用不可）</small>
+                {% endif %}
+            </span>
+        </div>
+        {% if current_user.is_payment_overdue() %}
+        <div class="payment-warning-box">
+            <h2>⚠️ オークションに参加できません</h2>
+            <p>月謝のお支払いが確認できていないため、オークションへの参加が制限されています。<br>
+            お支払いを完了後、参加いただけます。</p>
+            <a href="{{ url_for('profile') }}" class="btn-payment">決済情報を確認</a>
+        </div>
+        {% else %}
+        <div class="contact-info">
+            {% if settings.sale_mode == 'fixed' %}
+            <h2>購入方法</h2>
+            <p>「購入する」ボタンを押すと、その場で購入が確定します。<br>
+            <strong>早い者勝ち</strong>ですので、お早めにどうぞ！</p>
+            {% else %}
+            <h2>入札方法</h2>
+            <p>入札金額を入力して「入札する」ボタンを押してください。<br>
+            最高入札額を上回る金額で入札できます。</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="login-required">
+            <h2>ログインが必要です</h2>
+            {% if settings.sale_mode == 'fixed' %}
+            <p>購入するにはログインしてください。</p>
+            {% else %}
+            <p>オークションに参加するにはログインしてください。</p>
+            {% endif %}
+            <a href="{{ url_for('login') }}?next={{ request.path }}" class="btn-login">ログイン</a>
+        </div>
+        {% endif %}
+        
+        {% if items %}
+        <p class="items-count">{{ items|length }}件の商品が出品中</p>
+        
+        <div class="items-grid">
+            {% for item in items %}
+            <div class="item-card" id="item-{{ item.id }}">
+                <div class="item-photo" onclick="openImageModal({{ item.id }})">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                    <span class="zoom-hint">🔍 クリックで拡大</span>
+                    {% set photo_count = 1 %}
+                    {% if item.additional_photos %}
+                        {% set photos = item.additional_photos.split(',') if item.additional_photos is string else item.additional_photos %}
+                        {% set photo_count = 1 + (photos|length if photos and photos[0] else 0) %}
+                    {% endif %}
+                    {% if photo_count > 1 %}
+                    <span class="photo-count">📷 {{ photo_count }}枚</span>
+                    {% endif %}
+                    {% else %}
+                    <span class="no-image">No Image</span>
+                    {% endif %}
+                </div>
+                <div class="item-info">
+                    {% if item.brand_name %}
+                    <div class="item-brand">{{ item.brand_name }}</div>
+                    {% endif %}
+                    <div class="item-name">{{ item.product_name or '商品名なし' }}</div>
+                    {% if item.item_condition %}
+                    <span class="item-condition">{{ item.item_condition }}</span>
+                    {% endif %}
+                    
+                    {% if settings.sale_mode == 'fixed' %}
+                    <!-- 即決モード -->
+                    <div class="fixed-price">
+                        <div class="price-label">販売価格</div>
+                        <div class="price-amount">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    </div>
+                    
+                    {% if current_user.is_authenticated and current_user.can_participate_auction() %}
+                    <button class="btn-purchase" onclick="submitPurchase({{ item.id }}, this)" id="purchase-btn-{{ item.id }}">
+                        🛒 購入する
+                    </button>
+                    <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
+                    {% elif current_user.is_authenticated and current_user.is_payment_overdue() %}
+                    <div class="bid-disabled">
+                        <span>⚠️ 購入不可</span>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <!-- オークションモード -->
+                    <div class="start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    
+                    {% if item.highest_bid %}
+                    <div class="current-bid">
+                        <div class="bid-label">現在の最高入札</div>
+                        <div class="bid-amount" id="bid-amount-{{ item.id }}">¥{{ "{:,}".format(item.highest_bid) }}</div>
+                        <div class="bidder-name" id="bidder-name-{{ item.id }}">入札者: {{ item.highest_bidder }}</div>
+                    </div>
+                    {% else %}
+                    <div class="no-bid" id="no-bid-{{ item.id }}">まだ入札がありません</div>
+                    {% endif %}
+                    
+                    {% if current_user.is_authenticated and current_user.can_participate_auction() %}
+                    <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})">
+                        <div class="bid-row">
+                            {% if item.highest_bid %}
+                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.highest_bid + 1 }}" id="amount-{{ item.id }}">
+                            {% else %}
+                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.listing_price or 0 }}" id="amount-{{ item.id }}">
+                            {% endif %}
+                            <button type="submit" class="btn-bid">入札する</button>
+                        </div>
+                        <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
+                    </form>
+                    {% elif current_user.is_authenticated and current_user.is_payment_overdue() %}
+                    <div class="bid-disabled">
+                        <span>⚠️ 入札不可</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">
+            <h2>現在出品中の商品はありません</h2>
+            <p>新しい商品が追加されるまでお待ちください。</p>
+        </div>
+        {% endif %}
+    </main>
+    
+    <footer class="footer">
+        <p>&copy; 株式会社 開花</p>
+    </footer>
+    
+    <!-- 画像モーダル -->
+    <div class="image-modal" id="imageModal" onclick="closeImageModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeImageModal()">&times;</button>
+            <button class="modal-nav prev" onclick="prevImage()">❮</button>
+            <img id="modalMainImage" src="" alt="">
+            <button class="modal-nav next" onclick="nextImage()">❯</button>
+            <div class="modal-thumbnails" id="modalThumbnails"></div>
+            <div class="modal-item-info" id="modalItemInfo"></div>
+        </div>
+    </div>
+    
+    <script>
+    // 商品画像データ
+    const itemImages = {
+        {% for item in items %}
+        {{ item.id }}: {
+            name: "{{ item.product_name or '商品名なし' }}",
+            brand: "{{ item.brand_name or '' }}",
+            images: [
+                {% if item.photo_path %}"{{ url_for('static', filename=item.photo_path) }}"{% endif %}
+                {% if item.additional_photos %}
+                    {% set photos = item.additional_photos.split(',') if item.additional_photos is string else item.additional_photos %}
+                    {% for photo in photos %}
+                        {% if photo and photo.strip() %}
+                        ,"{{ url_for('static', filename=photo.strip()) }}"
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            ]
+        },
+        {% endfor %}
+    };
+    
+    let currentItemId = null;
+    let currentImageIndex = 0;
+    
+    function openImageModal(itemId) {
+        const item = itemImages[itemId];
+        if (!item || item.images.length === 0) return;
+        
+        currentItemId = itemId;
+        currentImageIndex = 0;
+        
+        updateModalImage();
+        document.getElementById('imageModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeImageModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        document.getElementById('imageModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    function updateModalImage() {
+        const item = itemImages[currentItemId];
+        const mainImg = document.getElementById('modalMainImage');
+        const thumbnails = document.getElementById('modalThumbnails');
+        const info = document.getElementById('modalItemInfo');
+        
+        mainImg.src = item.images[currentImageIndex];
+        
+        // サムネイル生成
+        thumbnails.innerHTML = item.images.map((img, idx) => `
+            <div class="modal-thumbnail ${idx === currentImageIndex ? 'active' : ''}" onclick="goToImage(${idx})">
+                <img src="${img}" alt="">
+            </div>
+        `).join('');
+        
+        // 商品情報表示
+        let infoText = item.name;
+        if (item.brand) infoText = item.brand + ' - ' + infoText;
+        infoText += ` (${currentImageIndex + 1}/${item.images.length})`;
+        info.textContent = infoText;
+    }
+    
+    function goToImage(index) {
+        currentImageIndex = index;
+        updateModalImage();
+    }
+    
+    function prevImage() {
+        const item = itemImages[currentItemId];
+        currentImageIndex = (currentImageIndex - 1 + item.images.length) % item.images.length;
+        updateModalImage();
+    }
+    
+    function nextImage() {
+        const item = itemImages[currentItemId];
+        currentImageIndex = (currentImageIndex + 1) % item.images.length;
+        updateModalImage();
+    }
+    
+    // キーボード操作
+    document.addEventListener('keydown', function(e) {
+        if (!document.getElementById('imageModal').classList.contains('active')) return;
+        
+        if (e.key === 'Escape') closeImageModal();
+        if (e.key === 'ArrowLeft') prevImage();
+        if (e.key === 'ArrowRight') nextImage();
+    });
+    
+    // 入札処理
+    function submitBid(event, itemId) {
+        event.preventDefault();
+        
+        const amountInput = document.getElementById('amount-' + itemId);
+        const errorDiv = document.getElementById('error-' + itemId);
+        const form = event.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        
+        errorDiv.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.textContent = '処理中...';
+        
+        fetch('/proxy-service/bid', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                merchandise_id: itemId,
+                bid_amount: parseInt(amountInput.value)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '入札する';
+            
+            if (data.success) {
+                // 入札成功 - 表示を更新
+                const noBidDiv = document.getElementById('no-bid-' + itemId);
+                if (noBidDiv) {
+                    noBidDiv.outerHTML = `
+                        <div class="current-bid">
+                            <div class="bid-label">現在の最高入札</div>
+                            <div class="bid-amount" id="bid-amount-${itemId}">¥${data.bid_amount.toLocaleString()}</div>
+                            <div class="bidder-name" id="bidder-name-${itemId}">入札者: ${data.bidder_name}</div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('bid-amount-' + itemId).textContent = '¥' + data.bid_amount.toLocaleString();
+                    document.getElementById('bidder-name-' + itemId).textContent = '入札者: ' + data.bidder_name;
+                }
+                
+                // 最低入札額を更新
+                amountInput.min = data.bid_amount + 1;
+                amountInput.value = '';
+                
+                alert('入札が完了しました！');
+            } else {
+                errorDiv.textContent = data.error;
+                errorDiv.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '入札する';
+            errorDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
+            errorDiv.style.display = 'block';
+        });
+    }
+    
+    // 即決購入処理
+    function submitPurchase(itemId, btn) {
+        if (!confirm('この商品を購入しますか？\n購入後のキャンセルはできません。')) {
+            return;
+        }
+        
+        const errorDiv = document.getElementById('error-' + itemId);
+        errorDiv.style.display = 'none';
+        btn.disabled = true;
+        btn.textContent = '処理中...';
+        
+        fetch('/proxy-service/purchase', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                merchandise_id: itemId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 購入成功 - カードを売り切れ表示に
+                const itemCard = document.getElementById('item-' + itemId);
+                itemCard.classList.add('sold');
+                btn.textContent = '✓ 購入済み';
+                btn.classList.add('sold');
+                btn.disabled = true;
+                
+                alert('購入が完了しました！\n¥' + data.purchase_price.toLocaleString());
+            } else {
+                btn.disabled = false;
+                btn.textContent = '🛒 購入する';
+                errorDiv.textContent = data.error;
+                errorDiv.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = '🛒 購入する';
+            errorDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
+            errorDiv.style.display = 'block';
+        });
+    }
+    
+    // カウントダウン
+    {% if end_datetime %}
+    const endTime = new Date('{{ end_datetime }}').getTime();
+    
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const diff = endTime - now;
+        
+        if (diff <= 0) {
+            document.getElementById('countdown').textContent = '終了しました';
+            document.getElementById('countdownBar').classList.add('ended');
+            return;
+        }
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        
+        let text = '';
+        if (hours > 0) text += hours + '時間 ';
+        text += minutes + '分 ' + seconds + '秒';
+        
+        document.getElementById('countdown').textContent = text;
+        
+        // 残り30分以下で点滅
+        if (diff < 30 * 60 * 1000) {
+            document.getElementById('countdownBar').classList.add('ending-soon');
+        }
+    }
+    
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+    {% endif %}
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+物販管理システム ファイル説明
+📁 ルートファイル
+ファイル名	説明
+app.py	メインアプリケーション - Flask製のWebサーバー。ルーティング、データベース処理、認証、全機能のバックエンドロジックを含む
+merchandise.db	SQLiteデータベース - ローカル環境用のデータ保存ファイル（ユーザー、商品、仕切書、請求書等）
+requirements.txt	依存パッケージ一覧 - Flask, Flask-Login, psycopg2等のPythonライブラリ定義
+Procfile	Render起動設定 - Renderでgunicornを使ってサーバーを起動するコマンド
+render.yaml	Renderデプロイ設定 - 環境変数、ビルドコマンド、Python版本等の設定
+start_server.bat	ローカル起動用バッチ - Windowsでダブルクリックでサーバーを起動
+📁 static/ - 静的ファイル
+ファイル名	説明
+css/style.css	スタイルシート - 画面のデザイン、レイアウト、レスポンシブ対応のCSS
+manifest.json	PWA設定 - プログレッシブWebアプリ用のマニフェスト
+uploads/	画像保存フォルダ - 商品の写真が保存される場所
+📁 templates/ - HTMLテンプレート（一般ユーザー用）
+ファイル名	説明
+base.html	ベーステンプレート - 全ページ共通のヘッダー、ナビゲーション、フッター
+login.html	ログイン画面 - ユーザー認証フォーム
+register.html	新規登録画面 - ユーザー登録フォーム（現在は無効化）
+index.html	商品一覧（メイン画面） - 登録商品の表示、統計、お知らせエリア
+form.html	商品登録/編集フォーム - 商品情報の入力画面
+view.html	商品詳細画面 - 個別商品の詳細表示
+customers.html	顧客一覧画面 - 顧客リスト表示
+customer_form.html	顧客登録/編集フォーム - 顧客情報の入力
+profile.html	プロフィール画面 - ユーザー自身の情報編集
+shikiriosho_list.html	仕切書一覧（ユーザー） - 受け取った仕切書の一覧
+shikiriosho_view.html	仕切書詳細（ユーザー） - 仕切書の内容表示
+invoice_list.html	請求書一覧（ユーザー） - 作成した請求書の一覧
+invoice_form.html	請求書作成/編集フォーム - 請求書の入力画面
+invoice_view.html	請求書詳細（ユーザー） - 請求書の内容表示
+📁 templates/pdf/ - PDF出力用テンプレート
+ファイル名	説明
+shikiriosho_pdf.html	仕切書PDF - 印刷/PDF保存用の仕切書レイアウト
+invoice_pdf.html	請求書PDF - 印刷/PDF保存用の請求書レイアウト
+📁 templates/admin/ - 管理者用テンプレート
+ファイル名	説明
+dashboard.html	管理者ダッシュボード - 管理画面のトップ、概要表示
+users.html	ユーザー管理一覧 - 全ユーザーのリスト表示
+user_form.html	ユーザー作成/編集 - ユーザー情報の入力画面
+user_items.html	ユーザー別商品一覧 - 特定ユーザーの商品表示
+analytics.html	分析画面 - 売上、利益、ブランド別統計等のグラフ・データ表示
+analytics_settings.html	分析ウィジェット設定 - 表示する分析項目のカスタマイズ
+announcements.html	お知らせ管理一覧 - お知らせの一覧と管理
+announcement_form.html	お知らせ作成/編集 - お知らせ内容の入力画面
+backup.html	バックアップ画面 - データのエクスポート/インポート
+shikiriosho_list.html	仕切書管理一覧 - 作成した仕切書の一覧
+shikiriosho_form.html	仕切書作成/編集 - 仕切書の入力画面（商品選択機能付き）
+shikiriosho_view.html	仕切書詳細（管理者） - 仕切書の内容表示
+invoice_list.html	請求書管理一覧 - 受け取った請求書の一覧
+invoice_view.html	請求書詳細（管理者） - 請求書の内容表示、承認/却下
+📁 ドキュメント
+ファイル名	説明
+デプロイ手順.md	Renderへのデプロイ方法
+初期設定変更手順書.md	初期設定の変更方法
+クライアント向け_セットアップ手順書_完成版.xlsx	お客様向けセットアップガイド
+環境変数設定手順書.xlsx	環境変数の設定方法
+営業資料.md / 営業資料.html	営業用の説明資料
+契約書_物販管理システム利用契約.md	システム利用契約書テンプレート

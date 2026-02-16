@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}買取明細書管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>買取明細書管理</h1>
+    <div class="admin-nav-buttons">
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">← 書類管理</a>
+        <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類No.</th>
+                <th>買取先</th>
+                <th>発行日</th>
+                <th>商品点数</th>
+                <th>買取合計</th>
+                <th>身分証</th>
+                <th>同意書</th>
+                <th>ステータス</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in kaitori_list %}
+            <tr>
+                <td class="doc-no">{{ doc.invoice_no }}</td>
+                <td>
+                    {% if doc.user_display_name %}
+                        {{ doc.user_display_name }}
+                    {% elif doc.customer_name %}
+                        {{ doc.customer_name }}
+                    {% else %}
+                        <span class="text-muted">未設定</span>
+                    {% endif %}
+                </td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="text-center">-</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount|default(0)|int) }}</td>
+                <td class="text-center">
+                    {% if doc.id_document_path %}
+                        <span class="doc-attached">○</span>
+                    {% else %}
+                        <span class="doc-missing">×</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if doc.consent_form_path %}
+                        <span class="doc-attached">○</span>
+                    {% else %}
+                        <span class="doc-missing">×</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if doc.status == 'completed' %}
+                        <span class="status-badge status-completed">完了</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_kaitori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    <a href="{{ url_for('admin_kaitori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status == 'draft' %}
+                        <a href="{{ url_for('admin_kaitori_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_kaitori_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この買取明細書を削除しますか？')">削除</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="text-center text-muted">買取明細書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.admin-nav-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.doc-attached {
+    color: #28a745;
+}
+
+.doc-missing {
+    color: #dc3545;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin: 2px;
+}
+
+.btn-info { background: #17a2b8; color: white; }
+.btn-pdf { background: #dc3545; color: white; }
+
+.actions {
+    white-space: nowrap;
+}
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 800px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}

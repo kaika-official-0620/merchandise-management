@@ -1,0 +1,716 @@
+{% extends "base.html" %}
+
+{% block title %}{% if invoice %}買取明細書編集{% else %}買取明細書作成{% endif %} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('user_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+</div>
+
+<form method="POST" class="invoice-form">
+    <div class="form-section">
+        <h3>基本情報</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>買取明細書番号</label>
+                <input type="text" value="{{ invoice.invoice_no if invoice else invoice_no }}" readonly class="form-control readonly">
+            </div>
+            <div class="form-group">
+                <label for="recipient_name">宛名</label>
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ invoice.recipient_name if invoice else '' }}" class="form-control" placeholder="株式会社○○">
+            </div>
+            <div class="form-group">
+                <label for="service_type">サービス種別 *</label>
+                <select id="service_type" name="service_type" class="form-control" required>
+                    <option value="normal" {% if not invoice or invoice.service_type == 'normal' %}selected{% endif %}>通常精算（手数料10%）</option>
+                    <option value="photo_packing" {% if invoice and invoice.service_type == 'photo_packing' %}selected{% endif %}>撮影梱包等代行（25,000円以上:2%, 未満:500円）</option>
+                    <option value="wholesale" {% if invoice and invoice.service_type == 'wholesale' %}selected{% endif %}>業者卸販売（手数料10%）</option>
+                    <option value="multi_listing" {% if invoice and invoice.service_type == 'multi_listing' %}selected{% endif %}>同時出品サービス（手数料3%）</option>
+                    <option value="auction" {% if invoice and invoice.service_type == 'auction' %}selected{% endif %}>オークション流し（手数料5%）</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="issue_date">発行日 *</label>
+                <input type="date" id="issue_date" name="issue_date" value="{{ invoice.issue_date if invoice else today }}" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="payment_due_date">支払期限</label>
+                <input type="date" id="payment_due_date" name="payment_due_date" value="{{ invoice.payment_due_date if invoice }}" class="form-control">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>明細</h3>
+        <p class="help-text">※「8%」は軽減税率対象、「10」は標準税率です</p>
+        <div class="product-selector">
+            <label>登録商品から追加：</label>
+            <select id="product-filter" class="form-control" style="max-width: 150px;">
+                <option value="">すべて</option>
+                <option value="sold">売却済みのみ</option>
+                <option value="inventory">在庫のみ</option>
+            </select>
+            <select id="product-select" class="form-control">
+                <option value="">-- 商品を選択 --</option>
+            </select>
+            <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+        </div>
+        <div class="table-responsive">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th width="8%">税区分</th>
+                        <th width="11%">仕入れ日</th>
+                        <th width="24%">商品名／品名 *</th>
+                        <th width="12%">商品番号</th>
+                        <th width="6%">数量</th>
+                        <th width="8%">単位</th>
+                        <th width="12%">単価</th>
+                        <th width="12%">金額</th>
+                        <th width="5%"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td>
+                                <select name="tax_category[]" class="form-control tax-category">
+                                    <option value="10" {% if item.tax_category == '10' %}selected{% endif %}>10</option>
+                                    <option value="8" {% if item.tax_category == '8' %}selected{% endif %}>8%</option>
+                                </select>
+                            </td>
+                            <td><input type="date" name="product_date[]" value="{{ item.product_date }}" class="form-control"></td>
+                            <td><input type="text" name="product_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
+                            <td><input type="text" name="product_code[]" value="{{ item.product_code or '' }}" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control item-qty" min="1"></td>
+                            <td><input type="text" name="unit[]" value="{{ item.unit }}" class="form-control" placeholder="個"></td>
+                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control item-price" min="0"></td>
+                            <td class="item-amount">¥{{ "{:,}".format(item.amount) }}</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(5) %}
+                        <tr class="item-row">
+                            <td>
+                                <select name="tax_category[]" class="form-control tax-category">
+                                    <option value="10">10</option>
+                                    <option value="8">8%</option>
+                                </select>
+                            </td>
+                            <td><input type="date" name="product_date[]" class="form-control"></td>
+                            <td><input type="text" name="product_name[]" class="form-control item-name"></td>
+                            <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
+                            <td><input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1"></td>
+                            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
+                            <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
+                            <td class="item-amount">¥0</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="8">
+                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>小計</strong></td>
+                        <td id="subtotal">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>消費税(8%)</strong></td>
+                        <td id="tax-8">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>消費税(10%)</strong></td>
+                        <td id="tax-10">¥0</td>
+                        <td></td>
+                    </tr>
+                    <tr class="totals-row commission-row">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>手数料 <span id="commission-rate-label">(10%)</span></strong></td>
+                        <td id="commission-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                    <input type="hidden" name="commission_amount" id="commission-input" value="0">
+                    <input type="hidden" name="commission_rate" id="commission-rate-input" value="10">
+                    <tr class="totals-row total-final">
+                        <td colspan="5"></td>
+                        <td class="text-right"><strong>請求金額（税込・手数料込）</strong></td>
+                        <td id="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>🏦 振込先</h3>
+        <div class="form-group">
+            <textarea name="bank_info" rows="3" class="form-control" placeholder="○○銀行　○○支店　普通預金&#10;口座番号 0000000　○○○○">{{ invoice.bank_info if invoice else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>備考</h3>
+        <div class="form-group">
+            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ invoice.notes if invoice else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <button type="submit" name="status" value="sent" class="btn btn-primary">保存して送信</button>
+    </div>
+</form>
+
+<style>
+.invoice-form {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    color: #333;
+}
+
+.help-text {
+    color: #666;
+    font-size: 13px;
+    margin-bottom: 15px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control.readonly {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    min-width: 800px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8f9fa;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.items-table .form-control {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.item-amount {
+    font-weight: 500;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.totals-row td {
+    border: none;
+    padding: 8px 10px;
+}
+
+.totals-row .text-right {
+    text-align: right;
+}
+
+.total-final td {
+    font-size: 18px;
+    color: #007bff;
+}
+
+.commission-row td {
+    background: #fff3cd;
+}
+
+.commission-row #commission-amount {
+    color: #856404;
+    font-weight: 600;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.product-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #e8f4f8;
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.product-selector label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.product-selector select {
+    flex: 1;
+    max-width: 400px;
+    min-width: 200px;
+}
+
+@media (max-width: 768px) {
+    .invoice-form {
+        max-width: 100%;
+    }
+    
+    .form-section {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .form-section h3 {
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+    
+    .help-text {
+        font-size: 0.7rem;
+        margin-bottom: 8px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    
+    .form-group label {
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+    
+    .form-control {
+        padding: 6px;
+        font-size: 0.8rem;
+    }
+    
+    input[type="date"].form-control {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+        min-width: 110px;
+        width: auto;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    
+    .product-selector {
+        padding: 8px;
+        gap: 6px;
+    }
+    
+    .product-selector label {
+        font-size: 0.75rem;
+        width: 100%;
+    }
+    
+    .product-selector select {
+        max-width: 100%;
+        min-width: 100%;
+        font-size: 0.75rem;
+        padding: 6px;
+    }
+    
+    .items-table {
+        min-width: 580px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        padding: 3px 2px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table th {
+        font-size: 0.65rem;
+    }
+    
+    .items-table .form-control {
+        padding: 4px 3px;
+        font-size: 0.7rem;
+    }
+    
+    .items-table input[type="date"].form-control {
+        padding: 4px 2px;
+        font-size: 0.7rem;
+        min-width: 90px;
+        width: 90px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    
+    .item-amount {
+        font-size: 0.7rem;
+    }
+    
+    .totals-row td {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+    
+    .total-final td {
+        font-size: 0.9rem;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+    
+    .btn-sm {
+        padding: 3px 5px;
+        font-size: 0.6rem;
+    }
+    
+    .page-actions .btn {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsBody = document.getElementById('items-body');
+    const addRowBtn = document.getElementById('add-row');
+    const productSelect = document.getElementById('product-select');
+    const productFilter = document.getElementById('product-filter');
+    const addProductBtn = document.getElementById('add-product-btn');
+    const serviceTypeSelect = document.getElementById('service_type');
+    
+    let products = [];
+    
+    // 手数料計算関数
+    function calculateCommission(subtotal, serviceType) {
+        let rate = 10;
+        let commission = 0;
+        let rateLabel = '10%';
+        
+        switch(serviceType) {
+            case 'normal':
+                rate = 10;
+                commission = Math.floor(subtotal * 0.10);
+                rateLabel = '10%';
+                break;
+            case 'photo_packing':
+                if (subtotal >= 25000) {
+                    rate = 2;
+                    commission = Math.floor(subtotal * 0.02);
+                    rateLabel = '2%';
+                } else {
+                    rate = 0;
+                    commission = 500;
+                    rateLabel = '500円固定';
+                }
+                break;
+            case 'wholesale':
+                rate = 10;
+                commission = Math.floor(subtotal * 0.10);
+                rateLabel = '10%';
+                break;
+            case 'multi_listing':
+                rate = 3;
+                commission = Math.floor(subtotal * 0.03);
+                rateLabel = '3%';
+                break;
+            case 'auction':
+                rate = 5;
+                commission = Math.floor(subtotal * 0.05);
+                rateLabel = '5%';
+                break;
+        }
+        
+        return { rate, commission, rateLabel };
+    }
+    
+    // サービスタイプ変更時
+    serviceTypeSelect.addEventListener('change', function() {
+        calculateTotals();
+    });
+    
+    // 商品一覧を取得
+    async function loadProducts() {
+        try {
+            let url = '/api/products';
+            const params = new URLSearchParams();
+            
+            // フィルター条件を追加
+            const filterValue = productFilter.value;
+            if (filterValue === 'sold') {
+                params.append('sold_only', '1');
+            } else if (filterValue === 'inventory') {
+                params.append('inventory_only', '1');
+            }
+            
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+            
+            const response = await fetch(url);
+            products = await response.json();
+            updateProductSelect();
+        } catch (error) {
+            console.error('商品一覧の取得に失敗しました:', error);
+        }
+    }
+    
+    // 商品選択肢を更新
+    function updateProductSelect() {
+        productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
+        products.forEach(product => {
+            const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+            const soldLabel = product.sale_date ? ' [売却済]' : '';
+            const option = document.createElement('option');
+            option.value = JSON.stringify(product);
+            option.textContent = `${product.product_name}${product.brand_name ? ' (' + product.brand_name + ')' : ''} - ¥${price.toLocaleString()}${soldLabel}`;
+            productSelect.appendChild(option);
+        });
+    }
+    
+    // フィルター変更時に商品一覧を更新
+    productFilter.addEventListener('change', function() {
+        loadProducts();
+    });
+    
+    // 初期ロード
+    loadProducts();
+    
+    // 商品を追加
+    addProductBtn.addEventListener('click', function() {
+        if (!productSelect.value) return;
+        
+        const product = JSON.parse(productSelect.value);
+        const price = product.sale_price || product.listing_price || product.purchase_price || 0;
+        const today = new Date().toISOString().split('T')[0];
+        
+        addRow('10', today, product.product_name, '', 1, '個', price);
+        productSelect.value = '';
+    });
+    
+    // 行を追加
+    function addRow(taxCat = '10', date = '', name = '', code = '', qty = 1, unit = '個', price = 0) {
+        const newRow = document.createElement('tr');
+        newRow.className = 'item-row';
+        newRow.innerHTML = `
+            <td>
+                <select name="tax_category[]" class="form-control tax-category">
+                    <option value="10" ${taxCat === '10' ? 'selected' : ''}>10</option>
+                    <option value="8" ${taxCat === '8' ? 'selected' : ''}>8%</option>
+                </select>
+            </td>
+            <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
+            <td><input type="text" name="product_name[]" value="${name}" class="form-control item-name"></td>
+            <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
+            <td><input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1"></td>
+            <td><input type="text" name="unit[]" value="${unit}" class="form-control" placeholder="個"></td>
+            <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
+            <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+        `;
+        itemsBody.appendChild(newRow);
+        attachRowEvents(newRow);
+        calculateTotals();
+    }
+    
+    addRowBtn.addEventListener('click', function() {
+        addRow();
+    });
+    
+    // 行のイベント付与
+    function attachRowEvents(row) {
+        const removeBtn = row.querySelector('.remove-row');
+        const qtyInput = row.querySelector('.item-qty');
+        const priceInput = row.querySelector('.item-price');
+        const taxSelect = row.querySelector('.tax-category');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            calculateTotals();
+        });
+        
+        qtyInput.addEventListener('input', function() {
+            calculateRowAmount(row);
+            calculateTotals();
+        });
+        
+        priceInput.addEventListener('input', function() {
+            calculateRowAmount(row);
+            calculateTotals();
+        });
+        
+        taxSelect.addEventListener('change', function() {
+            calculateTotals();
+        });
+    }
+    
+    // 行の金額を計算
+    function calculateRowAmount(row) {
+        const qty = parseInt(row.querySelector('.item-qty').value) || 0;
+        const price = parseInt(row.querySelector('.item-price').value) || 0;
+        const amount = qty * price;
+        row.querySelector('.item-amount').textContent = '¥' + amount.toLocaleString();
+    }
+    
+    // 合計を計算
+    function calculateTotals() {
+        let subtotal = 0;
+        let subtotal8 = 0;
+        let subtotal10 = 0;
+        
+        const rows = itemsBody.querySelectorAll('.item-row');
+        rows.forEach(row => {
+            const qty = parseInt(row.querySelector('.item-qty').value) || 0;
+            const price = parseInt(row.querySelector('.item-price').value) || 0;
+            const taxCategory = row.querySelector('.tax-category').value;
+            const amount = qty * price;
+            subtotal += amount;
+            
+            if (taxCategory === '8') {
+                subtotal8 += amount;
+            } else {
+                subtotal10 += amount;
+            }
+        });
+        
+        const tax8 = Math.floor(subtotal8 * 0.08);
+        const tax10 = Math.floor(subtotal10 * 0.10);
+        const subtotalWithTax = subtotal + tax8 + tax10;
+        
+        // 手数料計算
+        const serviceType = serviceTypeSelect.value;
+        const { rate, commission, rateLabel } = calculateCommission(subtotalWithTax, serviceType);
+        
+        const totalAmount = subtotalWithTax + commission;
+        
+        document.getElementById('subtotal').textContent = '¥' + subtotal.toLocaleString();
+        document.getElementById('tax-8').textContent = '¥' + tax8.toLocaleString();
+        document.getElementById('tax-10').textContent = '¥' + tax10.toLocaleString();
+        document.getElementById('commission-rate-label').textContent = '(' + rateLabel + ')';
+        document.getElementById('commission-amount').textContent = '¥' + commission.toLocaleString();
+        document.getElementById('commission-input').value = commission;
+        document.getElementById('commission-rate-input').value = rate;
+        document.getElementById('total-amount').textContent = '¥' + totalAmount.toLocaleString();
+    }
+    
+    // 既存の行にイベントを付与
+    document.querySelectorAll('.item-row').forEach(row => {
+        attachRowEvents(row);
+    });
+    
+    // 初期計算
+    calculateTotals();
+});
+</script>
+{% endblock %}
+

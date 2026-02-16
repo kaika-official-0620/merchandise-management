@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}計算書詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類管理に戻る</a>
+    <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
+    {% if keisan.status == 'draft' and not keisan.is_admin_created %}
+    <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+    {% endif %}
+</div>
+
+<div class="document-view">
+    <div class="document-header">
+        <div class="doc-title-section">
+            <h1>計算書</h1>
+            {% if keisan.is_admin_created %}
+            <span class="status-badge status-admin">管理者発行</span>
+            {% else %}
+            <span class="status-badge status-{{ keisan.status }}">
+                {% if keisan.status == 'draft' %}下書き{% else %}完了{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        <div class="doc-no">{{ keisan.document_no }}</div>
+    </div>
+
+    <div class="document-body">
+        <div class="info-section">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">発行日</span>
+                    <span class="info-value">{{ keisan.issue_date }}</span>
+                </div>
+                {% if keisan.recipient_name %}
+                <div class="info-item">
+                    <span class="info-label">宛先</span>
+                    <span class="info-value">{{ keisan.recipient_name }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if keisan.subject %}
+        <div class="subject-section">
+            <h3>件名</h3>
+            <p class="subject-text">{{ keisan.subject }}</p>
+        </div>
+        {% endif %}
+
+        <div class="items-section">
+            <h3>明細</h3>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>項目名</th>
+                        <th>数量</th>
+                        <th>単位</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.item_no }}</td>
+                        <td>{{ item.item_name }}</td>
+                        <td class="text-right">{{ item.quantity }}</td>
+                        <td>{{ item.unit or '-' }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
+                        <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center">明細がありません</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="5" class="text-right"><strong>合計金額</strong></td>
+                        <td class="text-right total-amount">¥{{ "{:,}".format(keisan.total_amount or 0) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        {% if keisan.notes %}
+        <div class="notes-section">
+            <h3>備考</h3>
+            <p class="notes-text">{{ keisan.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.document-view {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.document-header {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.doc-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.document-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.doc-no {
+    font-family: 'Consolas', monospace;
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-badge.status-draft { background: #fef3c7; color: #b45309; }
+.status-badge.status-completed { background: #d1fae5; color: #059669; }
+.status-badge.status-admin { background: #e0cffc; color: #6610f2; }
+
+.btn-pdf { background: #dc3545; color: white; }
+
+.document-body {
+    padding: 24px;
+}
+
+.info-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-label {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.info-value {
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.subject-section,
+.items-section,
+.notes-section {
+    margin-bottom: 24px;
+}
+
+.subject-section h3,
+.items-section h3,
+.notes-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: #334155;
+    border-left: 3px solid #10b981;
+    padding-left: 10px;
+}
+
+.subject-text {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #1e293b;
+    margin: 0;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8fafc;
+    font-weight: 500;
+    color: #475569;
+}
+
+.items-table .text-right {
+    text-align: right;
+}
+
+.items-table .text-center {
+    text-align: center;
+    color: #64748b;
+}
+
+.total-row {
+    background: #ecfdf5;
+}
+
+.total-row td {
+    border-top: 2px solid #10b981;
+}
+
+.total-amount {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #10b981;
+}
+
+.notes-text {
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 8px;
+    margin: 0;
+    white-space: pre-wrap;
+    color: #475569;
+}
+
+.page-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary { background: #10b981; color: white; }
+.btn-secondary { background: #64748b; color: white; }
+
+@media (max-width: 768px) {
+    .document-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}精算書管理 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>精算書管理</h1>
+    <div class="admin-nav-buttons">
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">← 書類管理</a>
+        <a href="{{ url_for('admin_seisan_add') }}" class="btn btn-primary">+ 新規作成</a>
+    </div>
+</div>
+
+<div class="info-box">
+    <p>開花の名前を借りて販売した場合に、ユーザーへ送付する精算書です。</p>
+</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>書類No.</th>
+                <th>宛先</th>
+                <th>精算日</th>
+                <th>販売合計</th>
+                <th>手数料</th>
+                <th>お支払額</th>
+                <th>ステータス</th>
+                <th>既読</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in seisan_list %}
+            <tr>
+                <td class="doc-no">{{ doc.document_no }}</td>
+                <td>{{ doc.recipient_display_name or '未設定' }}</td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_sale) }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_commission) }}</td>
+                <td class="amount payment">¥{{ "{:,}".format(doc.total_payment) }}</td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        <span class="status-badge status-sent">送信済</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        {% if doc.is_read %}
+                            <span class="read-badge read">既読</span>
+                        {% else %}
+                            <span class="read-badge unread">未読</span>
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_seisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    <a href="{{ url_for('admin_seisan_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status == 'draft' %}
+                        <a href="{{ url_for('admin_seisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                        <a href="{{ url_for('admin_seisan_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_seisan_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="text-center text-muted">精算書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.admin-nav-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.info-box {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.info-box p {
+    margin: 0;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.amount.payment {
+    color: #28a745;
+    font-weight: 700;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-sent { background: #d4edda; color: #155724; }
+.status-draft { background: #fff3cd; color: #856404; }
+
+.read-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.read-badge.read { background: #e9ecef; color: #6c757d; }
+.read-badge.unread { background: #f59e0b; color: white; }
+
+.btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
+.btn-info { background: #17a2b8; color: white; }
+.btn-pdf { background: #dc3545; color: white; }
+.btn-success { background: #28a745; color: white; }
+
+.btn-primary { background: #f59e0b; color: white; }
+
+.actions { white-space: nowrap; }
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 850px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,1466 @@
+{% extends "base.html" %}
+{% block title %}{{ '編集' if item else '新規登録' }} - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+/* Google Drive連携スタイル */
+.photo-upload-options {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.btn-google-drive {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: #fff;
+    border: 2px solid #4285f4;
+    border-radius: 6px;
+    color: #4285f4;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-google-drive:hover:not(:disabled) {
+    background: #4285f4;
+    color: #fff;
+}
+
+.btn-google-drive:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.google-drive-preview {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+    background: #e8f0fe;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-preview img {
+    max-width: 200px;
+    max-height: 150px;
+    border-radius: 4px;
+}
+
+.google-drive-preview .photo-label {
+    display: block;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #4285f4;
+    margin-top: 6px;
+}
+
+.remove-google-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.google-drive-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.google-drive-additional-preview .preview-item {
+    position: relative;
+    background: #e8f0fe;
+    padding: 8px;
+    border-radius: 6px;
+    border: 2px solid #4285f4;
+}
+
+.google-drive-additional-preview .preview-item img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.google-drive-additional-preview .preview-item .remove-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* 写真関連スタイル */
+.current-photo {
+    margin-top: 10px;
+    position: relative;
+    display: inline-block;
+}
+
+.current-photo img {
+    max-width: 150px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.photo-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.form-help {
+    display: block;
+    color: #64748b;
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.current-file {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #e8f5e9;
+    border-radius: 4px;
+}
+
+.current-file a {
+    color: #2e7d32;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.current-file a:hover {
+    text-decoration: underline;
+}
+
+.additional-photos-grid {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.photos-count {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.additional-photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.additional-photo-item {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.additional-photo-item img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.photo-number {
+    display: block;
+    text-align: center;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.delete-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 6px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #ef4444;
+}
+
+.delete-checkbox input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.delete-checkbox span {
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .additional-photos-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 読み取り専用フィールドのスタイル */
+.basic-readonly-notice {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: #92400e;
+    font-size: 0.85rem;
+}
+
+.basic-readonly-notice strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+input:disabled, select:disabled, textarea:disabled {
+    background-color: #f1f5f9 !important;
+    cursor: not-allowed;
+    color: #64748b;
+}
+
+.owner-only-label {
+    color: #ef4444;
+    font-size: 0.75rem;
+    font-weight: normal;
+    margin-left: 4px;
+}
+</style>
+
+{% set basic_readonly = not current_user.is_owner() and item %}
+
+<form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
+    <div class="form-grid">
+        <!-- 左カラム: 基本情報 -->
+        <div class="form-section">
+            <h2>基本情報{% if basic_readonly %}<span class="owner-only-label">（オーナーのみ編集可）</span>{% endif %}</h2>
+            
+            {% if basic_readonly %}
+            <div class="basic-readonly-notice">
+                <strong>⚠️ 基本情報は編集できません</strong>
+                仕入れ情報（仕入日〜支払方法）はオーナーのみ編集可能です。<br>
+                <span style="color: #10b981;">✓ 商品写真の追加・削除は可能です。</span>
+            </div>
+            {% endif %}
+            
+            <div class="form-group">
+                <label for="purchase_date">仕入日</label>
+                <input type="date" id="purchase_date" name="purchase_date" 
+                       value="{{ item.purchase_date if item else '' }}"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="product_name">商品名</label>
+                <input type="text" id="product_name" name="product_name" 
+                       value="{{ item.product_name if item else '' }}" required
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="kaika_product_code">開花商品番号</label>
+                <input type="text" id="kaika_product_code" name="kaika_product_code" 
+                       value="{{ item.kaika_product_code if item else '' }}" placeholder="開花独自の管理番号"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="brand_name">ブランド名</label>
+                <select id="brand_name" name="brand_name" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_brand_name" value="{{ item.brand_name if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="model_number">型番</label>
+                <input type="text" id="model_number" name="model_number" 
+                       value="{{ item.model_number if item else '' }}" placeholder="例: M44874, 116500LN"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="item_condition">商品状態</label>
+                <select id="item_condition" name="item_condition" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_item_condition" value="{{ item.item_condition if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="store_name">仕入先</label>
+                <select id="store_name" name="store_name" onchange="toggleSupplierDetail()" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_store_name" value="{{ item.store_name if item else '' }}">
+            </div>
+            
+            <!-- 個人選択時の追加フィールド -->
+            <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="supplier_detail">仕入先詳細</label>
+                    <select id="supplier_detail" name="supplier_detail" {% if basic_readonly %}disabled{% endif %}>
+                        <option value="">選択してください</option>
+                        <!-- マスターデータから動的に生成 -->
+                    </select>
+                    <input type="hidden" id="current_supplier_detail" value="{{ item.supplier_detail if item else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_document">身分証</label>
+                    <input type="file" id="id_document" name="id_document" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    {% if item and item.id_document_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.id_document_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="consent_form">同意書</label>
+                    <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    {% if item and item.consent_form_path %}
+                    <div class="current-file">
+                        <a href="{{ url_for('static', filename=item.consent_form_path) }}" target="_blank">現在のファイルを表示</a>
+                    </div>
+                    {% endif %}
+                    <small class="form-help">画像またはPDF</small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="purchase_price">仕入額</label>
+                <input type="number" id="purchase_price" name="purchase_price" 
+                       value="{{ item.purchase_price if item else 0 }}" min="0"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+            
+            <div class="form-group">
+                <label for="payment_method">支払方法</label>
+                <select id="payment_method" name="payment_method" {% if basic_readonly %}disabled{% endif %}>
+                    <option value="">選択してください</option>
+                    <!-- マスターデータから動的に生成 -->
+                </select>
+                <input type="hidden" id="current_payment_method" value="{{ item.payment_method if item else '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="photo">メイン写真（1枚目）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
+                <div class="photo-upload-options">
+                <input type="file" id="photo" name="photo" accept="image/*">
+                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive">
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>
+                </div>
+                <input type="hidden" id="google-drive-photo-path" name="google_drive_photo_path" value="">
+                <div id="google-drive-photo-preview" class="google-drive-preview" style="display: none;">
+                    <img id="google-drive-photo-img" src="" alt="選択した写真">
+                    <span class="photo-label">Googleドライブから選択</span>
+                    <button type="button" class="remove-google-photo" onclick="removeGoogleDrivePhoto()">×</button>
+                </div>
+                {% if item and item.photo_path %}
+                <div class="current-photo">
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="現在の写真">
+                    <span class="photo-label">現在のメイン写真</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="additional_photos">追加写真（最大19枚）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
+                <div class="photo-upload-options">
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
+                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive">
+                        <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
+                            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
+                            <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
+                            <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75l7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.85L73.55 76.8z" fill="#EA4335"/>
+                            <path d="M43.65 25L57.4 1.2c-1.35-.8-2.9-1.2-4.5-1.2H34.4c-1.6 0-3.15.45-4.5 1.2L43.65 25z" fill="#00832D"/>
+                            <path d="M59.85 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h36.75c1.6 0 3.15-.45 4.5-1.2L59.85 53z" fill="#2684FC"/>
+                            <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25l16.2 28h27.45c0-1.55-.4-3.1-1.2-4.5l-12.7-22z" fill="#FFBA00"/>
+                        </svg>
+                        Googleドライブから選択
+                    </button>
+                </div>
+                <input type="hidden" id="google-drive-additional-paths" name="google_drive_additional_paths" value="">
+                <div id="google-drive-additional-preview" class="google-drive-additional-preview"></div>
+                <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
+                
+                {% if item and item.additional_photos_list and item.additional_photos_list|length > 0 %}
+                <div class="additional-photos-grid">
+                    <p class="photos-count">現在の追加写真: {{ item.additional_photos_list|length }}枚</p>
+                    {% for photo in item.additional_photos_list %}
+                    <div class="additional-photo-item">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
+                        <span class="photo-number">{{ loop.index + 1 }}枚目</span>
+                        <label class="delete-checkbox">
+                            <input type="checkbox" name="delete_photos" value="{{ photo }}">
+                            <span>削除</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 右カラム: 売却情報 -->
+        <div class="form-section">
+            <h2>売却情報</h2>
+            
+            <div class="form-group">
+                <label for="item_status">ステータス</label>
+                <select id="item_status" name="item_status" onchange="updateStatusFields()">
+                    {% set current_status = 'sold' if item and item.sale_date else ('listed' if item and item.is_listed else 'unlisted') %}
+                    <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
+                    <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
+                    <option value="sold" {% if current_status == 'sold' %}selected{% endif %}>売却済み</option>
+                </select>
+            </div>
+            
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-date-group" class="form-group" style="display: none;">
+                <label for="listing_date">出品日</label>
+                <input type="date" id="listing_date" name="listing_date" 
+                       value="{{ item.listing_date if item else '' }}">
+            </div>
+            
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-price-group" class="form-group" style="display: none;">
+                <label for="listing_price">出品価格</label>
+                <input type="number" id="listing_price" name="listing_price" 
+                       value="{{ item.listing_price if item else 0 }}" min="0">
+            </div>
+            
+            
+            <!-- 売却済み時のみ表示 -->
+            <div id="sale-date-group" class="form-group" style="display: none;">
+                <label for="sale_date">売却日</label>
+                <input type="date" id="sale_date" name="sale_date" 
+                       value="{{ item.sale_date if item else '' }}">
+            </div>
+            
+            <!-- 売却済み時のみ表示するフィールド -->
+            <div id="sold-fields" style="display: none;">
+                <div class="form-group">
+                    <label>販売タイプ（複数選択可）</label>
+                    <div class="sale-type-checkboxes">
+                        <!-- 撮影梱包等代行は固定（常にチェック、変更不可） -->
+                        <label class="sale-type-option fixed-option">
+                            <input type="checkbox" name="sale_type[]" value="photo_packing" checked disabled>
+                            <input type="hidden" name="sale_type[]" value="photo_packing">
+                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）<span class="fixed-badge">固定</span></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="normal"
+                                   {% if item and 'normal' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">通常（手数料10%）<span class="sale-type-note">※メルカリ・ラクマ・ヤフオクなど</span></span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="wholesale"
+                                   {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="multi_listing"
+                                   {% if item and 'multi_listing' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">同時出品サービス（手数料3%）</span>
+                        </label>
+                        <label class="sale-type-option">
+                            <input type="checkbox" name="sale_type[]" value="auction"
+                                   {% if item and 'auction' in (item.sale_type or '') %}checked{% endif %}>
+                            <span class="sale-type-label">オークション流し（手数料5%）</span>
+                        </label>
+                    </div>
+                    <small class="form-help">販売タイプを選択してください。撮影梱包等代行は必須です。</small>
+                    <input type="hidden" id="sale_type" name="sale_type" value="{{ item.sale_type if item else 'photo_packing' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="sale_price">売上金（税込販売価格）</label>
+                    <input type="number" id="sale_price" name="sale_price" 
+                           value="{{ item.sale_price if item else 0 }}" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">送料</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           value="{{ item.shipping_cost if item else 0 }}" min="0">
+                    <small class="form-help" id="shipping_hint"></small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sales_destination">販売先（メモ）</label>
+                    <input type="text" id="sales_destination" name="sales_destination" 
+                           value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力">
+                </div>
+                
+                <div class="form-group">
+                    <label for="commission">手数料</label>
+                    <input type="number" id="commission" name="commission" 
+                           value="{{ item.commission if item else 0 }}" min="0">
+                    <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" name="is_shipped" 
+                               {% if item and item.is_shipped %}checked{% endif %}>
+                        発送済み
+                    </label>
+                </div>
+                
+                <div class="form-group result-field">
+                    <label>実際の利益</label>
+                    <div class="calculated-value" id="actual_profit">¥0</div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        {% if current_user.is_admin() or current_user.is_owner() %}
+        <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">キャンセル</a>
+        {% else %}
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+            <span class="btn-text">{{ '更新' if item else '登録' }}</span>
+            <span class="btn-loading" style="display: none;">処理中...</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* 販売タイプチェックボックス */
+.sale-type-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.sale-type-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.sale-type-option:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.sale-type-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
+}
+
+.sale-type-option input[type="checkbox"]:checked + .sale-type-label {
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.sale-type-label {
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.sale-type-note {
+    display: block;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 2px;
+    font-weight: normal;
+}
+
+.sale-type-option.fixed-option {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    cursor: default;
+}
+
+.sale-type-option.fixed-option:hover {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+}
+
+.sale-type-option.fixed-option input[type="checkbox"] {
+    accent-color: #10b981;
+}
+
+.fixed-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: #10b981;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+.selected-types-summary {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #dbeafe;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #1e40af;
+}
+
+</style>
+
+<script>
+// 手数料の自動計算フラグ（手動変更されたらfalseに）
+let autoCalculateCommission = true;
+
+// 販売タイプごとの手数料計算ルール
+const saleTypeRules = {
+    'photo_packing': {
+        name: '撮影梱包等代行',
+        calculate: (price) => price >= 25000 ? Math.floor(price * 0.02) : 500,
+        hint: (price) => price >= 25000 ? '撮影梱包: 売上金の2%（25,000円以上）' : '撮影梱包: 500円（25,000円未満）',
+        shippingHint: '',
+        isFixed: true  // 固定費用
+    },
+    'normal': {
+        name: '通常',
+        calculate: (price) => Math.floor(price * 0.10),
+        hint: '通常: 売上金の10%（メルカリ・ラクマ・ヤフオク等）',
+        shippingHint: ''
+    },
+    'wholesale': {
+        name: '業者卸販売',
+        calculate: (price) => Math.floor(price * 0.10),
+        hint: '業者卸: 売上金の10%',
+        shippingHint: (price) => price >= 30000 ? '30,000円以上のため送料無料' : '※30,000円以上で送料無料',
+        freeShipping: (price) => price >= 30000
+    },
+    'multi_listing': {
+        name: '同時出品',
+        calculate: (price) => Math.floor(price * 0.03),
+        hint: '同時出品: 売上金の3%',
+        shippingHint: ''
+    },
+    'auction': {
+        name: 'オークション流し',
+        calculate: (price) => Math.floor(price * 0.05),
+        hint: 'オークション: 売上金の5%',
+        shippingHint: ''
+    }
+};
+
+// チェックボックスの選択状況をhiddenフィールドに反映
+function updateSaleTypeValue() {
+    const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked:not(:disabled)');
+    const values = Array.from(checkboxes).map(cb => cb.value);
+    // photo_packingは常に含める（固定）
+    if (!values.includes('photo_packing')) {
+        values.unshift('photo_packing');
+    }
+    document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
+    
+    // 自動計算が有効なら手数料を再計算
+    if (autoCalculateCommission) {
+        calculateCommission();
+    }
+}
+
+function calculateProfit() {
+    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
+    const commission = parseInt(document.getElementById('commission').value) || 0;
+    
+    // 実際の利益
+    const actualProfit = salePrice - purchasePrice - shippingCost - commission;
+    const actualEl = document.getElementById('actual_profit');
+    actualEl.textContent = '¥' + actualProfit.toLocaleString();
+    actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
+}
+
+// 販売タイプと売上金に基づいて手数料を計算（複数選択対応）
+function calculateCommission() {
+    if (!autoCalculateCommission) return;
+    
+    const saleTypeValue = document.getElementById('sale_type').value;
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    
+    // 複数タイプが選択されている場合、手数料を合計
+    let totalCommission = 0;
+    let hints = [];
+    let shippingHints = [];
+    
+    selectedTypes.forEach(saleType => {
+        const rule = saleTypeRules[saleType];
+        if (rule) {
+            totalCommission += rule.calculate(salePrice);
+            
+            // ヒント収集
+            if (typeof rule.hint === 'function') {
+                hints.push(rule.hint(salePrice));
+            } else {
+                hints.push(rule.hint);
+            }
+            
+            // 送料ヒント収集
+            if (rule.shippingHint) {
+                if (typeof rule.shippingHint === 'function') {
+                    shippingHints.push(rule.shippingHint(salePrice));
+                } else {
+                    shippingHints.push(rule.shippingHint);
+                }
+            }
+        }
+    });
+    
+    document.getElementById('commission').value = totalCommission;
+    
+    // ヒント更新
+    const hintEl = document.getElementById('commission_hint');
+    hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
+    
+    // 送料ヒント更新
+    const shippingHintEl = document.getElementById('shipping_hint');
+    if (shippingHints.length > 0) {
+        shippingHintEl.textContent = shippingHints.join(' / ');
+        shippingHintEl.style.color = selectedTypes.includes('wholesale') && salePrice >= 30000 ? '#10b981' : '#64748b';
+    } else {
+        shippingHintEl.textContent = '';
+    }
+    
+    calculateProfit();
+}
+
+// チェックボックスにイベントリスナー設定
+document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
+
+document.getElementById('sale_price').addEventListener('input', function() {
+    calculateCommission();
+});
+
+// 手数料を手動で変更したら自動計算を無効化
+document.getElementById('commission').addEventListener('input', function() {
+    autoCalculateCommission = false;
+    calculateProfit();
+});
+
+// 売上金以外の数値フィールドの変更時に利益を再計算
+document.querySelectorAll('input[type="number"]').forEach(input => {
+    if (input.id !== 'sale_price' && input.id !== 'commission') {
+        input.addEventListener('input', calculateProfit);
+    }
+});
+
+// ステータスに応じてフィールドの表示を切り替え
+function updateStatusFields() {
+    const status = document.getElementById('item_status').value;
+    const listingDateGroup = document.getElementById('listing-date-group');
+    const listingPriceGroup = document.getElementById('listing-price-group');
+    const saleDateGroup = document.getElementById('sale-date-group');
+    const soldFields = document.getElementById('sold-fields');
+    
+    // 出品日・出品価格フィールド：出品中・売却済みで表示
+    if (status === 'listed' || status === 'sold') {
+        listingDateGroup.style.display = 'block';
+        listingPriceGroup.style.display = 'block';
+    } else {
+        listingDateGroup.style.display = 'none';
+        listingPriceGroup.style.display = 'none';
+    }
+    
+    // 売却日・売却関連フィールド：売却済みで表示
+    if (status === 'sold') {
+        saleDateGroup.style.display = 'block';
+        soldFields.style.display = 'block';
+    } else {
+        saleDateGroup.style.display = 'none';
+        soldFields.style.display = 'none';
+    }
+}
+
+// 仕入先詳細セクションの表示切替
+function toggleSupplierDetail() {
+    const storeType = document.getElementById('store_name').value;
+    const detailSection = document.getElementById('supplier-detail-section');
+    
+    if (storeType === '個人') {
+        detailSection.style.display = 'block';
+    } else {
+        detailSection.style.display = 'none';
+    }
+}
+
+// ブランド名自動判定マッピング
+const brandKeywords = {
+    'Louis Vuitton': ['ヴィトン', 'ビトン', 'LV', 'ルイヴィトン', 'ルイ・ヴィトン', 'LOUIS VUITTON', 'louis vuitton'],
+    'Hermes': ['エルメス', 'HERMES', 'hermes', 'バーキン', 'ケリー', 'ボリード', 'コンスタンス'],
+    'Chanel': ['シャネル', 'CHANEL', 'chanel', 'マトラッセ'],
+    'Gucci': ['グッチ', 'GUCCI', 'gucci'],
+    'Prada': ['プラダ', 'PRADA', 'prada'],
+    'Dior': ['ディオール', 'DIOR', 'dior', 'クリスチャンディオール'],
+    'Celine': ['セリーヌ', 'CELINE', 'celine'],
+    'Bottega Veneta': ['ボッテガ', 'ボッテガヴェネタ', 'BOTTEGA', 'bottega'],
+    'Balenciaga': ['バレンシアガ', 'BALENCIAGA', 'balenciaga'],
+    'Saint Laurent': ['サンローラン', 'イヴサンローラン', 'YSL', 'SAINT LAURENT', 'saint laurent'],
+    'Loewe': ['ロエベ', 'LOEWE', 'loewe'],
+    'Fendi': ['フェンディ', 'FENDI', 'fendi'],
+    'Burberry': ['バーバリー', 'BURBERRY', 'burberry'],
+    'Valentino': ['ヴァレンティノ', 'バレンティノ', 'VALENTINO', 'valentino'],
+    'Givenchy': ['ジバンシィ', 'ジバンシー', 'GIVENCHY', 'givenchy'],
+    'Miu Miu': ['ミュウミュウ', 'MIU MIU', 'miu miu'],
+    'Rolex': ['ロレックス', 'ROLEX', 'rolex', 'サブマリーナ', 'デイトナ', 'デイトジャスト', 'GMTマスター'],
+    'Cartier': ['カルティエ', 'CARTIER', 'cartier', 'タンク', 'パシャ', 'サントス'],
+    'Omega': ['オメガ', 'OMEGA', 'omega', 'スピードマスター', 'シーマスター'],
+    'Patek Philippe': ['パテック', 'パテックフィリップ', 'PATEK', 'patek'],
+    'Audemars Piguet': ['オーデマピゲ', 'オーデマ', 'AP', 'AUDEMARS', 'audemars', 'ロイヤルオーク'],
+    'Tiffany': ['ティファニー', 'TIFFANY', 'tiffany'],
+    'Bvlgari': ['ブルガリ', 'BVLGARI', 'bvlgari'],
+    'Van Cleef': ['ヴァンクリ', 'ヴァンクリーフ', 'VAN CLEEF', 'van cleef'],
+    'Nike': ['ナイキ', 'NIKE', 'nike', 'エアマックス', 'エアフォース', 'ダンク'],
+    'Adidas': ['アディダス', 'ADIDAS', 'adidas', 'イージー', 'YEEZY'],
+    'Supreme': ['シュプリーム', 'SUPREME', 'supreme'],
+    'Off-White': ['オフホワイト', 'OFF-WHITE', 'off-white', 'OFF WHITE'],
+    'A BATHING APE': ['ベイプ', 'BAPE', 'bape', 'エイプ', 'A BATHING APE'],
+    'Jordan': ['ジョーダン', 'JORDAN', 'jordan', 'AJ1', 'エアジョーダン'],
+    'New Balance': ['ニューバランス', 'NEW BALANCE', 'new balance', 'NB'],
+    'COMME des GARCONS': ['コムデギャルソン', 'ギャルソン', 'COMME DES GARCONS', 'CDG'],
+    'Yohji Yamamoto': ['ヨウジ', 'ヨウジヤマモト', 'YOHJI', 'yohji'],
+    'ISSEY MIYAKE': ['イッセイミヤケ', 'ミヤケ', 'ISSEY MIYAKE', 'issey miyake'],
+    'sacai': ['サカイ', 'SACAI', 'sacai'],
+    'UNDERCOVER': ['アンダーカバー', 'UNDERCOVER', 'undercover'],
+    'Apple': ['アップル', 'APPLE', 'apple', 'iPhone', 'iphone', 'iPad', 'ipad', 'MacBook', 'macbook', 'AirPods'],
+    'Sony': ['ソニー', 'SONY', 'sony', 'プレステ', 'PlayStation', 'PS5', 'PS4'],
+    'Nintendo': ['任天堂', 'ニンテンドー', 'NINTENDO', 'nintendo', 'Switch', 'スイッチ'],
+    'Dyson': ['ダイソン', 'DYSON', 'dyson'],
+    'Bose': ['ボーズ', 'BOSE', 'bose']
+};
+
+// 商品名からブランド名を自動判定
+function detectBrandFromProductName(productName) {
+    const input = productName.toLowerCase();
+    
+    for (const [brand, keywords] of Object.entries(brandKeywords)) {
+        for (const keyword of keywords) {
+            if (input.includes(keyword.toLowerCase())) {
+                return brand;
+            }
+        }
+    }
+    return null;
+}
+
+// 商品名入力時にブランド名を自動選択
+function setupBrandAutoDetect() {
+    const productNameInput = document.getElementById('product_name');
+    const brandSelect = document.getElementById('brand_name');
+    
+    if (productNameInput && brandSelect) {
+        productNameInput.addEventListener('input', function() {
+            const detectedBrand = detectBrandFromProductName(this.value);
+            
+            if (detectedBrand) {
+                // ブランドが検出された場合、セレクトボックスを更新
+                // 既に手動で選択されている場合は上書きしない
+                if (brandSelect.value === '' || brandSelect.dataset.autoDetected === 'true') {
+                    brandSelect.value = detectedBrand;
+                    brandSelect.dataset.autoDetected = 'true';
+                    
+                    // 視覚的なフィードバック
+                    brandSelect.style.transition = 'background-color 0.3s';
+                    brandSelect.style.backgroundColor = '#d1fae5';
+                    setTimeout(() => {
+                        brandSelect.style.backgroundColor = '';
+                    }, 1000);
+                }
+            }
+        });
+        
+        // 手動で変更した場合は自動検出フラグをリセット
+        brandSelect.addEventListener('change', function() {
+            this.dataset.autoDetected = 'false';
+        });
+    }
+}
+
+// マスターデータをロードしてセレクトボックスを生成
+async function loadMasterData() {
+    try {
+        const response = await fetch('/api/master-data?scope=user');
+        const data = await response.json();
+        
+        // ブランド名セレクトボックスを生成
+        const brandSelect = document.getElementById('brand_name');
+        const currentBrand = document.getElementById('current_brand_name').value;
+        brandSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        // カテゴリごとにグループ化
+        const brandsByCategory = {};
+        data.brands.forEach(brand => {
+            const categoryId = brand.category_id || 0;
+            if (!brandsByCategory[categoryId]) {
+                brandsByCategory[categoryId] = [];
+            }
+            brandsByCategory[categoryId].push(brand);
+        });
+        
+        // カテゴリ情報をマッピング
+        const categoryMap = {};
+        data.brand_categories.forEach(cat => {
+            categoryMap[cat.id] = cat.name;
+        });
+        
+        // カテゴリごとにオプショングループを作成
+        for (const [catId, brands] of Object.entries(brandsByCategory)) {
+            const categoryName = categoryMap[catId] || 'その他';
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = categoryName;
+            
+            brands.forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand.value;
+                option.textContent = brand.display_name || brand.value;
+                if (brand.value === currentBrand) {
+                    option.selected = true;
+                }
+                optgroup.appendChild(option);
+            });
+            
+            brandSelect.appendChild(optgroup);
+        }
+        
+        // 商品状態セレクトボックスを生成
+        const conditionSelect = document.getElementById('item_condition');
+        const currentCondition = document.getElementById('current_item_condition').value;
+        conditionSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.conditions.forEach(condition => {
+            const option = document.createElement('option');
+            option.value = condition.value;
+            option.textContent = condition.display_name || condition.value;
+            if (condition.value === currentCondition) {
+                option.selected = true;
+            }
+            conditionSelect.appendChild(option);
+        });
+        
+        // 仕入先セレクトボックスを生成
+        const supplierSelect = document.getElementById('store_name');
+        const currentSupplier = document.getElementById('current_store_name').value;
+        supplierSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.value;
+            option.textContent = supplier.display_name || supplier.value;
+            if (supplier.value === currentSupplier) {
+                option.selected = true;
+            }
+            supplierSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細セレクトボックスを生成
+        const supplierDetailSelect = document.getElementById('supplier_detail');
+        const currentSupplierDetail = document.getElementById('current_supplier_detail').value;
+        supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.supplier_details.forEach(detail => {
+            const option = document.createElement('option');
+            option.value = detail.value;
+            option.textContent = detail.display_name || detail.value;
+            if (detail.value === currentSupplierDetail) {
+                option.selected = true;
+            }
+            supplierDetailSelect.appendChild(option);
+        });
+        
+        // 支払方法セレクトボックスを生成
+        const paymentSelect = document.getElementById('payment_method');
+        const currentPayment = document.getElementById('current_payment_method').value;
+        paymentSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.payment_methods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.value;
+            option.textContent = method.display_name || method.value;
+            if (method.value === currentPayment) {
+                option.selected = true;
+            }
+            paymentSelect.appendChild(option);
+        });
+        
+        // 仕入先詳細の表示状態を更新
+        toggleSupplierDetail();
+        
+        // ブランド自動検出用のキーワードマップを更新
+        window.masterBrandKeywords = {};
+        data.brands.forEach(brand => {
+            if (brand.keywords) {
+                window.masterBrandKeywords[brand.value] = brand.keywords.split(',').map(k => k.trim().toLowerCase());
+            }
+        });
+        
+    } catch (error) {
+        console.error('マスターデータの読み込みに失敗しました:', error);
+    }
+}
+
+// 初期計算
+document.addEventListener('DOMContentLoaded', function() {
+    // マスターデータをロード
+    loadMasterData();
+    
+    // ブランド名自動判定の初期化
+    setupBrandAutoDetect();
+    
+    // ステータスフィールドの初期表示
+    updateStatusFields();
+    
+    // 仕入先詳細の初期表示
+    toggleSupplierDetail();
+    
+    const existingCommission = parseInt(document.getElementById('commission').value) || 0;
+    const existingSalePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    
+    // 既存データがある場合は手動入力と見なす
+    if (existingCommission > 0 && existingSalePrice > 0) {
+        autoCalculateCommission = false;
+    }
+    
+    // 複数選択のチェックボックスの初期化
+    const saleTypeValue = document.getElementById('sale_type').value;
+    if (saleTypeValue) {
+        const selectedTypes = saleTypeValue.split(',');
+        document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
+            checkbox.checked = selectedTypes.includes(checkbox.value);
+        });
+    }
+    
+    // 初期ヒント表示（複数選択対応）
+    const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
+    let hints = [];
+    selectedTypes.forEach(type => {
+        const rule = saleTypeRules[type];
+        if (rule) {
+            if (typeof rule.hint === 'function') {
+                hints.push(rule.hint(existingSalePrice));
+            } else {
+                hints.push(rule.hint);
+            }
+        }
+    });
+    
+    const hintEl = document.getElementById('commission_hint');
+    hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
+    
+    calculateProfit();
+    
+    // 画像リサイズ処理
+    const MAX_WIDTH = 1200;
+    const MAX_HEIGHT = 1200;
+    const QUALITY = 0.85;
+    
+    async function resizeImage(file) {
+        return new Promise((resolve) => {
+            // 画像以外はそのまま返す
+            if (!file.type.startsWith('image/')) {
+                resolve(file);
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // リサイズが不要な場合はそのまま返す
+                    if (img.width <= MAX_WIDTH && img.height <= MAX_HEIGHT) {
+                        resolve(file);
+                        return;
+                    }
+                    
+                    // アスペクト比を維持してリサイズ
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = Math.round(height * MAX_WIDTH / width);
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = Math.round(width * MAX_HEIGHT / height);
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    
+                    // Canvas で描画
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Blob に変換
+                    canvas.toBlob(function(blob) {
+                        const resizedFile = new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        console.log(`リサイズ: ${file.name} ${(file.size/1024).toFixed(0)}KB → ${(resizedFile.size/1024).toFixed(0)}KB`);
+                        resolve(resizedFile);
+                    }, 'image/jpeg', QUALITY);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    // フォーム送信時のローディング処理と画像リサイズ
+    const form = document.getElementById('item-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const btnLoading = submitBtn.querySelector('.btn-loading');
+    
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // 二重送信防止
+        if (submitBtn.disabled) {
+            return;
+        }
+        
+        // ボタンを無効化してローディング表示
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.7';
+        submitBtn.style.cursor = 'wait';
+        btnText.style.display = 'none';
+        btnLoading.style.display = 'inline';
+        
+        try {
+            const formData = new FormData(form);
+            
+            // メイン写真をリサイズ
+            const photoInput = document.getElementById('photo');
+            if (photoInput.files.length > 0) {
+                formData.delete('photo');
+                const resizedPhoto = await resizeImage(photoInput.files[0]);
+                formData.append('photo', resizedPhoto);
+            }
+            
+            // 追加写真をリサイズ
+            const additionalInput = document.getElementById('additional_photos');
+            if (additionalInput.files.length > 0) {
+                formData.delete('additional_photos');
+                for (let i = 0; i < additionalInput.files.length; i++) {
+                    const resizedPhoto = await resizeImage(additionalInput.files[i]);
+                    formData.append('additional_photos', resizedPhoto);
+                }
+            }
+            
+            // フォーム送信
+            const response = await fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else if (response.ok) {
+                window.location.href = '{{ url_for("index") }}';
+            } else {
+                throw new Error('送信エラー');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('エラーが発生しました。もう一度お試しください。');
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+            submitBtn.style.cursor = 'pointer';
+            btnText.style.display = 'inline';
+            btnLoading.style.display = 'none';
+        }
+    });
+    
+    // ====================
+    // Google Drive連携
+    // ====================
+    initGoogleDrivePicker();
+});
+
+// Google Drive Picker関連の変数
+let googleDriveConfig = null;
+let googlePickerInited = false;
+let gisInited = false;
+let tokenClient = null;
+let accessToken = null;
+let currentPickerTarget = null; // 'photo' or 'additional'
+let googleDriveAdditionalPaths = [];
+
+// Google Drive設定を取得
+async function initGoogleDrivePicker() {
+    try {
+        const response = await fetch('/api/google-drive/config');
+        googleDriveConfig = await response.json();
+        
+        if (!googleDriveConfig.enabled) {
+            // Google Drive連携が無効の場合、ボタンを非表示
+            document.querySelectorAll('.btn-google-drive').forEach(btn => {
+                btn.style.display = 'none';
+            });
+            return;
+        }
+        
+        // Google APIスクリプトをロード
+        loadGoogleAPIs();
+        
+        // ボタンにイベントリスナーを追加
+        document.getElementById('google-drive-photo-btn')?.addEventListener('click', () => openGooglePicker('photo'));
+        document.getElementById('google-drive-additional-btn')?.addEventListener('click', () => openGooglePicker('additional'));
+        
+    } catch (error) {
+        console.error('Google Drive設定の取得に失敗:', error);
+        document.querySelectorAll('.btn-google-drive').forEach(btn => {
+            btn.style.display = 'none';
+        });
+    }
+}
+
+// Google APIスクリプトをロード
+function loadGoogleAPIs() {
+    // Google Identity Services (GIS)
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = gisLoaded;
+    document.head.appendChild(gisScript);
+    
+    // Google API (gapi)
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = gapiLoaded;
+    document.head.appendChild(gapiScript);
+}
+
+// gapi ロード完了
+function gapiLoaded() {
+    gapi.load('picker', () => {
+        googlePickerInited = true;
+    });
+}
+
+// GIS ロード完了
+function gisLoaded() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: googleDriveConfig.clientId,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: '', // 後で設定
+    });
+    gisInited = true;
+}
+
+// Google Pickerを開く
+function openGooglePicker(target) {
+    currentPickerTarget = target;
+    
+    if (!googlePickerInited || !gisInited) {
+        alert('Google Drive連携を読み込み中です。しばらくお待ちください。');
+        return;
+    }
+    
+    tokenClient.callback = async (response) => {
+        if (response.error !== undefined) {
+            throw response;
+        }
+        accessToken = response.access_token;
+        createPicker();
+    };
+    
+    if (accessToken === null) {
+        // 初回は認証を要求
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        // 既に認証済みの場合はそのまま使用
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+// Pickerを作成
+function createPicker() {
+    const picker = new google.picker.PickerBuilder()
+        .addView(new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false))
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(googleDriveConfig.apiKey)
+        .setCallback(pickerCallback)
+        .setTitle('Googleドライブから画像を選択')
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setLocale('ja')
+        .build();
+    picker.setVisible(true);
+}
+
+// Picker選択後のコールバック
+async function pickerCallback(data) {
+    if (data.action === google.picker.Action.PICKED) {
+        const files = data.docs;
+        
+        for (const file of files) {
+            await downloadAndSaveFile(file);
+        }
+    }
+}
+
+// ファイルをダウンロードしてサーバーに保存
+async function downloadAndSaveFile(file) {
+    try {
+        // ローディング表示
+        const btn = currentPickerTarget === 'photo' 
+            ? document.getElementById('google-drive-photo-btn')
+            : document.getElementById('google-drive-additional-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="loading-spinner"></span> ダウンロード中...';
+        btn.disabled = true;
+        
+        const response = await fetch('/api/google-drive/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                fileId: file.id,
+                fileName: file.name,
+                accessToken: accessToken
+            })
+        });
+        
+        const result = await response.json();
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (result.success) {
+            if (currentPickerTarget === 'photo') {
+                // メイン写真
+                document.getElementById('google-drive-photo-path').value = result.filePath;
+                const preview = document.getElementById('google-drive-photo-preview');
+                const img = document.getElementById('google-drive-photo-img');
+                img.src = '/static/' + result.filePath;
+                preview.style.display = 'inline-block';
+                
+                // 通常のファイル入力をクリア
+                document.getElementById('photo').value = '';
+            } else {
+                // 追加写真
+                googleDriveAdditionalPaths.push(result.filePath);
+                document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+                
+                // プレビューを追加
+                const previewContainer = document.getElementById('google-drive-additional-preview');
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
+                previewItem.dataset.path = result.filePath;
+                previewItem.innerHTML = `
+                    <img src="/static/${result.filePath}" alt="追加写真">
+                    <button type="button" class="remove-btn" onclick="removeGoogleDriveAdditional('${result.filePath}')">×</button>
+                `;
+                previewContainer.appendChild(previewItem);
+            }
+        } else {
+            alert('画像のダウンロードに失敗しました: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    }
+}
+
+// メイン写真のGoogle Drive画像を削除
+function removeGoogleDrivePhoto() {
+    document.getElementById('google-drive-photo-path').value = '';
+    document.getElementById('google-drive-photo-preview').style.display = 'none';
+    document.getElementById('google-drive-photo-img').src = '';
+}
+
+// 追加写真のGoogle Drive画像を削除
+function removeGoogleDriveAdditional(path) {
+    googleDriveAdditionalPaths = googleDriveAdditionalPaths.filter(p => p !== path);
+    document.getElementById('google-drive-additional-paths').value = JSON.stringify(googleDriveAdditionalPaths);
+    
+    const previewContainer = document.getElementById('google-drive-additional-preview');
+    const item = previewContainer.querySelector(`[data-path="${path}"]`);
+    if (item) {
+        item.remove();
+    }
+}
+</script>
+{% endblock %}
+

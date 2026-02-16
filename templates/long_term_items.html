@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+{% block title %}長期在庫商品 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>長期在庫商品</h1>
+</div>
+
+<div class="long-term-container">
+    <!-- 説明 -->
+    <div class="info-card">
+        <h3>📦 長期在庫商品について</h3>
+        <p>仕入れ日から<strong>3ヶ月以上</strong>経過した未売却商品は、以下の処分オプションを選択できます。</p>
+        <ul>
+            <li><strong>オークション販売</strong> - 弊社でオークションに出品し販売</li>
+            <li><strong>在庫処分</strong> - 弊社で処分</li>
+            <li><strong>受け取り郵送</strong> - ご指定の住所に郵送（送料自己負担）</li>
+        </ul>
+        <div class="warning-note">
+            <strong>⚠️ ご注意</strong>：仕入れ日から<strong>5ヶ月</strong>を過ぎると、商品は自動的に管理者へ移管されます。
+        </div>
+    </div>
+    
+    {% if items %}
+    <!-- 商品一覧 -->
+    <form method="POST" action="{{ url_for('submit_long_term_disposal_request') }}" id="disposal-form">
+        <div class="items-section">
+            <h3>対象商品（{{ items|length }}件）</h3>
+            
+            <div class="items-grid">
+                {% for item in items %}
+                <div class="item-card {% if item.disposal_request_id %}has-request{% endif %}">
+                    <div class="item-checkbox">
+                        {% if not item.disposal_request_id %}
+                        <input type="checkbox" name="merchandise_ids" value="{{ item.id }}" id="item-{{ item.id }}">
+                        {% endif %}
+                    </div>
+                    <div class="item-image">
+                        {% if item.photo_path %}
+                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                        {% else %}
+                        <div class="no-image">No Image</div>
+                        {% endif %}
+                    </div>
+                    <div class="item-info">
+                        <div class="item-name">{{ item.product_name or '商品名なし' }}</div>
+                        <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                        <div class="item-days">
+                            <span class="days-badge {% if item.days_since_purchase >= 150 %}danger{% elif item.days_since_purchase >= 120 %}warning{% endif %}">
+                                {{ item.days_since_purchase }}日経過
+                            </span>
+                            {% if item.days_since_purchase >= 150 %}
+                            <span class="auto-transfer-warning">まもなく自動移管</span>
+                            {% endif %}
+                        </div>
+                        <div class="item-price">仕入: ¥{{ "{:,}".format(item.purchase_price or 0) }}</div>
+                        
+                        {% if item.disposal_request_id %}
+                        <div class="request-status">
+                            <span class="status-badge status-{{ item.disposal_status }}">
+                                {% if item.disposal_status == 'pending' %}申請中{% elif item.disposal_status == 'processing' %}処理中{% endif %}
+                            </span>
+                            <span class="disposal-type">
+                                {% if item.disposal_type == 'auction' %}オークション販売
+                                {% elif item.disposal_type == 'liquidation' %}在庫処分
+                                {% elif item.disposal_type == 'shipping' %}受け取り郵送{% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- 処分オプション選択 -->
+        <div class="disposal-options">
+            <h3>処分方法を選択</h3>
+            
+            <div class="options-grid">
+                <label class="option-card" onclick="selectOption('auction')">
+                    <input type="radio" name="disposal_type" value="auction" id="option-auction">
+                    <div class="option-content">
+                        <span class="option-icon">🏷️</span>
+                        <span class="option-title">オークション販売</span>
+                        <span class="option-desc">弊社でオークションに出品</span>
+                    </div>
+                </label>
+                
+                <label class="option-card" onclick="selectOption('liquidation')">
+                    <input type="radio" name="disposal_type" value="liquidation" id="option-liquidation">
+                    <div class="option-content">
+                        <span class="option-icon">📦</span>
+                        <span class="option-title">在庫処分</span>
+                        <span class="option-desc">弊社で処分</span>
+                    </div>
+                </label>
+                
+                <label class="option-card" onclick="selectOption('shipping')">
+                    <input type="radio" name="disposal_type" value="shipping" id="option-shipping">
+                    <div class="option-content">
+                        <span class="option-icon">📮</span>
+                        <span class="option-title">受け取り郵送</span>
+                        <span class="option-desc">ご指定住所へ郵送</span>
+                        <span class="option-warning">※送料自己負担</span>
+                    </div>
+                </label>
+            </div>
+            
+            <!-- 郵送先住所（郵送選択時のみ表示） -->
+            <div class="shipping-info" id="shipping-info" style="display: none;">
+                <h4>郵送先情報</h4>
+                <div class="form-group">
+                    <label>お名前</label>
+                    <input type="text" name="shipping_name" placeholder="例：山田 太郎">
+                </div>
+                <div class="form-group">
+                    <label>電話番号</label>
+                    <input type="tel" name="shipping_phone" placeholder="例：090-1234-5678">
+                </div>
+                <div class="form-group">
+                    <label>郵送先住所 <span class="required">*</span></label>
+                    <textarea name="shipping_address" rows="3" placeholder="例：〒123-4567 東京都新宿区..."></textarea>
+                </div>
+                <div class="shipping-warning">
+                    ⚠️ 送料はお客様のご負担となります。着払いでの発送となりますので、受け取り時に配送業者へお支払いください。
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="selectAll()">すべて選択</button>
+            <button type="submit" class="btn btn-primary" id="submit-btn" disabled>選択した商品を申請</button>
+        </div>
+    </form>
+    {% else %}
+    <div class="empty-message">
+        <p>仕入れ日から3ヶ月以上経過した商品はありません</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.long-term-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.info-card {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #3b82f6;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.info-card h3 {
+    margin: 0 0 1rem 0;
+    color: #1e40af;
+}
+
+.info-card p {
+    margin: 0 0 1rem 0;
+    color: #1e3a5f;
+}
+
+.info-card ul {
+    margin: 0 0 1rem 0;
+    padding-left: 1.5rem;
+    color: #1e3a5f;
+}
+
+.info-card li {
+    margin-bottom: 0.5rem;
+}
+
+.warning-note {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+
+.items-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.items-section h3 {
+    margin: 0 0 1rem 0;
+    color: #1e293b;
+}
+
+.items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.item-card {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.item-card:hover {
+    border-color: #3b82f6;
+}
+
+.item-card.has-request {
+    background: #ecfdf5;
+    border-color: #10b981;
+}
+
+.item-checkbox {
+    display: flex;
+    align-items: flex-start;
+    padding-top: 0.25rem;
+}
+
+.item-checkbox input {
+    width: 20px;
+    height: 20px;
+    accent-color: #3b82f6;
+}
+
+.item-image {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+}
+
+.item-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.no-image {
+    width: 100%;
+    height: 100%;
+    background: #e2e8f0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: #94a3b8;
+}
+
+.item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.item-name {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-brand {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.item-days {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.days-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.days-badge.warning {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.days-badge.danger {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.auto-transfer-warning {
+    font-size: 0.7rem;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.item-price {
+    font-size: 0.85rem;
+    color: #475569;
+}
+
+.request-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #d1fae5;
+}
+
+.status-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.status-badge.status-pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-badge.status-processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.disposal-type {
+    font-size: 0.8rem;
+    color: #059669;
+}
+
+.disposal-options {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.disposal-options h3 {
+    margin: 0 0 1rem 0;
+    color: #1e293b;
+}
+
+.options-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .options-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.option-card {
+    display: block;
+    cursor: pointer;
+}
+
+.option-card input {
+    display: none;
+}
+
+.option-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.option-card input:checked + .option-content {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.option-card:hover .option-content {
+    border-color: #93c5fd;
+}
+
+.option-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.option-title {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.25rem;
+}
+
+.option-desc {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.option-warning {
+    font-size: 0.75rem;
+    color: #dc2626;
+    margin-top: 0.5rem;
+}
+
+.shipping-info {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.shipping-info h4 {
+    margin: 0 0 1rem 0;
+    color: #1e293b;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    color: #374151;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.required {
+    color: #ef4444;
+}
+
+.shipping-warning {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    color: #92400e;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    color: #64748b;
+}
+</style>
+
+<script>
+function selectOption(type) {
+    const shippingInfo = document.getElementById('shipping-info');
+    if (type === 'shipping') {
+        shippingInfo.style.display = 'block';
+    } else {
+        shippingInfo.style.display = 'none';
+    }
+    updateSubmitButton();
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('input[name="merchandise_ids"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+    
+    updateSubmitButton();
+}
+
+function updateSubmitButton() {
+    const checkboxes = document.querySelectorAll('input[name="merchandise_ids"]:checked');
+    const optionSelected = document.querySelector('input[name="disposal_type"]:checked');
+    const submitBtn = document.getElementById('submit-btn');
+    
+    if (submitBtn) {
+        submitBtn.disabled = !(checkboxes.length > 0 && optionSelected);
+        submitBtn.textContent = checkboxes.length > 0 
+            ? `選択した商品を申請（${checkboxes.length}件）` 
+            : '選択した商品を申請';
+    }
+}
+
+// チェックボックスの変更を監視
+document.querySelectorAll('input[name="merchandise_ids"]').forEach(cb => {
+    cb.addEventListener('change', updateSubmitButton);
+});
+
+document.querySelectorAll('input[name="disposal_type"]').forEach(radio => {
+    radio.addEventListener('change', updateSubmitButton);
+});
+</script>
+{% endblock %}

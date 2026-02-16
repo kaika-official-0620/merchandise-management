@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block title %}{{ inquiry.title }} - お問い合わせ{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>お問い合わせ詳細</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('inquiry_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+    </div>
+</div>
+
+<div class="inquiry-detail-container">
+    <!-- 問い合わせ情報 -->
+    <div class="inquiry-info-card">
+        <div class="inquiry-header">
+            <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
+            <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
+        </div>
+        <h2 class="inquiry-title">{{ inquiry.title }}</h2>
+        <div class="inquiry-meta">
+            <span>送信日時: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
+        </div>
+        <div class="inquiry-content">
+            {{ inquiry.content | replace('\n', '<br>') | safe }}
+        </div>
+        
+        {% if inquiry.image_path %}
+        <div class="inquiry-attachment">
+            <h4>📷 添付画像</h4>
+            <div class="attachment-images">
+                {% set image_paths = inquiry.image_path %}
+                {% if image_paths.startswith('[') %}
+                    {% set paths = image_paths | replace('[', '') | replace(']', '') | replace('"', '') | replace("'", "") | split(',') %}
+                    {% for path in paths %}
+                        {% set clean_path = path | trim %}
+                        {% if clean_path %}
+                        <div class="attachment-image-item">
+                            <a href="{{ url_for('static', filename=clean_path) }}" target="_blank" class="image-link">
+                                <img src="{{ url_for('static', filename=clean_path) }}" alt="添付画像 {{ loop.index }}">
+                            </a>
+                            <div class="image-actions">
+                                <a href="{{ url_for('static', filename=clean_path) }}" download class="btn btn-sm">💾</a>
+                                <a href="{{ url_for('static', filename=clean_path) }}" target="_blank" class="btn btn-sm">🔍</a>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <div class="attachment-image-item">
+                        <a href="{{ url_for('static', filename=image_paths) }}" target="_blank" class="image-link">
+                            <img src="{{ url_for('static', filename=image_paths) }}" alt="添付画像">
+                        </a>
+                        <div class="image-actions">
+                            <a href="{{ url_for('static', filename=image_paths) }}" download class="btn btn-sm">💾</a>
+                            <a href="{{ url_for('static', filename=image_paths) }}" target="_blank" class="btn btn-sm">🔍</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- やり取り履歴 -->
+    <div class="thread-section">
+        <h3>やり取り履歴</h3>
+        
+        {% if replies %}
+        <div class="thread-list">
+            {% for reply in replies %}
+            <div class="thread-item {% if reply.is_admin_reply %}admin-reply{% else %}user-reply{% endif %}">
+                <div class="thread-header">
+                    <span class="thread-author">
+                        {% if reply.is_admin_reply %}
+                        <span class="admin-badge">管理者</span>
+                        {% endif %}
+                        {{ reply.display_name or reply.username }}
+                    </span>
+                    <span class="thread-date">{{ reply.created_at[:16].replace('-', '/').replace('T', ' ') if reply.created_at else '-' }}</span>
+                </div>
+                <div class="thread-content">
+                    {{ reply.content | replace('\n', '<br>') | safe }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-replies">まだ返信はありません</div>
+        {% endif %}
+    </div>
+    
+    <!-- 返信フォーム -->
+    {% if inquiry.status != 'closed' %}
+    <div class="reply-form-section">
+        <h3>追加メッセージを送信</h3>
+        <form method="POST" action="{{ url_for('inquiry_reply', id=inquiry.id) }}">
+            <div class="form-group">
+                <textarea name="content" class="form-control" rows="4" required
+                          placeholder="追加の質問や情報があればこちらに入力してください"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">送信する</button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+    <div class="closed-notice">
+        このお問い合わせはクローズされています
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.inquiry-detail-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.inquiry-info-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+}
+
+.inquiry-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.inquiry-category {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background: #f1f5f9;
+    border-radius: 4px;
+    color: #64748b;
+}
+
+.inquiry-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.inquiry-status.status-new { background: #fef3c7; color: #b45309; }
+.inquiry-status.status-in_progress { background: #dbeafe; color: #1d4ed8; }
+.inquiry-status.status-resolved { background: #d1fae5; color: #059669; }
+.inquiry-status.status-closed { background: #e2e8f0; color: #64748b; }
+
+.inquiry-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 0.75rem 0;
+}
+
+.inquiry-meta {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.inquiry-content {
+    color: #374151;
+    line-height: 1.7;
+}
+
+.inquiry-attachment {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.inquiry-attachment h4 {
+    font-size: 0.95rem;
+    color: #374151;
+    margin: 0 0 1rem 0;
+}
+
+.attachment-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.attachment-image-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.attachment-image-item .image-link {
+    display: block;
+}
+
+.attachment-image-item img {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    cursor: zoom-in;
+    transition: transform 0.2s;
+}
+
+.attachment-image-item img:hover {
+    transform: scale(1.05);
+}
+
+.image-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #475569;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.btn-sm:hover {
+    background: #e2e8f0;
+}
+
+.thread-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+}
+
+.thread-section h3 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1e293b;
+}
+
+.thread-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.thread-item {
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.thread-item.user-reply {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.thread-item.admin-reply {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+}
+
+.thread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.thread-author {
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    background: #2563eb;
+    color: white;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.thread-date {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.thread-content {
+    color: #374151;
+    line-height: 1.6;
+}
+
+.no-replies {
+    text-align: center;
+    color: #94a3b8;
+    padding: 2rem;
+}
+
+.reply-form-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.reply-form-section h3 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    color: #1e293b;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    resize: vertical;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.closed-notice {
+    text-align: center;
+    padding: 1.5rem;
+    background: #f1f5f9;
+    border-radius: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+</style>
+{% endblock %}

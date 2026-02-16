@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}プロフィール - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <!-- 月額利用料情報 -->
+    <div class="billing-section">
+        <h2>月額利用料</h2>
+        <div class="billing-card">
+            <div class="billing-main">
+                <div class="billing-fee">
+                    <span class="fee-label">現在の月額</span>
+                    <span class="fee-amount">¥{{ "{:,}".format(billing_info.monthly_fee) }}</span>
+                </div>
+                <div class="billing-detail">
+                    <span class="detail-item">今月の登録数: <strong>{{ billing_info.item_count }}件</strong></span>
+                    <span class="detail-item">総登録数: <strong>{{ billing_info.total_item_count }}件</strong></span>
+                </div>
+            </div>
+            <div class="billing-status">
+                {% if billing_info.has_subscription %}
+                    {% if billing_info.subscription_status == 'active' %}
+                    <span class="status-badge status-active">自動引落し有効</span>
+                    {% elif billing_info.subscription_status == 'past_due' %}
+                    <span class="status-badge status-past-due">支払い遅延</span>
+                    {% elif billing_info.subscription_status == 'canceling' %}
+                    <span class="status-badge status-canceling">解約予定</span>
+                    {% else %}
+                    <span class="status-badge status-inactive">{{ billing_info.subscription_status or '確認中' }}</span>
+                    {% endif %}
+                {% else %}
+                <span class="status-badge status-none">未登録</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if billing_info.has_subscription and billing_info.subscription_status == 'active' %}
+        <div class="billing-dates">
+            {% if billing_info.last_payment_date %}
+            <span>最終支払日: {{ billing_info.last_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+            {% if billing_info.next_payment_date %}
+            <span>次回引落日: {{ billing_info.next_payment_date.strftime('%Y年%m月%d日') }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="billing-note">
+            <p>月額利用料は、<strong>当月の商品登録件数</strong>に基づいて決定されます。</p>
+            <table class="fee-table-mini">
+                <tr><th>当月の登録件数</th><th>月額利用料</th></tr>
+                <tr><td>0〜20個</td><td>¥2,500</td></tr>
+                <tr><td>21〜50個</td><td>¥5,000</td></tr>
+                <tr><td>51〜100個</td><td>¥10,000</td></tr>
+                <tr><td>101〜200個</td><td>¥20,000</td></tr>
+                <tr><td>201〜300個</td><td>¥30,000</td></tr>
+            </table>
+        </div>
+    </div>
+    
+    <!-- 代行仕入れサービス残高 -->
+    {% if current_user.proxy_service_budget is not none %}
+    <div class="proxy-budget-section">
+        <h2>代行仕入れサービス</h2>
+        <div class="budget-card">
+            <div class="budget-main">
+                <div class="budget-remaining">
+                    <span class="budget-label">利用可能残高</span>
+                    <span class="budget-amount">¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</span>
+                </div>
+                <div class="budget-detail">
+                    <span class="detail-item">利用上限: <strong>¥{{ "{:,}".format(current_user.proxy_service_budget) }}</strong></span>
+                    <span class="detail-item">使用済み: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_used_amount() or 0) }}</strong></span>
+                </div>
+            </div>
+            <div class="budget-progress">
+                {% set remaining = current_user.get_proxy_service_remaining_budget() or 0 %}
+                {% set budget = current_user.proxy_service_budget %}
+                {% set percentage = ((budget - remaining) / budget * 100) if budget > 0 else 0 %}
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ percentage }}%"></div>
+                </div>
+                <span class="progress-text">{{ "%.0f"|format(percentage) }}% 使用済み</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" class="profile-form">
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" 
+                       value="{{ current_user.display_name }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">メールアドレス</label>
+                <input type="email" id="email" name="email" 
+                       value="{{ current_user.email }}">
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>パスワード変更</h2>
+            
+            <div class="form-group">
+                <label for="current_password">現在のパスワード</label>
+                <input type="password" id="current_password" name="current_password">
+            </div>
+            
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合のみ入力</small>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.billing-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.billing-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.billing-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #0ea5e9;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.billing-main {
+    flex: 1;
+}
+
+.billing-fee {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.fee-label {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.fee-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0369a1;
+    font-family: 'Consolas', monospace;
+}
+
+.billing-detail {
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.detail-item strong {
+    color: #1e293b;
+}
+
+.billing-status {
+    margin-left: 1rem;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-active {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-past-due {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-canceling {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.status-none {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.billing-dates {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+}
+
+.billing-note {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.billing-note p {
+    margin: 0 0 0.75rem 0;
+}
+
+.fee-table-mini {
+    width: 100%;
+    max-width: 280px;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.fee-table-mini td {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fee-table-mini td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+@media (max-width: 768px) {
+    .billing-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .billing-status {
+        margin-left: 0;
+    }
+    
+    .billing-dates {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
+
+/* 代行仕入れサービス残高セクション */
+.proxy-budget-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.proxy-budget-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+.budget-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+
+.budget-main {
+    flex: 1;
+}
+
+.budget-remaining {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.budget-label {
+    font-size: 0.9rem;
+    color: #92400e;
+}
+
+.budget-amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #d97706;
+    font-family: 'Consolas', monospace;
+}
+
+.budget-detail {
+    font-size: 0.9rem;
+    color: #78350f;
+}
+
+.budget-detail .detail-item {
+    margin-right: 1rem;
+}
+
+.budget-detail strong {
+    color: #92400e;
+}
+
+.budget-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    min-width: 120px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.75rem;
+    color: #92400e;
+}
+
+@media (max-width: 768px) {
+    .budget-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .budget-progress {
+        width: 100%;
+        align-items: flex-start;
+    }
+}
+</style>
+{% endblock %}
+
+

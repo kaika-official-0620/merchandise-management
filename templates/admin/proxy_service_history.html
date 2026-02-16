@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% block title %}代行サービス履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.proxy-history-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.history-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0;
+}
+
+.history-tab {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.history-tab:hover {
+    color: #374151;
+}
+
+.history-tab.active {
+    color: #059669;
+    border-bottom-color: #059669;
+}
+
+.history-section {
+    display: none;
+}
+
+.history-section.active {
+    display: block;
+}
+
+.stats-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    text-align: center;
+}
+
+.stat-card.finalized {
+    border-left: 4px solid #10b981;
+}
+
+.stat-card.bids {
+    border-left: 4px solid #3b82f6;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.stat-card.finalized .stat-value {
+    color: #10b981;
+}
+
+.stat-card.bids .stat-value {
+    color: #3b82f6;
+}
+
+/* 落札済み商品リスト */
+.finalized-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.finalized-item {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-left: 4px solid #10b981;
+}
+
+.finalized-item img {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.finalized-item-placeholder {
+    width: 60px;
+    height: 60px;
+    background: #e2e8f0;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.finalized-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.finalized-name {
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.finalized-brand {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.finalized-details {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.finalized-detail {
+    text-align: center;
+}
+
+.finalized-detail-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    display: block;
+}
+
+.finalized-detail-value {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.finalized-detail-value.price {
+    color: #059669;
+}
+
+/* 入札履歴テーブル */
+.bid-history-table {
+    width: 100%;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.bid-history-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bid-history-table th {
+    background: #f8fafc;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.bid-history-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.9rem;
+}
+
+.bid-history-table tr:last-child td {
+    border-bottom: none;
+}
+
+.bid-history-table tr:hover {
+    background: #f8fafc;
+}
+
+.bid-item-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.bid-item-info img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.bid-item-name {
+    font-weight: 500;
+    color: #1e293b;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bid-amount {
+    font-weight: 600;
+    color: #059669;
+}
+
+.bid-status {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.bid-status.won {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.bid-status.lost {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.bid-status.pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.no-data {
+    text-align: center;
+    padding: 3rem;
+    background: white;
+    border-radius: 12px;
+    color: #64748b;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.back-link:hover {
+    color: #374151;
+}
+
+@media (max-width: 768px) {
+    .finalized-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .finalized-details {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .bid-history-table {
+        overflow-x: auto;
+    }
+    
+    .bid-history-table table {
+        min-width: 600px;
+    }
+}
+</style>
+
+<div class="page-header">
+    <h1>代行サービス履歴</h1>
+</div>
+
+<div class="proxy-history-container">
+    {% if current_user.is_owner() %}
+    <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 代行サービス管理に戻る</a>
+    {% endif %}
+    
+    <!-- 統計 -->
+    <div class="stats-summary">
+        <div class="stat-card finalized">
+            <div class="stat-label">落札済み商品</div>
+            <div class="stat-value">{{ finalized_items|length }}</div>
+        </div>
+        <div class="stat-card bids">
+            <div class="stat-label">入札件数</div>
+            <div class="stat-value">{{ bid_history|length }}</div>
+        </div>
+    </div>
+    
+    <!-- タブ -->
+    <div class="history-tabs">
+        <button class="history-tab active" onclick="showTab('finalized')">落札済み商品</button>
+        <button class="history-tab" onclick="showTab('bids')">入札履歴</button>
+    </div>
+    
+    <!-- 落札済み商品 -->
+    <div id="finalized-section" class="history-section active">
+        {% if finalized_items %}
+        <div class="finalized-list">
+            {% for item in finalized_items %}
+            <div class="finalized-item">
+                {% if item.photo_path %}
+                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                {% else %}
+                <div class="finalized-item-placeholder"></div>
+                {% endif %}
+                <div class="finalized-info">
+                    <div class="finalized-name">{{ item.product_name }}</div>
+                    {% if item.brand_name %}
+                    <div class="finalized-brand">{{ item.brand_name }}</div>
+                    {% endif %}
+                </div>
+                <div class="finalized-details">
+                    <div class="finalized-detail">
+                        <span class="finalized-detail-label">落札者</span>
+                        <span class="finalized-detail-value">{{ item.winner_name or '-' }}</span>
+                    </div>
+                    <div class="finalized-detail">
+                        <span class="finalized-detail-label">落札金額</span>
+                        <span class="finalized-detail-value price">¥{{ "{:,}".format(item.winning_bid or item.sale_price or 0) }}</span>
+                    </div>
+                    <div class="finalized-detail">
+                        <span class="finalized-detail-label">落札日</span>
+                        <span class="finalized-detail-value">{{ item.sale_date[:10].replace('-', '/') if item.sale_date else '-' }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-data">
+            <p>落札済み商品はありません</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- 入札履歴 -->
+    <div id="bids-section" class="history-section">
+        {% if bid_history %}
+        <div class="bid-history-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>商品</th>
+                        <th>入札者</th>
+                        <th>入札金額</th>
+                        <th>入札日時</th>
+                        <th>状態</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bid in bid_history %}
+                    <tr>
+                        <td>
+                            <div class="bid-item-info">
+                                {% if bid.photo_path %}
+                                <img src="{{ url_for('static', filename=bid.photo_path) }}" alt="">
+                                {% endif %}
+                                <span class="bid-item-name">{{ bid.product_name }}</span>
+                            </div>
+                        </td>
+                        <td>{{ bid.user_display_name or bid.bidder_name or '-' }}</td>
+                        <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
+                        <td>{{ bid.created_at[:16].replace('-', '/').replace('T', ' ') if bid.created_at else '-' }}</td>
+                        <td>
+                            {% if bid.sale_date %}
+                            <span class="bid-status won">落札済</span>
+                            {% else %}
+                            <span class="bid-status pending">入札中</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="no-data">
+            <p>入札履歴はありません</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function showTab(tab) {
+    // タブをアクティブに
+    document.querySelectorAll('.history-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // セクションを表示
+    document.querySelectorAll('.history-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(tab + '-section').classList.add('active');
+}
+</script>
+{% endblock %}
