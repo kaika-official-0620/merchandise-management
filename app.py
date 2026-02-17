@@ -16006,6 +16006,7 @@ def long_term_items():
                   )
             """, (current_user.id,))
             items_no_request = [dict(row) for row in cur.fetchall()]
+            print(f"[DEBUG] long_term_items: Retrieved {len(items_no_request)} items without request", flush=True)
             
             # 次に、申請があるが完了していない商品を取得
             cur.execute("""
@@ -16024,10 +16025,11 @@ def long_term_items():
                   AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
             """, (current_user.id,))
             items_with_request = [dict(row) for row in cur.fetchall()]
+            print(f"[DEBUG] long_term_items: Retrieved {len(items_with_request)} items with request", flush=True)
             
             # 両方を結合（申請がない商品を優先）
             items = items_no_request + items_with_request
-            print(f"[DEBUG] long_term_items: Retrieved {len(items_no_request)} items without request, {len(items_with_request)} items with request, total {len(items)} items", flush=True)
+            print(f"[DEBUG] long_term_items: Total {len(items)} items after merge", flush=True)
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
@@ -16117,11 +16119,35 @@ def long_term_items():
             """, (current_user.id,))
             debug_info['no_request'] = cur.fetchone()['count']
             
+            # 実際に取得された商品の詳細を確認
+            cur.execute("""
+                SELECT m.id, m.product_name, m.purchase_date, m.sale_date
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                LIMIT 5
+            """, (current_user.id,))
+            debug_items = [dict(row) for row in cur.fetchall()]
+            debug_info['sample_items'] = debug_items
+            
             # 現在の日付と90日前の日付
             cur.execute("SELECT CURRENT_DATE as today, (CURRENT_DATE - INTERVAL '90 days')::DATE as cutoff_date")
             date_info = cur.fetchone()
             debug_info['today'] = str(date_info['today'])
             debug_info['cutoff_date'] = str(date_info['cutoff_date'])
+            
+            debug_info['items_count'] = len(items)
+            # 変数スコープの問題を回避するため、直接カウントを取得
+            try:
+                debug_info['items_no_request_count'] = len(items_no_request)
+            except:
+                debug_info['items_no_request_count'] = 0
+            try:
+                debug_info['items_with_request_count'] = len(items_with_request)
+            except:
+                debug_info['items_with_request_count'] = 0
             
             cur.close()
             conn.close()
@@ -16129,8 +16155,11 @@ def long_term_items():
             three_months_ago = datetime.now() - timedelta(days=90)
             debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
             debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
+            debug_info['items_count'] = len(items)
     except Exception as e:
         debug_info['error'] = str(e)
+        import traceback
+        debug_info['traceback'] = traceback.format_exc()
     
     return render_template('long_term_items.html', items=items, debug_info=debug_info)
 
