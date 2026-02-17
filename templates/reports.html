@@ -17,12 +17,12 @@
             <div class="report-options">
                 <select id="monthly-year" class="form-control">
                     {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                    <option value="{{ y }}" {% if y==current_year %}selected{% endif %}>{{ y }}年</option>
                     {% endfor %}
                 </select>
                 <select id="monthly-month" class="form-control">
                     {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                    <option value="{{ m }}" {% if m==current_month %}selected{% endif %}>{{ m }}月</option>
                     {% endfor %}
                 </select>
             </div>
@@ -58,7 +58,7 @@
             <div class="report-options">
                 <select id="annual-year" class="form-control">
                     {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                    <option value="{{ y }}" {% if y==current_year %}selected{% endif %}>{{ y }}年</option>
                     {% endfor %}
                 </select>
             </div>
@@ -78,13 +78,13 @@
             <div class="report-options">
                 <select id="sales-year" class="form-control">
                     {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                    <option value="{{ y }}" {% if y==current_year %}selected{% endif %}>{{ y }}年</option>
                     {% endfor %}
                 </select>
                 <select id="sales-month" class="form-control">
                     <option value="0">全期間</option>
                     {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                    <option value="{{ m }}" {% if m==current_month %}selected{% endif %}>{{ m }}月</option>
                     {% endfor %}
                 </select>
             </div>
@@ -115,471 +115,491 @@
 </div>
 
 <style>
-.page-header {
-    margin-bottom: 2rem;
-}
+    .page-header {
+        margin-bottom: 2rem;
+    }
 
-.page-header h1 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.75rem;
-    color: #1e293b;
-}
-
-.page-desc {
-    color: #64748b;
-    margin: 0;
-}
-
-.report-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1.5rem;
-}
-
-.report-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border: 1px solid #e2e8f0;
-    display: flex;
-    gap: 1rem;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.report-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.report-icon {
-    font-size: 2.5rem;
-    flex-shrink: 0;
-}
-
-.report-content {
-    flex: 1;
-}
-
-.report-content h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.1rem;
-    color: #1e293b;
-}
-
-.report-content p {
-    margin: 0 0 1rem 0;
-    font-size: 0.9rem;
-    color: #64748b;
-}
-
-.report-options {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-}
-
-.report-options .form-control {
-    padding: 0.5rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    flex: 1;
-}
-
-.report-stats {
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    background: #f8fafc;
-    border-radius: 6px;
-}
-
-.stat-item {
-    font-size: 0.9rem;
-    color: #475569;
-    font-weight: 500;
-}
-
-.report-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.report-actions .btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity 0.2s;
-}
-
-.report-actions .btn:hover {
-    opacity: 0.9;
-}
-
-.btn-primary { background: #3b82f6; color: white; }
-.btn-secondary { background: #64748b; color: white; }
-.btn-info { background: #06b6d4; color: white; }
-
-/* モーダル */
-.report-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9999;
-}
-
-.report-modal.open {
-    display: block;
-}
-
-.report-modal-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-}
-
-.report-modal-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 900px;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-}
-
-.report-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.report-modal-header h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    color: #1e293b;
-}
-
-.report-modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #64748b;
-    padding: 0;
-    line-height: 1;
-}
-
-.report-modal-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem;
-}
-
-.report-modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid #e2e8f0;
-}
-
-.loading {
-    text-align: center;
-    padding: 3rem;
-    color: #64748b;
-}
-
-/* レポートテーブル */
-.report-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-}
-
-.report-table th,
-.report-table td {
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    text-align: left;
-}
-
-.report-table th {
-    background: #f8fafc;
-    font-weight: 600;
-    color: #475569;
-}
-
-.report-table .text-right {
-    text-align: right;
-}
-
-.report-table .total-row {
-    background: #f0f9ff;
-    font-weight: 600;
-}
-
-.report-table .profit-positive {
-    color: #10b981;
-}
-
-.report-table .profit-negative {
-    color: #ef4444;
-}
-
-.report-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    padding: 1rem;
-    background: #f8fafc;
-    border-radius: 8px;
-}
-
-.summary-item {
-    text-align: center;
-}
-
-.summary-item .label {
-    font-size: 0.8rem;
-    color: #64748b;
-    margin-bottom: 0.25rem;
-}
-
-.summary-item .value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #1e293b;
-}
-
-@media (max-width: 768px) {
     .page-header h1 {
-        font-size: 1.2rem;
+        margin: 0 0 0.5rem 0;
+        font-size: 1.75rem;
+        color: #1e293b;
     }
-    
+
     .page-desc {
-        font-size: 0.75rem;
+        color: #64748b;
+        margin: 0;
     }
-    
+
     .report-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
     }
-    
+
     .report-card {
-        flex-direction: column;
-        padding: 1rem;
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e2e8f0;
+        display: flex;
+        gap: 1rem;
+        transition: transform 0.2s, box-shadow 0.2s;
     }
-    
+
+    .report-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
     .report-icon {
-        font-size: 2rem;
+        font-size: 2.5rem;
+        flex-shrink: 0;
     }
-    
+
+    .report-content {
+        flex: 1;
+    }
+
     .report-content h3 {
-        font-size: 0.95rem;
+        margin: 0 0 0.5rem 0;
+        font-size: 1.1rem;
+        color: #1e293b;
     }
-    
+
     .report-content p {
-        font-size: 0.8rem;
+        margin: 0 0 1rem 0;
+        font-size: 0.9rem;
+        color: #64748b;
     }
-    
+
     .report-options {
-        flex-direction: column;
-    }
-    
-    .report-options .form-control {
-        font-size: 0.8rem;
-        padding: 0.4rem;
-    }
-    
-    .report-stats {
-        padding: 0.5rem;
-    }
-    
-    .stat-item {
-        font-size: 0.8rem;
-    }
-    
-    .report-actions {
-        flex-wrap: wrap;
-    }
-    
-    .report-actions .btn {
-        font-size: 0.75rem;
-        padding: 0.4rem 0.75rem;
-    }
-    
-    .report-modal-content {
-        width: 95%;
-        max-height: 95vh;
-    }
-    
-    .report-modal-header {
-        padding: 0.75rem 1rem;
-    }
-    
-    .report-modal-header h2 {
-        font-size: 1rem;
-    }
-    
-    .report-modal-body {
-        padding: 1rem;
-    }
-    
-    .report-summary {
-        grid-template-columns: repeat(2, 1fr);
+        display: flex;
         gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .report-options .form-control {
+        padding: 0.5rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        flex: 1;
+    }
+
+    .report-stats {
+        margin-bottom: 1rem;
         padding: 0.75rem;
+        background: #f8fafc;
+        border-radius: 6px;
     }
-    
-    .summary-item .label {
-        font-size: 0.65rem;
+
+    .stat-item {
+        font-size: 0.9rem;
+        color: #475569;
+        font-weight: 500;
     }
-    
-    .summary-item .value {
+
+    .report-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .report-actions .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: opacity 0.2s;
+    }
+
+    .report-actions .btn:hover {
+        opacity: 0.9;
+    }
+
+    .btn-primary {
+        background: #3b82f6;
+        color: white;
+    }
+
+    .btn-secondary {
+        background: #64748b;
+        color: white;
+    }
+
+    .btn-info {
+        background: #06b6d4;
+        color: white;
+    }
+
+    /* モーダル */
+    .report-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+    }
+
+    .report-modal.open {
+        display: block;
+    }
+
+    .report-modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+    }
+
+    .report-modal-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 900px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .report-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .report-modal-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+        color: #1e293b;
+    }
+
+    .report-modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .report-modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+    }
+
+    .report-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 3rem;
+        color: #64748b;
+    }
+
+    /* レポートテーブル */
+    .report-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
         font-size: 0.9rem;
     }
-    
-    .report-table {
-        font-size: 0.7rem;
-    }
-    
+
     .report-table th,
     .report-table td {
-        padding: 0.4rem 0.3rem;
+        padding: 0.75rem;
+        border: 1px solid #e2e8f0;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: middle;
     }
-    
-    .report-modal-footer {
-        padding: 0.75rem 1rem;
-    }
-    
-    .report-modal-footer .btn {
-        font-size: 0.8rem;
-        padding: 0.5rem 1rem;
-    }
-}
 
-@media (max-width: 480px) {
+    .report-table th {
+        background: #f8fafc;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .report-table .text-right {
+        text-align: center;
+    }
+
+    .report-table .total-row {
+        background: #f0f9ff;
+        font-weight: 600;
+    }
+
+    .report-table .profit-positive {
+        color: #10b981;
+    }
+
+    .report-table .profit-negative {
+        color: #ef4444;
+    }
+
     .report-summary {
-        grid-template-columns: 1fr 1fr;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 8px;
     }
-    
-    .summary-item .value {
+
+    .summary-item {
+        text-align: center;
+    }
+
+    .summary-item .label {
         font-size: 0.8rem;
+        color: #64748b;
+        margin-bottom: 0.25rem;
     }
-}
+
+    .summary-item .value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    @media (max-width: 768px) {
+        .page-header h1 {
+            font-size: 1.2rem;
+        }
+
+        .page-desc {
+            font-size: 0.75rem;
+        }
+
+        .report-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .report-card {
+            flex-direction: column;
+            padding: 1rem;
+        }
+
+        .report-icon {
+            font-size: 2rem;
+        }
+
+        .report-content h3 {
+            font-size: 0.95rem;
+        }
+
+        .report-content p {
+            font-size: 0.8rem;
+        }
+
+        .report-options {
+            flex-direction: column;
+        }
+
+        .report-options .form-control {
+            font-size: 0.8rem;
+            padding: 0.4rem;
+        }
+
+        .report-stats {
+            padding: 0.5rem;
+        }
+
+        .stat-item {
+            font-size: 0.8rem;
+        }
+
+        .report-actions {
+            flex-wrap: wrap;
+        }
+
+        .report-actions .btn {
+            font-size: 0.75rem;
+            padding: 0.4rem 0.75rem;
+        }
+
+        .report-modal-content {
+            width: 95%;
+            max-height: 95vh;
+        }
+
+        .report-modal-header {
+            padding: 0.75rem 1rem;
+        }
+
+        .report-modal-header h2 {
+            font-size: 1rem;
+        }
+
+        .report-modal-body {
+            padding: 1rem;
+        }
+
+        .report-summary {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            padding: 0.75rem;
+        }
+
+        .summary-item .label {
+            font-size: 0.65rem;
+        }
+
+        .summary-item .value {
+            font-size: 0.9rem;
+        }
+
+        .report-table {
+            font-size: 0.7rem;
+            min-width: 500px;
+        }
+
+        .report-table th,
+        .report-table td {
+            padding: 0.4rem 0.3rem;
+            white-space: nowrap;
+        }
+
+        .report-modal-footer {
+            padding: 0.75rem 1rem;
+        }
+
+        .report-modal-footer .btn {
+            font-size: 0.8rem;
+            padding: 0.5rem 1rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .report-summary {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .summary-item .value {
+            font-size: 0.8rem;
+        }
+    }
 </style>
 
 <script>
-let currentReportType = '';
-let currentParams = {};
+    let currentReportType = '';
+    let currentParams = {};
 
-function generateReport(type, format) {
-    currentReportType = type;
-    currentParams = {};
-    
-    // パラメータを取得
-    switch(type) {
-        case 'monthly':
-            currentParams.year = document.getElementById('monthly-year').value;
-            currentParams.month = document.getElementById('monthly-month').value;
-            break;
-        case 'annual':
-            currentParams.year = document.getElementById('annual-year').value;
-            break;
-        case 'sales':
-            currentParams.year = document.getElementById('sales-year').value;
-            currentParams.month = document.getElementById('sales-month').value;
-            break;
-        case 'inventory':
-            // 在庫は期間パラメータなし
-            break;
+    function generateReport(type, format) {
+        currentReportType = type;
+        currentParams = {};
+
+        // パラメータを取得
+        switch (type) {
+            case 'monthly':
+                currentParams.year = document.getElementById('monthly-year').value;
+                currentParams.month = document.getElementById('monthly-month').value;
+                break;
+            case 'annual':
+                currentParams.year = document.getElementById('annual-year').value;
+                break;
+            case 'sales':
+                currentParams.year = document.getElementById('sales-year').value;
+                currentParams.month = document.getElementById('sales-month').value;
+                break;
+            case 'inventory':
+                // 在庫は期間パラメータなし
+                break;
+        }
+
+        if (format === 'preview') {
+            openReportModal(type);
+        } else {
+            downloadReport(type, format);
+        }
     }
-    
-    if (format === 'preview') {
-        openReportModal(type);
-    } else {
-        downloadReport(type, format);
+
+    function openReportModal(type) {
+        const modal = document.getElementById('reportModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+
+        const titles = {
+            'monthly': '月次売上報告書',
+            'inventory': '在庫一覧表',
+            'annual': '年間収支報告書',
+            'sales': '売却一覧'
+        };
+
+        modalTitle.textContent = titles[type] + ' プレビュー';
+        modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+
+        // データを取得
+        const params = new URLSearchParams(currentParams);
+        fetch(`/api/report/${type}?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                modalBody.innerHTML = renderReportPreview(type, data);
+            })
+            .catch(error => {
+                modalBody.innerHTML = '<p style="color: #ef4444; text-align: center;">データの取得に失敗しました</p>';
+            });
+
+        // ダウンロードボタンの設定
+        document.getElementById('downloadCsvBtn').onclick = () => downloadReport(type, 'csv');
     }
-}
 
-function openReportModal(type) {
-    const modal = document.getElementById('reportModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalBody = document.getElementById('modalBody');
-    
-    const titles = {
-        'monthly': '月次売上報告書',
-        'inventory': '在庫一覧表',
-        'annual': '年間収支報告書',
-        'sales': '売却一覧'
-    };
-    
-    modalTitle.textContent = titles[type] + ' プレビュー';
-    modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    
-    // データを取得
-    const params = new URLSearchParams(currentParams);
-    fetch(`/api/report/${type}?${params.toString()}`)
-        .then(response => response.json())
-        .then(data => {
-            modalBody.innerHTML = renderReportPreview(type, data);
-        })
-        .catch(error => {
-            modalBody.innerHTML = '<p style="color: #ef4444; text-align: center;">データの取得に失敗しました</p>';
-        });
-    
-    // ダウンロードボタンの設定
-    document.getElementById('downloadCsvBtn').onclick = () => downloadReport(type, 'csv');
-}
-
-function closeReportModal() {
-    document.getElementById('reportModal').classList.remove('open');
-    document.body.style.overflow = '';
-}
-
-function downloadReport(type, format) {
-    const params = new URLSearchParams(currentParams);
-    params.append('format', format);
-    window.location.href = `/api/report/${type}/download?${params.toString()}`;
-}
-
-function renderReportPreview(type, data) {
-    switch(type) {
-        case 'monthly':
-            return renderMonthlyReport(data);
-        case 'inventory':
-            return renderInventoryReport(data);
-        case 'annual':
-            return renderAnnualReport(data);
-        case 'sales':
-            return renderSalesReport(data);
-        default:
-            return '<p>レポートタイプが不明です</p>';
+    function closeReportModal() {
+        document.getElementById('reportModal').classList.remove('open');
+        document.body.style.overflow = '';
     }
-}
 
-function renderMonthlyReport(data) {
-    let html = `
+    function downloadReport(type, format) {
+        const params = new URLSearchParams(currentParams);
+        params.append('format', format);
+        window.location.href = `/api/report/${type}/download?${params.toString()}`;
+    }
+
+    function renderReportPreview(type, data) {
+        switch (type) {
+            case 'monthly':
+                return renderMonthlyReport(data);
+            case 'inventory':
+                return renderInventoryReport(data);
+            case 'annual':
+                return renderAnnualReport(data);
+            case 'sales':
+                return renderSalesReport(data);
+            default:
+                return '<p>レポートタイプが不明です</p>';
+        }
+    }
+
+    function renderMonthlyReport(data) {
+        let html = `
         <div class="report-summary">
             <div class="summary-item">
                 <div class="label">売上件数</div>
@@ -606,6 +626,7 @@ function renderMonthlyReport(data) {
                 <div class="value ${data.summary.total_profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(data.summary.total_profit).toLocaleString()}</div>
             </div>
         </div>
+        <div class="report-table-wrapper">
         <table class="report-table">
             <thead>
                 <tr>
@@ -622,10 +643,10 @@ function renderMonthlyReport(data) {
             </thead>
             <tbody>
     `;
-    
-    data.items.forEach(item => {
-        const profit = item.sale_price - item.purchase_price - item.shipping_cost - item.commission;
-        html += `
+
+        data.items.forEach(item => {
+            const profit = item.sale_price - item.purchase_price - item.shipping_cost - item.commission;
+            html += `
             <tr>
                 <td>${item.sale_date}</td>
                 <td>${item.product_name}</td>
@@ -638,14 +659,14 @@ function renderMonthlyReport(data) {
                 <td class="text-right ${profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(profit).toLocaleString()}</td>
             </tr>
         `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
+        });
 
-function renderInventoryReport(data) {
-    let html = `
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderInventoryReport(data) {
+        let html = `
         <div class="report-summary">
             <div class="summary-item">
                 <div class="label">在庫数</div>
@@ -660,6 +681,7 @@ function renderInventoryReport(data) {
                 <div class="value">¥${Number(data.summary.total_listing).toLocaleString()}</div>
             </div>
         </div>
+        <div class="report-table-wrapper">
         <table class="report-table">
             <thead>
                 <tr>
@@ -674,10 +696,10 @@ function renderInventoryReport(data) {
             </thead>
             <tbody>
     `;
-    
-    data.items.forEach(item => {
-        const status = item.is_listed ? '出品中' : '未出品';
-        html += `
+
+        data.items.forEach(item => {
+            const status = item.is_listed ? '出品中' : '未出品';
+            html += `
             <tr>
                 <td>${item.purchase_date || '-'}</td>
                 <td>${item.product_name}</td>
@@ -688,14 +710,14 @@ function renderInventoryReport(data) {
                 <td>${status}</td>
             </tr>
         `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
+        });
 
-function renderAnnualReport(data) {
-    let html = `
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderAnnualReport(data) {
+        let html = `
         <div class="report-summary">
             <div class="summary-item">
                 <div class="label">年間売上件数</div>
@@ -719,6 +741,7 @@ function renderAnnualReport(data) {
             </div>
         </div>
         <h4 style="margin: 1.5rem 0 1rem;">月別推移</h4>
+        <div class="report-table-wrapper">
         <table class="report-table">
             <thead>
                 <tr>
@@ -733,9 +756,9 @@ function renderAnnualReport(data) {
             </thead>
             <tbody>
     `;
-    
-    data.monthly.forEach(m => {
-        html += `
+
+        data.monthly.forEach(m => {
+            html += `
             <tr>
                 <td>${m.month}月</td>
                 <td class="text-right">${m.count}件</td>
@@ -746,14 +769,14 @@ function renderAnnualReport(data) {
                 <td class="text-right ${m.profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(m.profit).toLocaleString()}</td>
             </tr>
         `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
+        });
 
-function renderSalesReport(data) {
-    let html = `
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderSalesReport(data) {
+        let html = `
         <div class="report-summary">
             <div class="summary-item">
                 <div class="label">売却件数</div>
@@ -768,6 +791,7 @@ function renderSalesReport(data) {
                 <div class="value ${data.summary.total_profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(data.summary.total_profit).toLocaleString()}</div>
             </div>
         </div>
+        <div class="report-table-wrapper">
         <table class="report-table">
             <thead>
                 <tr>
@@ -781,10 +805,10 @@ function renderSalesReport(data) {
             </thead>
             <tbody>
     `;
-    
-    data.items.forEach(item => {
-        const profit = item.sale_price - item.purchase_price - item.shipping_cost - item.commission;
-        html += `
+
+        data.items.forEach(item => {
+            const profit = item.sale_price - item.purchase_price - item.shipping_cost - item.commission;
+            html += `
             <tr>
                 <td>${item.sale_date}</td>
                 <td>${item.product_name}</td>
@@ -794,17 +818,17 @@ function renderSalesReport(data) {
                 <td class="text-right ${profit >= 0 ? 'profit-positive' : 'profit-negative'}">¥${Number(profit).toLocaleString()}</td>
             </tr>
         `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
+        });
 
-// ESCキーでモーダルを閉じる
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        closeReportModal();
+        html += '</tbody></table></div>';
+        return html;
     }
-});
+
+    // ESCキーでモーダルを閉じる
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeReportModal();
+        }
+    });
 </script>
 {% endblock %}
