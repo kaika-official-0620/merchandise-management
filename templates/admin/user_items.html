@@ -26,6 +26,7 @@
         padding: 12px;
         gap: 12px;
         border-bottom: 1px solid #f1f5f9;
+        position: relative;
     }
 
     .card-photo {
@@ -154,11 +155,6 @@
         color: white;
     }
 
-    .badge-sold {
-        background: #ef4444;
-        color: white;
-    }
-
     .btn-danger:hover {
         background: #dc2626;
     }
@@ -230,8 +226,8 @@
     }
 
     .badge-sold {
-        background: #dbeafe;
-        color: #1e40af;
+        background: #ef4444;
+        color: white;
     }
 
     .badge-listed {
@@ -244,40 +240,38 @@
         color: #92400e;
     }
 
+    /* カードステータス（デフォルトは非表示） */
+    .card-status {
+        display: none;
+    }
+
     /* スマホ（768px以下）*/
     @media (max-width: 768px) {
         .admin-table-container {
             display: none;
         }
 
-
         .mobile-cards {
             display: block;
         }
 
         .card-header {
-            position: relative;
-            padding-right: 40px;
-            /* バッジ分の余白 */
+            padding-right: 70px;
         }
 
         /* Status Badge Overlay */
         .card-status {
+            display: block;
             position: absolute;
-            top: 4px;
-            right: 4px;
+            top: 8px;
+            right: 8px;
             z-index: 10;
         }
 
         .card-status .badge {
             font-size: 0.75rem;
             padding: 4px 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .badge-sold {
-            background: #ef4444;
-            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
         }
     }
 </style>
@@ -417,14 +411,13 @@
             </div>
         </div>
     </div>
-</div>
-{% else %}
-<div class="item-card">
-    <div class="card-body" style="text-align: center; padding: 2rem;">
-        商品がありません
+    {% else %}
+    <div class="item-card">
+        <div class="card-body" style="text-align: center; padding: 2rem;">
+            商品がありません
+        </div>
     </div>
-</div>
-{% endfor %}
+    {% endfor %}
 </div>
 
 <!-- 削除確認モーダル -->
