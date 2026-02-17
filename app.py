@@ -11533,7 +11533,7 @@ def admin_shikiriosho_add():
         document_no = generate_document_no()
         
         if DATABASE_URL:
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 INSERT INTO shikiriosho 
                 (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
