@@ -15993,8 +15993,8 @@ def long_term_items():
                        EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date))::INTEGER as days_since_purchase
                 FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
-                    AND dr.status != 'completed' 
                     AND dr.reason = 'long_term'
+                    AND dr.status != 'completed'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
@@ -16020,12 +16020,16 @@ def long_term_items():
                        dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
                        CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
                 FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
+                    AND dr.reason = 'long_term'
+                    AND dr.status != 'completed'
                 WHERE m.user_id = ? 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
                   AND m.purchase_date <= ?
-                ORDER BY m.purchase_date ASC
+                ORDER BY 
+                    CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
+                    m.purchase_date ASC
             """, (current_user.id, three_months_ago_str))
             items = [dict(row) for row in cur.fetchall()]
             print(f"[DEBUG] long_term_items: SQLite - Retrieved {len(items)} items", flush=True)
