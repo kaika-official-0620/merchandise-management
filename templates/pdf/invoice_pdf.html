@@ -205,6 +205,24 @@
             }
             .container {
                 padding: 0;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                max-height: 297mm; /* A4縦の高さ */
+                overflow: hidden;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+            .header-section,
+            .amount-company-row,
+            .summary-section,
+            .footer-section {
+                page-break-inside: avoid;
+            }
+            /* テーブルの行が分割されないように */
+            tr {
+                page-break-inside: avoid;
             }
         }
     </style>

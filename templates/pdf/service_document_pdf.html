@@ -115,10 +115,34 @@
         @media print {
             body {
                 padding: 20px;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
             }
             
             .no-print {
                 display: none;
+            }
+            
+            body {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                max-height: 297mm; /* A4縦の高さ */
+                overflow: hidden;
+            }
+            
+            .header,
+            .section,
+            .amount-section {
+                page-break-inside: avoid;
+            }
+            
+            table {
+                page-break-inside: avoid;
+            }
+            
+            tr {
+                page-break-inside: avoid;
             }
         }
         
