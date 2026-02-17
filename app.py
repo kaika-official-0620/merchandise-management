@@ -2824,23 +2824,31 @@ def reports():
     current_month = datetime.now().month
     years = list(range(current_year - 5, current_year + 1))
     
+    is_admin_user = current_user.is_admin()
+    
     # 在庫数と在庫総額を取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NULL
-        """, (current_user.id,))
+            WHERE sale_date IS NULL
+              AND ({user_filter})
+        """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+        () if is_admin_user else (current_user.id,))
         result = cur.fetchone()
+
     else:
         cur = conn.cursor()
         cur.execute("""
             SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NULL
-        """, (current_user.id,))
+            WHERE sale_date IS NULL
+              AND ({user_filter})
+        """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+        () if is_admin_user else (current_user.id,))
         result = dict(cur.fetchone())
+
     
     inventory_count = result['count'] if result else 0
     inventory_total = result['total'] if result else 0
@@ -2865,8 +2873,12 @@ def api_report(report_type):
     year = request.args.get('year', datetime.now().year, type=int)
     month = request.args.get('month', datetime.now().month, type=int)
     
+    # 管理者の場合は全データを表示
+    is_admin_user = current_user.is_admin()
+    
     conn = get_db()
     data = {'items': [], 'summary': {}}
+
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2877,11 +2889,14 @@ def api_report(report_type):
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                   AND EXTRACT(MONTH FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year, month))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             # 日付をシリアライズ可能に
@@ -2889,11 +2904,11 @@ def api_report(report_type):
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
-            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
                 'items': items,
@@ -2913,17 +2928,20 @@ def api_report(report_type):
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('purchase_date'):
                     item['purchase_date'] = str(item['purchase_date'])
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_listing = sum(i['listing_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_listing = int(sum(i['listing_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -2936,23 +2954,39 @@ def api_report(report_type):
             
         elif report_type == 'expenses':
             # 月次経費精算書
-            cur.execute("""
-                SELECT id, sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
-                  AND EXTRACT(YEAR FROM sale_date) = %s
-                  AND EXTRACT(MONTH FROM sale_date) = %s
-                ORDER BY sale_date
-            """, (current_user.id, year, month))
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -2975,11 +3009,14 @@ def api_report(report_type):
                        COALESCE(SUM(commission), 0) as commission,
                        COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                 GROUP BY EXTRACT(MONTH FROM sale_date)
                 ORDER BY month
-            """, (current_user.id, year))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year,) if is_admin_user else (current_user.id, year))
+
             monthly = [dict(row) for row in cur.fetchall()]
             
             # 各月のデータを整数に変換
@@ -2992,12 +3029,12 @@ def api_report(report_type):
                 m['commission'] = int(m['commission'])
                 m['profit'] = int(m['profit'])
             
-            total_count = sum(m['count'] for m in monthly)
-            total_sales = sum(m['sales'] for m in monthly)
-            total_purchase = sum(m['purchase'] for m in monthly)
-            total_shipping = sum(m['shipping'] for m in monthly)
-            total_commission = sum(m['commission'] for m in monthly)
-            total_profit = sum(m['profit'] for m in monthly)
+            total_count = int(sum(m['count'] for m in monthly))
+            total_sales = int(sum(m['sales'] for m in monthly))
+            total_purchase = int(sum(m['purchase'] for m in monthly))
+            total_shipping = int(sum(m['shipping'] for m in monthly))
+            total_commission = int(sum(m['commission'] for m in monthly))
+            total_profit = int(sum(m['profit'] for m in monthly))
             
             data = {
                 'monthly': monthly,
@@ -3017,27 +3054,32 @@ def api_report(report_type):
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                       AND EXTRACT(MONTH FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('purchase_date'):
                     item['purchase_date'] = str(item['purchase_date'])
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3054,28 +3096,33 @@ def api_report(report_type):
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                       AND EXTRACT(MONTH FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_profit = int(sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items))
             
             data = {
                 'items': items,
@@ -3094,18 +3141,21 @@ def api_report(report_type):
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                   AND strftime('%m', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
-            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
                 'items': items,
@@ -3124,13 +3174,16 @@ def api_report(report_type):
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_listing = sum(i['listing_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_listing = int(sum(i['listing_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3142,19 +3195,36 @@ def api_report(report_type):
             }
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT id, sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
-                  AND strftime('%Y', sale_date) = ?
-                  AND strftime('%m', sale_date) = ?
-                ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            # 月次経費精算書
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3176,11 +3246,14 @@ def api_report(report_type):
                        COALESCE(SUM(commission), 0) as commission,
                        COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                 GROUP BY strftime('%m', sale_date)
                 ORDER BY month
-            """, (current_user.id, str(year)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year),) if is_admin_user else (current_user.id, str(year)))
+
             monthly = [dict(row) for row in cur.fetchall()]
             
             total_count = sum(m['count'] for m in monthly)
@@ -3207,23 +3280,28 @@ def api_report(report_type):
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                       AND strftime('%m', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3239,24 +3317,29 @@ def api_report(report_type):
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                       AND strftime('%m', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_profit = int(sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items))
             
             data = {
                 'items': items,
@@ -3284,7 +3367,11 @@ def api_report_download(report_type):
     month = request.args.get('month', datetime.now().month, type=int)
     format_type = request.args.get('format', 'csv')
     
+    # 管理者の場合は全データを表示
+    is_admin_user = current_user.is_admin()
+    
     # データ取得（api_reportと同様のロジック）
+
     conn = get_db()
     items = []
     
@@ -3296,11 +3383,14 @@ def api_report_download(report_type):
                 SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                   AND EXTRACT(MONTH FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year, month))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3310,36 +3400,59 @@ def api_report_download(report_type):
                 SELECT purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
-                  AND EXTRACT(YEAR FROM sale_date) = %s
-                  AND EXTRACT(MONTH FROM sale_date) = %s
-                ORDER BY sale_date
-            """, (current_user.id, year, month))
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
+                filename = f"expenses_{year}_all.csv"
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+                filename = f"expenses_{year}_{month:02d}.csv"
+
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"expenses_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+
             
         elif report_type == 'annual':
             cur.execute("""
                 SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
                        shipping_cost, commission
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year,) if is_admin_user else (current_user.id, year))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"annual_report_{year}.csv"
             headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
@@ -3350,20 +3463,25 @@ def api_report_download(report_type):
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                       AND EXTRACT(MONTH FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
@@ -3374,20 +3492,25 @@ def api_report_download(report_type):
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                       AND EXTRACT(MONTH FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3400,11 +3523,14 @@ def api_report_download(report_type):
                 SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                   AND strftime('%m', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3414,36 +3540,59 @@ def api_report_download(report_type):
                 SELECT purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
-                  AND strftime('%Y', sale_date) = ?
-                  AND strftime('%m', sale_date) = ?
-                ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
+                filename = f"expenses_{year}_all.csv"
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+                filename = f"expenses_{year}_{month:02d}.csv"
+
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"expenses_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+
             
         elif report_type == 'annual':
             cur.execute("""
                 SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
                        shipping_cost, commission
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year),) if is_admin_user else (current_user.id, str(year)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"annual_report_{year}.csv"
             headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
@@ -3454,20 +3603,25 @@ def api_report_download(report_type):
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                       AND strftime('%m', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
@@ -3478,20 +3632,25 @@ def api_report_download(report_type):
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                       AND strftime('%m', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
