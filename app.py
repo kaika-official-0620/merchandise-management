@@ -15956,30 +15956,63 @@ def long_term_items():
     try:
         conn = get_db()
         
-        # 3ヶ月前の日付を計算
-        three_months_ago = datetime.now() - timedelta(days=90)
-        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
-        
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 仕入れ日から3ヶ月以上経過した未売却商品を取得
+            # デバッグ: まず条件に合う商品数を確認
             cur.execute("""
-                SELECT m.*, 
-                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                       EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date)) as days_since_purchase
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+            """, (current_user.id,))
+            debug_count = cur.fetchone()['count']
+            print(f"[DEBUG] long_term_items: Found {debug_count} items matching date condition (user_id={current_user.id})", flush=True)
+            
+            # 通知マークのカウントと一致させるため、申請未作成の商品も確認
+            cur.execute("""
+                SELECT COUNT(*) as count
                 FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= %s
-                ORDER BY m.purchase_date ASC
-            """, (current_user.id, three_months_ago_str))
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                  AND dr.id IS NULL
+            """, (current_user.id,))
+            debug_count_no_request = cur.fetchone()['count']
+            print(f"[DEBUG] long_term_items: Found {debug_count_no_request} items with no disposal request (should match notification badge)", flush=True)
+            
+            # 仕入れ日から3ヶ月以上経過した未売却商品を取得（PostgreSQLでは日付を直接計算）
+            # 申請未作成の商品を優先表示し、申請済み（完了以外）の商品も表示
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                       EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date))::INTEGER as days_since_purchase
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
+                    AND dr.status != 'completed' 
+                    AND dr.reason = 'long_term'
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                ORDER BY 
+                    CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
+                    m.purchase_date ASC
+            """, (current_user.id,))
             items = [dict(row) for row in cur.fetchall()]
+            print(f"[DEBUG] long_term_items: Retrieved {len(items)} items after JOIN", flush=True)
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
+            
+            # 3ヶ月前の日付を計算（SQLite用）
+            three_months_ago = datetime.now() - timedelta(days=90)
+            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
+            print(f"[DEBUG] long_term_items: SQLite - three_months_ago_str={three_months_ago_str}", flush=True)
             
             # 仕入れ日から3ヶ月以上経過した未売却商品を取得
             cur.execute("""
@@ -15995,11 +16028,14 @@ def long_term_items():
                 ORDER BY m.purchase_date ASC
             """, (current_user.id, three_months_ago_str))
             items = [dict(row) for row in cur.fetchall()]
+            print(f"[DEBUG] long_term_items: SQLite - Retrieved {len(items)} items", flush=True)
         
         cur.close()
         conn.close()
     except Exception as e:
         print(f"[ERROR] long_term_items: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     
     # 各商品の経過日数を計算
     for item in items:
@@ -16024,7 +16060,52 @@ def long_term_items():
                 item['days_since_purchase'] = 0
                 item['months_since_purchase'] = 0
     
-    return render_template('long_term_items.html', items=items)
+    # デバッグ情報を取得
+    debug_info = {}
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 日付条件に合う商品数
+            cur.execute("""
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+            """, (current_user.id,))
+            debug_info['total_matching_date'] = cur.fetchone()['count']
+            
+            # 申請未作成の商品数
+            cur.execute("""
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                  AND dr.id IS NULL
+            """, (current_user.id,))
+            debug_info['no_request'] = cur.fetchone()['count']
+            
+            # 現在の日付と90日前の日付
+            cur.execute("SELECT CURRENT_DATE as today, (CURRENT_DATE - INTERVAL '90 days')::DATE as cutoff_date")
+            date_info = cur.fetchone()
+            debug_info['today'] = str(date_info['today'])
+            debug_info['cutoff_date'] = str(date_info['cutoff_date'])
+            
+            cur.close()
+            conn.close()
+        else:
+            three_months_ago = datetime.now() - timedelta(days=90)
+            debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
+            debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
+    except Exception as e:
+        debug_info['error'] = str(e)
+    
+    return render_template('long_term_items.html', items=items, debug_info=debug_info)
 
 
 @app.route('/long-term-disposal-request', methods=['POST'])
@@ -16135,22 +16216,25 @@ def get_long_term_item_count():
     
     try:
         conn = get_db()
-        cur = conn.cursor()
-        
-        three_months_ago = datetime.now() - timedelta(days=90)
-        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
         
         if DATABASE_URL:
+            cur = conn.cursor()
+            # 仕入れ日から3ヶ月以上経過した未処理の長期在庫商品数を取得（PostgreSQLでは日付を直接計算）
             cur.execute("""
                 SELECT COUNT(*) FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= %s
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
                   AND dr.id IS NULL
-            """, (current_user.id, three_months_ago_str))
+            """, (current_user.id,))
         else:
+            cur = conn.cursor()
+            # 3ヶ月前の日付を計算（SQLite用）
+            three_months_ago = datetime.now() - timedelta(days=90)
+            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
+            
             cur.execute("""
                 SELECT COUNT(*) FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'

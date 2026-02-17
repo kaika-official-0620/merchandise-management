@@ -136,6 +136,23 @@
     {% else %}
     <div class="empty-message">
         <p>仕入れ日から3ヶ月以上経過した商品はありません</p>
+        
+        {% if debug_info %}
+        <!-- デバッグ情報 -->
+        <div class="debug-info" style="margin-top: 2rem; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #475569;">🔍 デバッグ情報</h4>
+            <ul style="margin: 0; padding-left: 1.5rem; color: #64748b;">
+                <li>現在日付: {{ debug_info.today or 'N/A' }}</li>
+                <li>基準日（90日前）: {{ debug_info.cutoff_date or 'N/A' }}</li>
+                <li>日付条件に合う商品数: {{ debug_info.total_matching_date or 0 }}件</li>
+                <li>申請未作成の商品数: {{ debug_info.no_request or 0 }}件</li>
+                <li>表示されている商品数: {{ items|length }}件</li>
+                {% if debug_info.error %}
+                <li style="color: #dc2626;">エラー: {{ debug_info.error }}</li>
+                {% endif %}
+            </ul>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>
