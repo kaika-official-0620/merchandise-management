@@ -15986,25 +15986,48 @@ def long_term_items():
             print(f"[DEBUG] long_term_items: Found {debug_count_no_request} items with no disposal request (should match notification badge)", flush=True)
             
             # 仕入れ日から3ヶ月以上経過した未売却商品を取得（PostgreSQLでは日付を直接計算）
-            # 申請未作成の商品を優先表示し、申請済み（完了以外）の商品も表示
+            # まず、申請がない商品を取得
             cur.execute("""
                 SELECT m.*, 
-                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
+                       NULL::INTEGER as disposal_request_id, 
+                       NULL::VARCHAR as disposal_type, 
+                       NULL::VARCHAR as disposal_status,
                        EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date))::INTEGER as days_since_purchase
                 FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                  AND NOT EXISTS (
+                      SELECT 1 FROM item_disposal_requests dr 
+                      WHERE dr.merchandise_id = m.id 
+                        AND dr.reason = 'long_term' 
+                        AND dr.status != 'completed'
+                  )
+            """, (current_user.id,))
+            items_no_request = [dict(row) for row in cur.fetchall()]
+            
+            # 次に、申請があるが完了していない商品を取得
+            cur.execute("""
+                SELECT m.*, 
+                       dr.id as disposal_request_id, 
+                       dr.disposal_type, 
+                       dr.status as disposal_status,
+                       EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date))::INTEGER as days_since_purchase
+                FROM merchandise m
+                INNER JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
                     AND dr.reason = 'long_term'
                     AND dr.status != 'completed'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
                   AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                ORDER BY 
-                    CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
-                    m.purchase_date ASC
             """, (current_user.id,))
-            items = [dict(row) for row in cur.fetchall()]
-            print(f"[DEBUG] long_term_items: Retrieved {len(items)} items after JOIN", flush=True)
+            items_with_request = [dict(row) for row in cur.fetchall()]
+            
+            # 両方を結合（申請がない商品を優先）
+            items = items_no_request + items_with_request
+            print(f"[DEBUG] long_term_items: Retrieved {len(items_no_request)} items without request, {len(items_with_request)} items with request, total {len(items)} items", flush=True)
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
