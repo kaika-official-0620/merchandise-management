@@ -4603,20 +4603,22 @@ def edit_item(id):
             cur.close()
             conn.close()
             
-            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            # リダイレクト先を決定（フォームのhiddenフィールドから戻り先を取得）
+            back_url = request.form.get('back_url', '')
+            if back_url:
+                return redirect(back_url)
+            
+            # フォールバック: referrerまたはデフォルトの遷移先
             referrer = request.referrer or ''
             item_dict = dict(item)
             user_id = item_dict.get('user_id')
             
             if 'admin/user-products' in referrer or 'admin/users' in referrer:
-                # ユーザー商品一覧ページから来た場合はそのページに戻る
                 return redirect(referrer)
-            elif current_user.is_admin() and user_id:
-                # 管理者で商品にuser_idがある場合は、そのユーザーの商品一覧に戻る
+            elif (current_user.is_admin() or current_user.is_owner()) and user_id:
                 return redirect(url_for('admin_user_items', id=user_id))
-            elif current_user.is_admin():
-                # 管理者でuser_idがない場合は、ユーザー商品一覧に戻る
-                return redirect(url_for('admin_user_products'))
+            elif current_user.is_admin() or current_user.is_owner():
+                return redirect(url_for('admin_items'))
             else:
                 return redirect(url_for('index'))
         except Exception as e:
