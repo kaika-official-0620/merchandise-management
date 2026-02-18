@@ -3,6 +3,88 @@
 
 {% block content %}
 <style>
+/* ブランド名コンボボックス */
+.brand-combobox {
+    position: relative;
+    width: 100%;
+}
+.brand-combobox input[type="text"] {
+    width: 100%;
+    padding-right: 36px;
+    box-sizing: border-box;
+}
+.combobox-toggle {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    width: 34px;
+    background: #f8fafc;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-radius: 0 6px 6px 0;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+.combobox-toggle:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+.brand-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
+}
+.brand-dropdown.open {
+    display: block;
+}
+.brand-dropdown .dropdown-category {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    position: sticky;
+    top: 0;
+}
+.brand-dropdown .dropdown-item {
+    padding: 8px 12px 8px 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+}
+.brand-dropdown .dropdown-item:hover,
+.brand-dropdown .dropdown-item.highlighted {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.brand-dropdown .dropdown-no-match {
+    padding: 12px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+.brand-auto-detected {
+    background-color: #d1fae5 !important;
+    transition: background-color 0.3s;
+}
+
 .current-photo {
     margin-top: 10px;
     position: relative;
@@ -102,10 +184,12 @@
             
             <div class="form-group">
                 <label for="brand_name">ブランド名</label>
-                <select id="brand_name" name="brand_name">
-                    <option value="">選択してください</option>
-                    <!-- マスターデータから動的に生成 -->
-                </select>
+                <div class="brand-combobox">
+                    <input type="text" id="brand_name" name="brand_name" 
+                           autocomplete="off" placeholder="選択または入力してください">
+                    <button type="button" class="combobox-toggle" id="brand-toggle">▼</button>
+                    <div class="brand-dropdown" id="brand-dropdown"></div>
+                </div>
             </div>
             
             <div class="form-group">
@@ -515,9 +599,8 @@ async function loadMasterData() {
         const response = await fetch(`/api/master-data?scope=${scope}`);
         const data = await response.json();
         
-        // ブランド名セレクトボックスを生成
-        const brandSelect = document.getElementById('brand_name');
-        brandSelect.innerHTML = '<option value="">選択してください</option>';
+        // ブランド名コンボボックスのドロップダウンを生成
+        window.brandMasterList = data.brands || [];
         
         // カテゴリごとにグループ化
         const brandsByCategory = {};
@@ -535,21 +618,11 @@ async function loadMasterData() {
             categoryMap[cat.id] = cat.name;
         });
         
-        // カテゴリごとにオプショングループを作成
-        for (const [catId, brands] of Object.entries(brandsByCategory)) {
-            const categoryName = categoryMap[catId] || 'その他';
-            const optgroup = document.createElement('optgroup');
-            optgroup.label = categoryName;
-            
-            brands.forEach(brand => {
-                const option = document.createElement('option');
-                option.value = brand.value;
-                option.textContent = brand.display_name || brand.value;
-                optgroup.appendChild(option);
-            });
-            
-            brandSelect.appendChild(optgroup);
-        }
+        // ドロップダウンデータを保存
+        window.brandCategoryData = { brandsByCategory, categoryMap };
+        
+        // 初回ドロップダウン構築
+        buildBrandDropdown('');
         
         // 商品状態セレクトボックスを生成
         const conditionSelect = document.getElementById('item_condition');
@@ -603,9 +676,190 @@ async function loadMasterData() {
     }
 }
 
+// ブランドドロップダウンを構築（フィルタ付き）
+function buildBrandDropdown(filter) {
+    const dropdown = document.getElementById('brand-dropdown');
+    if (!dropdown || !window.brandCategoryData) return;
+    
+    const { brandsByCategory, categoryMap } = window.brandCategoryData;
+    dropdown.innerHTML = '';
+    const filterLower = filter.toLowerCase();
+    let hasMatch = false;
+    
+    for (const [catId, brands] of Object.entries(brandsByCategory)) {
+        const filteredBrands = brands.filter(b => {
+            const name = (b.display_name || b.value).toLowerCase();
+            const val = b.value.toLowerCase();
+            return !filterLower || name.includes(filterLower) || val.includes(filterLower);
+        });
+        
+        if (filteredBrands.length === 0) continue;
+        hasMatch = true;
+        
+        const categoryName = categoryMap[catId] || 'その他';
+        const catDiv = document.createElement('div');
+        catDiv.className = 'dropdown-category';
+        catDiv.textContent = categoryName;
+        dropdown.appendChild(catDiv);
+        
+        filteredBrands.forEach(brand => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.textContent = brand.display_name || brand.value;
+            item.dataset.value = brand.value;
+            item.addEventListener('click', function() {
+                const brandInput = document.getElementById('brand_name');
+                brandInput.value = brand.value;
+                brandInput.dataset.autoDetected = 'false';
+                dropdown.classList.remove('open');
+            });
+            dropdown.appendChild(item);
+        });
+    }
+    
+    if (!hasMatch && filter) {
+        const noMatch = document.createElement('div');
+        noMatch.className = 'dropdown-no-match';
+        noMatch.textContent = '候補なし（手動入力のまま登録できます）';
+        dropdown.appendChild(noMatch);
+    }
+}
+
+// ブランドコンボボックスの初期化
+function setupBrandCombobox() {
+    const brandInput = document.getElementById('brand_name');
+    const brandToggle = document.getElementById('brand-toggle');
+    const dropdown = document.getElementById('brand-dropdown');
+    if (!brandInput || !dropdown) return;
+    
+    // 入力時にフィルタ
+    brandInput.addEventListener('input', function() {
+        this.dataset.autoDetected = 'false';
+        buildBrandDropdown(this.value);
+        dropdown.classList.add('open');
+    });
+    
+    // フォーカス時にドロップダウン表示
+    brandInput.addEventListener('focus', function() {
+        buildBrandDropdown(this.value);
+        dropdown.classList.add('open');
+    });
+    
+    // トグルボタン
+    if (brandToggle) {
+        brandToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (dropdown.classList.contains('open')) {
+                dropdown.classList.remove('open');
+            } else {
+                buildBrandDropdown(brandInput.value);
+                dropdown.classList.add('open');
+                brandInput.focus();
+            }
+        });
+    }
+    
+    // 外側クリックで閉じる
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.brand-combobox')) {
+            dropdown.classList.remove('open');
+        }
+    });
+}
+
+// ブランド名自動判定マッピング
+const brandKeywords = {
+    'Louis Vuitton': ['ヴィトン', 'ビトン', 'LV', 'ルイヴィトン', 'ルイ・ヴィトン', 'LOUIS VUITTON', 'louis vuitton'],
+    'Hermes': ['エルメス', 'HERMES', 'hermes', 'バーキン', 'ケリー', 'ボリード', 'コンスタンス'],
+    'Chanel': ['シャネル', 'CHANEL', 'chanel', 'マトラッセ'],
+    'Gucci': ['グッチ', 'GUCCI', 'gucci'],
+    'Prada': ['プラダ', 'PRADA', 'prada'],
+    'Dior': ['ディオール', 'DIOR', 'dior', 'クリスチャンディオール'],
+    'Celine': ['セリーヌ', 'CELINE', 'celine'],
+    'Bottega Veneta': ['ボッテガ', 'ボッテガヴェネタ', 'BOTTEGA', 'bottega'],
+    'Balenciaga': ['バレンシアガ', 'BALENCIAGA', 'balenciaga'],
+    'Saint Laurent': ['サンローラン', 'イヴサンローラン', 'YSL', 'SAINT LAURENT', 'saint laurent'],
+    'Loewe': ['ロエベ', 'LOEWE', 'loewe'],
+    'Fendi': ['フェンディ', 'FENDI', 'fendi'],
+    'Burberry': ['バーバリー', 'BURBERRY', 'burberry'],
+    'Valentino': ['ヴァレンティノ', 'バレンティノ', 'VALENTINO', 'valentino'],
+    'Givenchy': ['ジバンシィ', 'ジバンシー', 'GIVENCHY', 'givenchy'],
+    'Miu Miu': ['ミュウミュウ', 'MIU MIU', 'miu miu'],
+    'Rolex': ['ロレックス', 'ROLEX', 'rolex', 'サブマリーナ', 'デイトナ', 'デイトジャスト', 'GMTマスター'],
+    'Cartier': ['カルティエ', 'CARTIER', 'cartier', 'タンク', 'パシャ', 'サントス'],
+    'Omega': ['オメガ', 'OMEGA', 'omega', 'スピードマスター', 'シーマスター'],
+    'Patek Philippe': ['パテック', 'パテックフィリップ', 'PATEK', 'patek'],
+    'Audemars Piguet': ['オーデマピゲ', 'オーデマ', 'AP', 'AUDEMARS', 'audemars', 'ロイヤルオーク'],
+    'Tiffany': ['ティファニー', 'TIFFANY', 'tiffany'],
+    'Bvlgari': ['ブルガリ', 'BVLGARI', 'bvlgari'],
+    'Van Cleef': ['ヴァンクリ', 'ヴァンクリーフ', 'VAN CLEEF', 'van cleef'],
+    'Nike': ['ナイキ', 'NIKE', 'nike', 'エアマックス', 'エアフォース', 'ダンク'],
+    'Adidas': ['アディダス', 'ADIDAS', 'adidas', 'イージー', 'YEEZY'],
+    'Supreme': ['シュプリーム', 'SUPREME', 'supreme'],
+    'Off-White': ['オフホワイト', 'OFF-WHITE', 'off-white', 'OFF WHITE'],
+    'A BATHING APE': ['ベイプ', 'BAPE', 'bape', 'エイプ', 'A BATHING APE'],
+    'Jordan': ['ジョーダン', 'JORDAN', 'jordan', 'AJ1', 'エアジョーダン'],
+    'New Balance': ['ニューバランス', 'NEW BALANCE', 'new balance', 'NB'],
+    'COMME des GARCONS': ['コムデギャルソン', 'ギャルソン', 'COMME DES GARCONS', 'CDG'],
+    'Yohji Yamamoto': ['ヨウジ', 'ヨウジヤマモト', 'YOHJI', 'yohji'],
+    'ISSEY MIYAKE': ['イッセイミヤケ', 'ミヤケ', 'ISSEY MIYAKE', 'issey miyake'],
+    'sacai': ['サカイ', 'SACAI', 'sacai'],
+    'UNDERCOVER': ['アンダーカバー', 'UNDERCOVER', 'undercover'],
+    'Apple': ['アップル', 'APPLE', 'apple', 'iPhone', 'iphone', 'iPad', 'ipad', 'MacBook', 'macbook', 'AirPods'],
+    'Sony': ['ソニー', 'SONY', 'sony', 'プレステ', 'PlayStation', 'PS5', 'PS4'],
+    'Nintendo': ['任天堂', 'ニンテンドー', 'NINTENDO', 'nintendo', 'Switch', 'スイッチ'],
+    'Dyson': ['ダイソン', 'DYSON', 'dyson'],
+    'Bose': ['ボーズ', 'BOSE', 'bose']
+};
+
+// 商品名からブランド名を自動判定
+function detectBrandFromProductName(productName) {
+    const input = productName.toLowerCase();
+    
+    for (const [brand, keywords] of Object.entries(brandKeywords)) {
+        for (const keyword of keywords) {
+            if (input.includes(keyword.toLowerCase())) {
+                return brand;
+            }
+        }
+    }
+    return null;
+}
+
+// 商品名入力時にブランド名を自動選択
+function setupBrandAutoDetect() {
+    const productNameInput = document.getElementById('product_name');
+    const brandInput = document.getElementById('brand_name');
+    
+    if (productNameInput && brandInput) {
+        productNameInput.addEventListener('input', function() {
+            const detectedBrand = detectBrandFromProductName(this.value);
+            
+            if (detectedBrand) {
+                if (brandInput.value === '' || brandInput.dataset.autoDetected === 'true') {
+                    brandInput.value = detectedBrand;
+                    brandInput.dataset.autoDetected = 'true';
+                    
+                    brandInput.classList.add('brand-auto-detected');
+                    setTimeout(() => {
+                        brandInput.classList.remove('brand-auto-detected');
+                    }, 1000);
+                }
+            }
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
+    
+    // ブランド名コンボボックスの初期化
+    setupBrandCombobox();
+    
+    // ブランド名自動判定の初期化
+    setupBrandAutoDetect();
     
     updateStatusFields();
     toggleSupplierDetail();
