@@ -4602,8 +4602,23 @@ def edit_item(id):
             conn.commit()
             cur.close()
             conn.close()
-            flash('商品を更新しました', 'success')
-            return redirect(url_for('index'))
+            
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item)
+            user_id = item_dict.get('user_id')
+            
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                # ユーザー商品一覧ページから来た場合はそのページに戻る
+                return redirect(referrer)
+            elif current_user.is_admin() and user_id:
+                # 管理者で商品にuser_idがある場合は、そのユーザーの商品一覧に戻る
+                return redirect(url_for('admin_user_items', id=user_id))
+            elif current_user.is_admin():
+                # 管理者でuser_idがない場合は、ユーザー商品一覧に戻る
+                return redirect(url_for('admin_user_products'))
+            else:
+                return redirect(url_for('index'))
         except Exception as e:
             print(f"[ERROR] edit_item: {e}")
             import traceback
@@ -4628,7 +4643,18 @@ def edit_item(id):
     else:
         item_dict['additional_photos_list'] = []
     
-    return render_template('form.html', item=item_dict)
+    # リファラーから戻り先URLを判定
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer:
+        back_url = url_for('admin_user_products')
+    elif '/admin/users/' in referrer and '/items' in referrer:
+        back_url = referrer
+    elif current_user.is_admin() or current_user.is_owner():
+        back_url = url_for('admin_items')
+    else:
+        back_url = url_for('index')
+
+    return render_template('form.html', item=item_dict, back_url=back_url)
 
 @app.route('/view/<int:id>')
 @login_required
@@ -4693,7 +4719,18 @@ def view_item(id):
             item_dict.get('expected_commission', 0) or 0
         )
     
-    return render_template('view.html', item=item_dict)
+    # リファラーから戻り先URLを判定
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer:
+        back_url = url_for('admin_user_products')
+    elif '/admin/users/' in referrer and '/items' in referrer:
+        back_url = referrer
+    elif current_user.is_admin() or current_user.is_owner():
+        back_url = url_for('admin_items')
+    else:
+        back_url = url_for('index')
+
+    return render_template('view.html', item=item_dict, back_url=back_url)
 
 @app.route('/delete/<int:id>')
 @login_required
@@ -11105,7 +11142,12 @@ def admin_transfer_item(id):
     
     if not target_user_id:
         flash('転送先ユーザーを選択してください', 'error')
-        return redirect(url_for('admin_items'))
+        # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+        referrer = request.referrer or ''
+        if 'admin/user-products' in referrer or 'admin/users' in referrer:
+            return redirect(referrer)
+        else:
+            return redirect(url_for('admin_items'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -11118,7 +11160,16 @@ def admin_transfer_item(id):
             flash('商品が見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         # 転送先ユーザーの確認
         cur.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
@@ -11128,7 +11179,16 @@ def admin_transfer_item(id):
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         # 転送実行
         cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, id))
@@ -11141,7 +11201,16 @@ def admin_transfer_item(id):
             flash('商品が見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         cur.execute("SELECT * FROM users WHERE id = ?", (target_user_id,))
         target_user = cur.fetchone()
@@ -11150,7 +11219,16 @@ def admin_transfer_item(id):
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, id))
     
@@ -11160,7 +11238,17 @@ def admin_transfer_item(id):
     
     target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
     flash(f'商品を「{target_name}」に転送しました', 'success')
-    return redirect(url_for('admin_items'))
+    
+    # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+    referrer = request.referrer or ''
+    item_dict = dict(item) if item else {}
+    user_id = item_dict.get('user_id') if item else None
+    if 'admin/user-products' in referrer or 'admin/users' in referrer:
+        return redirect(referrer)
+    elif user_id:
+        return redirect(url_for('admin_user_items', id=user_id))
+    else:
+        return redirect(url_for('admin_items'))
 
 @app.route('/admin/items/<int:id>/delete', methods=['POST'])
 @login_required
@@ -11233,7 +11321,12 @@ def admin_transfer_items_bulk():
     
     if not item_ids or not target_user_id:
         flash('商品と転送先ユーザーを選択してください', 'error')
-        return redirect(url_for('admin_items'))
+        # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+        referrer = request.referrer or ''
+        if 'admin/user-products' in referrer or 'admin/users' in referrer:
+            return redirect(referrer)
+        else:
+            return redirect(url_for('admin_items'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -11245,7 +11338,12 @@ def admin_transfer_items_bulk():
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            else:
+                return redirect(url_for('admin_items'))
         
         for item_id in item_ids:
             cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, item_id))
@@ -11258,7 +11356,12 @@ def admin_transfer_items_bulk():
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            else:
+                return redirect(url_for('admin_items'))
         
         for item_id in item_ids:
             cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, item_id))
@@ -11269,7 +11372,13 @@ def admin_transfer_items_bulk():
     
     target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
     flash(f'{len(item_ids)}件の商品を「{target_name}」に転送しました', 'success')
-    return redirect(url_for('admin_items'))
+    
+    # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer or 'admin/users' in referrer:
+        return redirect(referrer)
+    else:
+        return redirect(url_for('admin_items'))
 
 # ===================
 # お知らせ管理ルート（管理者用）
@@ -16355,29 +16464,87 @@ def process_disposal_request(request_id):
     conn = get_db()
     cur = conn.cursor()
     
-    if DATABASE_URL:
-        cur.execute("""
-            UPDATE item_disposal_requests 
-            SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
-            WHERE id = %s
-        """, (action, admin_note, current_user.id, request_id))
-    else:
-        cur.execute("""
-            UPDATE item_disposal_requests 
-            SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
-            WHERE id = ?
-        """, (action, admin_note, current_user.id, request_id))
+    try:
+        # 申請情報を取得（商品IDを取得するため）
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur_dict = conn.cursor(cursor_factory=RealDictCursor)
+            cur_dict.execute("""
+                SELECT merchandise_id, status 
+                FROM item_disposal_requests 
+                WHERE id = %s
+            """, (request_id,))
+            request_info = cur_dict.fetchone()
+            cur_dict.close()
+        else:
+            cur.execute("""
+                SELECT merchandise_id, status 
+                FROM item_disposal_requests 
+                WHERE id = ?
+            """, (request_id,))
+            row = cur.fetchone()
+            if row:
+                request_info = {'merchandise_id': row[0], 'status': row[1]}
+            else:
+                request_info = None
+        
+        if not request_info:
+            flash('申請が見つかりません', 'error')
+            return redirect(url_for('admin_disposal_requests'))
+        
+        # 申請ステータスを更新
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE item_disposal_requests 
+                SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
+                WHERE id = %s
+            """, (action, admin_note, current_user.id, request_id))
+        else:
+            cur.execute("""
+                UPDATE item_disposal_requests 
+                SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
+                WHERE id = ?
+            """, (action, admin_note, current_user.id, request_id))
+        
+        # 申請が完了（completed）になった場合、商品を売却済みにする
+        if action == 'completed':
+            merchandise_id = request_info['merchandise_id'] if isinstance(request_info, dict) else request_info[0]
+            
+            # 商品の売却日を更新（まだ売却日が設定されていない場合のみ）
+            if DATABASE_URL:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET sale_date = CURRENT_DATE,
+                        sale_type = 'disposal'
+                    WHERE id = %s 
+                      AND sale_date IS NULL
+                """, (merchandise_id,))
+            else:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET sale_date = DATE('now'),
+                        sale_type = 'disposal'
+                    WHERE id = ? 
+                      AND sale_date IS NULL
+                """, (merchandise_id,))
+        
+        conn.commit()
+        
+        action_names = {
+            'processing': '処理中に変更',
+            'completed': '完了',
+            'rejected': '却下'
+        }
+        flash(f'申請を{action_names.get(action, action)}しました', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'処理中にエラーが発生しました: {str(e)}', 'error')
+        import traceback
+        traceback.print_exc()
+    finally:
+        cur.close()
+        conn.close()
     
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    action_names = {
-        'processing': '処理中に変更',
-        'completed': '完了',
-        'rejected': '却下'
-    }
-    flash(f'申請を{action_names.get(action, action)}しました', 'success')
     return redirect(url_for('admin_disposal_requests'))
 
 

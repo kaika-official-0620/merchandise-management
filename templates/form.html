@@ -563,7 +563,9 @@ input:disabled, select:disabled, textarea:disabled {
     </div>
     
     <div class="form-actions">
-        {% if current_user.is_admin() or current_user.is_owner() %}
+        {% if back_url %}
+        <a href="{{ back_url }}" class="btn btn-secondary">キャンセル</a>
+        {% elif current_user.is_admin() or current_user.is_owner() %}
         <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">キャンセル</a>
         {% else %}
         <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>

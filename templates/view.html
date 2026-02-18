@@ -461,11 +461,7 @@
 <div class="page-actions">
     <div class="header-actions">
         <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-primary">編集</a>
-        {% if current_user.is_admin() or current_user.is_owner() %}
-        <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">一覧に戻る</a>
-        {% else %}
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">一覧に戻る</a>
-        {% endif %}
+        <a href="{{ back_url }}" class="btn btn-secondary">一覧に戻る</a>
     </div>
 </div>
 
