@@ -1422,7 +1422,11 @@
             if (filterOwner && !owner.includes(filterOwner)) show = false;
             if (filterCondition && condition !== filterCondition) show = false;
             if (filterStatus && status !== filterStatus) show = false;
-            if (queryStatus && status !== queryStatus) show = false;
+            if (queryStatus === 'unsold') {
+                if (status === 'sold') show = false;
+            } else if (queryStatus && status !== queryStatus) {
+                show = false;
+            }
             if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
             if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
             if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;

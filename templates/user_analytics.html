@@ -115,33 +115,42 @@
 </style>
 
 <!-- 総合サマリー -->
+{% if analytics.is_admin_view %}
+{% set list_all_url = url_for('admin_user_products') %}
+{% set list_sold_url = url_for('admin_user_products', status='sold') %}
+{% set list_unsold_url = url_for('admin_user_products', status='unsold') %}
+{% else %}
+{% set list_all_url = url_for('index') %}
+{% set list_sold_url = url_for('index', filter='sold') %}
+{% set list_unsold_url = url_for('index', filter='unsold') %}
+{% endif %}
 <div class="analytics-summary">
-    <div class="summary-card">
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
         <div class="summary-label">総登録数</div>
         <div class="summary-value">{{ analytics.summary.total_items or 0 }}件</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">販売済</div>
         <div class="summary-value">{{ analytics.summary.sold_count or 0 }}件</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
         <div class="summary-label">総仕入額</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_purchase or 0)|int) }}</div>
-    </div>
-    <div class="summary-card inventory-card">
+    </a>
+    <a class="summary-card inventory-card summary-link-card" href="{{ list_unsold_url }}">
         <div class="summary-label">保管金額</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.inventory_value or 0)|int) }}</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">総売上</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_sales or 0)|int) }}</div>
-    </div>
-    <div class="summary-card highlight">
+    </a>
+    <a class="summary-card highlight summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">総利益</div>
         <div class="summary-value {% if analytics.summary.total_profit and analytics.summary.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
             ¥{{ "{:,}".format((analytics.summary.total_profit or 0)|int) }}
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- 経費内訳サマリー -->
@@ -622,6 +631,11 @@
     padding: 1.25rem;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.summary-link-card {
+    text-decoration: none;
+    color: inherit;
 }
 
 .summary-card.highlight {
