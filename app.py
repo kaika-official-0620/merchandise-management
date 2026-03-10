@@ -5637,10 +5637,10 @@ def admin_analytics():
             kaika_query = """
                 SELECT 
                     COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('photo_packing' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('wholesale' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('multi_listing' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('auction' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as auction_fee,
                     COUNT(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 END) as kaika_count
                 FROM merchandise
                 WHERE sale_date IS NOT NULL""" + date_condition
@@ -5837,10 +5837,10 @@ def admin_analytics():
             cur.execute("""
                 SELECT 
                     COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'photo_packing') > 0 THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'wholesale') > 0 THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'multi_listing') > 0 THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'auction') > 0 THEN commission ELSE 0 END), 0) as auction_fee,
                     SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 ELSE 0 END) as kaika_count
                 FROM merchandise
                 WHERE sale_date IS NOT NULL""" + date_condition_sqlite, date_params_sqlite if date_params_sqlite else [])
