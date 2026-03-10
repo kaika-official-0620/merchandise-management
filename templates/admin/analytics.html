@@ -229,7 +229,7 @@
     <div class="admin-section widget-section">
         <h2>回転率・在庫日数</h2>
         <div class="stats-cards">
-            <div class="stat-card">
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">
@@ -239,21 +239,21 @@
                     </span>
                     <span class="stat-label">回転率（売却率）</span>
                 </div>
-            </div>
-            <div class="stat-card">
+            </a>
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats.avg_days_to_sell else '-' }}日</span>
                     <span class="stat-label">平均販売日数</span>
                 </div>
-            </div>
-            <div class="stat-card">
+            </a>
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='unsold') }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_in_stock|round(1) if turnover_stats.avg_days_in_stock else '-' }}日</span>
                     <span class="stat-label">平均在庫日数</span>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -263,7 +263,7 @@
     <div class="admin-section widget-section">
         <h2>成約率</h2>
         <div class="stats-cards">
-            <div class="stat-card wide">
+            <a class="stat-card wide analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <div class="closing-rate-chart">
                     {% set total = closing_stats.total_count or 1 %}
                     {% set sold = closing_stats.sold_count or 0 %}
@@ -278,7 +278,7 @@
                         <span class="rate-label total">全体: {{ total }}件</span>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -290,20 +290,20 @@
     <div class="admin-section widget-section">
         <h2>平均単価</h2>
         <div class="stats-cards vertical">
-            <div class="stat-card horizontal">
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products') }}">
                 <span class="stat-label">平均仕入額</span>
                 <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_purchase or 0)|int) }}</span>
-            </div>
-            <div class="stat-card horizontal">
+            </a>
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <span class="stat-label">平均売上</span>
                 <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_sale or 0)|int) }}</span>
-            </div>
-            <div class="stat-card horizontal">
+            </a>
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <span class="stat-label">平均利益</span>
                 <span class="stat-value {% if avg_price_stats.avg_profit and avg_price_stats.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                     ¥{{ "{:,}".format((avg_price_stats.avg_profit or 0)|int) }}
                 </span>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -356,7 +356,7 @@
         <h2>販売先別統計</h2>
         <div class="analytics-cards">
             {% for dest in destination_stats %}
-            <div class="analytics-card">
+            <a class="analytics-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', destination=dest.sales_destination, date_from=date_from, date_to=date_to) }}">
                 <div class="analytics-icon">
                     {% if dest.sales_destination == 'メルカリ' %}
                     {% elif dest.sales_destination == 'ヤフオク' %}
@@ -369,7 +369,7 @@
                     <p class="analytics-value">¥{{ "{:,}".format(dest.total_sales or 0) }}</p>
                     <p class="analytics-sub">{{ dest.count }}件の販売</p>
                 </div>
-            </div>
+            </a>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -383,7 +383,7 @@
         <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
             {% for brand in brand_stats %}
-            <div class="brand-stat-item">
+            <a class="brand-stat-item analytics-link-card" href="{{ url_for('admin_user_products', status='sold', brand=(brand.brand_name or ''), date_from=date_from, date_to=date_to) }}">
                 <div class="brand-rank">{{ loop.index }}</div>
                 <div class="brand-info">
                     <h4>{{ brand.brand_name or '(未設定)' }}</h4>
@@ -397,7 +397,7 @@
                         ¥{{ "{:,}".format(brand.total_profit or 0) }}
                     </span>
                 </div>
-            </div>
+            </a>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -516,6 +516,7 @@
 }
 
 .analytics-link-card {
+    display: block;
     text-decoration: none;
     color: inherit;
 }

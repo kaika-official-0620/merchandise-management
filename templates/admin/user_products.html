@@ -1065,6 +1065,7 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
+                    data-sales-destination="{{ item.sales_destination or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
                     data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.purchase_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
@@ -1382,6 +1383,8 @@
         const querySaleType = (query.get('sale_type') || '').toLowerCase();
         const querySaleTypeNot = (query.get('sale_type_not') || '').toLowerCase();
         const queryStatus = (query.get('status') || '').toLowerCase();
+        const queryBrand = (query.get('brand') || '').toLowerCase();
+        const queryDestination = (query.get('destination') || '').toLowerCase();
         const queryDateFrom = query.get('date_from') || '';
         const queryDateTo = query.get('date_to') || '';
 
@@ -1415,6 +1418,7 @@
             const saleType = (row.dataset.saleType || '').toLowerCase();
             const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
             const saleDate = row.dataset.saleDate || '';
+            const salesDestination = (row.dataset.salesDestination || '').toLowerCase();
             const purchasePrice = row.dataset.purchasePrice || '0';
             const salePrice = row.dataset.salePrice || '0';
             const profit = row.dataset.profit || '0';
@@ -1435,6 +1439,8 @@
             }
             if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
             if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
+            if (queryBrand && !brand.includes(queryBrand)) show = false;
+            if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
             if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
             if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
 
@@ -1742,11 +1748,16 @@
     document.addEventListener('DOMContentLoaded', function () {
         const query = new URLSearchParams(window.location.search);
         const queryStatus = query.get('status');
+        const queryBrand = query.get('brand');
         if (queryStatus) {
             const statusInput = document.getElementById('tab-filter-status');
             if (statusInput) statusInput.value = queryStatus;
         }
-        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('date_from') || query.get('date_to')) {
+        if (queryBrand) {
+            const brandInput = document.getElementById('tab-filter-brand');
+            if (brandInput) brandInput.value = queryBrand;
+        }
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to')) {
             filterTable();
             updateFilterCount();
         }
