@@ -64,13 +64,13 @@
             </span>
         </div>
     </div>
-    <div class="admin-stat-card kaika-fee-card">
+    <a class="admin-stat-card kaika-fee-card" href="{{ url_for('admin_user_products', status='sold', sale_type_not='normal', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">開花手数料</div>
         <div class="stat-content">
             <span class="stat-value kaika-fee-value">¥{{ "{:,}".format((kaika_fee.summary.total_kaika_fee or 0)|int) }}</span>
         </div>
         <div class="stat-sub">{{ kaika_fee.summary.kaika_count or 0 }}件</div>
-    </div>
+    </a>
 </div>
 
 <!-- 開花手数料 詳細と推移 -->
@@ -80,22 +80,22 @@
     <div class="kaika-breakdown-only">
         <h3>サービス別内訳</h3>
         <div class="kaika-items">
-            <div class="kaika-item">
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='photo_packing', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">📸 撮影梱包等代行サービス</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='wholesale', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">🏭 業者卸販売</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='multi_listing', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">📋 同時出品サービス</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='auction', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">🔨 オークション流し</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
-            </div>
+            </a>
         </div>
     </div>
 </div>

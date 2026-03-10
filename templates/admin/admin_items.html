@@ -1062,6 +1062,8 @@
                     data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.purchase_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
+                    data-sale-type="{{ item.sale_type or '' }}"
+                    data-sale-date="{{ item.sale_date or '' }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
@@ -1370,6 +1372,12 @@
         const filterOwner = (document.getElementById('tab-filter-owner')?.value || '').toLowerCase();
         const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
         const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+        const query = new URLSearchParams(window.location.search);
+        const querySaleType = (query.get('sale_type') || '').toLowerCase();
+        const querySaleTypeNot = (query.get('sale_type_not') || '').toLowerCase();
+        const queryStatus = (query.get('status') || '').toLowerCase();
+        const queryDateFrom = query.get('date_from') || '';
+        const queryDateTo = query.get('date_to') || '';
 
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
         const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
@@ -1398,6 +1406,9 @@
             const owner = (row.dataset.owner || '').toLowerCase();
             const condition = row.dataset.condition || '';
             const status = row.dataset.status || '';
+            const saleType = (row.dataset.saleType || '').toLowerCase();
+            const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
+            const saleDate = row.dataset.saleDate || '';
             const purchasePrice = row.dataset.purchasePrice || '0';
             const salePrice = row.dataset.salePrice || '0';
             const profit = row.dataset.profit || '0';
@@ -1411,6 +1422,11 @@
             if (filterOwner && !owner.includes(filterOwner)) show = false;
             if (filterCondition && condition !== filterCondition) show = false;
             if (filterStatus && status !== filterStatus) show = false;
+            if (queryStatus && status !== queryStatus) show = false;
+            if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
+            if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
+            if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
+            if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
 
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
             if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
@@ -1715,6 +1731,17 @@
 
     // スワイプカルーセルのインジケーター更新
     document.addEventListener('DOMContentLoaded', function () {
+        const query = new URLSearchParams(window.location.search);
+        const queryStatus = query.get('status');
+        if (queryStatus) {
+            const statusInput = document.getElementById('tab-filter-status');
+            if (statusInput) statusInput.value = queryStatus;
+        }
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('date_from') || query.get('date_to')) {
+            filterTable();
+            updateFilterCount();
+        }
+
         const mobileCards = document.getElementById('mobileCards');
         const currentIndex = document.querySelector('.current-index');
         const totalCount = document.querySelector('.total-count');
