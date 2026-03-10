@@ -668,6 +668,10 @@
     }
 
     function renderMonthlyReport(data) {
+        const wholesaleRateSummary = (data.summary.wholesale_fee_rate_counts || [])
+            .map(item => `${Number(item.rate)}%: ${item.count}件`)
+            .join(' / ') || '-';
+
         let html = `
         <div class="report-summary">
             <div class="summary-item">
@@ -689,6 +693,14 @@
             <div class="summary-item">
                 <div class="label">手数料</div>
                 <div class="value">¥${Number(data.summary.total_commission).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料合計</div>
+                <div class="value">¥${Number(data.summary.total_wholesale_fee || 0).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料率内訳</div>
+                <div class="value">${wholesaleRateSummary}</div>
             </div>
             <div class="summary-item">
                 <div class="label">純利益</div>
@@ -735,6 +747,10 @@
     }
 
     function renderInventoryReport(data) {
+        const wholesaleRateSummary = (data.summary.wholesale_fee_rate_counts || [])
+            .map(item => `${Number(item.rate)}%: ${item.count}件`)
+            .join(' / ') || '-';
+
         let html = `
         <div class="report-summary">
             <div class="summary-item">
@@ -748,6 +764,14 @@
             <div class="summary-item">
                 <div class="label">出品価格合計</div>
                 <div class="value">¥${Number(data.summary.total_listing).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料合計</div>
+                <div class="value">¥${Number(data.summary.total_wholesale_fee || 0).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料率内訳</div>
+                <div class="value">${wholesaleRateSummary}</div>
             </div>
         </div>
         <div class="report-table-wrapper">

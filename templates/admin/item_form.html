@@ -237,8 +237,19 @@
             </div>
             
             <div class="form-group">
+                <label for="wholesale_price">卸価格</label>
+                <input type="number" id="wholesale_price" name="wholesale_price" value="0" min="0">
+            </div>
+
+            <div class="form-group">
+                <label for="wholesale_fee_rate">卸手数料（%）</label>
+                <input type="number" id="wholesale_fee_rate" name="wholesale_fee_rate" value="0" min="0" step="0.01">
+            </div>
+
+            <div class="form-group">
                 <label for="purchase_price">仕入額</label>
-                <input type="number" id="purchase_price" name="purchase_price" value="0" min="0">
+                <input type="number" id="purchase_price" name="purchase_price" value="0" min="0" readonly>
+                <small class="form-help">卸価格と卸手数料（%）から自動計算されます</small>
             </div>
             
             <div class="form-group">
@@ -505,6 +516,14 @@ function calculateProfit() {
     actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
 }
 
+function recalculatePurchasePrice() {
+    const wholesalePrice = parseFloat(document.getElementById('wholesale_price').value) || 0;
+    const wholesaleFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
+    const purchasePrice = Math.round(wholesalePrice * (1 + (wholesaleFeeRate / 100)));
+    document.getElementById('purchase_price').value = purchasePrice;
+    calculateProfit();
+}
+
 function calculateCommission() {
     if (!autoCalculateCommission) return;
     
@@ -551,6 +570,9 @@ document.getElementById('commission').addEventListener('input', function() {
     autoCalculateCommission = false;
     calculateProfit();
 });
+
+document.getElementById('wholesale_price').addEventListener('input', recalculatePurchasePrice);
+document.getElementById('wholesale_fee_rate').addEventListener('input', recalculatePurchasePrice);
 
 document.querySelectorAll('input[type="number"]').forEach(input => {
     if (input.id !== 'sale_price' && input.id !== 'commission') {
@@ -863,6 +885,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     updateStatusFields();
     toggleSupplierDetail();
+    recalculatePurchasePrice();
     
     // 画像リサイズ処理
     const MAX_WIDTH = 1200;

@@ -2908,6 +2908,23 @@ def api_report(report_type):
     conn = get_db()
     data = {'items': [], 'summary': {}}
 
+    def calculate_wholesale_fee_stats(items):
+        total_wholesale_fee = 0
+        rate_count_map = {}
+
+        for item in items:
+            wholesale_price = int(item.get('wholesale_price') or 0)
+            wholesale_fee_rate = float(item.get('wholesale_fee_rate') or 0)
+            wholesale_fee = int(round(wholesale_price * wholesale_fee_rate / 100))
+            total_wholesale_fee += wholesale_fee
+            rate_count_map[wholesale_fee_rate] = rate_count_map.get(wholesale_fee_rate, 0) + 1
+
+        wholesale_fee_rate_counts = [
+            {'rate': rate, 'count': count}
+            for rate, count in sorted(rate_count_map.items(), key=lambda x: x[0])
+        ]
+        return total_wholesale_fee, wholesale_fee_rate_counts
+
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2916,7 +2933,7 @@ def api_report(report_type):
             # 月次売上報告書
             cur.execute("""
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
-                       shipping_cost, commission, sale_type
+                       shipping_cost, commission, sale_type, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
                 WHERE sale_date IS NOT NULL
                   AND ({user_filter})
@@ -2937,6 +2954,7 @@ def api_report(report_type):
             total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
             total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
@@ -2947,6 +2965,8 @@ def api_report(report_type):
                     'total_purchase': total_purchase,
                     'total_shipping': total_shipping,
                     'total_commission': total_commission,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts,
                     'total_profit': total_profit
                 }
             }
@@ -2955,7 +2975,7 @@ def api_report(report_type):
             # 在庫一覧表
             cur.execute("""
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
-                       purchase_price, listing_price, is_listed
+                       purchase_price, listing_price, is_listed, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
                 WHERE sale_date IS NULL
                   AND ({user_filter})
@@ -2971,13 +2991,16 @@ def api_report(report_type):
             
             total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             total_listing = int(sum(i['listing_price'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             
             data = {
                 'items': items,
                 'summary': {
                     'count': len(items),
                     'total_purchase': total_purchase,
-                    'total_listing': total_listing
+                    'total_listing': total_listing,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts
                 }
             }
             
@@ -3168,7 +3191,7 @@ def api_report(report_type):
         if report_type == 'monthly':
             cur.execute("""
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
-                       shipping_cost, commission, sale_type
+                       shipping_cost, commission, sale_type, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
                 WHERE sale_date IS NOT NULL
                   AND ({user_filter})
@@ -3184,6 +3207,7 @@ def api_report(report_type):
             total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
             total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
@@ -3194,6 +3218,8 @@ def api_report(report_type):
                     'total_purchase': total_purchase,
                     'total_shipping': total_shipping,
                     'total_commission': total_commission,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts,
                     'total_profit': total_profit
                 }
             }
@@ -3201,7 +3227,7 @@ def api_report(report_type):
         elif report_type == 'inventory':
             cur.execute("""
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
-                       purchase_price, listing_price, is_listed
+                       purchase_price, listing_price, is_listed, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
                 WHERE sale_date IS NULL
                   AND ({user_filter})
@@ -3213,13 +3239,16 @@ def api_report(report_type):
             
             total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             total_listing = int(sum(i['listing_price'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             
             data = {
                 'items': items,
                 'summary': {
                     'count': len(items),
                     'total_purchase': total_purchase,
-                    'total_listing': total_listing
+                    'total_listing': total_listing,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts
                 }
             }
             
