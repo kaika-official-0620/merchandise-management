@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import time
 import calendar
+from decimal import Decimal
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -250,6 +251,8 @@ if DATABASE_URL:
                 brand_name VARCHAR(100),
                 item_condition VARCHAR(10),
                 store_name VARCHAR(200),
+                wholesale_price INTEGER DEFAULT 0,
+                wholesale_fee_rate DECIMAL(5,2) DEFAULT 0,
                 purchase_price INTEGER DEFAULT 0,
                 payment_method VARCHAR(50),
                 listing_price INTEGER DEFAULT 0,
@@ -307,6 +310,18 @@ if DATABASE_URL:
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS supplier_detail VARCHAR(50)")
+        except:
+            pass
+
+        # 卸価格カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS wholesale_price INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # 卸手数料率カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS wholesale_fee_rate DECIMAL(5,2) DEFAULT 0")
         except:
             pass
         
@@ -1143,6 +1158,8 @@ else:
                 brand_name TEXT,
                 item_condition TEXT,
                 store_name TEXT,
+                wholesale_price INTEGER DEFAULT 0,
+                wholesale_fee_rate REAL DEFAULT 0,
                 purchase_price INTEGER DEFAULT 0,
                 payment_method TEXT,
                 listing_price INTEGER DEFAULT 0,
@@ -1200,6 +1217,18 @@ else:
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN supplier_detail TEXT")
+        except:
+            pass
+
+        # 卸価格カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN wholesale_price INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # 卸手数料率カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN wholesale_fee_rate REAL DEFAULT 0")
         except:
             pass
         
@@ -9116,6 +9145,8 @@ def export_backup():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9124,7 +9155,7 @@ def export_backup():
     
     # JSONファイルとしてダウンロード
     output = io.BytesIO()
-    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
     output.seek(0)
     
     return send_file(
@@ -9230,6 +9261,8 @@ def export_backup_with_images():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9240,7 +9273,7 @@ def export_backup_with_images():
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # JSONデータを追加
-        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2, default=str)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
         # 画像ファイルを追加するヘルパー関数
@@ -9405,6 +9438,8 @@ def export_user_backup():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9412,7 +9447,7 @@ def export_user_backup():
     backup_data = convert_dates(backup_data)
     
     output = io.BytesIO()
-    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
     output.seek(0)
     
     return send_file(
@@ -9528,6 +9563,8 @@ def export_user_backup_with_images():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9538,7 +9575,7 @@ def export_user_backup_with_images():
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # JSONデータを追加
-        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2, default=str)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
         # 画像ファイルを追加するヘルパー関数
@@ -10998,6 +11035,10 @@ def admin_add_item():
             # 管理者モードの場合、ユーザーなし
             target_user_id = None
         
+        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
+        calculated_purchase_price = int(round(wholesale_price * (1 + wholesale_fee_rate / 100)))
+
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -11064,10 +11105,10 @@ def admin_add_item():
                     user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, 
                     model_number, item_condition, store_name, supplier_detail, 
                     id_document_path, consent_form_path,
-                    purchase_price, payment_method, listing_price, expected_shipping, 
+                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, 
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price, 
                     shipping_cost, sales_destination, commission, is_shipped
-                ) VALUES ({', '.join([placeholder] * 26)})
+                ) VALUES ({', '.join([placeholder] * 28)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
@@ -11081,7 +11122,9 @@ def admin_add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
+                wholesale_price,
+                wholesale_fee_rate,
+                calculated_purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
