@@ -13005,8 +13005,6 @@ def user_mitsumori_add():
                   AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
                   AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
                   AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
-                  AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
-                  AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         else:
@@ -13018,8 +13016,6 @@ def user_mitsumori_add():
                   AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
                   AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
                   AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
-                  AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
-                  AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -13148,8 +13144,6 @@ def user_mitsumori_edit(id):
               AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
               AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
               AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
-              AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
-              AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     else:
@@ -13161,8 +13155,6 @@ def user_mitsumori_edit(id):
               AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
               AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
               AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
-              AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
-              AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -14118,9 +14110,7 @@ def api_get_products():
             where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
         
         where_clause = "WHERE " + " AND ".join(where_conditions)
         
@@ -14153,9 +14143,7 @@ def api_get_products():
             where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
         
         where_clause = "WHERE " + " AND ".join(where_conditions)
         
@@ -14220,9 +14208,7 @@ def api_get_all_products():
             where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
         
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
@@ -14273,9 +14259,7 @@ def api_get_all_products():
             where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
                 AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
-                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
         
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
