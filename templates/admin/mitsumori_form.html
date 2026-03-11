@@ -66,6 +66,12 @@
                 <option value="sold">売却済みのみ</option>
                 <option value="inventory">在庫のみ</option>
             </select>
+            <select id="sold-days-filter" class="form-control" style="max-width: 170px;">
+                <option value="">売却日: すべて</option>
+                <option value="7">直近7日以内</option>
+                <option value="30">直近30日以内</option>
+                <option value="90">直近90日以内</option>
+            </select>
             <select id="product-select" class="form-control">
                 <option value="">-- 商品を選択 --</option>
             </select>
@@ -441,6 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addRowBtn = document.getElementById('add-row');
     const productSelect = document.getElementById('product-select');
     const productFilter = document.getElementById('product-filter');
+    const soldDaysFilter = document.getElementById('sold-days-filter');
     const addProductBtn = document.getElementById('add-product-btn');
     
     let products = [];
@@ -457,6 +464,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 params.append('sold_only', '1');
             } else if (filterValue === 'inventory') {
                 params.append('inventory_only', '1');
+            }
+            params.append('exclude_used', '1');
+            if (soldDaysFilter.value) {
+                params.append('sold_days', soldDaysFilter.value);
             }
             
             if (params.toString()) {
@@ -486,6 +497,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // フィルター変更時に商品一覧を更新
     productFilter.addEventListener('change', function() {
+        loadProducts();
+    });
+    soldDaysFilter.addEventListener('change', function() {
         loadProducts();
     });
     

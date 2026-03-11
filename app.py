@@ -491,6 +491,7 @@ if DATABASE_URL:
         try:
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_date DATE")
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -551,6 +552,7 @@ if DATABASE_URL:
         # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -770,12 +772,17 @@ if DATABASE_URL:
                 mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name VARCHAR(200) NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit VARCHAR(20),
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_mitsumori_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # ユーザー向け計算書テーブル
         cur.execute('''
@@ -801,12 +808,17 @@ if DATABASE_URL:
                 keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name VARCHAR(200) NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit VARCHAR(20),
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_keisan_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # マスター: ブランドカテゴリ
         cur.execute('''
@@ -1405,6 +1417,10 @@ else:
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN product_code TEXT")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # 買取明細書テーブル（ユーザー→管理者）
         cur.execute('''
@@ -1475,6 +1491,10 @@ else:
         # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE invoice_items ADD COLUMN product_code TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -1697,12 +1717,17 @@ else:
                 mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name TEXT NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_mitsumori_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # ユーザー向け計算書テーブル
         cur.execute('''
@@ -1728,12 +1753,17 @@ else:
                 keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name TEXT NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_keisan_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # マスター: ブランドカテゴリ
         cur.execute('''
@@ -7245,6 +7275,7 @@ def admin_auction_keisan_edit(id):
         
         # 明細を取得
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -11131,19 +11162,20 @@ def admin_add_item():
         try:
             cur.execute(f'''
                 INSERT INTO merchandise (
-                    user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, 
+                    user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, 
                     model_number, item_condition, store_name, supplier_detail, 
                     id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, 
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price, 
                     shipping_cost, sales_destination, commission, is_shipped
-                ) VALUES ({', '.join([placeholder] * 28)})
+                ) VALUES ({', '.join([placeholder] * 29)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
+                request.form.get('kaika_product_code'),
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -11692,6 +11724,7 @@ def admin_shikiriosho_add():
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
         amounts = request.form.getlist('amount[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算（税込金額を直接入力）
         total_amount = 0
@@ -11705,6 +11738,7 @@ def admin_shikiriosho_add():
                     'product_name': name,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': 1,
                     'unit_price': amount,
                     'amount': amount
@@ -11730,10 +11764,10 @@ def admin_shikiriosho_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -11748,10 +11782,10 @@ def admin_shikiriosho_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -11803,6 +11837,7 @@ def admin_shikiriosho_edit(id):
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
         amounts = request.form.getlist('amount[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算（税込金額を直接入力）
         total_amount = 0
@@ -11816,6 +11851,7 @@ def admin_shikiriosho_edit(id):
                     'product_name': name,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': 1,
                     'unit_price': amount,
                     'amount': amount
@@ -11841,10 +11877,10 @@ def admin_shikiriosho_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -11861,10 +11897,10 @@ def admin_shikiriosho_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12487,6 +12523,7 @@ def user_invoice_add():
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算
         subtotal = 0
@@ -12513,6 +12550,7 @@ def user_invoice_add():
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12541,10 +12579,10 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -12561,10 +12599,10 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12627,6 +12665,7 @@ def user_invoice_edit(id):
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算
         subtotal = 0
@@ -12653,6 +12692,7 @@ def user_invoice_edit(id):
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12678,10 +12718,10 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur.execute("""
                 UPDATE invoices SET
@@ -12697,10 +12737,10 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12860,6 +12900,7 @@ def user_mitsumori_add():
         
         # 明細項目
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -12876,6 +12917,7 @@ def user_mitsumori_add():
                 items_data.append({
                     'item_no': i + 1,
                     'item_name': name,
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12901,9 +12943,9 @@ def user_mitsumori_add():
             
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
@@ -12920,9 +12962,9 @@ def user_mitsumori_add():
             
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12958,14 +13000,26 @@ def user_mitsumori_add():
             cur.execute("""
                 SELECT id, product_name, brand_name, listing_price, photo_path 
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL 
+                WHERE user_id = %s AND sale_date IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         else:
             cur.execute("""
                 SELECT id, product_name, brand_name, listing_price, photo_path 
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL 
+                WHERE user_id = ? AND sale_date IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -13018,6 +13072,7 @@ def user_mitsumori_edit(id):
         
         # 明細項目
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -13034,6 +13089,7 @@ def user_mitsumori_edit(id):
                 items_data.append({
                     'item_no': i + 1,
                     'item_name': name,
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -13050,9 +13106,9 @@ def user_mitsumori_edit(id):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur.execute("""
                 UPDATE user_mitsumori SET issue_date = ?, valid_until = ?, company_name = ?, department = ?, 
@@ -13063,9 +13119,9 @@ def user_mitsumori_edit(id):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -13087,14 +13143,26 @@ def user_mitsumori_edit(id):
         cur.execute("""
             SELECT id, product_name, brand_name, listing_price, photo_path 
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NULL 
+            WHERE user_id = %s AND sale_date IS NULL
+              AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     else:
         cur.execute("""
             SELECT id, product_name, brand_name, listing_price, photo_path 
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NULL 
+            WHERE user_id = ? AND sale_date IS NULL
+              AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -14022,43 +14090,82 @@ def api_get_products():
     """
     sold_only = request.args.get('sold_only')
     inventory_only = request.args.get('inventory_only')
+    sold_days = request.args.get('sold_days')
+    exclude_used = request.args.get('exclude_used')
+    sold_days_value = None
+    if sold_days and sold_days.isdigit():
+        sold_days_value = int(sold_days)
     
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # フィルター条件を構築
-        where_clause = "WHERE user_id = %s"
+        where_conditions = ["m.user_id = %s"]
         params = [current_user.id]
         
         if sold_only == '1':
-            where_clause += " AND sale_date IS NOT NULL"
+            where_conditions.append("m.sale_date IS NOT NULL")
         elif inventory_only == '1':
-            where_clause += " AND sale_date IS NULL"
+            where_conditions.append("m.sale_date IS NULL")
+        
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("m.sale_date >= CURRENT_DATE - (%s * INTERVAL '1 day')")
+            params.append(sold_days_value)
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions)
         
         cur.execute(f"""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
-            FROM merchandise 
+            SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date,
+                   m.is_shipped, m.purchase_date, m.item_condition, m.commission, m.shipping_cost,
+                   m.sales_destination, m.id_document_path, m.consent_form_path
+            FROM merchandise m
             {where_clause}
-            ORDER BY created_at DESC
+            ORDER BY m.created_at DESC
         """, params)
     else:
         cur = conn.cursor()
         
         # フィルター条件を構築
-        where_clause = "WHERE user_id = ?"
+        where_conditions = ["m.user_id = ?"]
         params = [current_user.id]
         
         if sold_only == '1':
-            where_clause += " AND sale_date IS NOT NULL"
+            where_conditions.append("m.sale_date IS NOT NULL")
         elif inventory_only == '1':
-            where_clause += " AND sale_date IS NULL"
+            where_conditions.append("m.sale_date IS NULL")
+        
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("date(m.sale_date) >= date('now', '-' || ? || ' day')")
+            params.append(str(sold_days_value))
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions)
         
         cur.execute(f"""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
-            FROM merchandise 
+            SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date,
+                   m.is_shipped, m.purchase_date, m.item_condition, m.commission, m.shipping_cost,
+                   m.sales_destination, m.id_document_path, m.consent_form_path
+            FROM merchandise m
             {where_clause}
-            ORDER BY created_at DESC
+            ORDER BY m.created_at DESC
         """, params)
     
     products = [dict(row) for row in cur.fetchall()]
@@ -14080,6 +14187,11 @@ def api_get_all_products():
     user_id = request.args.get('user_id')
     sold_only = request.args.get('sold_only')
     inventory_only = request.args.get('inventory_only')
+    sold_days = request.args.get('sold_days')
+    exclude_used = request.args.get('exclude_used')
+    sold_days_value = None
+    if sold_days and sold_days.isdigit():
+        sold_days_value = int(sold_days)
     
     conn = get_db()
     
@@ -14099,11 +14211,26 @@ def api_get_all_products():
         elif inventory_only == '1':
             where_conditions.append("m.sale_date IS NULL")
         
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("m.sale_date >= CURRENT_DATE - (%s * INTERVAL '1 day')")
+            params.append(sold_days_value)
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+        
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
         if params:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -14113,6 +14240,8 @@ def api_get_all_products():
         else:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -14135,11 +14264,26 @@ def api_get_all_products():
         elif inventory_only == '1':
             where_conditions.append("m.sale_date IS NULL")
         
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("date(m.sale_date) >= date('now', '-' || ? || ' day')")
+            params.append(str(sold_days_value))
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_kaitori_shoudaku_items uksi WHERE uksi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM admin_kaitori_shoudaku_items aksi WHERE aksi.merchandise_id = m.id)""")
+        
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
         if params:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -14149,6 +14293,8 @@ def api_get_all_products():
         else:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id

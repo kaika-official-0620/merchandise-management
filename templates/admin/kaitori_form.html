@@ -96,6 +96,12 @@
         <h3>買取商品</h3>
         <div class="product-selector">
             <label>登録商品から追加：</label>
+            <select id="sold-days-filter" class="form-control" style="max-width: 170px;">
+                <option value="">売却日: すべて</option>
+                <option value="7">直近7日以内</option>
+                <option value="30">直近30日以内</option>
+                <option value="90">直近90日以内</option>
+            </select>
             <select id="product-select" class="form-control">
                 <option value="">-- ユーザーを選択してください --</option>
             </select>
@@ -547,6 +553,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const itemsBody = document.getElementById('items-body');
     const addRowBtn = document.getElementById('add-row');
     const productSelect = document.getElementById('product-select');
+    const soldDaysFilter = document.getElementById('sold-days-filter');
     const addProductBtn = document.getElementById('add-product-btn');
     const sellerSelect = document.getElementById('seller_id');
     
@@ -561,7 +568,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
-            const response = await fetch('/api/admin/products?user_id=' + userId);
+            const params = new URLSearchParams();
+            params.append('user_id', userId);
+            params.append('exclude_used', '1');
+            if (soldDaysFilter.value) {
+                params.append('sold_days', soldDaysFilter.value);
+            }
+            const response = await fetch('/api/admin/products?' + params.toString());
             products = await response.json();
             updateProductSelect();
         } catch (error) {
@@ -586,6 +599,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (sellerSelect.value) {
         loadUserProducts();
     }
+    soldDaysFilter.addEventListener('change', function() {
+        loadUserProducts();
+    });
     
     // 商品を追加
     addProductBtn.addEventListener('click', function() {

@@ -290,6 +290,12 @@
                 <label for="listing_date">出品日</label>
                 <input type="date" id="listing_date" name="listing_date">
             </div>
+
+            <!-- 出品中・売却済み時のみ表示 -->
+            <div id="listing-price-group" class="form-group" style="display: none;">
+                <label for="listing_price">出品価格</label>
+                <input type="number" id="listing_price" name="listing_price" value="0" min="0">
+            </div>
             
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
@@ -583,13 +589,16 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
 function updateStatusFields() {
     const status = document.getElementById('item_status').value;
     const listingDateGroup = document.getElementById('listing-date-group');
+    const listingPriceGroup = document.getElementById('listing-price-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
     
     if (status === 'listed' || status === 'sold') {
         listingDateGroup.style.display = 'block';
+        listingPriceGroup.style.display = 'block';
     } else {
         listingDateGroup.style.display = 'none';
+        listingPriceGroup.style.display = 'none';
     }
     
     if (status === 'sold') {

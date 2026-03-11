@@ -643,6 +643,16 @@
         vertical-align: middle;
     }
 
+    .data-table th.product-name-col,
+    .data-table td.product-name-col {
+        min-width: 300px;
+        width: 300px;
+    }
+
+    .data-table td.product-name-col {
+        white-space: nowrap;
+    }
+
     .data-table tbody tr:hover {
         background: #f8fafc;
     }
@@ -2115,7 +2125,7 @@
                 <tr>
                     <th style="width: 60px;">写真</th>
                     <th class="sortable" data-sort="id">No</th>
-                    <th class="sortable" data-sort="product_name">商品名</th>
+                    <th class="sortable product-name-col" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
                     <th>状態</th>
@@ -2155,7 +2165,7 @@
                         {% endif %}
                     </td>
                     <td>{{ item.id }}</td>
-                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
                     <td>
