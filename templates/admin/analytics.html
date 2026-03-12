@@ -451,6 +451,54 @@
 </div>
 {% endif %}
 
+<!-- デバッグ情報パネル -->
+{% if debug_info %}
+<div class="admin-section" style="margin-top: 2rem;">
+    <details>
+        <summary style="cursor:pointer; font-weight:600; color:#64748b; padding:0.5rem 0;">🔧 デバッグ情報（管理者用）</summary>
+        <div style="background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:1rem; margin-top:0.5rem; font-size:0.85rem; line-height:1.6;">
+            <p><strong>DB種類:</strong> {{ debug_info.db_type }}</p>
+            <p><strong>DATABASE_URL設定:</strong> {{ '有り' if debug_info.db_url_set else '無し（SQLite使用）' }}</p>
+            {% if debug_info.error %}
+            <p style="color:#dc2626;"><strong>エラー:</strong> {{ debug_info.error }}</p>
+            {% if debug_info.traceback %}
+            <pre style="background:#fef2f2; border:1px solid #fecaca; border-radius:4px; padding:0.5rem; font-size:0.75rem; overflow-x:auto; white-space:pre-wrap;">{{ debug_info.traceback }}</pre>
+            {% endif %}
+            {% else %}
+            <p style="color:#16a34a;"><strong>エラー:</strong> なし</p>
+            {% endif %}
+            <hr style="border:none; border-top:1px solid #e2e8f0; margin:0.75rem 0;">
+            <p><strong>クエリ結果:</strong></p>
+            <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+                <thead>
+                    <tr style="background:#e2e8f0;">
+                        <th style="padding:4px 8px; text-align:left; border:1px solid #cbd5e1;">項目</th>
+                        <th style="padding:4px 8px; text-align:left; border:1px solid #cbd5e1;">値</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key, value in debug_info.queries.items() %}
+                    <tr>
+                        <td style="padding:4px 8px; border:1px solid #cbd5e1;">{{ key }}</td>
+                        <td style="padding:4px 8px; border:1px solid #cbd5e1; {% if 'error' in key %}color:#dc2626; font-weight:600;{% endif %}">{{ value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <hr style="border:none; border-top:1px solid #e2e8f0; margin:0.75rem 0;">
+            <p><strong>テンプレート変数:</strong></p>
+            <ul style="margin:0; padding-left:1.2rem;">
+                <li>brand_stats: {{ brand_stats|length if brand_stats is defined and brand_stats else '未定義or空' }}件</li>
+                <li>destination_stats: {{ destination_stats|length if destination_stats is defined and destination_stats else '未定義or空' }}件</li>
+                <li>enabled_keys: {{ enabled_keys|join(', ') if enabled_keys else 'なし' }}</li>
+                <li>date_from: {{ date_from or '(未指定)' }}</li>
+                <li>date_to: {{ date_to or '(未指定)' }}</li>
+            </ul>
+        </div>
+    </details>
+</div>
+{% endif %}
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
