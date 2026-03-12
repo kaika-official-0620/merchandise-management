@@ -5735,6 +5735,12 @@ def admin_analytics():
     top_destination = {}
     auction_stats = {}
     analytics_memo = ''
+    debug_info = {
+        'db_type': 'PostgreSQL' if DATABASE_URL else 'SQLite',
+        'db_url_set': bool(DATABASE_URL),
+        'error': None,
+        'queries': {},
+    }
     
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
@@ -5787,6 +5793,15 @@ def admin_analytics():
                 WHERE 1=1 """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
             execute_optional_params(query, date_params)
             overall_stats = dict(cur.fetchone() or {})
+            debug_info['queries']['overall_stats'] = {'total_items': overall_stats.get('total_items', 0)}
+
+            # DB内の全商品数と売却済み件数
+            cur.execute("SELECT COUNT(*) as total FROM merchandise")
+            debug_info['queries']['db_total_rows'] = cur.fetchone()['total']
+            cur.execute("SELECT COUNT(*) as total FROM merchandise WHERE sale_date IS NOT NULL")
+            debug_info['queries']['db_sold_rows'] = cur.fetchone()['total']
+            cur.execute("SELECT COUNT(*) as total FROM merchandise WHERE sale_price > 0")
+            debug_info['queries']['db_has_sale_price'] = cur.fetchone()['total']
             
             # 開花手数料（sale_typeがnormal以外の手数料合計）
             kaika_query = """
@@ -5852,6 +5867,9 @@ def admin_analytics():
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
             widgets = cur.fetchall()
             enabled_widgets = {w['widget_key']: w for w in widgets if w['is_enabled']}
+            debug_info['queries']['enabled_widgets'] = list(enabled_widgets.keys())
+            debug_info['queries']['brand_stats_enabled'] = 'brand_stats' in enabled_widgets
+            debug_info['queries']['destination_stats_enabled'] = 'destination_stats' in enabled_widgets
             
             # 売上・利益（月別推移）
             if 'sales_profit' in enabled_widgets:
@@ -5987,13 +6005,36 @@ def admin_analytics():
                                 THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, FALSE) = TRUE AND COALESCE(sale_price, 0) > 0))""" + date_condition + """
                     GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
                 """
-                execute_optional_params(brand_stats_query, date_params)
-                analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+                try:
+                    execute_optional_params(brand_stats_query, date_params)
+                    brand_stats_rows = [dict(b) for b in cur.fetchall()]
+                    debug_info['queries']['brand_stats_first_try'] = len(brand_stats_rows)
+                    if not brand_stats_rows:
+                        cur.execute("""
+                            SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
+                                   COUNT(*) as count, 
+                                   SUM(sale_price) as total_sales,
+                                   SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                                   CASE WHEN SUM(purchase_price) > 0 
+                                        THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
+                                        ELSE 0 END as profit_rate
+                            FROM merchandise 
+                            WHERE (sale_date IS NOT NULL OR COALESCE(sale_price, 0) > 0)
+                            GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
+                            ORDER BY profit_rate DESC
+                            LIMIT 10
+                        """)
+                        brand_stats_rows = [dict(b) for b in cur.fetchall()]
+                        debug_info['queries']['brand_stats_fallback'] = len(brand_stats_rows)
+                    analytics_data['brand_stats'] = brand_stats_rows
+                except Exception as brand_err:
+                    debug_info['queries']['brand_stats_error'] = str(brand_err)
+                    analytics_data['brand_stats'] = []
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
@@ -6001,12 +6042,29 @@ def admin_analytics():
                     SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
                            COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, FALSE) = TRUE AND COALESCE(sale_price, 0) > 0))""" + date_condition + """
                     GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
                 """
-                execute_optional_params(destination_stats_query, date_params)
-                analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
+                try:
+                    execute_optional_params(destination_stats_query, date_params)
+                    destination_stats_rows = [dict(d) for d in cur.fetchall()]
+                    debug_info['queries']['destination_stats_first_try'] = len(destination_stats_rows)
+                    if not destination_stats_rows:
+                        cur.execute("""
+                            SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                                   COUNT(*) as count, SUM(sale_price) as total_sales
+                            FROM merchandise 
+                            WHERE (sale_date IS NOT NULL OR COALESCE(sale_price, 0) > 0)
+                            GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
+                            ORDER BY total_sales DESC
+                        """)
+                        destination_stats_rows = [dict(d) for d in cur.fetchall()]
+                        debug_info['queries']['destination_stats_fallback'] = len(destination_stats_rows)
+                    analytics_data['destination_stats'] = destination_stats_rows
+                except Exception as dest_err:
+                    debug_info['queries']['destination_stats_error'] = str(dest_err)
+                    analytics_data['destination_stats'] = []
         
         else:
             cur = conn.cursor()
@@ -6250,12 +6308,30 @@ def admin_analytics():
                                 THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, 0) = 1 AND COALESCE(sale_price, 0) > 0))""" + date_condition_sqlite + """
                     GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
                 """, date_params_sqlite if date_params_sqlite else [])
-                analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
+                brand_stats_rows = [dict(b) for b in cur.fetchall()]
+                if not brand_stats_rows:
+                    # 日付フィルターで0件になった場合は、フィルターなしで再取得して空表示を回避
+                    cur.execute("""
+                        SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
+                               COUNT(*) as count, 
+                               SUM(sale_price) as total_sales,
+                               SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
+                               CASE WHEN SUM(purchase_price) > 0 
+                                    THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
+                                    ELSE 0 END as profit_rate
+                        FROM merchandise 
+                        WHERE (sale_date IS NOT NULL OR COALESCE(sale_price, 0) > 0)
+                        GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
+                        ORDER BY profit_rate DESC
+                        LIMIT 10
+                    """)
+                    brand_stats_rows = [dict(b) for b in cur.fetchall()]
+                analytics_data['brand_stats'] = brand_stats_rows
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
@@ -6263,17 +6339,31 @@ def admin_analytics():
                     SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
                            COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, 0) = 1 AND COALESCE(sale_price, 0) > 0))""" + date_condition_sqlite + """
                     GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
                 """, date_params_sqlite if date_params_sqlite else [])
-                analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
+                destination_stats_rows = [dict(d) for d in cur.fetchall()]
+                if not destination_stats_rows:
+                    # 日付フィルターで0件になった場合は、フィルターなしで再取得して空表示を回避
+                    cur.execute("""
+                        SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                               COUNT(*) as count, SUM(sale_price) as total_sales
+                        FROM merchandise 
+                        WHERE (sale_date IS NOT NULL OR COALESCE(sale_price, 0) > 0)
+                        GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
+                        ORDER BY total_sales DESC
+                    """)
+                    destination_stats_rows = [dict(d) for d in cur.fetchall()]
+                analytics_data['destination_stats'] = destination_stats_rows
         
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"Analytics error: {e}")
+        debug_info['error'] = str(e)
         import traceback
+        debug_info['traceback'] = traceback.format_exc()
+        print(f"Analytics error: {e}")
         traceback.print_exc()
     
     return render_template('admin/analytics.html',
@@ -6285,6 +6375,7 @@ def admin_analytics():
                          analytics_memo=analytics_memo,
                          date_from=date_from,
                          date_to=date_to,
+                         debug_info=debug_info,
                          **analytics_data)
 
 @app.route('/admin/analytics/kaika')
@@ -11327,9 +11418,9 @@ def admin_add_item():
             # 管理者モードの場合、ユーザーなし
             target_user_id = None
         
-        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        purchase_price = int(float(request.form.get('purchase_price') or 0))
         wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
-        calculated_purchase_price = int(round(wholesale_price * (1 + wholesale_fee_rate / 100)))
+        calculated_wholesale_price = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
 
         conn = get_db()
         if DATABASE_URL:
@@ -11415,9 +11506,9 @@ def admin_add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                wholesale_price,
+                calculated_wholesale_price,
                 wholesale_fee_rate,
-                calculated_purchase_price,
+                purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
