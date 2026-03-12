@@ -5973,7 +5973,7 @@ def admin_analytics():
             # ブランド別統計
             if 'brand_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT brand_name, 
+                    SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
@@ -5981,22 +5981,23 @@ def admin_analytics():
                                 THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                    GROUP BY brand_name
+                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
-                """)
+                """, date_params if date_params else None)
                 analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                    SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                           COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                    GROUP BY sales_destination
+                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
-                """)
+                """, date_params if date_params else None)
                 analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
         else:
@@ -6233,7 +6234,7 @@ def admin_analytics():
             # ブランド別統計
             if 'brand_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT brand_name, 
+                    SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
@@ -6241,22 +6242,23 @@ def admin_analytics():
                                 THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                    GROUP BY brand_name
+                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
-                """)
+                """, date_params_sqlite if date_params_sqlite else [])
                 analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                    SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                           COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                    GROUP BY sales_destination
+                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
-                """)
+                """, date_params_sqlite if date_params_sqlite else [])
                 analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
         cur.close()
