@@ -5987,7 +5987,7 @@ def admin_analytics():
                                 THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, FALSE) = TRUE AND COALESCE(sale_price, 0) > 0))""" + date_condition + """
                     GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
@@ -6001,7 +6001,7 @@ def admin_analytics():
                     SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
                            COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, FALSE) = TRUE AND COALESCE(sale_price, 0) > 0))""" + date_condition + """
                     GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
                 """
@@ -6250,7 +6250,7 @@ def admin_analytics():
                                 THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, 0) = 1 AND COALESCE(sale_price, 0) > 0))""" + date_condition_sqlite + """
                     GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
@@ -6263,7 +6263,7 @@ def admin_analytics():
                     SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
                            COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    WHERE (sale_date IS NOT NULL OR (COALESCE(is_listed, 0) = 1 AND COALESCE(sale_price, 0) > 0))""" + date_condition_sqlite + """
                     GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
                 """, date_params_sqlite if date_params_sqlite else [])
