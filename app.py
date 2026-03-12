@@ -443,6 +443,16 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
+        # 分析メモテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS analytics_memos (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                memo_text TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # 精算書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
@@ -1360,6 +1370,16 @@ else:
                 INSERT OR IGNORE INTO widget_settings (widget_key, widget_name, is_enabled, display_order)
                 VALUES (?, ?, ?, ?)
             ''', widget)
+        
+        # 分析メモテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS analytics_memos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                memo_text TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # 精算書テーブル
         cur.execute('''
@@ -3837,7 +3857,7 @@ def api_report_download(report_type):
     
     return redirect(url_for('reports'))
 
-@app.route('/my-analytics')
+@app.route('/my-analytics', methods=['GET', 'POST'])
 @login_required
 def user_analytics():
     """ユーザー向け分析ページ
@@ -3854,6 +3874,28 @@ def user_analytics():
     
     # 管理者かどうかで条件を変更
     is_admin = current_user.is_admin()
+
+    # メモ保存
+    if request.method == 'POST':
+        memo_text = request.form.get('analytics_memo', '')
+        if DATABASE_URL:
+            cur_memo = conn.cursor()
+            cur_memo.execute("""
+                INSERT INTO analytics_memos (user_id, memo_text, updated_at)
+                VALUES (%s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id)
+                DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
+            """, (current_user.id, memo_text))
+        else:
+            cur_memo = conn.cursor()
+            cur_memo.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+            if cur_memo.rowcount == 0:
+                cur_memo.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+        conn.commit()
+        cur_memo.close()
+        conn.close()
+        flash('分析メモを保存しました', 'success')
+        return redirect(url_for('user_analytics', start_month=start_month, end_month=end_month))
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3951,6 +3993,31 @@ def user_analytics():
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+        # 販売先TOP（どこにいくら売れたか）
+        cur.execute(f"""
+            SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND sales_destination IS NOT NULL
+              AND sales_destination != ''
+            GROUP BY sales_destination
+            ORDER BY total_sales DESC
+            LIMIT 1
+        """, user_params)
+        analytics_data['top_destination'] = dict(cur.fetchone() or {})
+
+        # オークション販売実績
+        cur.execute(f"""
+            SELECT
+                COUNT(*) as auction_count,
+                COALESCE(SUM(sale_price), 0) as auction_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND POSITION('auction' IN COALESCE(sale_type, '')) > 0
+        """, user_params)
+        analytics_data['auction_stats'] = dict(cur.fetchone() or {})
         
         # 総合統計（期間フィルター適用）
         cur.execute(f"""
@@ -3988,6 +4055,11 @@ def user_analytics():
         except Exception as e:
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+
+        # 分析メモ
+        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+        memo_row = cur.fetchone()
+        analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
         
         # 月別キャッシュフロー
         try:
@@ -4109,6 +4181,31 @@ def user_analytics():
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+        # 販売先TOP（どこにいくら売れたか）
+        cur.execute(f"""
+            SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND sales_destination IS NOT NULL
+              AND sales_destination != ''
+            GROUP BY sales_destination
+            ORDER BY total_sales DESC
+            LIMIT 1
+        """, user_params)
+        analytics_data['top_destination'] = dict(cur.fetchone() or {})
+
+        # オークション販売実績
+        cur.execute(f"""
+            SELECT
+                COUNT(*) as auction_count,
+                COALESCE(SUM(sale_price), 0) as auction_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND instr(COALESCE(sale_type, ''), 'auction') > 0
+        """, user_params)
+        analytics_data['auction_stats'] = dict(cur.fetchone() or {})
         
         # 総合統計（期間フィルター適用）
         cur.execute(f"""
@@ -4146,6 +4243,11 @@ def user_analytics():
         except Exception as e:
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+
+        # 分析メモ
+        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+        memo_row = cur.fetchone()
+        analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
         
         # 月別キャッシュフロー
         try:
@@ -4174,6 +4276,9 @@ def user_analytics():
     
     # 管理者の場合は分析対象がわかるようにフラグを渡す
     analytics_data['is_admin_view'] = is_admin
+    analytics_data.setdefault('top_destination', {})
+    analytics_data.setdefault('auction_stats', {})
+    analytics_data.setdefault('analytics_memo', '')
     
     return render_template('user_analytics.html', analytics=analytics_data,
                          start_month=start_month, end_month=end_month)
@@ -5619,7 +5724,7 @@ def admin_user_items(id):
     
     return render_template('admin/user_items.html', user=dict(user), items=processed_items)
 
-@app.route('/admin/analytics')
+@app.route('/admin/analytics', methods=['GET', 'POST'])
 @login_required
 @permission_required('analytics')
 def admin_analytics():
@@ -5627,6 +5732,9 @@ def admin_analytics():
     widgets = []
     overall_stats = {}
     kaika_fee_data = {}
+    top_destination = {}
+    auction_stats = {}
+    analytics_memo = ''
     
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
@@ -5636,6 +5744,17 @@ def admin_analytics():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            if request.method == 'POST':
+                memo_text = request.form.get('analytics_memo', '')
+                cur.execute("""
+                    INSERT INTO analytics_memos (user_id, memo_text, updated_at)
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
+                """, (current_user.id, memo_text))
+                conn.commit()
+                flash('分析メモを保存しました', 'success')
             
             # 日付条件を構築
             date_condition = ""
@@ -5691,6 +5810,37 @@ def admin_analytics():
             """
             cur.execute(kaika_monthly_query, date_params if date_params else None)
             kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
+
+            # 販売先TOP（どこにいくら売れたか）
+            cur.execute("""
+                SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND sales_destination IS NOT NULL
+                  AND sales_destination != ''""" + date_condition + """
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+                LIMIT 1
+            """, date_params if date_params else None)
+            top_destination = dict(cur.fetchone() or {})
+
+            # オークション販売実績
+            cur.execute("""
+                SELECT
+                    COUNT(*) as auction_count,
+                    COALESCE(SUM(sale_price), 0) as auction_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND POSITION('auction' IN COALESCE(sale_type, '')) > 0""" + date_condition,
+                date_params if date_params else None
+            )
+            auction_stats = dict(cur.fetchone() or {})
+
+            # 分析メモ
+            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+            memo_row = cur.fetchone()
+            analytics_memo = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -5740,6 +5890,21 @@ def admin_analytics():
             
             # 回転率・在庫日数
             if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN sale_date::date - purchase_date::date 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN CURRENT_DATE - purchase_date::date 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            elif 'turnover_stats' not in analytics_data:
                 cur.execute("""
                     SELECT 
                         COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
@@ -5837,6 +6002,14 @@ def admin_analytics():
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
+
+            if request.method == 'POST':
+                memo_text = request.form.get('analytics_memo', '')
+                cur.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+                if cur.rowcount == 0:
+                    cur.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+                conn.commit()
+                flash('分析メモを保存しました', 'success')
             
             # 日付条件を構築（SQLite）
             date_condition_sqlite = ""
@@ -5889,6 +6062,37 @@ def admin_analytics():
                 LIMIT 12
             """, date_params_sqlite if date_params_sqlite else [])
             kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
+
+            # 販売先TOP（どこにいくら売れたか）
+            cur.execute("""
+                SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND sales_destination IS NOT NULL
+                  AND sales_destination != ''""" + date_condition_sqlite + """
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+                LIMIT 1
+            """, date_params_sqlite if date_params_sqlite else [])
+            top_destination = dict(cur.fetchone() or {})
+
+            # オークション販売実績
+            cur.execute("""
+                SELECT
+                    COUNT(*) as auction_count,
+                    COALESCE(SUM(sale_price), 0) as auction_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND instr(COALESCE(sale_type, ''), 'auction') > 0""" + date_condition_sqlite,
+                date_params_sqlite if date_params_sqlite else []
+            )
+            auction_stats = dict(cur.fetchone() or {})
+
+            # 分析メモ
+            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+            memo_row = cur.fetchone()
+            analytics_memo = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -5938,6 +6142,21 @@ def admin_analytics():
             
             # 回転率・在庫日数
             if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN julianday(sale_date) - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN julianday('now') - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            elif 'turnover_stats' not in analytics_data:
                 cur.execute("""
                     SELECT 
                         SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -6051,6 +6270,9 @@ def admin_analytics():
                          widgets=[dict(w) for w in widgets] if widgets else [],
                          overall_stats=overall_stats,
                          kaika_fee=kaika_fee_data,
+                         top_destination=top_destination,
+                         auction_stats=auction_stats,
+                         analytics_memo=analytics_memo,
                          date_from=date_from,
                          date_to=date_to,
                          **analytics_data)

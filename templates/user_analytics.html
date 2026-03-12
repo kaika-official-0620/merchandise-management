@@ -153,6 +153,39 @@
     </a>
 </div>
 
+<!-- 追加分析カード -->
+<div class="analytics-summary extra-analytics-cards">
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(analytics.top_destination.sales_destination or '')) if analytics.is_admin_view else url_for('index', filter='sold') }}">
+        <div class="summary-label">どこにいくら売れたか</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.top_destination.total_sales or 0)|int) }}</div>
+        <div class="summary-sub">{{ analytics.top_destination.sales_destination or '販売先未設定' }} / {{ analytics.top_destination.count or 0 }}件</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
+        <div class="summary-label">回転率</div>
+        {% set sold_count = (analytics.kpi.sold_count or 0)|int %}
+        {% set total_count = (analytics.kpi.total_items or 0)|int %}
+        {% set total_count_safe = total_count if total_count > 0 else 1 %}
+        <div class="summary-value">{{ "%.1f"|format(sold_count / total_count_safe * 100) }}%</div>
+        <div class="summary-sub">平均販売日数: {{ (analytics.kpi.avg_days_to_sell or 0)|round(1) }}日</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction') if analytics.is_admin_view else url_for('index', filter='sold') }}">
+        <div class="summary-label">オークション販売実績</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.auction_stats.auction_sales or 0)|int) }}</div>
+        <div class="summary-sub">{{ analytics.auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((analytics.auction_stats.auction_profit or 0)|int) }}</div>
+    </a>
+</div>
+
+<!-- メモ欄 -->
+<div class="analytics-section memo-section">
+    <h2>メモ</h2>
+    <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month) }}" class="memo-form">
+        <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics.analytics_memo or '' }}</textarea>
+        <div class="memo-actions">
+            <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
+        </div>
+    </form>
+</div>
+
 <!-- 経費内訳サマリー -->
 <div class="expense-summary">
     <a class="expense-card summary-link-card" href="{{ list_sold_url }}">
@@ -676,6 +709,42 @@
     font-size: 1.25rem;
     font-weight: 700;
     color: #1e293b;
+}
+
+.extra-analytics-cards {
+    margin-top: -0.75rem;
+}
+
+.summary-sub {
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.memo-section {
+    margin-top: -0.25rem;
+    margin-bottom: 2rem;
+}
+
+.memo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.memo-textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    resize: vertical;
+    background: #fff;
+}
+
+.memo-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .analytics-grid {

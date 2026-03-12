@@ -71,6 +71,41 @@
         </div>
         <div class="stat-sub">{{ kaika_fee.summary.kaika_count or 0 }}件</div>
     </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(top_destination.sales_destination or ''), date_from=date_from, date_to=date_to) if top_destination and top_destination.sales_destination else url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
+        <div class="stat-label-top">どこにいくら売れたか</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format((top_destination.total_sales or 0)|int) }}</span>
+        </div>
+        <div class="stat-sub">{{ top_destination.sales_destination or '販売先未設定' }} / {{ top_destination.count or 0 }}件</div>
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
+        <div class="stat-label-top">回転率</div>
+        <div class="stat-content">
+            <span class="stat-value">
+                {% if turnover_stats and turnover_stats.total_count and turnover_stats.total_count > 0 %}
+                {{ ((turnover_stats.sold_count or 0) / turnover_stats.total_count * 100)|round(1) }}%
+                {% else %}0%{% endif %}
+            </span>
+        </div>
+        <div class="stat-sub">平均販売日数: {{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats and turnover_stats.avg_days_to_sell else '-' }}日</div>
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction', date_from=date_from, date_to=date_to) }}">
+        <div class="stat-label-top">オークション販売実績</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format((auction_stats.auction_sales or 0)|int) }}</span>
+        </div>
+        <div class="stat-sub">{{ auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((auction_stats.auction_profit or 0)|int) }}</div>
+    </a>
+</div>
+
+<div class="admin-section memo-section">
+    <h2>メモ</h2>
+    <form method="POST" action="{{ url_for('admin_analytics', date_from=date_from, date_to=date_to) }}" class="memo-form">
+        <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics_memo or '' }}</textarea>
+        <div class="memo-actions">
+            <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
+        </div>
+    </form>
 </div>
 
 <!-- 開花手数料 詳細と推移 -->
@@ -88,7 +123,7 @@
                 <span class="kaika-service">🏭 業者卸販売</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
             </a>
-            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='multi_listing', date_from=date_from, date_to=date_to) }}">
+            <a class="kaika-item" href="{{ url_for('admin_items', status='sold', sale_type='multi_listing', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">📋 同時出品サービス</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
             </a>
@@ -351,7 +386,7 @@
 
 <div class="admin-grid-2">
     <!-- 販売先別統計 -->
-    {% if 'destination_stats' in enabled_keys and destination_stats %}
+    {% if 'destination_stats' in enabled_keys %}
     <div class="admin-section widget-section">
         <h2>販売先別統計</h2>
         <div class="analytics-cards">
@@ -378,7 +413,7 @@
     {% endif %}
     
     <!-- ブランド別利益率統計 -->
-    {% if 'brand_stats' in enabled_keys and brand_stats %}
+    {% if 'brand_stats' in enabled_keys %}
     <div class="admin-section widget-section">
         <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
@@ -476,6 +511,30 @@
     border-radius: 20px;
     font-size: 0.85rem;
     font-weight: 500;
+}
+
+.memo-section {
+    margin-bottom: 1.5rem;
+}
+
+.memo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.memo-textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    resize: vertical;
+}
+
+.memo-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* 開花手数料カード */
