@@ -2090,7 +2090,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>仕入額</label>
+                <label>卸価格</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -2124,7 +2124,7 @@
             <thead>
                 <tr>
                     <th style="width: 60px;">写真</th>
-                    <th class="sortable" data-sort="id">No</th>
+                    <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
                     <th class="sortable product-name-col" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
@@ -2133,7 +2133,7 @@
                     {% if is_shared_view %}<th>登録者</th>{% endif %}
                     <th>最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">仕入額</th>
+                    <th class="sortable" data-sort="purchase_price">卸価格</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
                     <th class="sortable" data-sort="profit">利益</th>
@@ -2147,7 +2147,7 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
-                    data-purchase-price="{{ item.purchase_price or 0 }}"
+                    data-purchase-price="{{ item.wholesale_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
@@ -2164,7 +2164,7 @@
                         <div class="no-thumb">-</div>
                         {% endif %}
                     </td>
-                    <td>{{ item.id }}</td>
+                    <td>{{ item.kaika_product_code or '-' }}</td>
                     <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
@@ -2178,7 +2178,7 @@
                     {% if is_shared_view %}<td class="owner-cell">{{ item.owner_name or '-' }}</td>{% endif %}
                     <td class="owner-cell">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
                     <td class="amount">
                         {% if item.listing_price %}
                         ¥{{ "{:,}".format(item.listing_price) }}
@@ -2296,7 +2296,7 @@
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
-            data-purchase-price="{{ item.purchase_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
+            data-purchase-price="{{ item.wholesale_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
             data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
             data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
@@ -2346,8 +2346,8 @@
             <div class="card-body">
                 <div class="card-prices three-col">
                     <div class="price-item">
-                        <span class="price-label">仕入</span>
-                        <span class="price-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                        <span class="price-label">卸価格</span>
+                        <span class="price-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
                     </div>
                     <div class="price-item">
                         <span class="price-label">出品</span>
@@ -2725,13 +2725,16 @@
             let aVal, bVal;
 
             switch (column) {
-                case 'id':
                 case 'purchase_price':
                 case 'listing_price':
                 case 'sale_price':
                 case 'profit':
                     aVal = parseInt(a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
                     bVal = parseInt(b.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
+                    break;
+                case 'kaika_product_code':
+                    aVal = a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.trim();
+                    bVal = b.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.trim();
                     break;
                 default:
                     aVal = a.dataset[column.replace('_', '')] || '';
@@ -2750,7 +2753,7 @@
 
     function getColumnIndex(column) {
         const map = {
-            'id': 2,
+            'kaika_product_code': 2,
             'product_name': 3,
             'brand_name': 4,
             'item_condition': 5,

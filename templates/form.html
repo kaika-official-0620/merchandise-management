@@ -458,6 +458,20 @@ input:disabled, select:disabled, textarea:disabled {
                        value="{{ item.purchase_price if item else 0 }}" min="0"
                        {% if basic_readonly %}disabled{% endif %}>
             </div>
+
+            <div class="form-group">
+                <label for="wholesale_fee_rate">卸手数料（%）</label>
+                <input type="number" id="wholesale_fee_rate" name="wholesale_fee_rate" 
+                       value="{{ item.wholesale_fee_rate if item and item.wholesale_fee_rate else 0 }}" min="0" step="0.01"
+                       {% if basic_readonly %}disabled{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="wholesale_price">卸価格</label>
+                <input type="number" id="wholesale_price" name="wholesale_price" 
+                       value="{{ item.wholesale_price if item and item.wholesale_price else 0 }}" min="0" readonly>
+                <small class="form-help">仕入額と卸手数料（%）から自動計算されます</small>
+            </div>
             
             <div class="form-group">
                 <label for="payment_method">支払方法</label>
@@ -814,13 +828,20 @@ function updateSaleTypeValue() {
     }
 }
 
+function recalculateWholesalePrice() {
+    const purchasePrice = parseFloat(document.getElementById('purchase_price').value) || 0;
+    const wholesaleFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
+    const wholesalePrice = Math.round(purchasePrice * (1 + (wholesaleFeeRate / 100)));
+    document.getElementById('wholesale_price').value = wholesalePrice;
+    calculateProfit();
+}
+
 function calculateProfit() {
     const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
     const commission = parseInt(document.getElementById('commission').value) || 0;
     
-    // 実際の利益
     const actualProfit = salePrice - purchasePrice - shippingCost - commission;
     const actualEl = document.getElementById('actual_profit');
     actualEl.textContent = '¥' + actualProfit.toLocaleString();
@@ -899,12 +920,19 @@ document.getElementById('commission').addEventListener('input', function() {
     calculateProfit();
 });
 
+// 仕入額・卸手数料率の変更時に卸価格を再計算
+document.getElementById('purchase_price').addEventListener('input', recalculateWholesalePrice);
+document.getElementById('wholesale_fee_rate').addEventListener('input', recalculateWholesalePrice);
+
 // 売上金以外の数値フィールドの変更時に利益を再計算
 document.querySelectorAll('input[type="number"]').forEach(input => {
     if (input.id !== 'sale_price' && input.id !== 'commission') {
         input.addEventListener('input', calculateProfit);
     }
 });
+
+// 初期表示時に卸価格を計算
+recalculateWholesalePrice();
 
 // ステータスに応じてフィールドの表示を切り替え
 function updateStatusFields() {

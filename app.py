@@ -4561,6 +4561,8 @@ def edit_item(id):
                 new_store_name = request.form.get('store_name')
                 new_supplier_detail = request.form.get('supplier_detail')
                 new_purchase_price = int(request.form.get('purchase_price') or 0)
+                new_wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
+                new_wholesale_price = int(round(new_purchase_price * (1 + new_wholesale_fee_rate / 100)))
                 new_payment_method = request.form.get('payment_method')
             else:
                 # 管理者は基本情報を元の値で維持（変更不可）、ただし画像は編集可能
@@ -4619,6 +4621,8 @@ def edit_item(id):
                 new_store_name = item_dict['store_name']
                 new_supplier_detail = item_dict.get('supplier_detail')
                 new_purchase_price = item_dict['purchase_price']
+                new_wholesale_fee_rate = float(item_dict.get('wholesale_fee_rate') or 0)
+                new_wholesale_price = int(item_dict.get('wholesale_price') or 0)
                 new_payment_method = item_dict['payment_method']
             
             # ステータスを取得（未出品/出品中/売却済み）
@@ -4631,6 +4635,7 @@ def edit_item(id):
                         UPDATE merchandise SET 
                             purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                             supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
+                            wholesale_price = %s, wholesale_fee_rate = %s,
                             purchase_price = %s, payment_method = %s, listing_price = %s, 
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
@@ -4650,12 +4655,14 @@ def edit_item(id):
                         new_supplier_detail,
                         id_document_path,
                         consent_form_path,
+                        new_wholesale_price,
+                        new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
                         int(request.form.get('listing_price') or 0),
                         int(request.form.get('expected_shipping') or 0),
                         int(request.form.get('expected_commission') or 0),
-                        item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                        item_status in ['listed', 'sold'],
                         request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                         request.form.get('sale_date') or None if item_status == 'sold' else None,
                         request.form.get('sale_type') or 'normal',
@@ -4672,6 +4679,7 @@ def edit_item(id):
                         UPDATE merchandise SET 
                             purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                             supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
+                            wholesale_price = %s, wholesale_fee_rate = %s,
                             purchase_price = %s, payment_method = %s, listing_price = %s, 
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
@@ -4691,12 +4699,14 @@ def edit_item(id):
                         new_supplier_detail,
                         id_document_path,
                         consent_form_path,
+                        new_wholesale_price,
+                        new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
                         int(request.form.get('listing_price') or 0),
                         int(request.form.get('expected_shipping') or 0),
                         int(request.form.get('expected_commission') or 0),
-                        item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
+                        item_status in ['listed', 'sold'],
                         request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                         request.form.get('sale_date') or None if item_status == 'sold' else None,
                         request.form.get('sale_type') or 'normal',
@@ -4714,6 +4724,7 @@ def edit_item(id):
                         UPDATE merchandise SET 
                             purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                             supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
+                            wholesale_price = ?, wholesale_fee_rate = ?,
                             purchase_price = ?, payment_method = ?, listing_price = ?, 
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
@@ -4733,12 +4744,14 @@ def edit_item(id):
                         new_supplier_detail,
                         id_document_path,
                         consent_form_path,
+                        new_wholesale_price,
+                        new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
                         int(request.form.get('listing_price') or 0),
                         int(request.form.get('expected_shipping') or 0),
                         int(request.form.get('expected_commission') or 0),
-                        1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                        1 if item_status in ['listed', 'sold'] else 0,
                         request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                         request.form.get('sale_date') or None if item_status == 'sold' else None,
                         request.form.get('sale_type') or 'normal',
@@ -4755,6 +4768,7 @@ def edit_item(id):
                         UPDATE merchandise SET 
                             purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                             supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
+                            wholesale_price = ?, wholesale_fee_rate = ?,
                             purchase_price = ?, payment_method = ?, listing_price = ?, 
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
@@ -4774,12 +4788,14 @@ def edit_item(id):
                         new_supplier_detail,
                         id_document_path,
                         consent_form_path,
+                        new_wholesale_price,
+                        new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
                         int(request.form.get('listing_price') or 0),
                         int(request.form.get('expected_shipping') or 0),
                         int(request.form.get('expected_commission') or 0),
-                        1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
+                        1 if item_status in ['listed', 'sold'] else 0,
                         request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                         request.form.get('sale_date') or None if item_status == 'sold' else None,
                         request.form.get('sale_type') or 'normal',

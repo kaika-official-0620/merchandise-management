@@ -998,7 +998,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>仕入額</label>
+                <label>卸価格</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1052,7 +1052,7 @@
                 <tr>
                     <th style="width: 40px;"></th>
                     <th style="width: 60px;">写真</th>
-                    <th class="sortable" data-sort="id">No</th>
+                    <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
                     <th class="sortable product-name-col" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
@@ -1061,7 +1061,7 @@
                     <th>登録者</th>
                     <th>最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">仕入額</th>
+                    <th class="sortable" data-sort="purchase_price">卸価格</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
                     <th class="sortable" data-sort="profit">利益</th>
@@ -1072,12 +1072,13 @@
             <tbody>
                 {% for item in items %}
                 <tr class="{% if item.sale_date %}row-sold{% endif %}" data-id="{{ item.id }}"
+                    data-kaika-product-code="{{ item.kaika_product_code or '' }}"
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
                     data-sales-destination="{{ item.sales_destination or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
-                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.purchase_price or 0 }}"
+                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.wholesale_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
@@ -1098,7 +1099,7 @@
                         <div class="no-thumb">-</div>
                         {% endif %}
                     </td>
-                    <td>{{ item.id }}</td>
+                    <td>{{ item.kaika_product_code or '-' }}</td>
                     <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
@@ -1112,7 +1113,7 @@
                     <td><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
                     <td>{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
+                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
                     <td class="amount">
                         {% if item.listing_price %}
                         ¥{{ "{:,}".format(item.listing_price) }}
@@ -1214,8 +1215,8 @@
             <div class="user-card-body">
                 <div class="user-card-info-grid">
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">仕入</span>
-                        <span class="user-card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                        <span class="user-card-info-label">卸価格</span>
+                        <span class="user-card-info-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
                     </div>
                     <div class="user-card-info-item">
                         <span class="user-card-info-label">出品</span>
@@ -1552,13 +1553,16 @@
             let aVal, bVal;
 
             switch (column) {
-                case 'id':
                 case 'purchase_price':
                 case 'listing_price':
                 case 'sale_price':
                 case 'profit':
                     aVal = parseInt(a.dataset[column.replace('_', '')] || a.dataset[column] || '0') || 0;
                     bVal = parseInt(b.dataset[column.replace('_', '')] || b.dataset[column] || '0') || 0;
+                    break;
+                case 'kaika_product_code':
+                    aVal = (a.dataset.kaikaProductCode || '');
+                    bVal = (b.dataset.kaikaProductCode || '');
                     break;
                 default:
                     aVal = a.dataset[column.replace('_', '')] || '';
