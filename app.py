@@ -5768,6 +5768,12 @@ def admin_analytics():
             elif date_to:
                 date_condition = " AND sale_date <= %s"
                 date_params = [date_to]
+
+            def execute_optional_params(sql, params):
+                if params:
+                    cur.execute(sql, params)
+                else:
+                    cur.execute(sql)
             
             # 全体統計
             query = """
@@ -5779,7 +5785,7 @@ def admin_analytics():
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
                 FROM merchandise
                 WHERE 1=1 """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
-            cur.execute(query, date_params if date_params else None)
+            execute_optional_params(query, date_params)
             overall_stats = dict(cur.fetchone() or {})
             
             # 開花手数料（sale_typeがnormal以外の手数料合計）
@@ -5793,7 +5799,7 @@ def admin_analytics():
                     COUNT(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 END) as kaika_count
                 FROM merchandise
                 WHERE sale_date IS NOT NULL""" + date_condition
-            cur.execute(kaika_query, date_params if date_params else None)
+            execute_optional_params(kaika_query, date_params)
             kaika_fee_data['summary'] = dict(cur.fetchone() or {})
             
             # 開花手数料の月別推移
@@ -5808,11 +5814,11 @@ def admin_analytics():
                 ORDER BY month DESC
                 LIMIT 12
             """
-            cur.execute(kaika_monthly_query, date_params if date_params else None)
+            execute_optional_params(kaika_monthly_query, date_params)
             kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
 
             # 販売先TOP（どこにいくら売れたか）
-            cur.execute("""
+            top_destination_query = """
                 SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
                 FROM merchandise
                 WHERE sale_date IS NOT NULL
@@ -5821,20 +5827,20 @@ def admin_analytics():
                 GROUP BY sales_destination
                 ORDER BY total_sales DESC
                 LIMIT 1
-            """, date_params if date_params else None)
+            """
+            execute_optional_params(top_destination_query, date_params)
             top_destination = dict(cur.fetchone() or {})
 
             # オークション販売実績
-            cur.execute("""
+            auction_stats_query = """
                 SELECT
                     COUNT(*) as auction_count,
                     COALESCE(SUM(sale_price), 0) as auction_sales,
                     COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
                 FROM merchandise
                 WHERE sale_date IS NOT NULL
-                  AND POSITION('auction' IN COALESCE(sale_type, '')) > 0""" + date_condition,
-                date_params if date_params else None
-            )
+                  AND POSITION('auction' IN COALESCE(sale_type, '')) > 0""" + date_condition
+            execute_optional_params(auction_stats_query, date_params)
             auction_stats = dict(cur.fetchone() or {})
 
             # 分析メモ
@@ -5972,7 +5978,7 @@ def admin_analytics():
             
             # ブランド別統計
             if 'brand_stats' in enabled_widgets:
-                cur.execute("""
+                brand_stats_query = """
                     SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
@@ -5985,19 +5991,21 @@ def admin_analytics():
                     GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
-                """, date_params if date_params else None)
+                """
+                execute_optional_params(brand_stats_query, date_params)
                 analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
-                cur.execute("""
+                destination_stats_query = """
                     SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
                            COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
                     WHERE sale_date IS NOT NULL""" + date_condition + """
                     GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
-                """, date_params if date_params else None)
+                """
+                execute_optional_params(destination_stats_query, date_params)
                 analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
         else:
