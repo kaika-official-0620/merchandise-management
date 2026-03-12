@@ -11327,9 +11327,9 @@ def admin_add_item():
             # 管理者モードの場合、ユーザーなし
             target_user_id = None
         
-        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        purchase_price = int(float(request.form.get('purchase_price') or 0))
         wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
-        calculated_purchase_price = int(round(wholesale_price * (1 + wholesale_fee_rate / 100)))
+        calculated_wholesale_price = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
 
         conn = get_db()
         if DATABASE_URL:
@@ -11415,9 +11415,9 @@ def admin_add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                wholesale_price,
+                calculated_wholesale_price,
                 wholesale_fee_rate,
-                calculated_purchase_price,
+                purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
