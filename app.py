@@ -5948,7 +5948,7 @@ def admin_analytics():
             if 'closing_rate' in enabled_widgets:
                 cur.execute("""
                     SELECT 
-                        COUNT(*) FILTER (WHERE is_listed = TRUE OR is_listed = 1) as listed_count,
+                        COUNT(*) FILTER (WHERE is_listed = TRUE) as listed_count,
                         COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
                         COUNT(*) as total_count
                     FROM merchandise
