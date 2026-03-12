@@ -232,6 +232,16 @@
         vertical-align: middle;
     }
 
+    .data-table th.product-name-col,
+    .data-table td.product-name-col {
+        min-width: 300px;
+        width: 300px;
+    }
+
+    .data-table td.product-name-col {
+        white-space: nowrap;
+    }
+
     .data-table tbody tr:hover {
         background: #f8fafc;
     }
@@ -1043,7 +1053,7 @@
                     <th style="width: 40px;"></th>
                     <th style="width: 60px;">写真</th>
                     <th class="sortable" data-sort="id">No</th>
-                    <th class="sortable" data-sort="product_name">商品名</th>
+                    <th class="sortable product-name-col" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
                     <th>状態</th>
@@ -1065,10 +1075,13 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
+                    data-sales-destination="{{ item.sales_destination or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
                     data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.purchase_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
+                    data-sale-type="{{ item.sale_type or '' }}"
+                    data-sale-date="{{ item.sale_date or '' }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
@@ -1086,7 +1099,7 @@
                         {% endif %}
                     </td>
                     <td>{{ item.id }}</td>
-                    <td><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
                     <td>
@@ -1376,6 +1389,14 @@
         const filterOwner = (document.getElementById('tab-filter-owner')?.value || '').toLowerCase();
         const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
         const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+        const query = new URLSearchParams(window.location.search);
+        const querySaleType = (query.get('sale_type') || '').toLowerCase();
+        const querySaleTypeNot = (query.get('sale_type_not') || '').toLowerCase();
+        const queryStatus = (query.get('status') || '').toLowerCase();
+        const queryBrand = (query.get('brand') || '').toLowerCase();
+        const queryDestination = (query.get('destination') || '').toLowerCase();
+        const queryDateFrom = query.get('date_from') || '';
+        const queryDateTo = query.get('date_to') || '';
 
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
         const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
@@ -1404,6 +1425,10 @@
             const owner = (row.dataset.owner || '').toLowerCase();
             const condition = row.dataset.condition || '';
             const status = row.dataset.status || '';
+            const saleType = (row.dataset.saleType || '').toLowerCase();
+            const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
+            const saleDate = row.dataset.saleDate || '';
+            const salesDestination = (row.dataset.salesDestination || '').toLowerCase();
             const purchasePrice = row.dataset.purchasePrice || '0';
             const salePrice = row.dataset.salePrice || '0';
             const profit = row.dataset.profit || '0';
@@ -1417,6 +1442,17 @@
             if (filterOwner && !owner.includes(filterOwner)) show = false;
             if (filterCondition && condition !== filterCondition) show = false;
             if (filterStatus && status !== filterStatus) show = false;
+            if (queryStatus === 'unsold') {
+                if (status === 'sold') show = false;
+            } else if (queryStatus && status !== queryStatus) {
+                show = false;
+            }
+            if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
+            if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
+            if (queryBrand && !brand.includes(queryBrand)) show = false;
+            if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
+            if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
+            if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
 
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
             if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
@@ -1720,6 +1756,22 @@
 
     // スワイプカルーセルのインジケーター更新
     document.addEventListener('DOMContentLoaded', function () {
+        const query = new URLSearchParams(window.location.search);
+        const queryStatus = query.get('status');
+        const queryBrand = query.get('brand');
+        if (queryStatus) {
+            const statusInput = document.getElementById('tab-filter-status');
+            if (statusInput) statusInput.value = queryStatus;
+        }
+        if (queryBrand) {
+            const brandInput = document.getElementById('tab-filter-brand');
+            if (brandInput) brandInput.value = queryBrand;
+        }
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to')) {
+            filterTable();
+            updateFilterCount();
+        }
+
         const mobileCards = document.getElementById('mobileCards');
         const currentIndex = document.querySelector('.current-index');
         const totalCount = document.querySelector('.total-count');

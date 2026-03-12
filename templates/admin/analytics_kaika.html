@@ -35,32 +35,32 @@
 
 <!-- 全体統計 -->
 <div class="admin-stats-grid">
-    <div class="admin-stat-card">
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items') }}">
         <div class="stat-label-top">総商品数</div>
         <div class="stat-content">
             <span class="stat-value">{{ overall_stats.total_items or 0 }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items') }}">
         <div class="stat-label-top">総仕入額</div>
         <div class="stat-content">
             <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_purchase or 0) }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items', status='sold', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">総売上</div>
         <div class="stat-content">
             <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_sales or 0) }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items', status='sold', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">総利益</div>
         <div class="stat-content">
             <span class="stat-value {% if overall_stats.total_profit and overall_stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                 ¥{{ "{:,}".format(overall_stats.total_profit or 0) }}
             </span>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- 在庫統計 -->
@@ -68,14 +68,14 @@
 <div class="admin-section">
     <h2>在庫状況</h2>
     <div class="inventory-stats">
-        <div class="inventory-stat">
+        <a class="inventory-stat analytics-link-card" href="{{ url_for('admin_items', status='unsold') }}">
             <span class="inventory-label">未販売商品</span>
             <span class="inventory-value">{{ inventory.unsold_count or 0 }}件</span>
-        </div>
-        <div class="inventory-stat">
+        </a>
+        <a class="inventory-stat analytics-link-card" href="{{ url_for('admin_items', status='unsold') }}">
             <span class="inventory-label">在庫価値</span>
             <span class="inventory-value">¥{{ "{:,}".format(inventory.inventory_value or 0) }}</span>
-        </div>
+        </a>
     </div>
 </div>
 {% endif %}
@@ -130,7 +130,7 @@
         <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
             {% for brand in brand_stats %}
-            <div class="brand-stat-item">
+            <a class="brand-stat-item analytics-link-card" href="{{ url_for('admin_items', status='sold', brand=(brand.brand_name or ''), date_from=date_from, date_to=date_to) }}">
                 <div class="brand-rank">{{ loop.index }}</div>
                 <div class="brand-info">
                     <h4>{{ brand.brand_name or '(未設定)' }}</h4>
@@ -144,7 +144,7 @@
                         ¥{{ "{:,}".format(brand.total_profit or 0) }}
                     </span>
                 </div>
-            </div>
+            </a>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -244,6 +244,12 @@
     color: #64748b;
     font-weight: 500;
     padding-bottom: 8px;
+}
+
+.analytics-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
 }
 
 .filter-active-notice {

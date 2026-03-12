@@ -198,9 +198,51 @@
             body {
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
+                margin: 0;
+                padding: 0;
             }
             .container {
                 padding: 0;
+                margin: 0;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                max-height: 297mm; /* A4縦の高さ */
+                overflow: hidden;
+                width: 100%;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+            .header-section,
+            .amount-company-row,
+            .summary-section,
+            .footer-section {
+                page-break-inside: avoid;
+            }
+            /* テーブルの行が分割されないように */
+            tr {
+                page-break-inside: avoid;
+            }
+        }
+        
+        /* スマホからPDF出力時も確実に1ページに収まるように */
+        @media print and (max-width: 768px) {
+            body {
+                font-size: 10px;
+            }
+            .container {
+                padding: 5mm 10mm;
+            }
+            .document-title {
+                font-size: 20px;
+                margin-bottom: 15px;
+            }
+            table {
+                font-size: 9px;
+            }
+            th, td {
+                padding: 4px 6px;
             }
         }
     </style>

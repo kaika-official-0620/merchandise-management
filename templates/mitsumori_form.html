@@ -61,7 +61,10 @@
                         <tr class="item-row">
                             <td class="item-no">{{ item.item_no }}</td>
                             <td><input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required></td>
-                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% else %}
@@ -69,7 +72,10 @@
                         <tr class="item-row">
                             <td class="item-no">{{ i + 1 }}</td>
                             <td><input type="text" name="item_name[]" class="form-control"></td>
-                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% endif %}
@@ -534,7 +540,10 @@ document.addEventListener('DOMContentLoaded', function() {
         newRow.innerHTML = `
             <td class="item-no">${rowCount + 1}</td>
             <td><input type="text" name="item_name[]" class="form-control"></td>
-            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+            <td>
+                <input type="hidden" name="merchandise_id[]" value="">
+                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+            </td>
         `;
         itemsBody.appendChild(newRow);
         attachRowEvents(newRow);
@@ -628,6 +637,7 @@ function addSelectedMerchandise() {
     
     selectedItems.forEach(checkbox => {
         const item = checkbox.closest('.merchandise-item');
+        const merchId = item.dataset.id;
         const name = item.dataset.name;
         const brand = item.dataset.brand;
         const displayName = brand ? `${name}（${brand}）` : name;
@@ -642,6 +652,7 @@ function addSelectedMerchandise() {
         
         if (emptyRow) {
             emptyRow.querySelector('input[name="item_name[]"]').value = displayName;
+            emptyRow.querySelector('input[name="merchandise_id[]"]').value = merchId;
         } else {
             const rowCount = itemsBody.querySelectorAll('.item-row').length;
             const newRow = document.createElement('tr');
@@ -649,7 +660,10 @@ function addSelectedMerchandise() {
             newRow.innerHTML = `
                 <td class="item-no">${rowCount + 1}</td>
                 <td><input type="text" name="item_name[]" class="form-control" value="${displayName}"></td>
-                <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                <td>
+                    <input type="hidden" name="merchandise_id[]" value="${merchId}">
+                    <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                </td>
             `;
             itemsBody.appendChild(newRow);
             

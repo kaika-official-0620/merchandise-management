@@ -50,6 +50,12 @@
                 <option value="sold">売却済みのみ</option>
                 <option value="inventory">在庫のみ</option>
             </select>
+            <select id="sold-days-filter" class="form-control" style="max-width: 170px;">
+                <option value="">売却日: すべて</option>
+                <option value="7">直近7日以内</option>
+                <option value="30">直近30日以内</option>
+                <option value="90">直近90日以内</option>
+            </select>
             <select id="product-select" class="form-control">
                 <option value="">-- 商品を選択 --</option>
             </select>
@@ -87,7 +93,10 @@
                             <td><input type="text" name="unit[]" value="{{ item.unit }}" class="form-control" placeholder="個"></td>
                             <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control item-price" min="0"></td>
                             <td class="item-amount">¥{{ "{:,}".format(item.amount) }}</td>
-                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% else %}
@@ -106,7 +115,10 @@
                             <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
                             <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
                             <td class="item-amount">¥0</td>
-                            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+                            <td>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% endif %}
@@ -486,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addRowBtn = document.getElementById('add-row');
     const productSelect = document.getElementById('product-select');
     const productFilter = document.getElementById('product-filter');
+    const soldDaysFilter = document.getElementById('sold-days-filter');
     const addProductBtn = document.getElementById('add-product-btn');
     const serviceTypeSelect = document.getElementById('service_type');
     
@@ -552,6 +565,10 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (filterValue === 'inventory') {
                 params.append('inventory_only', '1');
             }
+            params.append('exclude_used', '1');
+            if (soldDaysFilter.value) {
+                params.append('sold_days', soldDaysFilter.value);
+            }
             
             if (params.toString()) {
                 url += '?' + params.toString();
@@ -582,6 +599,9 @@ document.addEventListener('DOMContentLoaded', function() {
     productFilter.addEventListener('change', function() {
         loadProducts();
     });
+    soldDaysFilter.addEventListener('change', function() {
+        loadProducts();
+    });
     
     // 初期ロード
     loadProducts();
@@ -594,12 +614,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const price = product.sale_price || product.listing_price || product.purchase_price || 0;
         const today = new Date().toISOString().split('T')[0];
         
-        addRow('10', today, product.product_name, '', 1, '個', price);
+        addRow('10', today, product.product_name, '', 1, '個', price, product.id);
         productSelect.value = '';
     });
     
     // 行を追加
-    function addRow(taxCat = '10', date = '', name = '', code = '', qty = 1, unit = '個', price = 0) {
+    function addRow(taxCat = '10', date = '', name = '', code = '', qty = 1, unit = '個', price = 0, merchId = '') {
         const newRow = document.createElement('tr');
         newRow.className = 'item-row';
         newRow.innerHTML = `
@@ -616,7 +636,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <td><input type="text" name="unit[]" value="${unit}" class="form-control" placeholder="個"></td>
             <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
             <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
-            <td><button type="button" class="btn btn-danger btn-sm remove-row">×</button></td>
+            <td>
+                <input type="hidden" name="merchandise_id[]" value="${merchId}">
+                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
+            </td>
         `;
         itemsBody.appendChild(newRow);
         attachRowEvents(newRow);

@@ -94,6 +94,58 @@
             </div>
         </div>
     </div>
+
+    <!-- 買取台帳（個人仕入のみ） -->
+    <div class="report-card">
+        <div class="report-icon"></div>
+        <div class="report-content">
+            <h3>買取台帳</h3>
+            <p>個人からの買取履歴（古物台帳用）</p>
+            <div class="report-options">
+                <select id="kaitori-year" class="form-control">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if y==current_year %}selected{% endif %}>{{ y }}年</option>
+                    {% endfor %}
+                </select>
+                <select id="kaitori-month" class="form-control">
+                    <option value="0">全期間</option>
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m==current_month %}selected{% endif %}>{{ m }}月</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="report-actions">
+                <button onclick="generateReport('kaitori', 'preview')" class="btn btn-info">プレビュー</button>
+                <button onclick="generateReport('kaitori', 'csv')" class="btn btn-secondary">CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 経費明細 -->
+    <div class="report-card">
+        <div class="report-icon"></div>
+        <div class="report-content">
+            <h3>経費明細</h3>
+            <p>送料・手数料などの経費一覧</p>
+            <div class="report-options">
+                <select id="expenses-year" class="form-control">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if y==current_year %}selected{% endif %}>{{ y }}年</option>
+                    {% endfor %}
+                </select>
+                <select id="expenses-month" class="form-control">
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m==current_month %}selected{% endif %}>{{ m }}月</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="report-actions">
+                <button onclick="generateReport('expenses', 'preview')" class="btn btn-info">プレビュー</button>
+                <button onclick="generateReport('expenses', 'csv')" class="btn btn-secondary">CSV</button>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- プレビューモーダル -->
@@ -528,7 +580,16 @@
                 currentParams.year = document.getElementById('sales-year').value;
                 currentParams.month = document.getElementById('sales-month').value;
                 break;
+            case 'kaitori':
+                currentParams.year = document.getElementById('kaitori-year').value;
+                currentParams.month = document.getElementById('kaitori-month').value;
+                break;
+            case 'expenses':
+                currentParams.year = document.getElementById('expenses-year').value;
+                currentParams.month = document.getElementById('expenses-month').value;
+                break;
             case 'inventory':
+
                 // 在庫は期間パラメータなし
                 break;
         }
@@ -549,8 +610,11 @@
             'monthly': '月次売上報告書',
             'inventory': '在庫一覧表',
             'annual': '年間収支報告書',
-            'sales': '売却一覧'
+            'sales': '売却一覧',
+            'kaitori': '買取台帳',
+            'expenses': '経費明細'
         };
+
 
         modalTitle.textContent = titles[type] + ' プレビュー';
         modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
@@ -593,12 +657,21 @@
                 return renderAnnualReport(data);
             case 'sales':
                 return renderSalesReport(data);
+            case 'kaitori':
+                return renderKaitoriReport(data);
+            case 'expenses':
+                return renderExpensesReport(data);
             default:
+
                 return '<p>レポートタイプが不明です</p>';
         }
     }
 
     function renderMonthlyReport(data) {
+        const wholesaleRateSummary = (data.summary.wholesale_fee_rate_counts || [])
+            .map(item => `${Number(item.rate)}%: ${item.count}件`)
+            .join(' / ') || '-';
+
         let html = `
         <div class="report-summary">
             <div class="summary-item">
@@ -620,6 +693,14 @@
             <div class="summary-item">
                 <div class="label">手数料</div>
                 <div class="value">¥${Number(data.summary.total_commission).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料合計</div>
+                <div class="value">¥${Number(data.summary.total_wholesale_fee || 0).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料率内訳</div>
+                <div class="value">${wholesaleRateSummary}</div>
             </div>
             <div class="summary-item">
                 <div class="label">純利益</div>
@@ -666,6 +747,10 @@
     }
 
     function renderInventoryReport(data) {
+        const wholesaleRateSummary = (data.summary.wholesale_fee_rate_counts || [])
+            .map(item => `${Number(item.rate)}%: ${item.count}件`)
+            .join(' / ') || '-';
+
         let html = `
         <div class="report-summary">
             <div class="summary-item">
@@ -679,6 +764,14 @@
             <div class="summary-item">
                 <div class="label">出品価格合計</div>
                 <div class="value">¥${Number(data.summary.total_listing).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料合計</div>
+                <div class="value">¥${Number(data.summary.total_wholesale_fee || 0).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">卸手数料率内訳</div>
+                <div class="value">${wholesaleRateSummary}</div>
             </div>
         </div>
         <div class="report-table-wrapper">
@@ -823,6 +916,102 @@
         html += '</tbody></table></div>';
         return html;
     }
+
+    function renderKaitoriReport(data) {
+        let html = `
+        <div class="report-summary">
+            <div class="summary-item">
+                <div class="label">買取件数</div>
+                <div class="value">${data.summary.count}件</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">買取総額</div>
+                <div class="value">¥${Number(data.summary.total_purchase).toLocaleString()}</div>
+            </div>
+        </div>
+        <div class="report-table-wrapper">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>仕入日</th>
+                    <th>商品名</th>
+                    <th>ブランド</th>
+                    <th>仕入先</th>
+                    <th class="text-right">買取金額</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+        data.items.forEach(item => {
+            html += `
+            <tr>
+                <td>${item.purchase_date}</td>
+                <td>${item.product_name}</td>
+                <td>${item.brand_name || '-'}</td>
+                <td>${item.store_name}</td>
+                <td class="text-right">¥${Number(item.purchase_price).toLocaleString()}</td>
+            </tr>
+        `;
+        });
+
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderExpensesReport(data) {
+        let html = `
+        <div class="report-summary">
+            <div class="summary-item">
+                <div class="label">売上件数</div>
+                <div class="value">${data.summary.count}件</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">総送料</div>
+                <div class="value">¥${Number(data.summary.total_shipping).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">総手数料</div>
+                <div class="value">¥${Number(data.summary.total_commission).toLocaleString()}</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">経費合計</div>
+                <div class="value">¥${Number(data.summary.total_expenses).toLocaleString()}</div>
+            </div>
+        </div>
+        <div class="report-table-wrapper">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>売却日</th>
+                    <th>商品名</th>
+                    <th class="text-right">売上</th>
+                    <th class="text-right">送料</th>
+                    <th class="text-right">手数料</th>
+                    <th class="text-right">経費計</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+        data.items.forEach(item => {
+            const expenses = item.shipping_cost + item.commission;
+            html += `
+            <tr>
+                <td>${item.sale_date}</td>
+                <td>${item.product_name}</td>
+                <td class="text-right">¥${Number(item.sale_price).toLocaleString()}</td>
+                <td class="text-right">¥${Number(item.shipping_cost).toLocaleString()}</td>
+                <td class="text-right">¥${Number(item.commission).toLocaleString()}</td>
+                <td class="text-right">¥${Number(expenses).toLocaleString()}</td>
+            </tr>
+        `;
+        });
+
+        html += '</tbody></table></div>';
+        return html;
+    }
+
 
     // ESCキーでモーダルを閉じる
     document.addEventListener('keydown', function (e) {

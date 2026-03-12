@@ -38,39 +38,74 @@
 
 <!-- 全体統計 -->
 <div class="admin-stats-grid">
-    <div class="admin-stat-card">
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
         <div class="stat-label-top">総商品数</div>
         <div class="stat-content">
             <span class="stat-value">{{ overall_stats.total_items or 0 }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
         <div class="stat-label-top">総仕入額</div>
         <div class="stat-content">
             <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_purchase or 0) }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">総売上</div>
         <div class="stat-content">
             <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_sales or 0) }}</span>
         </div>
-    </div>
-    <div class="admin-stat-card">
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">総利益</div>
         <div class="stat-content">
             <span class="stat-value {% if overall_stats.total_profit and overall_stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                 ¥{{ "{:,}".format(overall_stats.total_profit or 0) }}
             </span>
         </div>
-    </div>
-    <div class="admin-stat-card kaika-fee-card">
+    </a>
+    <a class="admin-stat-card kaika-fee-card" href="{{ url_for('admin_user_products', status='sold', sale_type_not='normal', date_from=date_from, date_to=date_to) }}">
         <div class="stat-label-top">開花手数料</div>
         <div class="stat-content">
             <span class="stat-value kaika-fee-value">¥{{ "{:,}".format((kaika_fee.summary.total_kaika_fee or 0)|int) }}</span>
         </div>
         <div class="stat-sub">{{ kaika_fee.summary.kaika_count or 0 }}件</div>
-    </div>
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(top_destination.sales_destination or ''), date_from=date_from, date_to=date_to) if top_destination and top_destination.sales_destination else url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
+        <div class="stat-label-top">どこにいくら売れたか</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format((top_destination.total_sales or 0)|int) }}</span>
+        </div>
+        <div class="stat-sub">{{ top_destination.sales_destination or '販売先未設定' }} / {{ top_destination.count or 0 }}件</div>
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
+        <div class="stat-label-top">回転率</div>
+        <div class="stat-content">
+            <span class="stat-value">
+                {% if turnover_stats and turnover_stats.total_count and turnover_stats.total_count > 0 %}
+                {{ ((turnover_stats.sold_count or 0) / turnover_stats.total_count * 100)|round(1) }}%
+                {% else %}0%{% endif %}
+            </span>
+        </div>
+        <div class="stat-sub">平均販売日数: {{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats and turnover_stats.avg_days_to_sell else '-' }}日</div>
+    </a>
+    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction', date_from=date_from, date_to=date_to) }}">
+        <div class="stat-label-top">オークション販売実績</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format((auction_stats.auction_sales or 0)|int) }}</span>
+        </div>
+        <div class="stat-sub">{{ auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((auction_stats.auction_profit or 0)|int) }}</div>
+    </a>
+</div>
+
+<div class="admin-section memo-section">
+    <h2>メモ</h2>
+    <form method="POST" action="{{ url_for('admin_analytics', date_from=date_from, date_to=date_to) }}" class="memo-form">
+        <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics_memo or '' }}</textarea>
+        <div class="memo-actions">
+            <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
+        </div>
+    </form>
 </div>
 
 <!-- 開花手数料 詳細と推移 -->
@@ -80,22 +115,22 @@
     <div class="kaika-breakdown-only">
         <h3>サービス別内訳</h3>
         <div class="kaika-items">
-            <div class="kaika-item">
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='photo_packing', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">📸 撮影梱包等代行サービス</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.photo_packing_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='wholesale', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">🏭 業者卸販売</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.wholesale_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_items', status='sold', sale_type='multi_listing', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">📋 同時出品サービス</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.multi_listing_fee or 0)|int) }}</span>
-            </div>
-            <div class="kaika-item">
+            </a>
+            <a class="kaika-item" href="{{ url_for('admin_user_products', status='sold', sale_type='auction', date_from=date_from, date_to=date_to) }}">
                 <span class="kaika-service">🔨 オークション流し</span>
                 <span class="kaika-amount">¥{{ "{:,}".format((kaika_fee.summary.auction_fee or 0)|int) }}</span>
-            </div>
+            </a>
         </div>
     </div>
 </div>
@@ -229,7 +264,7 @@
     <div class="admin-section widget-section">
         <h2>回転率・在庫日数</h2>
         <div class="stats-cards">
-            <div class="stat-card">
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products') }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">
@@ -239,21 +274,21 @@
                     </span>
                     <span class="stat-label">回転率（売却率）</span>
                 </div>
-            </div>
-            <div class="stat-card">
+            </a>
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_to_sell|round(1) if turnover_stats.avg_days_to_sell else '-' }}日</span>
                     <span class="stat-label">平均販売日数</span>
                 </div>
-            </div>
-            <div class="stat-card">
+            </a>
+            <a class="stat-card analytics-link-card" href="{{ url_for('admin_user_products', status='unsold') }}">
                 <div class="stat-icon"></div>
                 <div class="stat-info">
                     <span class="stat-value">{{ turnover_stats.avg_days_in_stock|round(1) if turnover_stats.avg_days_in_stock else '-' }}日</span>
                     <span class="stat-label">平均在庫日数</span>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -263,7 +298,7 @@
     <div class="admin-section widget-section">
         <h2>成約率</h2>
         <div class="stats-cards">
-            <div class="stat-card wide">
+            <a class="stat-card wide analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <div class="closing-rate-chart">
                     {% set total = closing_stats.total_count or 1 %}
                     {% set sold = closing_stats.sold_count or 0 %}
@@ -278,7 +313,7 @@
                         <span class="rate-label total">全体: {{ total }}件</span>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -290,20 +325,20 @@
     <div class="admin-section widget-section">
         <h2>平均単価</h2>
         <div class="stats-cards vertical">
-            <div class="stat-card horizontal">
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products') }}">
                 <span class="stat-label">平均仕入額</span>
                 <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_purchase or 0)|int) }}</span>
-            </div>
-            <div class="stat-card horizontal">
+            </a>
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <span class="stat-label">平均売上</span>
                 <span class="stat-value">¥{{ "{:,}".format((avg_price_stats.avg_sale or 0)|int) }}</span>
-            </div>
-            <div class="stat-card horizontal">
+            </a>
+            <a class="stat-card horizontal analytics-link-card" href="{{ url_for('admin_user_products', status='sold', date_from=date_from, date_to=date_to) }}">
                 <span class="stat-label">平均利益</span>
                 <span class="stat-value {% if avg_price_stats.avg_profit and avg_price_stats.avg_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                     ¥{{ "{:,}".format((avg_price_stats.avg_profit or 0)|int) }}
                 </span>
-            </div>
+            </a>
         </div>
     </div>
     {% endif %}
@@ -351,12 +386,12 @@
 
 <div class="admin-grid-2">
     <!-- 販売先別統計 -->
-    {% if 'destination_stats' in enabled_keys and destination_stats %}
+    {% if 'destination_stats' in enabled_keys %}
     <div class="admin-section widget-section">
         <h2>販売先別統計</h2>
         <div class="analytics-cards">
             {% for dest in destination_stats %}
-            <div class="analytics-card">
+            <a class="analytics-card analytics-link-card" href="{{ url_for('admin_user_products', status='sold', destination=dest.sales_destination, date_from=date_from, date_to=date_to) }}">
                 <div class="analytics-icon">
                     {% if dest.sales_destination == 'メルカリ' %}
                     {% elif dest.sales_destination == 'ヤフオク' %}
@@ -369,7 +404,7 @@
                     <p class="analytics-value">¥{{ "{:,}".format(dest.total_sales or 0) }}</p>
                     <p class="analytics-sub">{{ dest.count }}件の販売</p>
                 </div>
-            </div>
+            </a>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -378,12 +413,12 @@
     {% endif %}
     
     <!-- ブランド別利益率統計 -->
-    {% if 'brand_stats' in enabled_keys and brand_stats %}
+    {% if 'brand_stats' in enabled_keys %}
     <div class="admin-section widget-section">
         <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
             {% for brand in brand_stats %}
-            <div class="brand-stat-item">
+            <a class="brand-stat-item analytics-link-card" href="{{ url_for('admin_user_products', status='sold', brand=(brand.brand_name or ''), date_from=date_from, date_to=date_to) }}">
                 <div class="brand-rank">{{ loop.index }}</div>
                 <div class="brand-info">
                     <h4>{{ brand.brand_name or '(未設定)' }}</h4>
@@ -397,7 +432,7 @@
                         ¥{{ "{:,}".format(brand.total_profit or 0) }}
                     </span>
                 </div>
-            </div>
+            </a>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -478,6 +513,30 @@
     font-weight: 500;
 }
 
+.memo-section {
+    margin-bottom: 1.5rem;
+}
+
+.memo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.memo-textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    resize: vertical;
+}
+
+.memo-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* 開花手数料カード */
 .kaika-fee-card {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
@@ -513,6 +572,12 @@
     grid-template-columns: 1fr 2fr;
     gap: 1.5rem;
     overflow: hidden;
+}
+
+.analytics-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
 }
 
 @media (max-width: 900px) {

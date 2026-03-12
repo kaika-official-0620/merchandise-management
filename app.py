@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import time
 import calendar
+from decimal import Decimal
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -250,6 +251,8 @@ if DATABASE_URL:
                 brand_name VARCHAR(100),
                 item_condition VARCHAR(10),
                 store_name VARCHAR(200),
+                wholesale_price INTEGER DEFAULT 0,
+                wholesale_fee_rate DECIMAL(5,2) DEFAULT 0,
                 purchase_price INTEGER DEFAULT 0,
                 payment_method VARCHAR(50),
                 listing_price INTEGER DEFAULT 0,
@@ -307,6 +310,18 @@ if DATABASE_URL:
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS supplier_detail VARCHAR(50)")
+        except:
+            pass
+
+        # 卸価格カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS wholesale_price INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # 卸手数料率カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS wholesale_fee_rate DECIMAL(5,2) DEFAULT 0")
         except:
             pass
         
@@ -428,6 +443,16 @@ if DATABASE_URL:
                 ON CONFLICT (widget_key) DO NOTHING
             ''', widget)
         
+        # 分析メモテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS analytics_memos (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                memo_text TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # 精算書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
@@ -476,6 +501,7 @@ if DATABASE_URL:
         try:
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_date DATE")
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -536,6 +562,7 @@ if DATABASE_URL:
         # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS product_code VARCHAR(50)")
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -755,12 +782,17 @@ if DATABASE_URL:
                 mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name VARCHAR(200) NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit VARCHAR(20),
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_mitsumori_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # ユーザー向け計算書テーブル
         cur.execute('''
@@ -786,12 +818,17 @@ if DATABASE_URL:
                 keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name VARCHAR(200) NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit VARCHAR(20),
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_keisan_items ADD COLUMN IF NOT EXISTS merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # マスター: ブランドカテゴリ
         cur.execute('''
@@ -1143,6 +1180,8 @@ else:
                 brand_name TEXT,
                 item_condition TEXT,
                 store_name TEXT,
+                wholesale_price INTEGER DEFAULT 0,
+                wholesale_fee_rate REAL DEFAULT 0,
                 purchase_price INTEGER DEFAULT 0,
                 payment_method TEXT,
                 listing_price INTEGER DEFAULT 0,
@@ -1200,6 +1239,18 @@ else:
         # supplier_detailカラムを追加（仕入先詳細）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN supplier_detail TEXT")
+        except:
+            pass
+
+        # 卸価格カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN wholesale_price INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # 卸手数料率カラムを追加
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN wholesale_fee_rate REAL DEFAULT 0")
         except:
             pass
         
@@ -1320,6 +1371,16 @@ else:
                 VALUES (?, ?, ?, ?)
             ''', widget)
         
+        # 分析メモテーブル
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS analytics_memos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                memo_text TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # 精算書テーブル
         cur.execute('''
             CREATE TABLE IF NOT EXISTS shikiriosho (
@@ -1374,6 +1435,10 @@ else:
             pass
         try:
             cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN product_code TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE shikiriosho_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -1446,6 +1511,10 @@ else:
         # invoice_itemsにproduct_codeカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE invoice_items ADD COLUMN product_code TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
         except:
             pass
         
@@ -1668,12 +1737,17 @@ else:
                 mitsumori_id INTEGER REFERENCES user_mitsumori(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name TEXT NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_mitsumori_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # ユーザー向け計算書テーブル
         cur.execute('''
@@ -1699,12 +1773,17 @@ else:
                 keisan_id INTEGER REFERENCES user_keisan(id) ON DELETE CASCADE,
                 item_no INTEGER NOT NULL,
                 item_name TEXT NOT NULL,
+                merchandise_id INTEGER REFERENCES merchandise(id),
                 quantity INTEGER DEFAULT 1,
                 unit TEXT,
                 unit_price INTEGER DEFAULT 0,
                 amount INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE user_keisan_items ADD COLUMN merchandise_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
         
         # マスター: ブランドカテゴリ
         cur.execute('''
@@ -2824,23 +2903,31 @@ def reports():
     current_month = datetime.now().month
     years = list(range(current_year - 5, current_year + 1))
     
+    is_admin_user = current_user.is_admin()
+    
     # 在庫数と在庫総額を取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NULL
-        """, (current_user.id,))
+            WHERE sale_date IS NULL
+              AND ({user_filter})
+        """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+        () if is_admin_user else (current_user.id,))
         result = cur.fetchone()
+
     else:
         cur = conn.cursor()
         cur.execute("""
             SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NULL
-        """, (current_user.id,))
+            WHERE sale_date IS NULL
+              AND ({user_filter})
+        """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+        () if is_admin_user else (current_user.id,))
         result = dict(cur.fetchone())
+
     
     inventory_count = result['count'] if result else 0
     inventory_total = result['total'] if result else 0
@@ -2865,8 +2952,29 @@ def api_report(report_type):
     year = request.args.get('year', datetime.now().year, type=int)
     month = request.args.get('month', datetime.now().month, type=int)
     
+    # 管理者の場合は全データを表示
+    is_admin_user = current_user.is_admin()
+    
     conn = get_db()
     data = {'items': [], 'summary': {}}
+
+    def calculate_wholesale_fee_stats(items):
+        total_wholesale_fee = 0
+        rate_count_map = {}
+
+        for item in items:
+            wholesale_price = int(item.get('wholesale_price') or 0)
+            wholesale_fee_rate = float(item.get('wholesale_fee_rate') or 0)
+            wholesale_fee = int(round(wholesale_price * wholesale_fee_rate / 100))
+            total_wholesale_fee += wholesale_fee
+            rate_count_map[wholesale_fee_rate] = rate_count_map.get(wholesale_fee_rate, 0) + 1
+
+        wholesale_fee_rate_counts = [
+            {'rate': rate, 'count': count}
+            for rate, count in sorted(rate_count_map.items(), key=lambda x: x[0])
+        ]
+        return total_wholesale_fee, wholesale_fee_rate_counts
+
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2875,13 +2983,16 @@ def api_report(report_type):
             # 月次売上報告書
             cur.execute("""
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
-                       shipping_cost, commission, sale_type
+                       shipping_cost, commission, sale_type, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                   AND EXTRACT(MONTH FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year, month))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             # 日付をシリアライズ可能に
@@ -2889,11 +3000,12 @@ def api_report(report_type):
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
-            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
+            total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
                 'items': items,
@@ -2903,6 +3015,8 @@ def api_report(report_type):
                     'total_purchase': total_purchase,
                     'total_shipping': total_shipping,
                     'total_commission': total_commission,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts,
                     'total_profit': total_profit
                 }
             }
@@ -2911,48 +3025,70 @@ def api_report(report_type):
             # 在庫一覧表
             cur.execute("""
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
-                       purchase_price, listing_price, is_listed
+                       purchase_price, listing_price, is_listed, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('purchase_date'):
                     item['purchase_date'] = str(item['purchase_date'])
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_listing = sum(i['listing_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_listing = int(sum(i['listing_price'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             
             data = {
                 'items': items,
                 'summary': {
                     'count': len(items),
                     'total_purchase': total_purchase,
-                    'total_listing': total_listing
+                    'total_listing': total_listing,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts
                 }
             }
             
         elif report_type == 'expenses':
             # 月次経費精算書
-            cur.execute("""
-                SELECT id, sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
-                  AND EXTRACT(YEAR FROM sale_date) = %s
-                  AND EXTRACT(MONTH FROM sale_date) = %s
-                ORDER BY sale_date
-            """, (current_user.id, year, month))
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -2975,11 +3111,14 @@ def api_report(report_type):
                        COALESCE(SUM(commission), 0) as commission,
                        COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                 GROUP BY EXTRACT(MONTH FROM sale_date)
                 ORDER BY month
-            """, (current_user.id, year))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year,) if is_admin_user else (current_user.id, year))
+
             monthly = [dict(row) for row in cur.fetchall()]
             
             # 各月のデータを整数に変換
@@ -2992,12 +3131,12 @@ def api_report(report_type):
                 m['commission'] = int(m['commission'])
                 m['profit'] = int(m['profit'])
             
-            total_count = sum(m['count'] for m in monthly)
-            total_sales = sum(m['sales'] for m in monthly)
-            total_purchase = sum(m['purchase'] for m in monthly)
-            total_shipping = sum(m['shipping'] for m in monthly)
-            total_commission = sum(m['commission'] for m in monthly)
-            total_profit = sum(m['profit'] for m in monthly)
+            total_count = int(sum(m['count'] for m in monthly))
+            total_sales = int(sum(m['sales'] for m in monthly))
+            total_purchase = int(sum(m['purchase'] for m in monthly))
+            total_shipping = int(sum(m['shipping'] for m in monthly))
+            total_commission = int(sum(m['commission'] for m in monthly))
+            total_profit = int(sum(m['profit'] for m in monthly))
             
             data = {
                 'monthly': monthly,
@@ -3017,27 +3156,32 @@ def api_report(report_type):
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                       AND EXTRACT(MONTH FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('purchase_date'):
                     item['purchase_date'] = str(item['purchase_date'])
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3054,28 +3198,33 @@ def api_report(report_type):
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                       AND EXTRACT(MONTH FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             
             for item in items:
                 if item.get('sale_date'):
                     item['sale_date'] = str(item['sale_date'])
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_profit = int(sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items))
             
             data = {
                 'items': items,
@@ -3092,20 +3241,24 @@ def api_report(report_type):
         if report_type == 'monthly':
             cur.execute("""
                 SELECT id, sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
-                       shipping_cost, commission, sale_type
+                       shipping_cost, commission, sale_type, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                   AND strftime('%m', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
-            total_profit = total_sales - total_purchase - total_shipping - total_commission
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
+            total_profit = int(total_sales - total_purchase - total_shipping - total_commission)
             
             data = {
                 'items': items,
@@ -3115,6 +3268,8 @@ def api_report(report_type):
                     'total_purchase': total_purchase,
                     'total_shipping': total_shipping,
                     'total_commission': total_commission,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts,
                     'total_profit': total_profit
                 }
             }
@@ -3122,39 +3277,62 @@ def api_report(report_type):
         elif report_type == 'inventory':
             cur.execute("""
                 SELECT id, purchase_date, product_name, brand_name, item_condition,
-                       purchase_price, listing_price, is_listed
+                       purchase_price, listing_price, is_listed, wholesale_price, wholesale_fee_rate
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
-            total_listing = sum(i['listing_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
+            total_listing = int(sum(i['listing_price'] or 0 for i in items))
+            total_wholesale_fee, wholesale_fee_rate_counts = calculate_wholesale_fee_stats(items)
             
             data = {
                 'items': items,
                 'summary': {
                     'count': len(items),
                     'total_purchase': total_purchase,
-                    'total_listing': total_listing
+                    'total_listing': total_listing,
+                    'total_wholesale_fee': total_wholesale_fee,
+                    'wholesale_fee_rate_counts': wholesale_fee_rate_counts
                 }
             }
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT id, sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
-                  AND strftime('%Y', sale_date) = ?
-                  AND strftime('%m', sale_date) = ?
-                ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            # 月次経費精算書
+            if month == 0:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
+            else:
+                cur.execute("""
+                    SELECT id, sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_shipping = sum(i['shipping_cost'] or 0 for i in items)
-            total_commission = sum(i['commission'] or 0 for i in items)
+            total_shipping = int(sum(i['shipping_cost'] or 0 for i in items))
+            total_commission = int(sum(i['commission'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3176,11 +3354,14 @@ def api_report(report_type):
                        COALESCE(SUM(commission), 0) as commission,
                        COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as profit
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                 GROUP BY strftime('%m', sale_date)
                 ORDER BY month
-            """, (current_user.id, str(year)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year),) if is_admin_user else (current_user.id, str(year)))
+
             monthly = [dict(row) for row in cur.fetchall()]
             
             total_count = sum(m['count'] for m in monthly)
@@ -3207,23 +3388,28 @@ def api_report(report_type):
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT id, purchase_date, product_name, brand_name, store_name,
                            purchase_price, id_document_path
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                       AND strftime('%m', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_purchase = sum(i['purchase_price'] or 0 for i in items)
+            total_purchase = int(sum(i['purchase_price'] or 0 for i in items))
             
             data = {
                 'items': items,
@@ -3239,24 +3425,29 @@ def api_report(report_type):
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT id, sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                       AND strftime('%m', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             
-            total_sales = sum(i['sale_price'] or 0 for i in items)
-            total_profit = sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items)
+            total_sales = int(sum(i['sale_price'] or 0 for i in items))
+            total_profit = int(sum((i['sale_price'] or 0) - (i['purchase_price'] or 0) - (i['shipping_cost'] or 0) - (i['commission'] or 0) for i in items))
             
             data = {
                 'items': items,
@@ -3284,7 +3475,11 @@ def api_report_download(report_type):
     month = request.args.get('month', datetime.now().month, type=int)
     format_type = request.args.get('format', 'csv')
     
+    # 管理者の場合は全データを表示
+    is_admin_user = current_user.is_admin()
+    
     # データ取得（api_reportと同様のロジック）
+
     conn = get_db()
     items = []
     
@@ -3296,11 +3491,14 @@ def api_report_download(report_type):
                 SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                   AND EXTRACT(MONTH FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year, month))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3310,36 +3508,59 @@ def api_report_download(report_type):
                 SELECT purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
-                  AND EXTRACT(YEAR FROM sale_date) = %s
-                  AND EXTRACT(MONTH FROM sale_date) = %s
-                ORDER BY sale_date
-            """, (current_user.id, year, month))
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
+                filename = f"expenses_{year}_all.csv"
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND EXTRACT(YEAR FROM sale_date) = %s
+                      AND EXTRACT(MONTH FROM sale_date) = %s
+                    ORDER BY sale_date
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+                filename = f"expenses_{year}_{month:02d}.csv"
+
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"expenses_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+
             
         elif report_type == 'annual':
             cur.execute("""
                 SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
                        shipping_cost, commission
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND EXTRACT(YEAR FROM sale_date) = %s
                 ORDER BY sale_date
-            """, (current_user.id, year))
+            """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+            (year,) if is_admin_user else (current_user.id, year))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"annual_report_{year}.csv"
             headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
@@ -3350,20 +3571,25 @@ def api_report_download(report_type):
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = %s AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM purchase_date) = %s
                       AND EXTRACT(MONTH FROM purchase_date) = %s
                     ORDER BY purchase_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
@@ -3374,20 +3600,25 @@ def api_report_download(report_type):
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year,) if is_admin_user else (current_user.id, year))
             else:
                 cur.execute("""
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = %s AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND EXTRACT(YEAR FROM sale_date) = %s
                       AND EXTRACT(MONTH FROM sale_date) = %s
                     ORDER BY sale_date
-                """, (current_user.id, year, month))
+                """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
+                (year, month) if is_admin_user else (current_user.id, year, month))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3400,11 +3631,14 @@ def api_report_download(report_type):
                 SELECT sale_date, product_name, brand_name, store_name, sale_price, purchase_price, 
                        shipping_cost, commission, sale_type
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                   AND strftime('%m', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"monthly_report_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '仕入先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3414,36 +3648,59 @@ def api_report_download(report_type):
                 SELECT purchase_date, product_name, brand_name, item_condition,
                        purchase_price, listing_price, is_listed
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL
+                WHERE sale_date IS NULL
+                  AND ({user_filter})
                 ORDER BY purchase_date DESC
-            """, (current_user.id,))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            () if is_admin_user else (current_user.id,))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
-            cur.execute("""
-                SELECT sale_date, product_name, sale_type, sale_price, 
-                       shipping_cost, commission
-                FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
-                  AND strftime('%Y', sale_date) = ?
-                  AND strftime('%m', sale_date) = ?
-                ORDER BY sale_date
-            """, (current_user.id, str(year), str(month).zfill(2)))
+            if month == 0:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
+                filename = f"expenses_{year}_all.csv"
+            else:
+                cur.execute("""
+                    SELECT sale_date, product_name, sale_type, sale_price, 
+                           shipping_cost, commission
+                    FROM merchandise 
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
+                      AND strftime('%Y', sale_date) = ?
+                      AND strftime('%m', sale_date) = ?
+                    ORDER BY sale_date
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+                filename = f"expenses_{year}_{month:02d}.csv"
+
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"expenses_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', '販売タイプ', '売上', '送料', '手数料', '経費計']
+
             
         elif report_type == 'annual':
             cur.execute("""
                 SELECT sale_date, product_name, brand_name, sale_price, purchase_price, 
                        shipping_cost, commission
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NOT NULL
+                WHERE sale_date IS NOT NULL
+                  AND ({user_filter})
                   AND strftime('%Y', sale_date) = ?
                 ORDER BY sale_date
-            """, (current_user.id, str(year)))
+            """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+            (str(year),) if is_admin_user else (current_user.id, str(year)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"annual_report_{year}.csv"
             headers = ['売却日', '商品名', 'ブランド', '売上', '仕入', '送料', '手数料', '利益']
@@ -3454,20 +3711,25 @@ def api_report_download(report_type):
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT purchase_date, product_name, brand_name, store_name,
                            purchase_price
                     FROM merchandise 
-                    WHERE user_id = ? AND store_name = '個人'
+                    WHERE store_name = '個人'
+                      AND ({user_filter})
                       AND strftime('%Y', purchase_date) = ?
                       AND strftime('%m', purchase_date) = ?
                     ORDER BY purchase_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"kaitori_ledger_{year}.csv" if month == 0 else f"kaitori_ledger_{year}_{month:02d}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '仕入先', '買取金額']
@@ -3478,20 +3740,25 @@ def api_report_download(report_type):
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year),) if is_admin_user else (current_user.id, str(year)))
             else:
                 cur.execute("""
                     SELECT sale_date, product_name, brand_name, sales_destination,
                            sale_price, purchase_price, shipping_cost, commission
                     FROM merchandise 
-                    WHERE user_id = ? AND sale_date IS NOT NULL
+                    WHERE sale_date IS NOT NULL
+                      AND ({user_filter})
                       AND strftime('%Y', sale_date) = ?
                       AND strftime('%m', sale_date) = ?
                     ORDER BY sale_date
-                """, (current_user.id, str(year), str(month).zfill(2)))
+                """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
+                (str(year), str(month).zfill(2)) if is_admin_user else (current_user.id, str(year), str(month).zfill(2)))
+
             items = [dict(row) for row in cur.fetchall()]
             filename = f"sales_list_{year}.csv" if month == 0 else f"sales_list_{year}_{month:02d}.csv"
             headers = ['売却日', '商品名', 'ブランド', '販売先', '売上', '仕入', '送料', '手数料', '利益']
@@ -3590,7 +3857,7 @@ def api_report_download(report_type):
     
     return redirect(url_for('reports'))
 
-@app.route('/my-analytics')
+@app.route('/my-analytics', methods=['GET', 'POST'])
 @login_required
 def user_analytics():
     """ユーザー向け分析ページ
@@ -3607,6 +3874,28 @@ def user_analytics():
     
     # 管理者かどうかで条件を変更
     is_admin = current_user.is_admin()
+
+    # メモ保存
+    if request.method == 'POST':
+        memo_text = request.form.get('analytics_memo', '')
+        if DATABASE_URL:
+            cur_memo = conn.cursor()
+            cur_memo.execute("""
+                INSERT INTO analytics_memos (user_id, memo_text, updated_at)
+                VALUES (%s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id)
+                DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
+            """, (current_user.id, memo_text))
+        else:
+            cur_memo = conn.cursor()
+            cur_memo.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+            if cur_memo.rowcount == 0:
+                cur_memo.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+        conn.commit()
+        cur_memo.close()
+        conn.close()
+        flash('分析メモを保存しました', 'success')
+        return redirect(url_for('user_analytics', start_month=start_month, end_month=end_month))
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -3704,6 +3993,31 @@ def user_analytics():
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+        # 販売先TOP（どこにいくら売れたか）
+        cur.execute(f"""
+            SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND sales_destination IS NOT NULL
+              AND sales_destination != ''
+            GROUP BY sales_destination
+            ORDER BY total_sales DESC
+            LIMIT 1
+        """, user_params)
+        analytics_data['top_destination'] = dict(cur.fetchone() or {})
+
+        # オークション販売実績
+        cur.execute(f"""
+            SELECT
+                COUNT(*) as auction_count,
+                COALESCE(SUM(sale_price), 0) as auction_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND POSITION('auction' IN COALESCE(sale_type, '')) > 0
+        """, user_params)
+        analytics_data['auction_stats'] = dict(cur.fetchone() or {})
         
         # 総合統計（期間フィルター適用）
         cur.execute(f"""
@@ -3741,6 +4055,11 @@ def user_analytics():
         except Exception as e:
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+
+        # 分析メモ
+        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+        memo_row = cur.fetchone()
+        analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
         
         # 月別キャッシュフロー
         try:
@@ -3862,6 +4181,31 @@ def user_analytics():
             ORDER BY count DESC
         """, user_params)
         analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+        # 販売先TOP（どこにいくら売れたか）
+        cur.execute(f"""
+            SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND sales_destination IS NOT NULL
+              AND sales_destination != ''
+            GROUP BY sales_destination
+            ORDER BY total_sales DESC
+            LIMIT 1
+        """, user_params)
+        analytics_data['top_destination'] = dict(cur.fetchone() or {})
+
+        # オークション販売実績
+        cur.execute(f"""
+            SELECT
+                COUNT(*) as auction_count,
+                COALESCE(SUM(sale_price), 0) as auction_sales,
+                COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+            FROM merchandise
+            WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
+              AND instr(COALESCE(sale_type, ''), 'auction') > 0
+        """, user_params)
+        analytics_data['auction_stats'] = dict(cur.fetchone() or {})
         
         # 総合統計（期間フィルター適用）
         cur.execute(f"""
@@ -3899,6 +4243,11 @@ def user_analytics():
         except Exception as e:
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
+
+        # 分析メモ
+        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+        memo_row = cur.fetchone()
+        analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
         
         # 月別キャッシュフロー
         try:
@@ -3927,6 +4276,9 @@ def user_analytics():
     
     # 管理者の場合は分析対象がわかるようにフラグを渡す
     analytics_data['is_admin_view'] = is_admin
+    analytics_data.setdefault('top_destination', {})
+    analytics_data.setdefault('auction_stats', {})
+    analytics_data.setdefault('analytics_memo', '')
     
     return render_template('user_analytics.html', analytics=analytics_data,
                          start_month=start_month, end_month=end_month)
@@ -4443,8 +4795,25 @@ def edit_item(id):
             conn.commit()
             cur.close()
             conn.close()
-            flash('商品を更新しました', 'success')
-            return redirect(url_for('index'))
+            
+            # リダイレクト先を決定（フォームのhiddenフィールドから戻り先を取得）
+            back_url = request.form.get('back_url', '')
+            if back_url:
+                return redirect(back_url)
+            
+            # フォールバック: referrerまたはデフォルトの遷移先
+            referrer = request.referrer or ''
+            item_dict = dict(item)
+            user_id = item_dict.get('user_id')
+            
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif (current_user.is_admin() or current_user.is_owner()) and user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            elif current_user.is_admin() or current_user.is_owner():
+                return redirect(url_for('admin_items'))
+            else:
+                return redirect(url_for('index'))
         except Exception as e:
             print(f"[ERROR] edit_item: {e}")
             import traceback
@@ -4469,7 +4838,18 @@ def edit_item(id):
     else:
         item_dict['additional_photos_list'] = []
     
-    return render_template('form.html', item=item_dict)
+    # リファラーから戻り先URLを判定
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer:
+        back_url = url_for('admin_user_products')
+    elif '/admin/users/' in referrer and '/items' in referrer:
+        back_url = referrer
+    elif current_user.is_admin() or current_user.is_owner():
+        back_url = url_for('admin_items')
+    else:
+        back_url = url_for('index')
+
+    return render_template('form.html', item=item_dict, back_url=back_url)
 
 @app.route('/view/<int:id>')
 @login_required
@@ -4534,7 +4914,18 @@ def view_item(id):
             item_dict.get('expected_commission', 0) or 0
         )
     
-    return render_template('view.html', item=item_dict)
+    # リファラーから戻り先URLを判定
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer:
+        back_url = url_for('admin_user_products')
+    elif '/admin/users/' in referrer and '/items' in referrer:
+        back_url = referrer
+    elif current_user.is_admin() or current_user.is_owner():
+        back_url = url_for('admin_items')
+    else:
+        back_url = url_for('index')
+
+    return render_template('view.html', item=item_dict, back_url=back_url)
 
 @app.route('/delete/<int:id>')
 @login_required
@@ -5333,7 +5724,7 @@ def admin_user_items(id):
     
     return render_template('admin/user_items.html', user=dict(user), items=processed_items)
 
-@app.route('/admin/analytics')
+@app.route('/admin/analytics', methods=['GET', 'POST'])
 @login_required
 @permission_required('analytics')
 def admin_analytics():
@@ -5341,6 +5732,9 @@ def admin_analytics():
     widgets = []
     overall_stats = {}
     kaika_fee_data = {}
+    top_destination = {}
+    auction_stats = {}
+    analytics_memo = ''
     
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
@@ -5350,6 +5744,17 @@ def admin_analytics():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            if request.method == 'POST':
+                memo_text = request.form.get('analytics_memo', '')
+                cur.execute("""
+                    INSERT INTO analytics_memos (user_id, memo_text, updated_at)
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
+                """, (current_user.id, memo_text))
+                conn.commit()
+                flash('分析メモを保存しました', 'success')
             
             # 日付条件を構築
             date_condition = ""
@@ -5363,6 +5768,12 @@ def admin_analytics():
             elif date_to:
                 date_condition = " AND sale_date <= %s"
                 date_params = [date_to]
+
+            def execute_optional_params(sql, params):
+                if params:
+                    cur.execute(sql, params)
+                else:
+                    cur.execute(sql)
             
             # 全体統計
             query = """
@@ -5374,21 +5785,21 @@ def admin_analytics():
                         sale_price - purchase_price - shipping_cost - commission ELSE 0 END), 0) as total_profit
                 FROM merchandise
                 WHERE 1=1 """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
-            cur.execute(query, date_params if date_params else None)
+            execute_optional_params(query, date_params)
             overall_stats = dict(cur.fetchone() or {})
             
             # 開花手数料（sale_typeがnormal以外の手数料合計）
             kaika_query = """
                 SELECT 
                     COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('photo_packing' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('wholesale' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('multi_listing' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN POSITION('auction' IN COALESCE(sale_type, '')) > 0 THEN commission ELSE 0 END), 0) as auction_fee,
                     COUNT(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 END) as kaika_count
                 FROM merchandise
                 WHERE sale_date IS NOT NULL""" + date_condition
-            cur.execute(kaika_query, date_params if date_params else None)
+            execute_optional_params(kaika_query, date_params)
             kaika_fee_data['summary'] = dict(cur.fetchone() or {})
             
             # 開花手数料の月別推移
@@ -5403,8 +5814,39 @@ def admin_analytics():
                 ORDER BY month DESC
                 LIMIT 12
             """
-            cur.execute(kaika_monthly_query, date_params if date_params else None)
+            execute_optional_params(kaika_monthly_query, date_params)
             kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
+
+            # 販売先TOP（どこにいくら売れたか）
+            top_destination_query = """
+                SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND sales_destination IS NOT NULL
+                  AND sales_destination != ''""" + date_condition + """
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+                LIMIT 1
+            """
+            execute_optional_params(top_destination_query, date_params)
+            top_destination = dict(cur.fetchone() or {})
+
+            # オークション販売実績
+            auction_stats_query = """
+                SELECT
+                    COUNT(*) as auction_count,
+                    COALESCE(SUM(sale_price), 0) as auction_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND POSITION('auction' IN COALESCE(sale_type, '')) > 0""" + date_condition
+            execute_optional_params(auction_stats_query, date_params)
+            auction_stats = dict(cur.fetchone() or {})
+
+            # 分析メモ
+            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+            memo_row = cur.fetchone()
+            analytics_memo = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -5454,6 +5896,21 @@ def admin_analytics():
             
             # 回転率・在庫日数
             if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN sale_date::date - purchase_date::date 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN CURRENT_DATE - purchase_date::date 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            elif 'turnover_stats' not in analytics_data:
                 cur.execute("""
                     SELECT 
                         COUNT(*) FILTER (WHERE sale_date IS NOT NULL) as sold_count,
@@ -5521,8 +5978,8 @@ def admin_analytics():
             
             # ブランド別統計
             if 'brand_stats' in enabled_widgets:
-                cur.execute("""
-                    SELECT brand_name, 
+                brand_stats_query = """
+                    SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
@@ -5530,27 +5987,38 @@ def admin_analytics():
                                 THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission)::numeric / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                    GROUP BY brand_name
+                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
-                """)
+                """
+                execute_optional_params(brand_stats_query, date_params)
                 analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
-                cur.execute("""
-                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                destination_stats_query = """
+                    SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                           COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                    GROUP BY sales_destination
+                    WHERE sale_date IS NOT NULL""" + date_condition + """
+                    GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
-                """)
+                """
+                execute_optional_params(destination_stats_query, date_params)
                 analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
+
+            if request.method == 'POST':
+                memo_text = request.form.get('analytics_memo', '')
+                cur.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+                if cur.rowcount == 0:
+                    cur.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+                conn.commit()
+                flash('分析メモを保存しました', 'success')
             
             # 日付条件を構築（SQLite）
             date_condition_sqlite = ""
@@ -5581,10 +6049,10 @@ def admin_analytics():
             cur.execute("""
                 SELECT 
                     COALESCE(SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL THEN commission ELSE 0 END), 0) as total_kaika_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'photo_packing' THEN commission ELSE 0 END), 0) as photo_packing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'wholesale' THEN commission ELSE 0 END), 0) as wholesale_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'multi_listing' THEN commission ELSE 0 END), 0) as multi_listing_fee,
-                    COALESCE(SUM(CASE WHEN sale_type = 'auction' THEN commission ELSE 0 END), 0) as auction_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'photo_packing') > 0 THEN commission ELSE 0 END), 0) as photo_packing_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'wholesale') > 0 THEN commission ELSE 0 END), 0) as wholesale_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'multi_listing') > 0 THEN commission ELSE 0 END), 0) as multi_listing_fee,
+                    COALESCE(SUM(CASE WHEN instr(COALESCE(sale_type, ''), 'auction') > 0 THEN commission ELSE 0 END), 0) as auction_fee,
                     SUM(CASE WHEN sale_type != 'normal' AND sale_type IS NOT NULL AND sale_date IS NOT NULL THEN 1 ELSE 0 END) as kaika_count
                 FROM merchandise
                 WHERE sale_date IS NOT NULL""" + date_condition_sqlite, date_params_sqlite if date_params_sqlite else [])
@@ -5603,6 +6071,37 @@ def admin_analytics():
                 LIMIT 12
             """, date_params_sqlite if date_params_sqlite else [])
             kaika_fee_data['monthly'] = [dict(m) for m in cur.fetchall()]
+
+            # 販売先TOP（どこにいくら売れたか）
+            cur.execute("""
+                SELECT sales_destination, COUNT(*) as count, COALESCE(SUM(sale_price), 0) as total_sales
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND sales_destination IS NOT NULL
+                  AND sales_destination != ''""" + date_condition_sqlite + """
+                GROUP BY sales_destination
+                ORDER BY total_sales DESC
+                LIMIT 1
+            """, date_params_sqlite if date_params_sqlite else [])
+            top_destination = dict(cur.fetchone() or {})
+
+            # オークション販売実績
+            cur.execute("""
+                SELECT
+                    COUNT(*) as auction_count,
+                    COALESCE(SUM(sale_price), 0) as auction_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as auction_profit
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND instr(COALESCE(sale_type, ''), 'auction') > 0""" + date_condition_sqlite,
+                date_params_sqlite if date_params_sqlite else []
+            )
+            auction_stats = dict(cur.fetchone() or {})
+
+            # 分析メモ
+            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+            memo_row = cur.fetchone()
+            analytics_memo = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
             
             # ウィジェット設定を取得
             cur.execute("SELECT * FROM widget_settings ORDER BY display_order")
@@ -5652,6 +6151,21 @@ def admin_analytics():
             
             # 回転率・在庫日数
             if 'turnover_rate' in enabled_widgets:
+                cur.execute("""
+                    SELECT 
+                        SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
+                        COUNT(*) as total_count,
+                        AVG(CASE WHEN sale_date IS NOT NULL 
+                            THEN julianday(sale_date) - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_to_sell,
+                        AVG(CASE WHEN sale_date IS NULL AND purchase_date IS NOT NULL
+                            THEN julianday('now') - julianday(purchase_date) 
+                            ELSE NULL END) as avg_days_in_stock
+                    FROM merchandise 
+                    WHERE purchase_date IS NOT NULL
+                """)
+                analytics_data['turnover_stats'] = dict(cur.fetchone() or {})
+            elif 'turnover_stats' not in analytics_data:
                 cur.execute("""
                     SELECT 
                         SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END) as sold_count,
@@ -5728,7 +6242,7 @@ def admin_analytics():
             # ブランド別統計
             if 'brand_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT brand_name, 
+                    SELECT COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)') as brand_name, 
                            COUNT(*) as count, 
                            SUM(sale_price) as total_sales,
                            SUM(sale_price - purchase_price - shipping_cost - commission) as total_profit,
@@ -5736,22 +6250,23 @@ def admin_analytics():
                                 THEN ROUND(CAST(SUM(sale_price - purchase_price - shipping_cost - commission) AS REAL) / SUM(purchase_price) * 100, 1)
                                 ELSE 0 END as profit_rate
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND brand_name IS NOT NULL AND brand_name != ''
-                    GROUP BY brand_name
+                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(未設定)')
                     ORDER BY profit_rate DESC
                     LIMIT 10
-                """)
+                """, date_params_sqlite if date_params_sqlite else [])
                 analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
             
             # 販売先別統計
             if 'destination_stats' in enabled_widgets:
                 cur.execute("""
-                    SELECT sales_destination, COUNT(*) as count, SUM(sale_price) as total_sales
+                    SELECT COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                           COUNT(*) as count, SUM(sale_price) as total_sales
                     FROM merchandise 
-                    WHERE sale_date IS NOT NULL AND sales_destination IS NOT NULL
-                    GROUP BY sales_destination
+                    WHERE sale_date IS NOT NULL""" + date_condition_sqlite + """
+                    GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
                     ORDER BY total_sales DESC
-                """)
+                """, date_params_sqlite if date_params_sqlite else [])
                 analytics_data['destination_stats'] = [dict(d) for d in cur.fetchall()]
         
         cur.close()
@@ -5765,6 +6280,9 @@ def admin_analytics():
                          widgets=[dict(w) for w in widgets] if widgets else [],
                          overall_stats=overall_stats,
                          kaika_fee=kaika_fee_data,
+                         top_destination=top_destination,
+                         auction_stats=auction_stats,
+                         analytics_memo=analytics_memo,
                          date_from=date_from,
                          date_to=date_to,
                          **analytics_data)
@@ -6989,6 +7507,7 @@ def admin_auction_keisan_edit(id):
         
         # 明細を取得
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -8918,6 +9437,8 @@ def export_backup():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -8926,7 +9447,7 @@ def export_backup():
     
     # JSONファイルとしてダウンロード
     output = io.BytesIO()
-    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
     output.seek(0)
     
     return send_file(
@@ -9032,6 +9553,8 @@ def export_backup_with_images():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9042,7 +9565,7 @@ def export_backup_with_images():
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # JSONデータを追加
-        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2, default=str)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
         # 画像ファイルを追加するヘルパー関数
@@ -9207,6 +9730,8 @@ def export_user_backup():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9214,7 +9739,7 @@ def export_user_backup():
     backup_data = convert_dates(backup_data)
     
     output = io.BytesIO()
-    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2).encode('utf-8'))
+    output.write(json.dumps(backup_data, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
     output.seek(0)
     
     return send_file(
@@ -9330,6 +9855,8 @@ def export_user_backup_with_images():
             return {k: convert_dates(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_dates(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            return str(obj)
         elif hasattr(obj, 'isoformat'):
             return obj.isoformat()
         return obj
@@ -9340,7 +9867,7 @@ def export_user_backup_with_images():
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # JSONデータを追加
-        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        json_data = json.dumps(backup_data, ensure_ascii=False, indent=2, default=str)
         zip_file.writestr('backup_data.json', json_data.encode('utf-8'))
         
         # 画像ファイルを追加するヘルパー関数
@@ -10800,6 +11327,10 @@ def admin_add_item():
             # 管理者モードの場合、ユーザーなし
             target_user_id = None
         
+        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
+        calculated_purchase_price = int(round(wholesale_price * (1 + wholesale_fee_rate / 100)))
+
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -10863,19 +11394,20 @@ def admin_add_item():
         try:
             cur.execute(f'''
                 INSERT INTO merchandise (
-                    user_id, purchase_date, photo_path, additional_photos, product_name, brand_name, 
+                    user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, 
                     model_number, item_condition, store_name, supplier_detail, 
                     id_document_path, consent_form_path,
-                    purchase_price, payment_method, listing_price, expected_shipping, 
+                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, 
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price, 
                     shipping_cost, sales_destination, commission, is_shipped
-                ) VALUES ({', '.join([placeholder] * 26)})
+                ) VALUES ({', '.join([placeholder] * 29)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
+                request.form.get('kaika_product_code'),
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -10883,7 +11415,9 @@ def admin_add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
+                wholesale_price,
+                wholesale_fee_rate,
+                calculated_purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
@@ -10946,7 +11480,12 @@ def admin_transfer_item(id):
     
     if not target_user_id:
         flash('転送先ユーザーを選択してください', 'error')
-        return redirect(url_for('admin_items'))
+        # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+        referrer = request.referrer or ''
+        if 'admin/user-products' in referrer or 'admin/users' in referrer:
+            return redirect(referrer)
+        else:
+            return redirect(url_for('admin_items'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -10959,7 +11498,16 @@ def admin_transfer_item(id):
             flash('商品が見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         # 転送先ユーザーの確認
         cur.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
@@ -10969,7 +11517,16 @@ def admin_transfer_item(id):
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         # 転送実行
         cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, id))
@@ -10982,7 +11539,16 @@ def admin_transfer_item(id):
             flash('商品が見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         cur.execute("SELECT * FROM users WHERE id = ?", (target_user_id,))
         target_user = cur.fetchone()
@@ -10991,7 +11557,16 @@ def admin_transfer_item(id):
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            item_dict = dict(item) if item else {}
+            user_id = item_dict.get('user_id') if item else None
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            elif user_id:
+                return redirect(url_for('admin_user_items', id=user_id))
+            else:
+                return redirect(url_for('admin_items'))
         
         cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, id))
     
@@ -11001,7 +11576,17 @@ def admin_transfer_item(id):
     
     target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
     flash(f'商品を「{target_name}」に転送しました', 'success')
-    return redirect(url_for('admin_items'))
+    
+    # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+    referrer = request.referrer or ''
+    item_dict = dict(item) if item else {}
+    user_id = item_dict.get('user_id') if item else None
+    if 'admin/user-products' in referrer or 'admin/users' in referrer:
+        return redirect(referrer)
+    elif user_id:
+        return redirect(url_for('admin_user_items', id=user_id))
+    else:
+        return redirect(url_for('admin_items'))
 
 @app.route('/admin/items/<int:id>/delete', methods=['POST'])
 @login_required
@@ -11074,7 +11659,12 @@ def admin_transfer_items_bulk():
     
     if not item_ids or not target_user_id:
         flash('商品と転送先ユーザーを選択してください', 'error')
-        return redirect(url_for('admin_items'))
+        # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+        referrer = request.referrer or ''
+        if 'admin/user-products' in referrer or 'admin/users' in referrer:
+            return redirect(referrer)
+        else:
+            return redirect(url_for('admin_items'))
     
     conn = get_db()
     if DATABASE_URL:
@@ -11086,7 +11676,12 @@ def admin_transfer_items_bulk():
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            else:
+                return redirect(url_for('admin_items'))
         
         for item_id in item_ids:
             cur.execute("UPDATE merchandise SET user_id = %s WHERE id = %s", (target_user_id, item_id))
@@ -11099,7 +11694,12 @@ def admin_transfer_items_bulk():
             flash('転送先ユーザーが見つかりません', 'error')
             cur.close()
             conn.close()
-            return redirect(url_for('admin_items'))
+            # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+            referrer = request.referrer or ''
+            if 'admin/user-products' in referrer or 'admin/users' in referrer:
+                return redirect(referrer)
+            else:
+                return redirect(url_for('admin_items'))
         
         for item_id in item_ids:
             cur.execute("UPDATE merchandise SET user_id = ? WHERE id = ?", (target_user_id, item_id))
@@ -11110,7 +11710,13 @@ def admin_transfer_items_bulk():
     
     target_name = target_user.get('display_name') or target_user.get('username') if isinstance(target_user, dict) else (target_user['display_name'] or target_user['username'])
     flash(f'{len(item_ids)}件の商品を「{target_name}」に転送しました', 'success')
-    return redirect(url_for('admin_items'))
+    
+    # リダイレクト先を決定（ユーザー商品一覧ページから来た場合はそのページに戻る）
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer or 'admin/users' in referrer:
+        return redirect(referrer)
+    else:
+        return redirect(url_for('admin_items'))
 
 # ===================
 # お知らせ管理ルート（管理者用）
@@ -11350,6 +11956,7 @@ def admin_shikiriosho_add():
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
         amounts = request.form.getlist('amount[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算（税込金額を直接入力）
         total_amount = 0
@@ -11363,6 +11970,7 @@ def admin_shikiriosho_add():
                     'product_name': name,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': 1,
                     'unit_price': amount,
                     'amount': amount
@@ -11374,7 +11982,7 @@ def admin_shikiriosho_add():
         document_no = generate_document_no()
         
         if DATABASE_URL:
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 INSERT INTO shikiriosho 
                 (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
@@ -11388,10 +11996,10 @@ def admin_shikiriosho_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -11406,10 +12014,10 @@ def admin_shikiriosho_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (shikiriosho_id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -11461,6 +12069,7 @@ def admin_shikiriosho_edit(id):
         product_dates = request.form.getlist('product_date[]')
         product_codes = request.form.getlist('product_code[]')
         amounts = request.form.getlist('amount[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算（税込金額を直接入力）
         total_amount = 0
@@ -11474,6 +12083,7 @@ def admin_shikiriosho_edit(id):
                     'product_name': name,
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': 1,
                     'unit_price': amount,
                     'amount': amount
@@ -11499,10 +12109,10 @@ def admin_shikiriosho_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -11519,10 +12129,10 @@ def admin_shikiriosho_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO shikiriosho_items 
-                    (shikiriosho_id, item_no, product_name, product_date, product_code, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (id, item['item_no'], item['product_name'], item['product_date'],
-                      item['product_code'], item['quantity'], item['unit_price'], item['amount']))
+                      item['product_code'], item['merchandise_id'], item['quantity'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12145,6 +12755,7 @@ def user_invoice_add():
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算
         subtotal = 0
@@ -12171,6 +12782,7 @@ def user_invoice_add():
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12199,10 +12811,10 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("""
@@ -12219,10 +12831,10 @@ def user_invoice_add():
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (invoice_id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12285,6 +12897,7 @@ def user_invoice_edit(id):
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         
         # 合計計算
         subtotal = 0
@@ -12311,6 +12924,7 @@ def user_invoice_edit(id):
                     'product_date': product_dates[i] if i < len(product_dates) and product_dates[i] else None,
                     'product_name': name,
                     'product_code': product_codes[i] if i < len(product_codes) else '',
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12336,10 +12950,10 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur.execute("""
                 UPDATE invoices SET
@@ -12355,10 +12969,10 @@ def user_invoice_edit(id):
             for item in items:
                 cur.execute("""
                     INSERT INTO invoice_items 
-                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_no, tax_category, product_date, product_name, product_code, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (id, item['item_no'], item['tax_category'], item['product_date'],
-                      item['product_name'], item['product_code'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                      item['product_name'], item['product_code'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12518,6 +13132,7 @@ def user_mitsumori_add():
         
         # 明細項目
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -12534,6 +13149,7 @@ def user_mitsumori_add():
                 items_data.append({
                     'item_no': i + 1,
                     'item_name': name,
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12559,9 +13175,9 @@ def user_mitsumori_add():
             
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) as count FROM user_mitsumori WHERE user_id = ? AND issue_date >= ?", 
@@ -12578,9 +13194,9 @@ def user_mitsumori_add():
             
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (mitsumori_id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (mitsumori_id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12616,14 +13232,22 @@ def user_mitsumori_add():
             cur.execute("""
                 SELECT id, product_name, brand_name, listing_price, photo_path 
                 FROM merchandise 
-                WHERE user_id = %s AND sale_date IS NULL 
+                WHERE user_id = %s AND sale_date IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         else:
             cur.execute("""
                 SELECT id, product_name, brand_name, listing_price, photo_path 
                 FROM merchandise 
-                WHERE user_id = ? AND sale_date IS NULL 
+                WHERE user_id = ? AND sale_date IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+                  AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
                 ORDER BY id DESC
             """, (current_user.id,))
         my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -12676,6 +13300,7 @@ def user_mitsumori_edit(id):
         
         # 明細項目
         item_names = request.form.getlist('item_name[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -12692,6 +13317,7 @@ def user_mitsumori_edit(id):
                 items_data.append({
                     'item_no': i + 1,
                     'item_name': name,
+                    'merchandise_id': int(merchandise_ids[i]) if i < len(merchandise_ids) and merchandise_ids[i] else None,
                     'quantity': qty,
                     'unit': units[i] if i < len(units) else '',
                     'unit_price': price,
@@ -12708,9 +13334,9 @@ def user_mitsumori_edit(id):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         else:
             cur.execute("""
                 UPDATE user_mitsumori SET issue_date = ?, valid_until = ?, company_name = ?, department = ?, 
@@ -12721,9 +13347,9 @@ def user_mitsumori_edit(id):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
             for item in items_data:
                 cur.execute("""
-                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id, item['item_no'], item['item_name'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
+                    INSERT INTO user_mitsumori_items (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (id, item['item_no'], item['item_name'], item['merchandise_id'], item['quantity'], item['unit'], item['unit_price'], item['amount']))
         
         conn.commit()
         cur.close()
@@ -12745,14 +13371,22 @@ def user_mitsumori_edit(id):
         cur.execute("""
             SELECT id, product_name, brand_name, listing_price, photo_path 
             FROM merchandise 
-            WHERE user_id = %s AND sale_date IS NULL 
+            WHERE user_id = %s AND sale_date IS NULL
+              AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     else:
         cur.execute("""
             SELECT id, product_name, brand_name, listing_price, photo_path 
             FROM merchandise 
-            WHERE user_id = ? AND sale_date IS NULL 
+            WHERE user_id = ? AND sale_date IS NULL
+              AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = merchandise.id)
+              AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = merchandise.id)
             ORDER BY id DESC
         """, (current_user.id,))
     my_merchandise = [dict(row) for row in cur.fetchall()]
@@ -13680,43 +14314,78 @@ def api_get_products():
     """
     sold_only = request.args.get('sold_only')
     inventory_only = request.args.get('inventory_only')
+    sold_days = request.args.get('sold_days')
+    exclude_used = request.args.get('exclude_used')
+    sold_days_value = None
+    if sold_days and sold_days.isdigit():
+        sold_days_value = int(sold_days)
     
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # フィルター条件を構築
-        where_clause = "WHERE user_id = %s"
+        where_conditions = ["m.user_id = %s"]
         params = [current_user.id]
         
         if sold_only == '1':
-            where_clause += " AND sale_date IS NOT NULL"
+            where_conditions.append("m.sale_date IS NOT NULL")
         elif inventory_only == '1':
-            where_clause += " AND sale_date IS NULL"
+            where_conditions.append("m.sale_date IS NULL")
+        
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("m.sale_date >= CURRENT_DATE - (%s * INTERVAL '1 day')")
+            params.append(sold_days_value)
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions)
         
         cur.execute(f"""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
-            FROM merchandise 
+            SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date,
+                   m.is_shipped, m.purchase_date, m.item_condition, m.commission, m.shipping_cost,
+                   m.sales_destination, m.id_document_path, m.consent_form_path
+            FROM merchandise m
             {where_clause}
-            ORDER BY created_at DESC
+            ORDER BY m.created_at DESC
         """, params)
     else:
         cur = conn.cursor()
         
         # フィルター条件を構築
-        where_clause = "WHERE user_id = ?"
+        where_conditions = ["m.user_id = ?"]
         params = [current_user.id]
         
         if sold_only == '1':
-            where_clause += " AND sale_date IS NOT NULL"
+            where_conditions.append("m.sale_date IS NOT NULL")
         elif inventory_only == '1':
-            where_clause += " AND sale_date IS NULL"
+            where_conditions.append("m.sale_date IS NULL")
+        
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("date(m.sale_date) >= date('now', '-' || ? || ' day')")
+            params.append(str(sold_days_value))
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions)
         
         cur.execute(f"""
-            SELECT id, product_name, brand_name, purchase_price, listing_price, sale_price, sale_date, is_shipped
-            FROM merchandise 
+            SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date,
+                   m.is_shipped, m.purchase_date, m.item_condition, m.commission, m.shipping_cost,
+                   m.sales_destination, m.id_document_path, m.consent_form_path
+            FROM merchandise m
             {where_clause}
-            ORDER BY created_at DESC
+            ORDER BY m.created_at DESC
         """, params)
     
     products = [dict(row) for row in cur.fetchall()]
@@ -13738,6 +14407,11 @@ def api_get_all_products():
     user_id = request.args.get('user_id')
     sold_only = request.args.get('sold_only')
     inventory_only = request.args.get('inventory_only')
+    sold_days = request.args.get('sold_days')
+    exclude_used = request.args.get('exclude_used')
+    sold_days_value = None
+    if sold_days and sold_days.isdigit():
+        sold_days_value = int(sold_days)
     
     conn = get_db()
     
@@ -13757,11 +14431,24 @@ def api_get_all_products():
         elif inventory_only == '1':
             where_conditions.append("m.sale_date IS NULL")
         
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("m.sale_date >= CURRENT_DATE - (%s * INTERVAL '1 day')")
+            params.append(sold_days_value)
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
+        
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
         if params:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -13771,6 +14458,8 @@ def api_get_all_products():
         else:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -13793,11 +14482,24 @@ def api_get_all_products():
         elif inventory_only == '1':
             where_conditions.append("m.sale_date IS NULL")
         
+        if sold_days_value is not None:
+            where_conditions.append("m.sale_date IS NOT NULL")
+            where_conditions.append("date(m.sale_date) >= date('now', '-' || ? || ' day')")
+            params.append(str(sold_days_value))
+        
+        if exclude_used == '1':
+            where_conditions.append("""NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM shikiriosho_items si WHERE si.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_mitsumori_items umi WHERE umi.merchandise_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM user_keisan_items uki WHERE uki.merchandise_id = m.id)""")
+        
         where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
         
         if params:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -13807,6 +14509,8 @@ def api_get_all_products():
         else:
             cur.execute(f"""
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                       m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
+                       m.id_document_path, m.consent_form_path,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -15797,30 +16501,76 @@ def long_term_items():
     try:
         conn = get_db()
         
-        # 3ヶ月前の日付を計算
-        three_months_ago = datetime.now() - timedelta(days=90)
-        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
-        
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 仕入れ日から3ヶ月以上経過した未売却商品を取得
+            # デバッグ: まず条件に合う商品数を確認
             cur.execute("""
-                SELECT m.*, 
-                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                       EXTRACT(DAY FROM (CURRENT_DATE - m.purchase_date)) as days_since_purchase
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+            """, (current_user.id,))
+            debug_count = cur.fetchone()['count']
+            print(f"[DEBUG] long_term_items: Found {debug_count} items matching date condition (user_id={current_user.id})", flush=True)
+            
+            # 通知マークのカウントと一致させるため、申請未作成の商品も確認
+            cur.execute("""
+                SELECT COUNT(*) as count
                 FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= %s
-                ORDER BY m.purchase_date ASC
-            """, (current_user.id, three_months_ago_str))
-            items = [dict(row) for row in cur.fetchall()]
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                  AND dr.id IS NULL
+            """, (current_user.id,))
+            debug_count_no_request = cur.fetchone()['count']
+            print(f"[DEBUG] long_term_items: Found {debug_count_no_request} items with no disposal request (should match notification badge)", flush=True)
+            
+            # 仕入れ日から3ヶ月以上経過した未売却商品を取得（PostgreSQLでは日付を直接計算）
+            # LEFT JOINを使用して、申請がない商品も含めて取得
+            try:
+                cur.execute("""
+                    SELECT m.*, 
+                           dr.id as disposal_request_id, 
+                           dr.disposal_type, 
+                           dr.status as disposal_status,
+                           (CURRENT_DATE - m.purchase_date)::INTEGER as days_since_purchase
+                    FROM merchandise m
+                    LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
+                        AND dr.reason = 'long_term'
+                        AND dr.status != 'completed'
+                    WHERE m.user_id = %s 
+                      AND m.sale_date IS NULL
+                      AND m.purchase_date IS NOT NULL
+                      AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                    ORDER BY 
+                        CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
+                        m.purchase_date ASC
+                """, (current_user.id,))
+                items = [dict(row) for row in cur.fetchall()]
+                print(f"[DEBUG] long_term_items: Retrieved {len(items)} items using LEFT JOIN", flush=True)
+                
+                # デバッグ用：取得した商品のIDを確認
+                if items:
+                    item_ids = [str(item.get('id', 'N/A')) for item in items]
+                    print(f"[DEBUG] long_term_items: Item IDs: {', '.join(item_ids)}", flush=True)
+            except Exception as query_error:
+                print(f"[ERROR] long_term_items query error: {query_error}", flush=True)
+                import traceback
+                traceback.print_exc()
+                items = []
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
+            
+            # 3ヶ月前の日付を計算（SQLite用）
+            three_months_ago = datetime.now() - timedelta(days=90)
+            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
+            print(f"[DEBUG] long_term_items: SQLite - three_months_ago_str={three_months_ago_str}", flush=True)
             
             # 仕入れ日から3ヶ月以上経過した未売却商品を取得
             cur.execute("""
@@ -15828,19 +16578,26 @@ def long_term_items():
                        dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
                        CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
                 FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
+                    AND dr.reason = 'long_term'
+                    AND dr.status != 'completed'
                 WHERE m.user_id = ? 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
                   AND m.purchase_date <= ?
-                ORDER BY m.purchase_date ASC
+                ORDER BY 
+                    CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
+                    m.purchase_date ASC
             """, (current_user.id, three_months_ago_str))
             items = [dict(row) for row in cur.fetchall()]
+            print(f"[DEBUG] long_term_items: SQLite - Retrieved {len(items)} items", flush=True)
         
         cur.close()
         conn.close()
     except Exception as e:
         print(f"[ERROR] long_term_items: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     
     # 各商品の経過日数を計算
     for item in items:
@@ -15865,7 +16622,74 @@ def long_term_items():
                 item['days_since_purchase'] = 0
                 item['months_since_purchase'] = 0
     
-    return render_template('long_term_items.html', items=items)
+    # デバッグ情報を取得
+    debug_info = {}
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            # 日付条件に合う商品数
+            cur.execute("""
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+            """, (current_user.id,))
+            debug_info['total_matching_date'] = cur.fetchone()['count']
+            
+            # 申請未作成の商品数
+            cur.execute("""
+                SELECT COUNT(*) as count
+                FROM merchandise m
+                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                  AND dr.id IS NULL
+            """, (current_user.id,))
+            debug_info['no_request'] = cur.fetchone()['count']
+            
+            # 実際に取得された商品の詳細を確認
+            cur.execute("""
+                SELECT m.id, m.product_name, m.purchase_date, m.sale_date
+                FROM merchandise m
+                WHERE m.user_id = %s 
+                  AND m.sale_date IS NULL
+                  AND m.purchase_date IS NOT NULL
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+                LIMIT 5
+            """, (current_user.id,))
+            debug_items = [dict(row) for row in cur.fetchall()]
+            debug_info['sample_items'] = debug_items
+            
+            # 現在の日付と90日前の日付
+            cur.execute("SELECT CURRENT_DATE as today, (CURRENT_DATE - INTERVAL '90 days')::DATE as cutoff_date")
+            date_info = cur.fetchone()
+            debug_info['today'] = str(date_info['today'])
+            debug_info['cutoff_date'] = str(date_info['cutoff_date'])
+            
+            debug_info['items_count'] = len(items)
+            # 変数スコープの問題を回避するため、直接カウントを取得
+            # items_no_requestとitems_with_requestは既にitemsに結合されているため、個別にカウントできない
+            debug_info['items_no_request_count'] = sum(1 for item in items if not item.get('disposal_request_id'))
+            debug_info['items_with_request_count'] = sum(1 for item in items if item.get('disposal_request_id'))
+            
+            cur.close()
+            conn.close()
+        else:
+            three_months_ago = datetime.now() - timedelta(days=90)
+            debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
+            debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
+            debug_info['items_count'] = len(items)
+    except Exception as e:
+        debug_info['error'] = str(e)
+        import traceback
+        debug_info['traceback'] = traceback.format_exc()
+    
+    return render_template('long_term_items.html', items=items, debug_info=debug_info)
 
 
 @app.route('/long-term-disposal-request', methods=['POST'])
@@ -15976,22 +16800,25 @@ def get_long_term_item_count():
     
     try:
         conn = get_db()
-        cur = conn.cursor()
-        
-        three_months_ago = datetime.now() - timedelta(days=90)
-        three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
         
         if DATABASE_URL:
+            cur = conn.cursor()
+            # 仕入れ日から3ヶ月以上経過した未処理の長期在庫商品数を取得（PostgreSQLでは日付を直接計算）
             cur.execute("""
                 SELECT COUNT(*) FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
                 WHERE m.user_id = %s 
                   AND m.sale_date IS NULL
                   AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= %s
+                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
                   AND dr.id IS NULL
-            """, (current_user.id, three_months_ago_str))
+            """, (current_user.id,))
         else:
+            cur = conn.cursor()
+            # 3ヶ月前の日付を計算（SQLite用）
+            three_months_ago = datetime.now() - timedelta(days=90)
+            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
+            
             cur.execute("""
                 SELECT COUNT(*) FROM merchandise m
                 LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
@@ -16073,29 +16900,87 @@ def process_disposal_request(request_id):
     conn = get_db()
     cur = conn.cursor()
     
-    if DATABASE_URL:
-        cur.execute("""
-            UPDATE item_disposal_requests 
-            SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
-            WHERE id = %s
-        """, (action, admin_note, current_user.id, request_id))
-    else:
-        cur.execute("""
-            UPDATE item_disposal_requests 
-            SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
-            WHERE id = ?
-        """, (action, admin_note, current_user.id, request_id))
+    try:
+        # 申請情報を取得（商品IDを取得するため）
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur_dict = conn.cursor(cursor_factory=RealDictCursor)
+            cur_dict.execute("""
+                SELECT merchandise_id, status 
+                FROM item_disposal_requests 
+                WHERE id = %s
+            """, (request_id,))
+            request_info = cur_dict.fetchone()
+            cur_dict.close()
+        else:
+            cur.execute("""
+                SELECT merchandise_id, status 
+                FROM item_disposal_requests 
+                WHERE id = ?
+            """, (request_id,))
+            row = cur.fetchone()
+            if row:
+                request_info = {'merchandise_id': row[0], 'status': row[1]}
+            else:
+                request_info = None
+        
+        if not request_info:
+            flash('申請が見つかりません', 'error')
+            return redirect(url_for('admin_disposal_requests'))
+        
+        # 申請ステータスを更新
+        if DATABASE_URL:
+            cur.execute("""
+                UPDATE item_disposal_requests 
+                SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
+                WHERE id = %s
+            """, (action, admin_note, current_user.id, request_id))
+        else:
+            cur.execute("""
+                UPDATE item_disposal_requests 
+                SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
+                WHERE id = ?
+            """, (action, admin_note, current_user.id, request_id))
+        
+        # 申請が完了（completed）になった場合、商品を売却済みにする
+        if action == 'completed':
+            merchandise_id = request_info['merchandise_id'] if isinstance(request_info, dict) else request_info[0]
+            
+            # 商品の売却日を更新（まだ売却日が設定されていない場合のみ）
+            if DATABASE_URL:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET sale_date = CURRENT_DATE,
+                        sale_type = 'disposal'
+                    WHERE id = %s 
+                      AND sale_date IS NULL
+                """, (merchandise_id,))
+            else:
+                cur.execute("""
+                    UPDATE merchandise 
+                    SET sale_date = DATE('now'),
+                        sale_type = 'disposal'
+                    WHERE id = ? 
+                      AND sale_date IS NULL
+                """, (merchandise_id,))
+        
+        conn.commit()
+        
+        action_names = {
+            'processing': '処理中に変更',
+            'completed': '完了',
+            'rejected': '却下'
+        }
+        flash(f'申請を{action_names.get(action, action)}しました', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'処理中にエラーが発生しました: {str(e)}', 'error')
+        import traceback
+        traceback.print_exc()
+    finally:
+        cur.close()
+        conn.close()
     
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    action_names = {
-        'processing': '処理中に変更',
-        'completed': '完了',
-        'rejected': '却下'
-    }
-    flash(f'申請を{action_names.get(action, action)}しました', 'success')
     return redirect(url_for('admin_disposal_requests'))
 
 

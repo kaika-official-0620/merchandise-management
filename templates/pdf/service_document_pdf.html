@@ -115,10 +115,52 @@
         @media print {
             body {
                 padding: 20px;
+                margin: 0;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                max-height: 297mm; /* A4縦の高さ */
+                overflow: hidden;
+                width: 100%;
             }
             
             .no-print {
                 display: none;
+            }
+            
+            .header,
+            .section,
+            .amount-section {
+                page-break-inside: avoid;
+            }
+            
+            table {
+                page-break-inside: avoid;
+            }
+            
+            tr {
+                page-break-inside: avoid;
+            }
+            
+        }
+        
+        /* スマホからPDF出力時も確実に1ページに収まるように */
+        @media print and (max-width: 768px) {
+            body {
+                padding: 10px;
+                font-size: 10pt;
+            }
+            .doc-title {
+                font-size: 20pt;
+            }
+            .section-title {
+                font-size: 12pt;
+            }
+            th, td {
+                padding: 8px 12px;
+                font-size: 9pt;
             }
         }
         

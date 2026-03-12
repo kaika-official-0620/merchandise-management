@@ -115,55 +115,97 @@
 </style>
 
 <!-- 総合サマリー -->
+{% if analytics.is_admin_view %}
+{% set list_all_url = url_for('admin_user_products') %}
+{% set list_sold_url = url_for('admin_user_products', status='sold') %}
+{% set list_unsold_url = url_for('admin_user_products', status='unsold') %}
+{% else %}
+{% set list_all_url = url_for('index') %}
+{% set list_sold_url = url_for('index', filter='sold') %}
+{% set list_unsold_url = url_for('index', filter='unsold') %}
+{% endif %}
 <div class="analytics-summary">
-    <div class="summary-card">
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
         <div class="summary-label">総登録数</div>
         <div class="summary-value">{{ analytics.summary.total_items or 0 }}件</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">販売済</div>
         <div class="summary-value">{{ analytics.summary.sold_count or 0 }}件</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
         <div class="summary-label">総仕入額</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_purchase or 0)|int) }}</div>
-    </div>
-    <div class="summary-card inventory-card">
+    </a>
+    <a class="summary-card inventory-card summary-link-card" href="{{ list_unsold_url }}">
         <div class="summary-label">保管金額</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.inventory_value or 0)|int) }}</div>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">総売上</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.summary.total_sales or 0)|int) }}</div>
-    </div>
-    <div class="summary-card highlight">
+    </a>
+    <a class="summary-card highlight summary-link-card" href="{{ list_sold_url }}">
         <div class="summary-label">総利益</div>
         <div class="summary-value {% if analytics.summary.total_profit and analytics.summary.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
             ¥{{ "{:,}".format((analytics.summary.total_profit or 0)|int) }}
         </div>
-    </div>
+    </a>
+</div>
+
+<!-- 追加分析カード -->
+<div class="analytics-summary extra-analytics-cards">
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(analytics.top_destination.sales_destination or '')) if analytics.is_admin_view else url_for('index', filter='sold') }}">
+        <div class="summary-label">どこにいくら売れたか</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.top_destination.total_sales or 0)|int) }}</div>
+        <div class="summary-sub">{{ analytics.top_destination.sales_destination or '販売先未設定' }} / {{ analytics.top_destination.count or 0 }}件</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_all_url }}">
+        <div class="summary-label">回転率</div>
+        {% set sold_count = (analytics.kpi.sold_count or 0)|int %}
+        {% set total_count = (analytics.kpi.total_items or 0)|int %}
+        {% set total_count_safe = total_count if total_count > 0 else 1 %}
+        <div class="summary-value">{{ "%.1f"|format(sold_count / total_count_safe * 100) }}%</div>
+        <div class="summary-sub">平均販売日数: {{ (analytics.kpi.avg_days_to_sell or 0)|round(1) }}日</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction') if analytics.is_admin_view else url_for('index', filter='sold') }}">
+        <div class="summary-label">オークション販売実績</div>
+        <div class="summary-value">¥{{ "{:,}".format((analytics.auction_stats.auction_sales or 0)|int) }}</div>
+        <div class="summary-sub">{{ analytics.auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((analytics.auction_stats.auction_profit or 0)|int) }}</div>
+    </a>
+</div>
+
+<!-- メモ欄 -->
+<div class="analytics-section memo-section">
+    <h2>メモ</h2>
+    <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month) }}" class="memo-form">
+        <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics.analytics_memo or '' }}</textarea>
+        <div class="memo-actions">
+            <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
+        </div>
+    </form>
 </div>
 
 <!-- 経費内訳サマリー -->
 <div class="expense-summary">
-    <div class="expense-card">
+    <a class="expense-card summary-link-card" href="{{ list_sold_url }}">
         <div class="expense-content">
             <div class="expense-label">総送料</div>
             <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_shipping or 0)|int) }}</div>
         </div>
-    </div>
-    <div class="expense-card">
+    </a>
+    <a class="expense-card summary-link-card" href="{{ list_sold_url }}">
         <div class="expense-content">
             <div class="expense-label">総手数料</div>
             <div class="expense-value">¥{{ "{:,}".format((analytics.kpi.total_commission or 0)|int) }}</div>
         </div>
-    </div>
-    <div class="expense-card total">
+    </a>
+    <a class="expense-card total summary-link-card" href="{{ list_sold_url }}">
         <div class="expense-content">
             <div class="expense-label">経費合計</div>
             <div class="expense-value">¥{{ "{:,}".format(((analytics.kpi.total_shipping or 0) + (analytics.kpi.total_commission or 0))|int) }}</div>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- KPIダッシュボード -->
@@ -180,43 +222,43 @@
         {% set purchase_safe = purchase if purchase > 0 else 1 %}
         {% set profit = (analytics.summary.total_profit or 0)|int %}
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">{{ "%.1f"|format(sold / total_safe * 100) }}%</div>
                 <div class="kpi-label">販売率</div>
                 <div class="kpi-detail">{{ sold }}/{{ total }}件</div>
             </div>
-        </div>
+        </a>
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / sales_safe * 100) }}%</div>
                 <div class="kpi-label">売上利益率</div>
                 <div class="kpi-detail">利益 ÷ 売上</div>
             </div>
-        </div>
+        </a>
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value {% if profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">{{ "%.1f"|format(profit / purchase_safe * 100) }}%</div>
                 <div class="kpi-label">利益÷仕入額</div>
                 <div class="kpi-detail">利益 ÷ 仕入額</div>
             </div>
-        </div>
+        </a>
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">{{ (kpi.avg_days_to_sell or 0)|int }}日</div>
                 <div class="kpi-label">平均販売日数</div>
                 <div class="kpi-detail">仕入〜売却</div>
             </div>
-        </div>
+        </a>
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_all_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 {% set unsold = total - sold %}
@@ -225,16 +267,16 @@
                 <div class="kpi-label">在庫回転率</div>
                 <div class="kpi-detail">販売数 ÷ 在庫数</div>
             </div>
-        </div>
+        </a>
         
-        <div class="kpi-card">
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
             <div class="kpi-icon"></div>
             <div class="kpi-content">
                 <div class="kpi-value">¥{{ "{:,}".format((analytics.summary.avg_profit or 0)|int) }}</div>
                 <div class="kpi-label">平均利益/件</div>
                 <div class="kpi-detail">1商品あたり</div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
@@ -579,18 +621,13 @@
 .cashflow-table td {
     padding: 0.75rem 1rem;
     border: 1px solid #d1d5db;
-    text-align: right;
+    text-align: center;
 }
 
 .cashflow-table th {
     background: #f8fafc;
     font-weight: 600;
     color: #475569;
-}
-
-.cashflow-table th:first-child,
-.cashflow-table td:first-child {
-    text-align: left;
 }
 
 .cashflow-table tbody tr:hover {
@@ -627,6 +664,12 @@
     padding: 1.25rem;
     text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.summary-link-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
 }
 
 .summary-card.highlight {
@@ -666,6 +709,42 @@
     font-size: 1.25rem;
     font-weight: 700;
     color: #1e293b;
+}
+
+.extra-analytics-cards {
+    margin-top: -0.75rem;
+}
+
+.summary-sub {
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.memo-section {
+    margin-top: -0.25rem;
+    margin-bottom: 2rem;
+}
+
+.memo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.memo-textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    resize: vertical;
+    background: #fff;
+}
+
+.memo-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .analytics-grid {
@@ -1062,6 +1141,7 @@
     .cashflow-table td {
         padding: 0.4rem 0.3rem;
         white-space: nowrap;
+        text-align: center;
     }
     
     .analytics-section {
