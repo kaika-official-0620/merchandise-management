@@ -49,11 +49,11 @@
             <p>月額利用料は、<strong>当月の商品登録件数</strong>に基づいて決定されます。</p>
             <table class="fee-table-mini">
                 <tr><th>当月の登録件数</th><th>月額利用料</th></tr>
-                <tr><td>0〜20個</td><td>¥2,500</td></tr>
-                <tr><td>21〜50個</td><td>¥5,000</td></tr>
-                <tr><td>51〜100個</td><td>¥10,000</td></tr>
-                <tr><td>101〜200個</td><td>¥20,000</td></tr>
-                <tr><td>201〜300個</td><td>¥30,000</td></tr>
+                <tr><td>0〜20個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2500') | int)) }}</td></tr>
+                <tr><td>21〜50個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5000') | int)) }}</td></tr>
+                <tr><td>51〜100個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '10000') | int)) }}</td></tr>
+                <tr><td>101〜200個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_200', '20000') | int)) }}</td></tr>
+                <tr><td>201個以上</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '30000') | int)) }}</td></tr>
             </table>
         </div>
     </div>

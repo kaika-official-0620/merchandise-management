@@ -162,23 +162,23 @@
             <tbody>
                 <tr>
                     <td>0〜20個</td>
-                    <td><span class="fee-badge fee-low">¥2,500</span></td>
+                    <td><span class="fee-badge fee-low">¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2500') | int)) }}</span></td>
                 </tr>
                 <tr>
                     <td>21〜50個</td>
-                    <td><span class="fee-badge fee-mid">¥5,000</span></td>
+                    <td><span class="fee-badge fee-mid">¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5000') | int)) }}</span></td>
                 </tr>
                 <tr>
                     <td>51〜100個</td>
-                    <td><span class="fee-badge fee-high">¥10,000</span></td>
+                    <td><span class="fee-badge fee-high">¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '10000') | int)) }}</span></td>
                 </tr>
                 <tr>
                     <td>101〜200個</td>
-                    <td><span class="fee-badge fee-max">¥20,000</span></td>
+                    <td><span class="fee-badge fee-max">¥{{ "{:,}".format((fee_settings.get('monthly_fee_200', '20000') | int)) }}</span></td>
                 </tr>
                 <tr>
-                    <td>201〜300個</td>
-                    <td><span class="fee-badge fee-max">¥30,000</span></td>
+                    <td>201個以上</td>
+                    <td><span class="fee-badge fee-max">¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '30000') | int)) }}</span></td>
                 </tr>
             </tbody>
         </table>

@@ -2586,7 +2586,7 @@ def profile():
         'next_payment_date': user_info.get('next_payment_date') if user_info else None
     }
     
-    return render_template('profile.html', billing_info=billing_info)
+    return render_template('profile.html', billing_info=billing_info, fee_settings=get_fee_settings())
 
 # ===================
 # 商品管理ルート
@@ -5376,7 +5376,7 @@ def admin_users():
     cur.close()
     conn.close()
     
-    return render_template('admin/users.html', users=users, search_query=search_query)
+    return render_template('admin/users.html', users=users, search_query=search_query, fee_settings=get_fee_settings())
 
 @app.route('/admin/users/<int:id>/toggle_admin')
 @login_required
@@ -17254,7 +17254,8 @@ def admin_stripe_dashboard():
                            users=users,
                            stripe_enabled=STRIPE_ENABLED and bool(STRIPE_SECRET_KEY),
                            stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
-                           scheduler_info=scheduler_info)
+                           scheduler_info=scheduler_info,
+                           fee_settings=get_fee_settings())
 
 def get_fee_settings():
     """料金・手数料設定をDBから取得（キャッシュ付き）"""
