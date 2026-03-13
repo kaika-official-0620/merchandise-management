@@ -919,6 +919,19 @@ if DATABASE_URL:
             )
         ''')
         
+        # マスター: 料金・手数料設定
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_fee_settings (
+                id SERIAL PRIMARY KEY,
+                setting_key VARCHAR(100) UNIQUE NOT NULL,
+                setting_value TEXT,
+                display_name VARCHAR(200),
+                display_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # 買取承諾書テーブル（ユーザー向け）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku (
@@ -1874,6 +1887,19 @@ else:
             )
         ''')
         
+        # マスター: 料金・手数料設定
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_fee_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                display_name TEXT,
+                display_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # 買取承諾書テーブル（ユーザー向け）
         cur.execute('''
             CREATE TABLE IF NOT EXISTS user_kaitori_shoudaku (
@@ -2544,18 +2570,9 @@ def profile():
     cur.close()
     conn.close()
     
-    # 月額利用料を計算
+    # 月額利用料を計算（DB設定参照）
     item_count = user_info.get('item_count', 0) if user_info else 0
-    if item_count <= 20:
-        monthly_fee = 2500
-    elif item_count <= 50:
-        monthly_fee = 5000
-    elif item_count <= 100:
-        monthly_fee = 10000
-    elif item_count <= 200:
-        monthly_fee = 20000
-    else:
-        monthly_fee = 30000  # 300件超は要相談
+    monthly_fee = get_monthly_fee(item_count)
     
     total_item_count = user_info.get('total_item_count', 0) if user_info else 0
     
@@ -4445,7 +4462,7 @@ def add_item():
         flash('商品を登録しました', 'success')
         return redirect(url_for('index'))
     
-    return render_template('form.html', item=None)
+    return render_template('form.html', item=None, fee_settings=get_fee_settings())
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -4865,7 +4882,7 @@ def edit_item(id):
     else:
         back_url = url_for('index')
 
-    return render_template('form.html', item=item_dict, back_url=back_url)
+    return render_template('form.html', item=item_dict, back_url=back_url, fee_settings=get_fee_settings())
 
 @app.route('/view/<int:id>')
 @login_required
@@ -5330,20 +5347,9 @@ def admin_users():
             result = cur.fetchone()
             user['monthly_item_count'] = result[0] if result else 0
         
-        # 月額利用料を計算
+        # 月額利用料を計算（DB設定参照）
         count = user['monthly_item_count']
-        if count <= 20:
-            user['monthly_fee'] = 2500
-        elif count <= 50:
-            user['monthly_fee'] = 5000
-        elif count <= 100:
-            user['monthly_fee'] = 10000
-        elif count <= 200:
-            user['monthly_fee'] = 20000
-        elif count <= 300:
-            user['monthly_fee'] = 30000
-        else:
-            user['monthly_fee'] = 30000  # 300以上は30000円
+        user['monthly_fee'] = get_monthly_fee(count)
         
         # 開花手数料（sale_typeがnormal以外の手数料合計）
         if DATABASE_URL:
@@ -8343,6 +8349,10 @@ def admin_master_settings():
         # 書類設定
         cur.execute("SELECT * FROM master_document_settings ORDER BY category, display_order, id")
         document_settings_raw = [dict(row) for row in cur.fetchall()]
+        
+        # 料金・手数料設定
+        cur.execute("SELECT * FROM master_fee_settings ORDER BY display_order, id")
+        fee_settings_raw = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
@@ -8368,9 +8378,16 @@ def admin_master_settings():
         # 書類設定
         cur.execute("SELECT * FROM master_document_settings ORDER BY category, display_order, id")
         document_settings_raw = [dict(row) for row in cur.fetchall()]
+        
+        # 料金・手数料設定
+        cur.execute("SELECT * FROM master_fee_settings ORDER BY display_order, id")
+        fee_settings_raw = [dict(row) for row in cur.fetchall()]
     
     # 書類設定をキーで辞書化
     document_settings = {row['setting_key']: row['setting_value'] for row in document_settings_raw}
+    
+    # 料金・手数料設定をキーで辞書化
+    fee_settings = {row['setting_key']: row['setting_value'] for row in fee_settings_raw}
     
     cur.close()
     conn.close()
@@ -8383,6 +8400,7 @@ def admin_master_settings():
                          payment_methods=payment_methods,
                          supplier_details=supplier_details,
                          document_settings=document_settings,
+                         fee_settings=fee_settings,
                          scope=scope)
 
 
@@ -9356,6 +9374,54 @@ def admin_document_settings_save():
         flash('書類設定を保存しました', 'success')
     except Exception as e:
         print(f"Document settings save error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'設定保存エラー: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_master_settings'))
+
+
+@app.route('/admin/fee-settings/save', methods=['POST'])
+@login_required
+@admin_required
+def admin_fee_settings_save():
+    """料金・手数料設定を保存"""
+    fee_keys = [
+        'monthly_fee_20', 'monthly_fee_50', 'monthly_fee_100', 'monthly_fee_200', 'monthly_fee_300',
+        'commission_normal', 'commission_wholesale', 'commission_multi_listing',
+        'commission_auction', 'commission_proxy',
+        'photo_packing_fixed', 'photo_packing_rate', 'photo_packing_threshold',
+        'wholesale_free_shipping_threshold',
+    ]
+    
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor()
+            for key in fee_keys:
+                value = request.form.get(key, '')
+                cur.execute("SELECT id FROM master_fee_settings WHERE setting_key = %s", (key,))
+                if cur.fetchone():
+                    cur.execute("UPDATE master_fee_settings SET setting_value = %s, updated_at = CURRENT_TIMESTAMP WHERE setting_key = %s", (value, key))
+                else:
+                    cur.execute("INSERT INTO master_fee_settings (setting_key, setting_value) VALUES (%s, %s)", (key, value))
+        else:
+            cur = conn.cursor()
+            for key in fee_keys:
+                value = request.form.get(key, '')
+                cur.execute("SELECT id FROM master_fee_settings WHERE setting_key = ?", (key,))
+                if cur.fetchone():
+                    cur.execute("UPDATE master_fee_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?", (value, key))
+                else:
+                    cur.execute("INSERT INTO master_fee_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        flash('料金・手数料設定を保存しました', 'success')
+    except Exception as e:
+        print(f"Fee settings save error: {e}")
         import traceback
         traceback.print_exc()
         flash(f'設定保存エラー: {str(e)}', 'error')
@@ -11576,7 +11642,7 @@ def admin_add_item():
     # URLパラメータからデフォルトのユーザーIDを取得
     default_user_id = request.args.get('user_id', '')
     
-    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id, mode=mode)
+    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id, mode=mode, fee_settings=get_fee_settings())
 
 @app.route('/admin/items/<int:id>/transfer', methods=['POST'])
 @login_required
@@ -17190,20 +17256,44 @@ def admin_stripe_dashboard():
                            stripe_publishable_key=STRIPE_PUBLISHABLE_KEY,
                            scheduler_info=scheduler_info)
 
+def get_fee_settings():
+    """料金・手数料設定をDBから取得（キャッシュ付き）"""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT setting_key, setting_value FROM master_fee_settings")
+        else:
+            cur = conn.cursor()
+            cur.row_factory = sqlite3.Row
+            cur.execute("SELECT setting_key, setting_value FROM master_fee_settings")
+        settings = {row['setting_key']: row['setting_value'] for row in cur.fetchall()}
+        cur.close()
+        conn.close()
+        return settings
+    except Exception as e:
+        print(f"[WARN] fee_settings読込失敗（デフォルト使用）: {e}")
+        return {}
+
 def get_monthly_fee(item_count):
-    """当月の商品登録数から月額利用料を計算
-    20点→2,500円、50点→5,000円、100点→10,000円、200点→20,000円、300点→30,000円、それ以降は要相談
-    """
+    """当月の商品登録数から月額利用料を計算（DB設定優先、未設定時はデフォルト値）"""
+    settings = get_fee_settings()
+    fee_20 = int(settings.get('monthly_fee_20') or 2500)
+    fee_50 = int(settings.get('monthly_fee_50') or 5000)
+    fee_100 = int(settings.get('monthly_fee_100') or 10000)
+    fee_200 = int(settings.get('monthly_fee_200') or 20000)
+    fee_300 = int(settings.get('monthly_fee_300') or 30000)
+    
     if item_count <= 20:
-        return 2500
+        return fee_20
     elif item_count <= 50:
-        return 5000
+        return fee_50
     elif item_count <= 100:
-        return 10000
+        return fee_100
     elif item_count <= 200:
-        return 20000
+        return fee_200
     else:
-        return 30000  # 300件超は要相談
+        return fee_300
 
 def get_or_create_stripe_price(monthly_fee):
     """Stripeの料金プラン（Price）を取得または動的に作成"""

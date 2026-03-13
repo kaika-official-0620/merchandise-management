@@ -359,6 +359,7 @@
 <div class="main-tabs">
     <button class="main-tab active" onclick="showMainTab('product')">商品登録</button>
     <button class="main-tab" onclick="showMainTab('document')">書類作成</button>
+    <button class="main-tab" onclick="showMainTab('fee')">料金・手数料</button>
 </div>
 
 <!-- ===== 商品登録タブ ===== -->
@@ -1284,6 +1285,141 @@
             <div style="text-align: center; margin-top: 1.5rem;">
                 <button type="submit" class="btn btn-primary">設定を保存</button>
             </div>
+        </div>
+    </form>
+</div>
+
+<!-- ===== 料金・手数料タブ ===== -->
+<div id="main-fee" class="main-content">
+    <form action="{{ url_for('admin_fee_settings_save') }}" method="POST">
+        <!-- 月謝設定 -->
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>月謝（月額利用料）</h3>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                    当月の商品登録数に応じた月額利用料を設定します。
+                </p>
+                <div class="master-table-container">
+                    <table class="master-table">
+                        <thead>
+                            <tr>
+                                <th>商品登録数</th>
+                                <th>月額利用料（円）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>20点以下</td>
+                                <td><input type="number" name="monthly_fee_20" value="{{ fee_settings.get('monthly_fee_20', '2500') }}" class="form-control" min="0" style="width: 150px;"></td>
+                            </tr>
+                            <tr>
+                                <td>21〜50点</td>
+                                <td><input type="number" name="monthly_fee_50" value="{{ fee_settings.get('monthly_fee_50', '5000') }}" class="form-control" min="0" style="width: 150px;"></td>
+                            </tr>
+                            <tr>
+                                <td>51〜100点</td>
+                                <td><input type="number" name="monthly_fee_100" value="{{ fee_settings.get('monthly_fee_100', '10000') }}" class="form-control" min="0" style="width: 150px;"></td>
+                            </tr>
+                            <tr>
+                                <td>101〜200点</td>
+                                <td><input type="number" name="monthly_fee_200" value="{{ fee_settings.get('monthly_fee_200', '20000') }}" class="form-control" min="0" style="width: 150px;"></td>
+                            </tr>
+                            <tr>
+                                <td>201点以上</td>
+                                <td><input type="number" name="monthly_fee_300" value="{{ fee_settings.get('monthly_fee_300', '30000') }}" class="form-control" min="0" style="width: 150px;"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 開花手数料設定 -->
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>開花手数料（販売タイプ別）</h3>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                    売上金に対する手数料率（%）を設定します。
+                </p>
+                <div class="master-table-container">
+                    <table class="master-table">
+                        <thead>
+                            <tr>
+                                <th>販売タイプ</th>
+                                <th>手数料率（%）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>通常（メルカリ・ラクマ・ヤフオク等）</td>
+                                <td><input type="number" name="commission_normal" value="{{ fee_settings.get('commission_normal', '10') }}" class="form-control" min="0" max="100" step="0.1" style="width: 120px;"></td>
+                            </tr>
+                            <tr>
+                                <td>業者卸販売</td>
+                                <td><input type="number" name="commission_wholesale" value="{{ fee_settings.get('commission_wholesale', '10') }}" class="form-control" min="0" max="100" step="0.1" style="width: 120px;"></td>
+                            </tr>
+                            <tr>
+                                <td>同時出品</td>
+                                <td><input type="number" name="commission_multi_listing" value="{{ fee_settings.get('commission_multi_listing', '3') }}" class="form-control" min="0" max="100" step="0.1" style="width: 120px;"></td>
+                            </tr>
+                            <tr>
+                                <td>オークション流し</td>
+                                <td><input type="number" name="commission_auction" value="{{ fee_settings.get('commission_auction', '5') }}" class="form-control" min="0" max="100" step="0.1" style="width: 120px;"></td>
+                            </tr>
+                            <tr>
+                                <td>販売代行</td>
+                                <td><input type="number" name="commission_proxy" value="{{ fee_settings.get('commission_proxy', '5') }}" class="form-control" min="0" max="100" step="0.1" style="width: 120px;"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 撮影梱包等代行 -->
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>撮影梱包等代行</h3>
+            </div>
+            <div style="padding: 1.25rem;">
+                <div class="doc-settings-grid">
+                    <div class="form-group">
+                        <label>固定料金（円）※売上が閾値未満の場合</label>
+                        <input type="number" name="photo_packing_fixed" value="{{ fee_settings.get('photo_packing_fixed', '500') }}" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>手数料率（%）※売上が閾値以上の場合</label>
+                        <input type="number" name="photo_packing_rate" value="{{ fee_settings.get('photo_packing_rate', '2') }}" class="form-control" min="0" max="100" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>閾値（円）※この金額以上で率計算に切替</label>
+                        <input type="number" name="photo_packing_threshold" value="{{ fee_settings.get('photo_packing_threshold', '25000') }}" class="form-control" min="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- その他設定 -->
+        <div class="master-section">
+            <div class="master-section-header">
+                <h3>その他</h3>
+            </div>
+            <div style="padding: 1.25rem;">
+                <div class="doc-settings-grid">
+                    <div class="form-group">
+                        <label>業者卸販売 送料無料の閾値（円）</label>
+                        <input type="number" name="wholesale_free_shipping_threshold" value="{{ fee_settings.get('wholesale_free_shipping_threshold', '30000') }}" class="form-control" min="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <button type="submit" class="btn btn-primary">料金・手数料設定を保存</button>
         </div>
     </form>
 </div>

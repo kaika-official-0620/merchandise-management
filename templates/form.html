@@ -776,38 +776,52 @@ input:disabled, select:disabled, textarea:disabled {
 // 手数料の自動計算フラグ（手動変更されたらfalseに）
 let autoCalculateCommission = true;
 
-// 販売タイプごとの手数料計算ルール
+// 販売タイプごとの手数料計算ルール（DB設定から動的生成）
+const _fs = {{ fee_settings | default({}) | tojson }};
+const _ppFixed = parseInt(_fs.photo_packing_fixed) || 500;
+const _ppRate = (parseFloat(_fs.photo_packing_rate) || 2) / 100;
+const _ppThreshold = parseInt(_fs.photo_packing_threshold) || 25000;
+const _commNormal = (parseFloat(_fs.commission_normal) || 10) / 100;
+const _commWholesale = (parseFloat(_fs.commission_wholesale) || 10) / 100;
+const _commMulti = (parseFloat(_fs.commission_multi_listing) || 3) / 100;
+const _commAuction = (parseFloat(_fs.commission_auction) || 5) / 100;
+const _wsFreeShip = parseInt(_fs.wholesale_free_shipping_threshold) || 30000;
+
 const saleTypeRules = {
     'photo_packing': {
         name: '撮影梱包等代行',
-        calculate: (price) => price >= 25000 ? Math.floor(price * 0.02) : 500,
-        hint: (price) => price >= 25000 ? '撮影梱包: 売上金の2%（25,000円以上）' : '撮影梱包: 500円（25,000円未満）',
+        calculate: (price) => price >= _ppThreshold ? Math.floor(price * _ppRate) : _ppFixed,
+        hint: (price) => price >= _ppThreshold
+            ? `撮影梱包: 売上金の${(_ppRate*100)}%（${_ppThreshold.toLocaleString()}円以上）`
+            : `撮影梱包: ${_ppFixed.toLocaleString()}円（${_ppThreshold.toLocaleString()}円未満）`,
         shippingHint: '',
-        isFixed: true  // 固定費用
+        isFixed: true
     },
     'normal': {
         name: '通常',
-        calculate: (price) => Math.floor(price * 0.10),
-        hint: '通常: 売上金の10%（メルカリ・ラクマ・ヤフオク等）',
+        calculate: (price) => Math.floor(price * _commNormal),
+        hint: `通常: 売上金の${(_commNormal*100)}%（メルカリ・ラクマ・ヤフオク等）`,
         shippingHint: ''
     },
     'wholesale': {
         name: '業者卸販売',
-        calculate: (price) => Math.floor(price * 0.10),
-        hint: '業者卸: 売上金の10%',
-        shippingHint: (price) => price >= 30000 ? '30,000円以上のため送料無料' : '※30,000円以上で送料無料',
-        freeShipping: (price) => price >= 30000
+        calculate: (price) => Math.floor(price * _commWholesale),
+        hint: `業者卸: 売上金の${(_commWholesale*100)}%`,
+        shippingHint: (price) => price >= _wsFreeShip
+            ? `${_wsFreeShip.toLocaleString()}円以上のため送料無料`
+            : `※${_wsFreeShip.toLocaleString()}円以上で送料無料`,
+        freeShipping: (price) => price >= _wsFreeShip
     },
     'multi_listing': {
         name: '同時出品',
-        calculate: (price) => Math.floor(price * 0.03),
-        hint: '同時出品: 売上金の3%',
+        calculate: (price) => Math.floor(price * _commMulti),
+        hint: `同時出品: 売上金の${(_commMulti*100)}%`,
         shippingHint: ''
     },
     'auction': {
         name: 'オークション流し',
-        calculate: (price) => Math.floor(price * 0.05),
-        hint: 'オークション: 売上金の5%',
+        calculate: (price) => Math.floor(price * _commAuction),
+        hint: `オークション: 売上金の${(_commAuction*100)}%`,
         shippingHint: ''
     }
 };
