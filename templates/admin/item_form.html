@@ -467,15 +467,48 @@
 <script>
 let autoCalculateCommission = true;
 
-// DB設定から動的に手数料率を反映
+// DB設定から動的に手数料計算ルール（段階別固定額）を反映
 const _fs = {{ fee_settings | default({}) | tojson }};
-const _ppFixed = parseInt(_fs.photo_packing_fixed) || 500;
-const _ppRate = (parseFloat(_fs.photo_packing_rate) || 2) / 100;
-const _ppThreshold = parseInt(_fs.photo_packing_threshold) || 25000;
 const _commNormal = (parseFloat(_fs.commission_normal) || 10) / 100;
-const _commWholesale = (parseFloat(_fs.commission_wholesale) || 10) / 100;
-const _commMulti = (parseFloat(_fs.commission_multi_listing) || 3) / 100;
-const _commAuction = (parseFloat(_fs.commission_auction) || 5) / 100;
+
+function _tierCalc(tiers, price) {
+    for (const t of tiers) {
+        if (t.max === null || price <= t.max) return t.fee;
+    }
+    return tiers[tiers.length - 1].fee;
+}
+function _tierHint(name, tiers, price) {
+    for (const t of tiers) {
+        if (t.max === null || price <= t.max)
+            return `${name}: ¥${t.fee.toLocaleString()}`;
+    }
+    return `${name}: ¥${tiers[tiers.length-1].fee.toLocaleString()}`;
+}
+
+const _ppTiers = [
+    {max: parseInt(_fs.photo_packing_t1_max)||19999, fee: parseInt(_fs.photo_packing_t1_fee)||500},
+    {max: parseInt(_fs.photo_packing_t2_max)||49999, fee: parseInt(_fs.photo_packing_t2_fee)||650},
+    {max: parseInt(_fs.photo_packing_t3_max)||99999, fee: parseInt(_fs.photo_packing_t3_fee)||800},
+    {max: null, fee: parseInt(_fs.photo_packing_t4_fee)||1000}
+];
+const _wsTiers = [
+    {max: parseInt(_fs.wholesale_t1_max)||19999, fee: parseInt(_fs.wholesale_t1_fee)||500},
+    {max: parseInt(_fs.wholesale_t2_max)||49999, fee: parseInt(_fs.wholesale_t2_fee)||1000},
+    {max: parseInt(_fs.wholesale_t3_max)||99999, fee: parseInt(_fs.wholesale_t3_fee)||1500},
+    {max: parseInt(_fs.wholesale_t4_max)||199999, fee: parseInt(_fs.wholesale_t4_fee)||2000},
+    {max: null, fee: parseInt(_fs.wholesale_t5_fee)||3000}
+];
+const _mlTiers = [
+    {max: parseInt(_fs.multi_listing_t1_max)||19999, fee: parseInt(_fs.multi_listing_t1_fee)||300},
+    {max: parseInt(_fs.multi_listing_t2_max)||49999, fee: parseInt(_fs.multi_listing_t2_fee)||400},
+    {max: null, fee: parseInt(_fs.multi_listing_t3_fee)||500}
+];
+const _aucTiers = [
+    {max: parseInt(_fs.auction_t1_max)||19999, fee: parseInt(_fs.auction_t1_fee)||300},
+    {max: parseInt(_fs.auction_t2_max)||49999, fee: parseInt(_fs.auction_t2_fee)||400},
+    {max: parseInt(_fs.auction_t3_max)||99999, fee: parseInt(_fs.auction_t3_fee)||500},
+    {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
+];
 
 const saleTypeRules = {
     'normal': {
@@ -484,26 +517,24 @@ const saleTypeRules = {
         hint: `通常: 売上金の${(_commNormal*100)}%`
     },
     'photo_packing': {
-        name: '撮影梱包等代行',
-        calculate: (price) => price >= _ppThreshold ? Math.floor(price * _ppRate) : _ppFixed,
-        hint: (price) => price >= _ppThreshold
-            ? `撮影梱包: 売上金の${(_ppRate*100)}%（${_ppThreshold.toLocaleString()}円以上）`
-            : `撮影梱包: ${_ppFixed.toLocaleString()}円（${_ppThreshold.toLocaleString()}円未満）`
+        name: '撮影梱包発送',
+        calculate: (price) => _tierCalc(_ppTiers, price),
+        hint: (price) => _tierHint('撮影梱包', _ppTiers, price)
     },
     'wholesale': {
-        name: '業者卸販売',
-        calculate: (price) => Math.floor(price * _commWholesale),
-        hint: `業者卸: 売上金の${(_commWholesale*100)}%`
+        name: '業者販売',
+        calculate: (price) => _tierCalc(_wsTiers, price),
+        hint: (price) => _tierHint('業者販売', _wsTiers, price)
     },
     'multi_listing': {
         name: '同時出品',
-        calculate: (price) => Math.floor(price * _commMulti),
-        hint: `同時出品: 売上金の${(_commMulti*100)}%`
+        calculate: (price) => _tierCalc(_mlTiers, price),
+        hint: (price) => _tierHint('同時出品', _mlTiers, price)
     },
     'auction': {
-        name: 'オークション流し',
-        calculate: (price) => Math.floor(price * _commAuction),
-        hint: `オークション: 売上金の${(_commAuction*100)}%`
+        name: 'オークション出品代行',
+        calculate: (price) => _tierCalc(_aucTiers, price),
+        hint: (price) => _tierHint('オークション', _aucTiers, price)
     }
 };
 

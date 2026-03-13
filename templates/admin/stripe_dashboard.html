@@ -201,35 +201,41 @@
 
 <!-- 料金体系 -->
 <div class="admin-section">
-    <h2>月額利用料体系（当月の商品登録件数に基づく）</h2>
+    <h2>システム利用料（月額料金）</h2>
     <div class="fee-table">
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>当月の登録件数</th>
-                    <th>月額利用料</th>
+                    <th>プラン</th>
+                    <th>商品数</th>
+                    <th>月額料金</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>0〜20件</td>
-                    <td class="amount"><span class="fee-badge fee-low">¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2500') | int)) }}</span></td>
+                    <td>{{ fee_settings.get('monthly_plan_20', 'ライト') }}</td>
+                    <td>0〜20商品</td>
+                    <td class="amount"><span class="fee-badge fee-low">¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2980') | int)) }}</span></td>
                 </tr>
                 <tr>
-                    <td>21〜50件</td>
-                    <td class="amount"><span class="fee-badge fee-mid">¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5000') | int)) }}</span></td>
+                    <td>{{ fee_settings.get('monthly_plan_50', 'スタンダード') }}</td>
+                    <td>21〜50商品</td>
+                    <td class="amount"><span class="fee-badge fee-mid">¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5980') | int)) }}</span></td>
                 </tr>
                 <tr>
-                    <td>51〜100件</td>
-                    <td class="amount"><span class="fee-badge fee-high">¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '10000') | int)) }}</span></td>
+                    <td>{{ fee_settings.get('monthly_plan_100', 'プロ') }}</td>
+                    <td>51〜100商品</td>
+                    <td class="amount"><span class="fee-badge fee-high">¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '9800') | int)) }}</span></td>
                 </tr>
                 <tr>
-                    <td>101〜200件</td>
-                    <td class="amount"><span class="fee-badge fee-max">¥{{ "{:,}".format((fee_settings.get('monthly_fee_200', '20000') | int)) }}</span></td>
+                    <td>{{ fee_settings.get('monthly_plan_300', 'ビジネス') }}</td>
+                    <td>101〜300商品</td>
+                    <td class="amount"><span class="fee-badge fee-max">¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '19800') | int)) }}</span></td>
                 </tr>
                 <tr>
-                    <td>201件以上</td>
-                    <td class="amount"><span class="fee-badge fee-max">¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '30000') | int)) }}</span></td>
+                    <td>{{ fee_settings.get('monthly_plan_over', 'エンタープライズ') }}</td>
+                    <td>300商品以上</td>
+                    <td class="amount"><span class="fee-badge fee-max">{% if (fee_settings.get('monthly_fee_over', '0') | int) > 0 %}¥{{ "{:,}".format((fee_settings.get('monthly_fee_over', '0') | int)) }}{% else %}個別相談{% endif %}</span></td>
                 </tr>
             </tbody>
         </table>

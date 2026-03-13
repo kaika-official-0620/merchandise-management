@@ -9387,11 +9387,17 @@ def admin_document_settings_save():
 def admin_fee_settings_save():
     """料金・手数料設定を保存"""
     fee_keys = [
-        'monthly_fee_20', 'monthly_fee_50', 'monthly_fee_100', 'monthly_fee_200', 'monthly_fee_300',
-        'commission_normal', 'commission_wholesale', 'commission_multi_listing',
-        'commission_auction', 'commission_proxy',
-        'photo_packing_fixed', 'photo_packing_rate', 'photo_packing_threshold',
-        'wholesale_free_shipping_threshold',
+        'monthly_fee_20', 'monthly_fee_50', 'monthly_fee_100', 'monthly_fee_300', 'monthly_fee_over',
+        'monthly_plan_20', 'monthly_plan_50', 'monthly_plan_100', 'monthly_plan_300', 'monthly_plan_over',
+        'commission_normal',
+        'photo_packing_t1_fee', 'photo_packing_t2_fee', 'photo_packing_t3_fee', 'photo_packing_t4_fee',
+        'photo_packing_t1_max', 'photo_packing_t2_max', 'photo_packing_t3_max',
+        'wholesale_t1_fee', 'wholesale_t2_fee', 'wholesale_t3_fee', 'wholesale_t4_fee', 'wholesale_t5_fee',
+        'wholesale_t1_max', 'wholesale_t2_max', 'wholesale_t3_max', 'wholesale_t4_max',
+        'multi_listing_t1_fee', 'multi_listing_t2_fee', 'multi_listing_t3_fee',
+        'multi_listing_t1_max', 'multi_listing_t2_max',
+        'auction_t1_fee', 'auction_t2_fee', 'auction_t3_fee', 'auction_t4_fee',
+        'auction_t1_max', 'auction_t2_max', 'auction_t3_max',
     ]
     
     try:
@@ -17279,11 +17285,11 @@ def get_fee_settings():
 def get_monthly_fee(item_count):
     """当月の商品登録数から月額利用料を計算（DB設定優先、未設定時はデフォルト値）"""
     settings = get_fee_settings()
-    fee_20 = int(settings.get('monthly_fee_20') or 2500)
-    fee_50 = int(settings.get('monthly_fee_50') or 5000)
-    fee_100 = int(settings.get('monthly_fee_100') or 10000)
-    fee_200 = int(settings.get('monthly_fee_200') or 20000)
-    fee_300 = int(settings.get('monthly_fee_300') or 30000)
+    fee_20 = int(settings.get('monthly_fee_20') or 2980)
+    fee_50 = int(settings.get('monthly_fee_50') or 5980)
+    fee_100 = int(settings.get('monthly_fee_100') or 9800)
+    fee_300 = int(settings.get('monthly_fee_300') or 19800)
+    fee_over = int(settings.get('monthly_fee_over') or 0)
     
     if item_count <= 20:
         return fee_20
@@ -17291,10 +17297,10 @@ def get_monthly_fee(item_count):
         return fee_50
     elif item_count <= 100:
         return fee_100
-    elif item_count <= 200:
-        return fee_200
-    else:
+    elif item_count <= 300:
         return fee_300
+    else:
+        return fee_over
 
 def get_or_create_stripe_price(monthly_fee):
     """Stripeの料金プラン（Price）を取得または動的に作成"""

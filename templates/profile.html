@@ -48,12 +48,12 @@
         <div class="billing-note">
             <p>月額利用料は、<strong>当月の商品登録件数</strong>に基づいて決定されます。</p>
             <table class="fee-table-mini">
-                <tr><th>当月の登録件数</th><th>月額利用料</th></tr>
-                <tr><td>0〜20個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2500') | int)) }}</td></tr>
-                <tr><td>21〜50個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5000') | int)) }}</td></tr>
-                <tr><td>51〜100個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '10000') | int)) }}</td></tr>
-                <tr><td>101〜200個</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_200', '20000') | int)) }}</td></tr>
-                <tr><td>201個以上</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '30000') | int)) }}</td></tr>
+                <tr><th>プラン</th><th>商品数</th><th>月額料金</th></tr>
+                <tr><td>{{ fee_settings.get('monthly_plan_20', 'ライト') }}</td><td>0〜20商品</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_20', '2980') | int)) }}</td></tr>
+                <tr><td>{{ fee_settings.get('monthly_plan_50', 'スタンダード') }}</td><td>21〜50商品</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_50', '5980') | int)) }}</td></tr>
+                <tr><td>{{ fee_settings.get('monthly_plan_100', 'プロ') }}</td><td>51〜100商品</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_100', '9800') | int)) }}</td></tr>
+                <tr><td>{{ fee_settings.get('monthly_plan_300', 'ビジネス') }}</td><td>101〜300商品</td><td>¥{{ "{:,}".format((fee_settings.get('monthly_fee_300', '19800') | int)) }}</td></tr>
+                <tr><td>{{ fee_settings.get('monthly_plan_over', 'エンタープライズ') }}</td><td>300商品以上</td><td>{% if (fee_settings.get('monthly_fee_over', '0') | int) > 0 %}¥{{ "{:,}".format((fee_settings.get('monthly_fee_over', '0') | int)) }}{% else %}個別相談{% endif %}</td></tr>
             </table>
         </div>
     </div>
