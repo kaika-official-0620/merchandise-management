@@ -606,12 +606,19 @@
                             <span class="price-value purchase">¥{{ "{:,}".format(req.purchase_price or 0) }}</span>
                         </div>
                     </div>
-                    {% if req.qr_image_path %}
-                    <div class="qr-section">
-                        <span class="qr-thumbnail" onclick="openImageModal('{{ url_for('static', filename=req.qr_image_path) }}', '発送用QRコード')" title="クリックで拡大">
-                            <img src="{{ url_for('static', filename=req.qr_image_path) }}" alt="QR">
+                    {% if req.qr_image_path or req.qr_image_path2 %}
+                    <div class="qr-section" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        {% if req.qr_image_path %}
+                        <span class="qr-thumbnail" onclick="openImageModal('{{ url_for('static', filename=req.qr_image_path) }}', '画像1')" title="クリックで拡大">
+                            <img src="{{ url_for('static', filename=req.qr_image_path) }}" alt="画像1">
                         </span>
-                        <span style="color: #64748b; font-size: 0.85rem;">📱 発送用QRコード（クリックで拡大）</span>
+                        {% endif %}
+                        {% if req.qr_image_path2 %}
+                        <span class="qr-thumbnail" onclick="openImageModal('{{ url_for('static', filename=req.qr_image_path2) }}', '画像2')" title="クリックで拡大">
+                            <img src="{{ url_for('static', filename=req.qr_image_path2) }}" alt="画像2">
+                        </span>
+                        {% endif %}
+                        <span style="color: #64748b; font-size: 0.85rem;">📱 添付画像（クリックで拡大）</span>
                     </div>
                     {% endif %}
                     {% if req.status != 'pending' %}

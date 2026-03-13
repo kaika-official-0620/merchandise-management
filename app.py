@@ -1051,6 +1051,7 @@ if DATABASE_URL:
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
                 qr_image_path TEXT,
+                qr_image_path2 TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -1058,6 +1059,12 @@ if DATABASE_URL:
                 admin_note TEXT
             )
         ''')
+        
+        # qr_image_path2カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS qr_image_path2 TEXT")
+        except:
+            pass
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -2019,6 +2026,7 @@ else:
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
                 qr_image_path TEXT,
+                qr_image_path2 TEXT,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -2026,6 +2034,12 @@ else:
                 admin_note TEXT
             )
         ''')
+        
+        # qr_image_path2カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN qr_image_path2 TEXT")
+        except:
+            pass
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -9794,6 +9808,7 @@ def export_backup_with_images():
             # 売却申請のQRコード画像
             for req in backup_data.get('sale_requests', []):
                 add_file_to_zip(req.get('qr_image_path'), added_files)
+                add_file_to_zip(req.get('qr_image_path2'), added_files)
     
     zip_buffer.seek(0)
     
@@ -10096,6 +10111,7 @@ def export_user_backup_with_images():
             # 売却申請のQRコード画像
             for req in backup_data.get('sale_requests', []):
                 add_file_to_zip(req.get('qr_image_path'), added_files)
+                add_file_to_zip(req.get('qr_image_path2'), added_files)
     
     zip_buffer.seek(0)
     
@@ -19683,6 +19699,7 @@ def inject_sale_request_count():
 def submit_sale_request(item_id):
     sale_price = request.form.get('sale_price', type=int)
     qr_image = request.files.get('qr_image')
+    qr_image2 = request.files.get('qr_image2')
     
     if not sale_price or sale_price <= 0:
         flash('売上金額を正しく入力してください', 'error')
@@ -19717,27 +19734,36 @@ def submit_sale_request(item_id):
         return redirect(url_for('index'))
     
     # QR画像の保存
+    upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+    os.makedirs(upload_folder, exist_ok=True)
+    
     qr_image_path = None
     if qr_image and qr_image.filename:
         filename = secure_filename(qr_image.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
         filename = timestamp + filename
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
         qr_image.save(os.path.join(upload_folder, filename))
         qr_image_path = 'uploads/qr/' + filename
+    
+    qr_image_path2 = None
+    if qr_image2 and qr_image2.filename:
+        filename2 = secure_filename(qr_image2.filename)
+        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename2 = timestamp2 + '2_' + filename2
+        qr_image2.save(os.path.join(upload_folder, filename2))
+        qr_image_path2 = 'uploads/qr/' + filename2
     
     # 売却申請を登録
     if DATABASE_URL:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
-            VALUES (%s, %s, %s, %s, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, qr_image_path2, status)
+            VALUES (%s, %s, %s, %s, %s, 'pending')
+        ''', (item_id, current_user.id, sale_price, qr_image_path, qr_image_path2))
     else:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
-            VALUES (?, ?, ?, ?, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, qr_image_path2, status)
+            VALUES (?, ?, ?, ?, ?, 'pending')
+        ''', (item_id, current_user.id, sale_price, qr_image_path, qr_image_path2))
     
     conn.commit()
     cur.close()
@@ -19947,6 +19973,7 @@ def reject_sale_request(request_id):
 def edit_sale_request(request_id):
     sale_price = request.form.get('sale_price', type=int)
     qr_image = request.files.get('qr_image')
+    qr_image2 = request.files.get('qr_image2')
     
     if not sale_price or sale_price <= 0:
         flash('売上金額を正しく入力してください', 'error')
@@ -19973,29 +20000,38 @@ def edit_sale_request(request_id):
     sale_request_dict = dict(sale_request)
     
     # QR画像の保存（新しい画像がある場合のみ）
+    upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+    os.makedirs(upload_folder, exist_ok=True)
+    
     qr_image_path = sale_request_dict.get('qr_image_path')
     if qr_image and qr_image.filename:
         filename = secure_filename(qr_image.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
         filename = timestamp + filename
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
         qr_image.save(os.path.join(upload_folder, filename))
         qr_image_path = 'uploads/qr/' + filename
+    
+    qr_image_path2 = sale_request_dict.get('qr_image_path2')
+    if qr_image2 and qr_image2.filename:
+        filename2 = secure_filename(qr_image2.filename)
+        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename2 = timestamp2 + '2_' + filename2
+        qr_image2.save(os.path.join(upload_folder, filename2))
+        qr_image_path2 = 'uploads/qr/' + filename2
     
     # 売却申請を更新
     if DATABASE_URL:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = %s, qr_image_path = %s
+            SET sale_price = %s, qr_image_path = %s, qr_image_path2 = %s
             WHERE id = %s
-        ''', (sale_price, qr_image_path, request_id))
+        ''', (sale_price, qr_image_path, qr_image_path2, request_id))
     else:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = ?, qr_image_path = ?
+            SET sale_price = ?, qr_image_path = ?, qr_image_path2 = ?
             WHERE id = ?
-        ''', (sale_price, qr_image_path, request_id))
+        ''', (sale_price, qr_image_path, qr_image_path2, request_id))
     
     conn.commit()
     cur.close()
