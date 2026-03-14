@@ -11209,6 +11209,8 @@ def admin_items():
             for item in items_raw:
                 item_dict = dict(item)
                 user_info = user_map.get(item_dict.get('user_id'))
+                if not user_info:
+                    user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
@@ -11255,6 +11257,8 @@ def admin_items():
             for item in items_raw:
                 item_dict = dict(item)
                 user_info = user_map.get(item_dict.get('user_id'))
+                if not user_info:
+                    user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
@@ -11519,8 +11523,8 @@ def admin_add_item():
                 return redirect(url_for('admin_add_item', mode='user'))
             target_user_id = int(target_user_id_str)
         else:
-            # 管理者モードの場合、ユーザーなし
-            target_user_id = None
+            # 管理者モードの場合、登録した管理者自身をオーナーにする
+            target_user_id = current_user.id
         
         purchase_price = int(float(request.form.get('purchase_price') or 0))
         wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
@@ -11629,7 +11633,7 @@ def admin_add_item():
             ))
             conn.commit()
             
-            if target_user_id:
+            if form_mode == 'user':
                 flash('商品を登録し、指定ユーザーに割り当てました', 'success')
             else:
                 flash('商品を管理者商品として登録しました', 'success')
@@ -11641,7 +11645,7 @@ def admin_add_item():
             conn.close()
         
         # 登録後のリダイレクト先を決定
-        if target_user_id:
+        if form_mode == 'user':
             return redirect(url_for('admin_user_products'))
         else:
             return redirect(url_for('admin_items'))
