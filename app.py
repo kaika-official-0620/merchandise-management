@@ -1050,6 +1050,7 @@ if DATABASE_URL:
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
+                shipping_cost INTEGER DEFAULT 0,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
@@ -1063,6 +1064,12 @@ if DATABASE_URL:
         # qr_image_path2カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS qr_image_path2 TEXT")
+        except:
+            pass
+        
+        # shipping_costカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipping_cost INTEGER DEFAULT 0")
         except:
             pass
         
@@ -2025,6 +2032,7 @@ else:
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
+                shipping_cost INTEGER DEFAULT 0,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status TEXT DEFAULT 'pending',
@@ -2038,6 +2046,12 @@ else:
         # qr_image_path2カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN qr_image_path2 TEXT")
+        except:
+            pass
+        
+        # shipping_costカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN shipping_cost INTEGER DEFAULT 0")
         except:
             pass
         
@@ -19702,6 +19716,7 @@ def inject_sale_request_count():
 @login_required
 def submit_sale_request(item_id):
     sale_price = request.form.get('sale_price', type=int)
+    shipping_cost = request.form.get('shipping_cost', type=int) or 0
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
     
@@ -19760,14 +19775,14 @@ def submit_sale_request(item_id):
     # 売却申請を登録
     if DATABASE_URL:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, qr_image_path2, status)
-            VALUES (%s, %s, %s, %s, %s, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path, qr_image_path2))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+        ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
     else:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, qr_image_path2, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path, qr_image_path2))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
     
     conn.commit()
     cur.close()
@@ -19870,7 +19885,7 @@ def approve_sale_request(request_id):
         # 申請情報を取得（sale_price, merchandise_idが必要）
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = %s", (request_id,))
+            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = %s", (request_id,))
             sale_request = cur.fetchone()
             cur.close()
             
@@ -19880,6 +19895,7 @@ def approve_sale_request(request_id):
                 return redirect(url_for('admin_sale_requests'))
             
             sale_price = sale_request['sale_price']
+            shipping_cost = sale_request.get('shipping_cost') or 0
             merchandise_id = sale_request['merchandise_id']
             
             # 通常のカーソルでUPDATE実行
@@ -19890,16 +19906,16 @@ def approve_sale_request(request_id):
                 WHERE id = %s
             ''', (datetime.now(), current_user.id, admin_note, request_id))
             
-            # 商品のステータスを売却済みに更新、売上金も更新
+            # 商品のステータスを売却済みに更新、売上金・送料も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET is_listed = TRUE, sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
+                SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, sale_date = %s, updated_at = %s, updated_by = %s
                 WHERE id = %s
-            ''', (sale_price, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
+            ''', (sale_price, shipping_cost, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
-            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = ?", (request_id,))
+            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = ?", (request_id,))
             sale_request = cur.fetchone()
             
             if not sale_request:
@@ -19909,6 +19925,7 @@ def approve_sale_request(request_id):
                 return redirect(url_for('admin_sale_requests'))
             
             sale_price = sale_request['sale_price']
+            shipping_cost = sale_request['shipping_cost'] or 0
             merchandise_id = sale_request['merchandise_id']
             
             cur.execute('''
@@ -19917,12 +19934,12 @@ def approve_sale_request(request_id):
                 WHERE id = ?
             ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, request_id))
             
-            # 商品のステータスを売却済みに更新、売上金も更新
+            # 商品のステータスを売却済みに更新、売上金・送料も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET is_listed = 1, sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
+                SET is_listed = 1, sale_price = ?, shipping_cost = ?, sale_date = ?, updated_at = ?, updated_by = ?
                 WHERE id = ?
-            ''', (sale_price, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
+            ''', (sale_price, shipping_cost, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
         conn.commit()
         cur.close()
@@ -19976,6 +19993,7 @@ def reject_sale_request(request_id):
 @login_required
 def edit_sale_request(request_id):
     sale_price = request.form.get('sale_price', type=int)
+    shipping_cost = request.form.get('shipping_cost', type=int) or 0
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
     
@@ -20027,15 +20045,15 @@ def edit_sale_request(request_id):
     if DATABASE_URL:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = %s, qr_image_path = %s, qr_image_path2 = %s
+            SET sale_price = %s, shipping_cost = %s, qr_image_path = %s, qr_image_path2 = %s
             WHERE id = %s
-        ''', (sale_price, qr_image_path, qr_image_path2, request_id))
+        ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
     else:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = ?, qr_image_path = ?, qr_image_path2 = ?
+            SET sale_price = ?, shipping_cost = ?, qr_image_path = ?, qr_image_path2 = ?
             WHERE id = ?
-        ''', (sale_price, qr_image_path, qr_image_path2, request_id))
+        ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
     
     conn.commit()
     cur.close()

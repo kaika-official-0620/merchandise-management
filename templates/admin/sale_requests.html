@@ -602,6 +602,10 @@
                             <span class="price-value sale">¥{{ "{:,}".format(req.sale_price) }}</span>
                         </div>
                         <div class="price-item">
+                            <span class="price-label">送料</span>
+                            <span class="price-value">¥{{ "{:,}".format(req.shipping_cost or 0) }}</span>
+                        </div>
+                        <div class="price-item">
                             <span class="price-label">仕入額</span>
                             <span class="price-value purchase">¥{{ "{:,}".format(req.purchase_price or 0) }}</span>
                         </div>
