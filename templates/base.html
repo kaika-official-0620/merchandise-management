@@ -371,13 +371,17 @@
                         <div class="formula-item">
                             <span class="formula-label">利益</span>
                             <span class="formula-eq">=</span>
-                            <span class="formula-value">売上 − 仕入額 − 手数料 − 送料</span>
+                            <span class="formula-value">売上 − 仕入額 − 媒体手数料 − 販売タイプ手数料 − 送料</span>
                         </div>
                         <div class="formula-item">
                             <span class="formula-label">利益率</span>
                             <span class="formula-eq">=</span>
                             <span class="formula-value">利益 ÷ 仕入れ金額 × 100</span>
                         </div>
+                    </div>
+                    <div class="formula-box" style="margin-top: 0.5rem; font-size: 0.85rem; color: #64748b;">
+                        <div>※ 媒体手数料は売上 × {{ fee_settings.get('commission_normal', '10') }}%（マスター設定連動）</div>
+                        <div>※ 販売タイプ手数料は段階別固定額（マスター設定連動）</div>
                     </div>
                 </div>
                 
@@ -388,28 +392,23 @@
                         <div class="calc-input-row full-width">
                             <label>媒体手数料</label>
                             <select id="calcPlatform" class="calc-select" onchange="onPlatformChange()">
-                                <option value="mercari" selected>メルカリ（10%）</option>
-                                <option value="rakuma">ラクマ（10%）</option>
-                                <option value="yahuoku">ヤフオク（10%）</option>
-                                <option value="yahoo_fleamarket">ヤフーフリマ（5%）</option>
-                                <option value="buyma">バイマ（7.7%）</option>
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
                                 <option value="other">その他（手動設定）</option>
                             </select>
                         </div>
                         <div class="calc-input-row full-width">
                             <label>販売タイプ</label>
                             <select id="calcSaleType" class="calc-select" onchange="onSaleTypeChange()">
-                                <option value="custom">カスタム（手動設定）</option>
-                                <option value="wholesale">業者卸販売（10%・3万円以上送料無料）</option>
-                                <option value="simultaneous">同時出品サービス（3%）</option>
-                                <option value="auction">オークション流し（5%）</option>
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
                             </select>
-                        </div>
-                        <div class="calc-checkbox-row">
-                            <label class="calc-checkbox-label">
-                                <input type="checkbox" id="calcPhotoPacking" onchange="calculateProfit()" checked>
-                                <span>撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
-                            </label>
                         </div>
                         <div class="calc-input-row">
                             <label>売上（税込）</label>
@@ -423,22 +422,13 @@
                         </div>
                         <div class="calc-input-row">
                             <label>媒体手数料（%）</label>
-                            <input type="number" id="calcPlatformFeeRate" placeholder="10" value="10" step="0.1" oninput="calculateProfit()" readonly style="background-color: #f1f5f9;">
-                            <span class="input-unit">%</span>
-                        </div>
-                        <div class="calc-input-row" id="calcSaleTypeFeeRow" style="display:none;">
-                            <label>販売タイプ手数料（%）</label>
-                            <input type="number" id="calcFeeRate" placeholder="0" value="0" step="0.1" oninput="calculateProfit()" readonly style="background-color: #f1f5f9;">
+                            <input type="number" id="calcPlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateProfit()" readonly style="background-color: #f1f5f9;">
                             <span class="input-unit">%</span>
                         </div>
                         <div class="calc-input-row">
                             <label>送料</label>
                             <input type="number" id="calcShipping" placeholder="0" value="0" oninput="calculateProfit()">
                             <span class="input-unit">円</span>
-                        </div>
-                        <div class="calc-shipping-note" id="calcShippingNote" style="display:none;">
-                            <span class="note-icon">ℹ️</span>
-                            <span>業者卸販売：30,000円以上で送料無料</span>
                         </div>
                     </div>
                 </div>
@@ -452,12 +442,8 @@
                             <span class="result-value" id="resultPlatformFee">¥0</span>
                         </div>
                         <div class="calc-result-row" id="resultSaleTypeFeeRow" style="display:none;">
-                            <span class="result-label">販売タイプ手数料</span>
+                            <span class="result-label" id="resultSaleTypeFeeLabel">販売タイプ手数料</span>
                             <span class="result-value" id="resultSaleTypeFee">¥0</span>
-                        </div>
-                        <div class="calc-result-row" id="resultPhotoPackingRow">
-                            <span class="result-label">撮影梱包代行</span>
-                            <span class="result-value" id="resultPhotoPacking">¥0</span>
                         </div>
                         <div class="calc-result-row highlight">
                             <span class="result-label">利益</span>
@@ -477,28 +463,23 @@
                         <div class="calc-input-row full-width">
                             <label>媒体手数料</label>
                             <select id="calcReversePlatform" class="calc-select" onchange="onReversePlatformChange()">
-                                <option value="mercari" selected>メルカリ（10%）</option>
-                                <option value="rakuma">ラクマ（10%）</option>
-                                <option value="yahuoku">ヤフオク（10%）</option>
-                                <option value="yahoo_fleamarket">ヤフーフリマ（5%）</option>
-                                <option value="buyma">バイマ（7.7%）</option>
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
                                 <option value="other">その他（手動設定）</option>
                             </select>
                         </div>
                         <div class="calc-input-row full-width">
                             <label>販売タイプ</label>
                             <select id="calcReverseSaleType" class="calc-select" onchange="onReverseSaleTypeChange()">
-                                <option value="custom">カスタム（手動設定）</option>
-                                <option value="wholesale">業者卸販売（10%・3万円以上送料無料）</option>
-                                <option value="simultaneous">同時出品サービス（3%）</option>
-                                <option value="auction">オークション流し（5%）</option>
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
                             </select>
-                        </div>
-                        <div class="calc-checkbox-row">
-                            <label class="calc-checkbox-label">
-                                <input type="checkbox" id="calcReversePhotoPacking" onchange="calculateReversePrice()" checked>
-                                <span>撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
-                            </label>
                         </div>
                         <div class="calc-input-row">
                             <label>目標利益</label>
@@ -512,12 +493,7 @@
                         </div>
                         <div class="calc-input-row">
                             <label>媒体手数料（%）</label>
-                            <input type="number" id="calcReversePlatformFeeRate" placeholder="10" value="10" step="0.1" oninput="calculateReversePrice()" readonly style="background-color: #f1f5f9;">
-                            <span class="input-unit">%</span>
-                        </div>
-                        <div class="calc-input-row" id="calcReverseSaleTypeFeeRow" style="display:none;">
-                            <label>販売タイプ手数料（%）</label>
-                            <input type="number" id="calcReverseFeeRate" placeholder="0" value="0" step="0.1" oninput="calculateReversePrice()" readonly style="background-color: #f1f5f9;">
+                            <input type="number" id="calcReversePlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateReversePrice()" readonly style="background-color: #f1f5f9;">
                             <span class="input-unit">%</span>
                         </div>
                         <div class="calc-input-row">
@@ -525,12 +501,12 @@
                             <input type="number" id="calcReverseShipping" placeholder="0" value="0" oninput="calculateReversePrice()">
                             <span class="input-unit">円</span>
                         </div>
-                        <div class="calc-shipping-note" id="calcReverseShippingNote" style="display:none;">
-                            <span class="note-icon">ℹ️</span>
-                            <span>業者卸販売：30,000円以上で送料無料</span>
-                        </div>
                     </div>
                     <div class="calc-result-grid">
+                        <div class="calc-result-row" id="resultReverseSaleTypeFeeRow" style="display:none;">
+                            <span class="result-label" id="resultReverseSaleTypeFeeLabel">販売タイプ手数料</span>
+                            <span class="result-value" id="resultReverseSaleTypeFee">¥0</span>
+                        </div>
                         <div class="calc-result-row highlight-blue">
                             <span class="result-label">必要な売上額</span>
                             <span class="result-value" id="resultRequiredPrice">¥0</span>
@@ -549,28 +525,23 @@
                         <div class="calc-input-row full-width">
                             <label>媒体手数料</label>
                             <select id="calcRateReversePlatform" class="calc-select" onchange="onRateReversePlatformChange()">
-                                <option value="mercari" selected>メルカリ（10%）</option>
-                                <option value="rakuma">ラクマ（10%）</option>
-                                <option value="yahuoku">ヤフオク（10%）</option>
-                                <option value="yahoo_fleamarket">ヤフーフリマ（5%）</option>
-                                <option value="buyma">バイマ（7.7%）</option>
+                                <option value="mercari" selected>メルカリ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="rakuma">ラクマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahuoku">ヤフオク（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="yahoo_fleamarket">ヤフーフリマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
+                                <option value="buyma">バイマ（{{ fee_settings.get('commission_normal', '10') }}%）</option>
                                 <option value="other">その他（手動設定）</option>
                             </select>
                         </div>
                         <div class="calc-input-row full-width">
                             <label>販売タイプ</label>
                             <select id="calcRateReverseSaleType" class="calc-select" onchange="onRateReverseSaleTypeChange()">
-                                <option value="custom">カスタム（手動設定）</option>
-                                <option value="wholesale">業者卸販売（10%・3万円以上送料無料）</option>
-                                <option value="simultaneous">同時出品サービス（3%）</option>
-                                <option value="auction">オークション流し（5%）</option>
+                                <option value="none">なし</option>
+                                <option value="photo_packing">撮影梱包発送</option>
+                                <option value="wholesale">業者販売</option>
+                                <option value="multi_listing">同時出品</option>
+                                <option value="auction">オークション出品代行</option>
                             </select>
-                        </div>
-                        <div class="calc-checkbox-row">
-                            <label class="calc-checkbox-label">
-                                <input type="checkbox" id="calcRateReversePhotoPacking" onchange="calculateRateReversePrice()" checked>
-                                <span>撮影梱包等代行（25,000円以上:2%、未満:500円）</span>
-                            </label>
                         </div>
                         <div class="calc-input-row">
                             <label>目標利益率</label>
@@ -584,12 +555,7 @@
                         </div>
                         <div class="calc-input-row">
                             <label>媒体手数料（%）</label>
-                            <input type="number" id="calcRateReversePlatformFeeRate" placeholder="10" value="10" step="0.1" oninput="calculateRateReversePrice()" readonly style="background-color: #f1f5f9;">
-                            <span class="input-unit">%</span>
-                        </div>
-                        <div class="calc-input-row" id="calcRateReverseSaleTypeFeeRow" style="display:none;">
-                            <label>販売タイプ手数料（%）</label>
-                            <input type="number" id="calcRateReverseFeeRate" placeholder="0" value="0" step="0.1" oninput="calculateRateReversePrice()" readonly style="background-color: #f1f5f9;">
+                            <input type="number" id="calcRateReversePlatformFeeRate" placeholder="10" value="{{ fee_settings.get('commission_normal', '10') }}" step="0.1" oninput="calculateRateReversePrice()" readonly style="background-color: #f1f5f9;">
                             <span class="input-unit">%</span>
                         </div>
                         <div class="calc-input-row">
@@ -597,12 +563,12 @@
                             <input type="number" id="calcRateReverseShipping" placeholder="0" value="0" oninput="calculateRateReversePrice()">
                             <span class="input-unit">円</span>
                         </div>
-                        <div class="calc-shipping-note" id="calcRateReverseShippingNote" style="display:none;">
-                            <span class="note-icon">ℹ️</span>
-                            <span>業者卸販売：30,000円以上で送料無料</span>
-                        </div>
                     </div>
                     <div class="calc-result-grid" style="border-color: #f59e0b;">
+                        <div class="calc-result-row" id="resultRateReverseSaleTypeFeeRow" style="display:none;">
+                            <span class="result-label" id="resultRateReverseSaleTypeFeeLabel">販売タイプ手数料</span>
+                            <span class="result-value" id="resultRateReverseSaleTypeFee">¥0</span>
+                        </div>
                         <div class="calc-result-row" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
                             <span class="result-label">必要な売上額</span>
                             <span class="result-value" id="resultRateRequiredPrice" style="color: #b45309;">¥0</span>
@@ -1076,29 +1042,66 @@
             }
         });
         
-        // 媒体手数料率
+        // DB設定から動的に手数料を反映（form.htmlと同じ方式）
+        const _fs = {{ fee_settings | default({}) | tojson }};
+        const _commNormal = parseFloat(_fs.commission_normal) || 10;
+        
+        // 媒体手数料率（DB設定に連動）
         const platformRates = {
-            'mercari': 10,        // メルカリ 10%
-            'rakuma': 10,         // ラクマ 10%
-            'yahuoku': 10,        // ヤフオク 10%
-            'yahoo_fleamarket': 5, // ヤフーフリマ 5%
-            'buyma': 7.7,         // バイマ 7.7%
-            'other': null         // その他（手動設定）
+            'mercari': _commNormal,
+            'rakuma': _commNormal,
+            'yahuoku': _commNormal,
+            'yahoo_fleamarket': _commNormal,
+            'buyma': _commNormal,
+            'other': null
         };
         
-        // 販売タイプの手数料率
-        const saleTypeRates = {
-            'custom': null,      // 手動設定
-            'wholesale': 10,     // 業者卸販売 10%
-            'simultaneous': 3,   // 同時出品サービス 3%
-            'auction': 5         // オークション流し 5%
+        // 段階別固定額の計算ヘルパー
+        function _tierCalc(tiers, price) {
+            for (const t of tiers) {
+                if (t.max === null || price <= t.max) return t.fee;
+            }
+            return tiers[tiers.length - 1].fee;
+        }
+        
+        // 段階別ティア定義（DB設定から動的生成）
+        const _ppTiers = [
+            {max: parseInt(_fs.photo_packing_t1_max)||19999, fee: parseInt(_fs.photo_packing_t1_fee)||500},
+            {max: parseInt(_fs.photo_packing_t2_max)||49999, fee: parseInt(_fs.photo_packing_t2_fee)||650},
+            {max: parseInt(_fs.photo_packing_t3_max)||99999, fee: parseInt(_fs.photo_packing_t3_fee)||800},
+            {max: null, fee: parseInt(_fs.photo_packing_t4_fee)||1000}
+        ];
+        const _wsTiers = [
+            {max: parseInt(_fs.wholesale_t1_max)||19999, fee: parseInt(_fs.wholesale_t1_fee)||500},
+            {max: parseInt(_fs.wholesale_t2_max)||49999, fee: parseInt(_fs.wholesale_t2_fee)||1000},
+            {max: parseInt(_fs.wholesale_t3_max)||99999, fee: parseInt(_fs.wholesale_t3_fee)||1500},
+            {max: parseInt(_fs.wholesale_t4_max)||199999, fee: parseInt(_fs.wholesale_t4_fee)||2000},
+            {max: null, fee: parseInt(_fs.wholesale_t5_fee)||3000}
+        ];
+        const _mlTiers = [
+            {max: parseInt(_fs.multi_listing_t1_max)||19999, fee: parseInt(_fs.multi_listing_t1_fee)||300},
+            {max: parseInt(_fs.multi_listing_t2_max)||49999, fee: parseInt(_fs.multi_listing_t2_fee)||400},
+            {max: null, fee: parseInt(_fs.multi_listing_t3_fee)||500}
+        ];
+        const _aucTiers = [
+            {max: parseInt(_fs.auction_t1_max)||19999, fee: parseInt(_fs.auction_t1_fee)||300},
+            {max: parseInt(_fs.auction_t2_max)||49999, fee: parseInt(_fs.auction_t2_fee)||400},
+            {max: parseInt(_fs.auction_t3_max)||99999, fee: parseInt(_fs.auction_t3_fee)||500},
+            {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
+        ];
+        
+        // 販売タイプ別の手数料計算ルール
+        const saleTypeCalcRules = {
+            'photo_packing': { name: '撮影梱包発送', tiers: _ppTiers },
+            'wholesale':     { name: '業者販売',     tiers: _wsTiers },
+            'multi_listing': { name: '同時出品',     tiers: _mlTiers },
+            'auction':       { name: 'オークション', tiers: _aucTiers }
         };
         
-        // 利益計算用の媒体変更
-        function onPlatformChange() {
-            const platform = document.getElementById('calcPlatform').value;
-            const feeInput = document.getElementById('calcPlatformFeeRate');
-            
+        // 共通：媒体変更ハンドラー
+        function handlePlatformChange(selectId, feeInputId, callback) {
+            const platform = document.getElementById(selectId).value;
+            const feeInput = document.getElementById(feeInputId);
             if (platformRates[platform] !== null) {
                 feeInput.value = platformRates[platform];
                 feeInput.readOnly = true;
@@ -1107,75 +1110,17 @@
                 feeInput.readOnly = false;
                 feeInput.style.backgroundColor = '';
             }
-            
-            calculateProfit();
+            callback();
         }
         
-        // 利益計算用の販売タイプ変更
-        function onSaleTypeChange() {
-            const saleType = document.getElementById('calcSaleType').value;
-            const feeInput = document.getElementById('calcFeeRate');
-            const feeRow = document.getElementById('calcSaleTypeFeeRow');
-            const shippingNote = document.getElementById('calcShippingNote');
-            
-            if (saleType === 'custom') {
-                feeRow.style.display = 'none';
-            } else {
-                feeRow.style.display = 'grid';
-                feeInput.value = saleTypeRates[saleType];
-            }
-            
-            // 業者卸販売の場合は送料無料の注記を表示
-            shippingNote.style.display = (saleType === 'wholesale') ? 'flex' : 'none';
-            
-            calculateProfit();
-        }
+        function onPlatformChange() { handlePlatformChange('calcPlatform', 'calcPlatformFeeRate', calculateProfit); }
+        function onReversePlatformChange() { handlePlatformChange('calcReversePlatform', 'calcReversePlatformFeeRate', calculateReversePrice); }
+        function onRateReversePlatformChange() { handlePlatformChange('calcRateReversePlatform', 'calcRateReversePlatformFeeRate', calculateRateReversePrice); }
         
-        // 逆算用の媒体変更
-        function onReversePlatformChange() {
-            const platform = document.getElementById('calcReversePlatform').value;
-            const feeInput = document.getElementById('calcReversePlatformFeeRate');
-            
-            if (platformRates[platform] !== null) {
-                feeInput.value = platformRates[platform];
-                feeInput.readOnly = true;
-                feeInput.style.backgroundColor = '#f1f5f9';
-            } else {
-                feeInput.readOnly = false;
-                feeInput.style.backgroundColor = '';
-            }
-            
-            calculateReversePrice();
-        }
-        
-        // 逆算用の販売タイプ変更
-        function onReverseSaleTypeChange() {
-            const saleType = document.getElementById('calcReverseSaleType').value;
-            const feeInput = document.getElementById('calcReverseFeeRate');
-            const feeRow = document.getElementById('calcReverseSaleTypeFeeRow');
-            const shippingNote = document.getElementById('calcReverseShippingNote');
-            
-            if (saleType === 'custom') {
-                feeRow.style.display = 'none';
-            } else {
-                feeRow.style.display = 'grid';
-                feeInput.value = saleTypeRates[saleType];
-            }
-            
-            // 業者卸販売の場合は送料無料の注記を表示
-            shippingNote.style.display = (saleType === 'wholesale') ? 'flex' : 'none';
-            
-            calculateReversePrice();
-        }
-        
-        // 撮影梱包等代行の費用計算
-        function calculatePhotoPackingFee(salePrice) {
-            if (salePrice >= 25000) {
-                return Math.floor(salePrice * 0.02);
-            } else {
-                return 500;
-            }
-        }
+        // 共通：販売タイプ変更ハンドラー
+        function onSaleTypeChange() { calculateProfit(); }
+        function onReverseSaleTypeChange() { calculateReversePrice(); }
+        function onRateReverseSaleTypeChange() { calculateRateReversePrice(); }
         
         // 利益計算
         function calculateProfit() {
@@ -1183,51 +1128,30 @@
             const salePrice = parseFloat(document.getElementById('calcSalePrice').value) || 0;
             const purchasePrice = parseFloat(document.getElementById('calcPurchasePrice').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcPlatformFeeRate').value) || 0;
-            const saleTypeFeeRate = (saleType !== 'custom') ? (parseFloat(document.getElementById('calcFeeRate').value) || 0) : 0;
             let shipping = parseFloat(document.getElementById('calcShipping').value) || 0;
-            const usePhotoPacking = document.getElementById('calcPhotoPacking').checked;
             
-            // 業者卸販売で30,000円以上の場合は送料無料
-            if (saleType === 'wholesale' && salePrice >= 30000) {
-                shipping = 0;
-            }
-            
-            // 媒体手数料計算
             const platformFee = Math.floor(salePrice * (platformFeeRate / 100));
             
-            // 販売タイプ手数料計算
-            const saleTypeFee = Math.floor(salePrice * (saleTypeFeeRate / 100));
-            
-            // 撮影梱包代行費用計算
-            const photoPackingFee = usePhotoPacking ? calculatePhotoPackingFee(salePrice) : 0;
-            
-            // 利益計算
-            const profit = salePrice - purchasePrice - platformFee - saleTypeFee - photoPackingFee - shipping;
-            
-            // 利益率計算（利益 ÷ 仕入れ金額 × 100）
-            const profitRate = purchasePrice > 0 ? (profit / purchasePrice * 100) : 0;
-            
-            // 結果表示
-            document.getElementById('resultPlatformFee').textContent = '¥' + platformFee.toLocaleString();
-            
-            // 販売タイプ手数料の表示
-            const saleTypeFeeRow = document.getElementById('resultSaleTypeFeeRow');
-            const saleTypeFeeEl = document.getElementById('resultSaleTypeFee');
-            if (saleType !== 'custom') {
-                saleTypeFeeRow.style.display = 'flex';
-                saleTypeFeeEl.textContent = '¥' + saleTypeFee.toLocaleString();
-            } else {
-                saleTypeFeeRow.style.display = 'none';
+            let saleTypeFee = 0;
+            let saleTypeFeeLabel = '';
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const rule = saleTypeCalcRules[saleType];
+                saleTypeFee = _tierCalc(rule.tiers, salePrice);
+                saleTypeFeeLabel = rule.name;
             }
             
-            // 撮影梱包代行の表示
-            const photoPackingRow = document.getElementById('resultPhotoPackingRow');
-            const photoPackingEl = document.getElementById('resultPhotoPacking');
-            if (usePhotoPacking) {
-                photoPackingRow.style.display = 'flex';
-                photoPackingEl.textContent = '¥' + photoPackingFee.toLocaleString();
+            const profit = salePrice - purchasePrice - platformFee - saleTypeFee - shipping;
+            const profitRate = purchasePrice > 0 ? (profit / purchasePrice * 100) : 0;
+            
+            document.getElementById('resultPlatformFee').textContent = '¥' + platformFee.toLocaleString();
+            
+            const saleTypeFeeRow = document.getElementById('resultSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeFee > 0) {
+                saleTypeFeeRow.style.display = 'flex';
+                document.getElementById('resultSaleTypeFeeLabel').textContent = saleTypeFeeLabel;
+                document.getElementById('resultSaleTypeFee').textContent = '¥' + saleTypeFee.toLocaleString();
             } else {
-                photoPackingRow.style.display = 'none';
+                saleTypeFeeRow.style.display = 'none';
             }
             
             const profitEl = document.getElementById('resultProfit');
@@ -1245,64 +1169,44 @@
             const targetProfit = parseFloat(document.getElementById('calcTargetProfit').value) || 0;
             const purchasePrice = parseFloat(document.getElementById('calcReversePurchase').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcReversePlatformFeeRate').value) || 0;
-            const saleTypeFeeRate = (saleType !== 'custom') ? (parseFloat(document.getElementById('calcReverseFeeRate').value) || 0) : 0;
-            const totalFeeRate = platformFeeRate + saleTypeFeeRate;
             let shipping = parseFloat(document.getElementById('calcReverseShipping').value) || 0;
-            const usePhotoPacking = document.getElementById('calcReversePhotoPacking').checked;
             
+            // 段階別固定額の場合、反復法で必要売上を求める
+            const totalNeeded = purchasePrice + targetProfit + shipping;
             let requiredPrice = 0;
             
-            if (usePhotoPacking) {
-                // 撮影梱包代行ありの場合、反復計算で求める
-                // 25000円以上: 利益 = 売上 - 仕入 - 売上*(媒体+販売タイプ)% - 売上*2% - 送料
-                // 25000円未満: 利益 = 売上 - 仕入 - 売上*(媒体+販売タイプ)% - 500 - 送料
-                
-                // まず25000円以上として計算（売上の(手数料率+2)%が費用）
-                const combinedRate = (totalFeeRate + 2) / 100;
-                let priceHigh = combinedRate < 1 
-                    ? Math.ceil((purchasePrice + targetProfit + shipping) / (1 - combinedRate))
-                    : 0;
-                
-                // 25000円未満として計算（売上の手数料率% + 500円が費用）
-                let priceLow = totalFeeRate < 100 
-                    ? Math.ceil((purchasePrice + targetProfit + 500 + shipping) / (1 - totalFeeRate / 100))
-                    : 0;
-                
-                // どちらの計算結果を使うか判定
-                if (priceHigh >= 25000) {
-                    requiredPrice = priceHigh;
-                } else if (priceLow < 25000) {
-                    requiredPrice = priceLow;
-                } else {
-                    // 境界付近の場合は25000円以上の計算を使用
-                    requiredPrice = priceHigh >= 25000 ? priceHigh : 25000;
-                }
+            if (platformFeeRate >= 100) {
+                requiredPrice = 0;
             } else {
-                // 撮影梱包代行なしの場合
-                requiredPrice = totalFeeRate < 100 
-                    ? Math.ceil((purchasePrice + targetProfit + shipping) / (1 - totalFeeRate / 100))
-                    : 0;
-            }
-            
-            // 業者卸販売で計算結果が30,000円以上なら送料無料で再計算
-            if (saleType === 'wholesale' && requiredPrice >= 30000) {
-                if (usePhotoPacking) {
-                    const combinedRate = (totalFeeRate + 2) / 100;
-                    requiredPrice = combinedRate < 1 
-                        ? Math.ceil((purchasePrice + targetProfit) / (1 - combinedRate))
-                        : 0;
-                } else {
-                    requiredPrice = totalFeeRate < 100 
-                        ? Math.ceil((purchasePrice + targetProfit) / (1 - totalFeeRate / 100))
-                        : 0;
+                // まず媒体手数料のみで概算
+                requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
+                
+                // 販売タイプ手数料がある場合、反復で収束させる
+                if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                    for (let i = 0; i < 10; i++) {
+                        const pFee = Math.floor(requiredPrice * (platformFeeRate / 100));
+                        const sFee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                        const newPrice = Math.ceil(totalNeeded + pFee + sFee);
+                        if (newPrice === requiredPrice) break;
+                        requiredPrice = newPrice;
+                    }
                 }
             }
             
-            // 利益率計算（利益 ÷ 仕入れ金額 × 100）
+            // 販売タイプ手数料の表示
+            const feeRow = document.getElementById('resultReverseSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const fee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                feeRow.style.display = 'flex';
+                document.getElementById('resultReverseSaleTypeFeeLabel').textContent = saleTypeCalcRules[saleType].name;
+                document.getElementById('resultReverseSaleTypeFee').textContent = '¥' + fee.toLocaleString();
+            } else {
+                feeRow.style.display = 'none';
+            }
+            
             const profitRate = purchasePrice > 0 ? (targetProfit / purchasePrice * 100) : 0;
             
             document.getElementById('resultRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
-            
             const profitRateEl = document.getElementById('resultReverseProfitRate');
             profitRateEl.textContent = profitRate.toFixed(1) + '%';
             profitRateEl.classList.toggle('negative', profitRate < 0);
@@ -1310,128 +1214,46 @@
         
         // ========== 目標利益率から逆算 ==========
         
-        // 目標利益率逆算用の媒体変更
-        function onRateReversePlatformChange() {
-            const platform = document.getElementById('calcRateReversePlatform').value;
-            const feeInput = document.getElementById('calcRateReversePlatformFeeRate');
-            
-            if (platformRates[platform] !== null) {
-                feeInput.value = platformRates[platform];
-                feeInput.readOnly = true;
-                feeInput.style.backgroundColor = '#f1f5f9';
-            } else {
-                feeInput.readOnly = false;
-                feeInput.style.backgroundColor = '';
-            }
-            
-            calculateRateReversePrice();
-        }
-        
-        // 目標利益率逆算用の販売タイプ変更
-        function onRateReverseSaleTypeChange() {
-            const saleType = document.getElementById('calcRateReverseSaleType').value;
-            const feeInput = document.getElementById('calcRateReverseFeeRate');
-            const feeRow = document.getElementById('calcRateReverseSaleTypeFeeRow');
-            const shippingNote = document.getElementById('calcRateReverseShippingNote');
-            
-            if (saleType === 'custom') {
-                feeRow.style.display = 'none';
-            } else {
-                feeRow.style.display = 'grid';
-                feeInput.value = saleTypeRates[saleType];
-            }
-            
-            // 業者卸販売の場合は送料無料の注記を表示
-            shippingNote.style.display = (saleType === 'wholesale') ? 'flex' : 'none';
-            
-            calculateRateReversePrice();
-        }
-        
-        // 目標利益率から必要売上額を計算
         function calculateRateReversePrice() {
             const saleType = document.getElementById('calcRateReverseSaleType').value;
             const targetProfitRate = parseFloat(document.getElementById('calcTargetProfitRate').value) || 0;
             const purchasePrice = parseFloat(document.getElementById('calcRateReversePurchase').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcRateReversePlatformFeeRate').value) || 0;
-            const saleTypeFeeRate = (saleType !== 'custom') ? (parseFloat(document.getElementById('calcRateReverseFeeRate').value) || 0) : 0;
-            const totalFeeRate = platformFeeRate + saleTypeFeeRate;
             let shipping = parseFloat(document.getElementById('calcRateReverseShipping').value) || 0;
-            const usePhotoPacking = document.getElementById('calcRateReversePhotoPacking').checked;
             
+            const targetProfit = Math.floor(purchasePrice * targetProfitRate / 100);
+            const totalNeeded = purchasePrice + targetProfit + shipping;
             let requiredPrice = 0;
-            let profit = 0;
             
-            // 利益率の式: 利益率 = 利益 / 仕入れ金額 × 100
-            // 利益 = 利益率 × 仕入れ金額 / 100
-            // 利益 = 売上 - 仕入額 - 手数料 - 送料
-            // 手数料 = 売上 × 手数料率%
-            // 
-            // 売上 = 仕入額 + 利益率 × 仕入額 / 100 + 手数料 + 送料
-            // 売上 = 仕入額 × (1 + 利益率 / 100) + 売上 × 手数料率% + 送料
-            // 売上 × (1 - 手数料率%) = 仕入額 × (1 + 利益率 / 100) + 送料
-            // 売上 = (仕入額 × (1 + 利益率 / 100) + 送料) / (1 - 手数料率%)
-            
-            if (usePhotoPacking) {
-                // 撮影梱包代行ありの場合、反復計算で求める
-                // 25000円以上: 手数料 = 売上 × (手数料率% + 2%)
-                // 25000円未満: 手数料 = 売上 × 手数料率% + 500
-                
-                // 25000円以上として計算（売上の(手数料率+2)%が費用）
-                const combinedRate = totalFeeRate + 2;
-                const denominator1 = 1 - combinedRate / 100;
-                const numerator1 = purchasePrice * (1 + targetProfitRate / 100) + shipping;
-                let priceHigh = denominator1 > 0 
-                    ? Math.ceil(numerator1 / denominator1)
-                    : 0;
-                
-                // 25000円未満として計算（売上の手数料率% + 500円が費用）
-                const denominator2 = 1 - totalFeeRate / 100;
-                const numerator2 = purchasePrice * (1 + targetProfitRate / 100) + 500 + shipping;
-                let priceLow = denominator2 > 0 
-                    ? Math.ceil(numerator2 / denominator2)
-                    : 0;
-                
-                // どちらの計算結果を使うか判定
-                if (priceHigh >= 25000) {
-                    requiredPrice = priceHigh;
-                } else if (priceLow < 25000 && priceLow > 0) {
-                    requiredPrice = priceLow;
-                } else {
-                    // 境界付近の場合
-                    requiredPrice = priceHigh > 0 ? priceHigh : priceLow;
-                }
+            if (platformFeeRate >= 100) {
+                requiredPrice = 0;
             } else {
-                // 撮影梱包代行なしの場合
-                const denominator = 1 - totalFeeRate / 100;
-                const numerator = purchasePrice * (1 + targetProfitRate / 100) + shipping;
-                requiredPrice = denominator > 0 
-                    ? Math.ceil(numerator / denominator)
-                    : 0;
-            }
-            
-            // 業者卸販売で計算結果が30,000円以上なら送料無料で再計算
-            if (saleType === 'wholesale' && requiredPrice >= 30000) {
-                if (usePhotoPacking) {
-                    const combinedRate = totalFeeRate + 2;
-                    const denominator = 1 - combinedRate / 100;
-                    const numerator = purchasePrice * (1 + targetProfitRate / 100);
-                    requiredPrice = denominator > 0 
-                        ? Math.ceil(numerator / denominator)
-                        : 0;
-                } else {
-                    const denominator = 1 - totalFeeRate / 100;
-                    const numerator = purchasePrice * (1 + targetProfitRate / 100);
-                    requiredPrice = denominator > 0 
-                        ? Math.ceil(numerator / denominator)
-                        : 0;
+                requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
+                
+                if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                    for (let i = 0; i < 10; i++) {
+                        const pFee = Math.floor(requiredPrice * (platformFeeRate / 100));
+                        const sFee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                        const newPrice = Math.ceil(totalNeeded + pFee + sFee);
+                        if (newPrice === requiredPrice) break;
+                        requiredPrice = newPrice;
+                    }
                 }
             }
             
-            // 想定利益を計算（利益率 × 仕入れ金額 / 100）
-            profit = Math.floor(purchasePrice * targetProfitRate / 100);
+            // 販売タイプ手数料の表示
+            const feeRow = document.getElementById('resultRateReverseSaleTypeFeeRow');
+            if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
+                const fee = _tierCalc(saleTypeCalcRules[saleType].tiers, requiredPrice);
+                feeRow.style.display = 'flex';
+                document.getElementById('resultRateReverseSaleTypeFeeLabel').textContent = saleTypeCalcRules[saleType].name;
+                document.getElementById('resultRateReverseSaleTypeFee').textContent = '¥' + fee.toLocaleString();
+            } else {
+                feeRow.style.display = 'none';
+            }
             
             document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
-            document.getElementById('resultRateProfit').textContent = '¥' + profit.toLocaleString();
+            document.getElementById('resultRateProfit').textContent = '¥' + targetProfit.toLocaleString();
         }
     </script>
     {% block scripts %}{% endblock %}

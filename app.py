@@ -17297,6 +17297,13 @@ def admin_stripe_dashboard():
                            scheduler_info=scheduler_info,
                            fee_settings=get_fee_settings())
 
+@app.context_processor
+def inject_fee_settings():
+    try:
+        return {'fee_settings': get_fee_settings()}
+    except Exception:
+        return {'fee_settings': {}}
+
 def get_fee_settings():
     """料金・手数料設定をDBから取得（キャッシュ付き）"""
     try:
