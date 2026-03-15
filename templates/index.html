@@ -2242,7 +2242,7 @@
                         {% elif item.pending_sale_request %}
                         {# 売却申請中の場合は修正ボタン #}
                         <button class="btn btn-sm btn-edit-request"
-                            onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                            onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, {{ item.sale_request.shipping_cost or 0 }}, '{{ item.sale_request.qr_image_path or '' }}', '{{ item.sale_request.qr_image_path2 or '' }}')">
                             申請修正
                         </button>
                         {% else %}
@@ -2401,7 +2401,7 @@
                 {% elif item.pending_sale_request %}
                 {# 売却申請中の場合は修正ボタン #}
                 <button class="btn btn-sm btn-edit-request"
-                    onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, '{{ item.sale_request.qr_image_path or '' }}')">
+                    onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, {{ item.sale_request.shipping_cost or 0 }}, '{{ item.sale_request.qr_image_path or '' }}', '{{ item.sale_request.qr_image_path2 or '' }}')">
                     申請修正
                 </button>
                 {% else %}
@@ -2842,10 +2842,15 @@
         document.getElementById('saleRequestItemId').value = itemId;
         document.getElementById('saleRequestProductName').textContent = productName;
         document.getElementById('saleRequestPrice').value = listingPrice || '';
+        document.getElementById('saleRequestShipping').value = 0;
         document.getElementById('saleRequestQrImage').value = '';
         document.getElementById('fileUploadArea').classList.remove('has-file');
         document.getElementById('fileUploadText').textContent = 'クリックまたはドラッグして画像を選択';
         document.getElementById('fileUploadName').textContent = '';
+        document.getElementById('saleRequestQrImage2').value = '';
+        document.getElementById('fileUploadArea2').classList.remove('has-file');
+        document.getElementById('fileUploadText2').textContent = 'クリックまたはドラッグして画像を選択';
+        document.getElementById('fileUploadName2').textContent = '';
         document.getElementById('saleRequestModal').classList.add('open');
     }
 
@@ -2855,44 +2860,48 @@
 
     // ファイル選択時の処理
     document.addEventListener('DOMContentLoaded', function () {
-        const fileInput = document.getElementById('saleRequestQrImage');
-        const uploadArea = document.getElementById('fileUploadArea');
-        const uploadText = document.getElementById('fileUploadText');
-        const uploadName = document.getElementById('fileUploadName');
+        function setupFileUpload(inputId, areaId, textId, nameId) {
+            const fileInput = document.getElementById(inputId);
+            const uploadArea = document.getElementById(areaId);
+            const uploadText = document.getElementById(textId);
+            const uploadName = document.getElementById(nameId);
 
-        if (fileInput) {
-            fileInput.addEventListener('change', function () {
-                if (this.files && this.files[0]) {
-                    uploadArea.classList.add('has-file');
-                    uploadText.textContent = '選択済み';
-                    uploadName.textContent = this.files[0].name;
-                } else {
-                    uploadArea.classList.remove('has-file');
-                    uploadText.textContent = 'クリックまたはドラッグして画像を選択';
-                    uploadName.textContent = '';
-                }
-            });
+            if (fileInput && uploadArea) {
+                fileInput.addEventListener('change', function () {
+                    if (this.files && this.files[0]) {
+                        uploadArea.classList.add('has-file');
+                        uploadText.textContent = '選択済み';
+                        uploadName.textContent = this.files[0].name;
+                    } else {
+                        uploadArea.classList.remove('has-file');
+                        uploadText.textContent = 'クリックまたはドラッグして画像を選択';
+                        uploadName.textContent = '';
+                    }
+                });
 
-            // ドラッグ&ドロップ
-            uploadArea.addEventListener('dragover', function (e) {
-                e.preventDefault();
-                this.style.borderColor = '#f59e0b';
-            });
+                uploadArea.addEventListener('dragover', function (e) {
+                    e.preventDefault();
+                    this.style.borderColor = '#f59e0b';
+                });
 
-            uploadArea.addEventListener('dragleave', function (e) {
-                e.preventDefault();
-                this.style.borderColor = '';
-            });
+                uploadArea.addEventListener('dragleave', function (e) {
+                    e.preventDefault();
+                    this.style.borderColor = '';
+                });
 
-            uploadArea.addEventListener('drop', function (e) {
-                e.preventDefault();
-                this.style.borderColor = '';
-                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    fileInput.files = e.dataTransfer.files;
-                    fileInput.dispatchEvent(new Event('change'));
-                }
-            });
+                uploadArea.addEventListener('drop', function (e) {
+                    e.preventDefault();
+                    this.style.borderColor = '';
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        fileInput.files = e.dataTransfer.files;
+                        fileInput.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
         }
+
+        setupFileUpload('saleRequestQrImage', 'fileUploadArea', 'fileUploadText', 'fileUploadName');
+        setupFileUpload('saleRequestQrImage2', 'fileUploadArea2', 'fileUploadText2', 'fileUploadName2');
     });
 
     // モーダル外クリックで閉じる
@@ -2903,11 +2912,13 @@
     });
 
     // ========== 売却申請修正機能 ==========
-    function openEditRequestModal(requestId, productName, salePrice, qrImagePath) {
+    function openEditRequestModal(requestId, productName, salePrice, shippingCost, qrImagePath, qrImagePath2) {
         document.getElementById('editRequestId').value = requestId;
         document.getElementById('editRequestProductName').textContent = productName;
         document.getElementById('editRequestPrice').value = salePrice || '';
+        document.getElementById('editRequestShipping').value = shippingCost || 0;
         document.getElementById('editRequestQrImage').value = '';
+        document.getElementById('editRequestQrImage2').value = '';
 
         const uploadArea = document.getElementById('editFileUploadArea');
         const uploadText = document.getElementById('editFileUploadText');
@@ -2918,13 +2929,29 @@
         uploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
         uploadName.textContent = '';
 
-        // 現在の画像を表示
+        const uploadArea2 = document.getElementById('editFileUploadArea2');
+        const uploadText2 = document.getElementById('editFileUploadText2');
+        const uploadName2 = document.getElementById('editFileUploadName2');
+        const currentImage2 = document.getElementById('editCurrentImage2');
+
+        uploadArea2.classList.remove('has-file');
+        uploadText2.textContent = 'クリックまたはドラッグして新しい画像を選択';
+        uploadName2.textContent = '';
+
         if (qrImagePath) {
             currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
             currentImage.style.display = 'block';
         } else {
             currentImage.innerHTML = '';
             currentImage.style.display = 'none';
+        }
+
+        if (qrImagePath2) {
+            currentImage2.innerHTML = '<img src="/static/' + qrImagePath2 + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
+            currentImage2.style.display = 'block';
+        } else {
+            currentImage2.innerHTML = '';
+            currentImage2.style.display = 'none';
         }
 
         document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
@@ -2937,24 +2964,29 @@
 
     // 編集モーダルのファイル選択時の処理
     document.addEventListener('DOMContentLoaded', function () {
-        const editFileInput = document.getElementById('editRequestQrImage');
-        const editUploadArea = document.getElementById('editFileUploadArea');
-        const editUploadText = document.getElementById('editFileUploadText');
-        const editUploadName = document.getElementById('editFileUploadName');
+        function setupEditFileUpload(inputId, areaId, textId, nameId) {
+            const editFileInput = document.getElementById(inputId);
+            const editUploadArea = document.getElementById(areaId);
+            const editUploadText = document.getElementById(textId);
+            const editUploadName = document.getElementById(nameId);
 
-        if (editFileInput) {
-            editFileInput.addEventListener('change', function () {
-                if (this.files && this.files[0]) {
-                    editUploadArea.classList.add('has-file');
-                    editUploadText.textContent = '新しい画像を選択済み';
-                    editUploadName.textContent = this.files[0].name;
-                } else {
-                    editUploadArea.classList.remove('has-file');
-                    editUploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
-                    editUploadName.textContent = '';
-                }
-            });
+            if (editFileInput && editUploadArea) {
+                editFileInput.addEventListener('change', function () {
+                    if (this.files && this.files[0]) {
+                        editUploadArea.classList.add('has-file');
+                        editUploadText.textContent = '新しい画像を選択済み';
+                        editUploadName.textContent = this.files[0].name;
+                    } else {
+                        editUploadArea.classList.remove('has-file');
+                        editUploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
+                        editUploadName.textContent = '';
+                    }
+                });
+            }
         }
+
+        setupEditFileUpload('editRequestQrImage', 'editFileUploadArea', 'editFileUploadText', 'editFileUploadName');
+        setupEditFileUpload('editRequestQrImage2', 'editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2');
     });
 
     // モーダル外クリックで閉じる
@@ -2987,7 +3019,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label>発送用QRコード画像 <small>（任意）</small></label>
+                        <label>送料 <small>（任意）</small></label>
+                        <input type="number" id="saleRequestShipping" name="shipping_cost" min="0"
+                            placeholder="送料を入力" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>画像1 <small>（任意）</small></label>
                         <div class="file-upload-area" id="fileUploadArea"
                             onclick="document.getElementById('saleRequestQrImage').click();">
                             <div class="file-upload-icon">📷</div>
@@ -2995,6 +3033,18 @@
                             <div class="file-upload-name" id="fileUploadName"></div>
                         </div>
                         <input type="file" id="saleRequestQrImage" name="qr_image" accept="image/*"
+                            style="display:none;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>画像2 <small>（任意）</small></label>
+                        <div class="file-upload-area" id="fileUploadArea2"
+                            onclick="document.getElementById('saleRequestQrImage2').click();">
+                            <div class="file-upload-icon">📷</div>
+                            <div class="file-upload-text" id="fileUploadText2">クリックまたはドラッグして画像を選択</div>
+                            <div class="file-upload-name" id="fileUploadName2"></div>
+                        </div>
+                        <input type="file" id="saleRequestQrImage2" name="qr_image2" accept="image/*"
                             style="display:none;">
                     </div>
                 </div>
@@ -3027,12 +3077,18 @@
                     </div>
 
                     <div class="form-group">
-                        <label>現在のQRコード画像</label>
+                        <label>送料 <small>（任意）</small></label>
+                        <input type="number" id="editRequestShipping" name="shipping_cost" min="0"
+                            placeholder="送料を入力" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>現在の画像1</label>
                         <div id="editCurrentImage" style="margin-bottom: 10px; display: none;"></div>
                     </div>
 
                     <div class="form-group">
-                        <label>新しいQRコード画像 <small>（変更する場合のみ）</small></label>
+                        <label>新しい画像1 <small>（変更する場合のみ）</small></label>
                         <div class="file-upload-area" id="editFileUploadArea"
                             onclick="document.getElementById('editRequestQrImage').click();">
                             <div class="file-upload-icon">📷</div>
@@ -3040,6 +3096,23 @@
                             <div class="file-upload-name" id="editFileUploadName"></div>
                         </div>
                         <input type="file" id="editRequestQrImage" name="qr_image" accept="image/*"
+                            style="display:none;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>現在の画像2</label>
+                        <div id="editCurrentImage2" style="margin-bottom: 10px; display: none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>新しい画像2 <small>（変更する場合のみ）</small></label>
+                        <div class="file-upload-area" id="editFileUploadArea2"
+                            onclick="document.getElementById('editRequestQrImage2').click();">
+                            <div class="file-upload-icon">📷</div>
+                            <div class="file-upload-text" id="editFileUploadText2">クリックまたはドラッグして新しい画像を選択</div>
+                            <div class="file-upload-name" id="editFileUploadName2"></div>
+                        </div>
+                        <input type="file" id="editRequestQrImage2" name="qr_image2" accept="image/*"
                             style="display:none;">
                     </div>
                 </div>

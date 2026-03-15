@@ -1050,7 +1050,9 @@ if DATABASE_URL:
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
+                shipping_cost INTEGER DEFAULT 0,
                 qr_image_path TEXT,
+                qr_image_path2 TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -1058,6 +1060,18 @@ if DATABASE_URL:
                 admin_note TEXT
             )
         ''')
+        
+        # qr_image_path2カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS qr_image_path2 TEXT")
+        except:
+            pass
+        
+        # shipping_costカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipping_cost INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -2018,7 +2032,9 @@ else:
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 sale_price INTEGER NOT NULL,
+                shipping_cost INTEGER DEFAULT 0,
                 qr_image_path TEXT,
+                qr_image_path2 TEXT,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -2026,6 +2042,18 @@ else:
                 admin_note TEXT
             )
         ''')
+        
+        # qr_image_path2カラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN qr_image_path2 TEXT")
+        except:
+            pass
+        
+        # shipping_costカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN shipping_cost INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -9794,6 +9822,7 @@ def export_backup_with_images():
             # 売却申請のQRコード画像
             for req in backup_data.get('sale_requests', []):
                 add_file_to_zip(req.get('qr_image_path'), added_files)
+                add_file_to_zip(req.get('qr_image_path2'), added_files)
     
     zip_buffer.seek(0)
     
@@ -10096,6 +10125,7 @@ def export_user_backup_with_images():
             # 売却申請のQRコード画像
             for req in backup_data.get('sale_requests', []):
                 add_file_to_zip(req.get('qr_image_path'), added_files)
+                add_file_to_zip(req.get('qr_image_path2'), added_files)
     
     zip_buffer.seek(0)
     
@@ -11193,6 +11223,8 @@ def admin_items():
             for item in items_raw:
                 item_dict = dict(item)
                 user_info = user_map.get(item_dict.get('user_id'))
+                if not user_info:
+                    user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
@@ -11239,6 +11271,8 @@ def admin_items():
             for item in items_raw:
                 item_dict = dict(item)
                 user_info = user_map.get(item_dict.get('user_id'))
+                if not user_info:
+                    user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
@@ -11503,8 +11537,8 @@ def admin_add_item():
                 return redirect(url_for('admin_add_item', mode='user'))
             target_user_id = int(target_user_id_str)
         else:
-            # 管理者モードの場合、ユーザーなし
-            target_user_id = None
+            # 管理者モードの場合、登録した管理者自身をオーナーにする
+            target_user_id = current_user.id
         
         purchase_price = int(float(request.form.get('purchase_price') or 0))
         wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
@@ -11613,7 +11647,7 @@ def admin_add_item():
             ))
             conn.commit()
             
-            if target_user_id:
+            if form_mode == 'user':
                 flash('商品を登録し、指定ユーザーに割り当てました', 'success')
             else:
                 flash('商品を管理者商品として登録しました', 'success')
@@ -11625,7 +11659,7 @@ def admin_add_item():
             conn.close()
         
         # 登録後のリダイレクト先を決定
-        if target_user_id:
+        if form_mode == 'user':
             return redirect(url_for('admin_user_products'))
         else:
             return redirect(url_for('admin_items'))
@@ -17263,6 +17297,13 @@ def admin_stripe_dashboard():
                            scheduler_info=scheduler_info,
                            fee_settings=get_fee_settings())
 
+@app.context_processor
+def inject_fee_settings():
+    try:
+        return {'fee_settings': get_fee_settings()}
+    except Exception:
+        return {'fee_settings': {}}
+
 def get_fee_settings():
     """料金・手数料設定をDBから取得（キャッシュ付き）"""
     try:
@@ -19682,7 +19723,9 @@ def inject_sale_request_count():
 @login_required
 def submit_sale_request(item_id):
     sale_price = request.form.get('sale_price', type=int)
+    shipping_cost = request.form.get('shipping_cost', type=int) or 0
     qr_image = request.files.get('qr_image')
+    qr_image2 = request.files.get('qr_image2')
     
     if not sale_price or sale_price <= 0:
         flash('売上金額を正しく入力してください', 'error')
@@ -19717,27 +19760,36 @@ def submit_sale_request(item_id):
         return redirect(url_for('index'))
     
     # QR画像の保存
+    upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+    os.makedirs(upload_folder, exist_ok=True)
+    
     qr_image_path = None
     if qr_image and qr_image.filename:
         filename = secure_filename(qr_image.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
         filename = timestamp + filename
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
         qr_image.save(os.path.join(upload_folder, filename))
         qr_image_path = 'uploads/qr/' + filename
+    
+    qr_image_path2 = None
+    if qr_image2 and qr_image2.filename:
+        filename2 = secure_filename(qr_image2.filename)
+        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename2 = timestamp2 + '2_' + filename2
+        qr_image2.save(os.path.join(upload_folder, filename2))
+        qr_image_path2 = 'uploads/qr/' + filename2
     
     # 売却申請を登録
     if DATABASE_URL:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
-            VALUES (%s, %s, %s, %s, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+        ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
     else:
         cur.execute('''
-            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, qr_image_path, status)
-            VALUES (?, ?, ?, ?, 'pending')
-        ''', (item_id, current_user.id, sale_price, qr_image_path))
+            INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
     
     conn.commit()
     cur.close()
@@ -19840,7 +19892,7 @@ def approve_sale_request(request_id):
         # 申請情報を取得（sale_price, merchandise_idが必要）
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = %s", (request_id,))
+            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = %s", (request_id,))
             sale_request = cur.fetchone()
             cur.close()
             
@@ -19850,6 +19902,7 @@ def approve_sale_request(request_id):
                 return redirect(url_for('admin_sale_requests'))
             
             sale_price = sale_request['sale_price']
+            shipping_cost = sale_request.get('shipping_cost') or 0
             merchandise_id = sale_request['merchandise_id']
             
             # 通常のカーソルでUPDATE実行
@@ -19860,16 +19913,16 @@ def approve_sale_request(request_id):
                 WHERE id = %s
             ''', (datetime.now(), current_user.id, admin_note, request_id))
             
-            # 商品のステータスを売却済みに更新、売上金も更新
+            # 商品のステータスを売却済みに更新、売上金・送料も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET is_listed = TRUE, sale_price = %s, sale_date = %s, updated_at = %s, updated_by = %s
+                SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, sale_date = %s, updated_at = %s, updated_by = %s
                 WHERE id = %s
-            ''', (sale_price, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
+            ''', (sale_price, shipping_cost, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
-            cur.execute("SELECT id, merchandise_id, sale_price FROM sale_requests WHERE id = ?", (request_id,))
+            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = ?", (request_id,))
             sale_request = cur.fetchone()
             
             if not sale_request:
@@ -19879,6 +19932,7 @@ def approve_sale_request(request_id):
                 return redirect(url_for('admin_sale_requests'))
             
             sale_price = sale_request['sale_price']
+            shipping_cost = sale_request['shipping_cost'] or 0
             merchandise_id = sale_request['merchandise_id']
             
             cur.execute('''
@@ -19887,12 +19941,12 @@ def approve_sale_request(request_id):
                 WHERE id = ?
             ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, request_id))
             
-            # 商品のステータスを売却済みに更新、売上金も更新
+            # 商品のステータスを売却済みに更新、売上金・送料も更新
             cur.execute('''
                 UPDATE merchandise 
-                SET is_listed = 1, sale_price = ?, sale_date = ?, updated_at = ?, updated_by = ?
+                SET is_listed = 1, sale_price = ?, shipping_cost = ?, sale_date = ?, updated_at = ?, updated_by = ?
                 WHERE id = ?
-            ''', (sale_price, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
+            ''', (sale_price, shipping_cost, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
         conn.commit()
         cur.close()
@@ -19946,7 +20000,9 @@ def reject_sale_request(request_id):
 @login_required
 def edit_sale_request(request_id):
     sale_price = request.form.get('sale_price', type=int)
+    shipping_cost = request.form.get('shipping_cost', type=int) or 0
     qr_image = request.files.get('qr_image')
+    qr_image2 = request.files.get('qr_image2')
     
     if not sale_price or sale_price <= 0:
         flash('売上金額を正しく入力してください', 'error')
@@ -19973,29 +20029,38 @@ def edit_sale_request(request_id):
     sale_request_dict = dict(sale_request)
     
     # QR画像の保存（新しい画像がある場合のみ）
+    upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+    os.makedirs(upload_folder, exist_ok=True)
+    
     qr_image_path = sale_request_dict.get('qr_image_path')
     if qr_image and qr_image.filename:
         filename = secure_filename(qr_image.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
         filename = timestamp + filename
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
         qr_image.save(os.path.join(upload_folder, filename))
         qr_image_path = 'uploads/qr/' + filename
+    
+    qr_image_path2 = sale_request_dict.get('qr_image_path2')
+    if qr_image2 and qr_image2.filename:
+        filename2 = secure_filename(qr_image2.filename)
+        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename2 = timestamp2 + '2_' + filename2
+        qr_image2.save(os.path.join(upload_folder, filename2))
+        qr_image_path2 = 'uploads/qr/' + filename2
     
     # 売却申請を更新
     if DATABASE_URL:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = %s, qr_image_path = %s
+            SET sale_price = %s, shipping_cost = %s, qr_image_path = %s, qr_image_path2 = %s
             WHERE id = %s
-        ''', (sale_price, qr_image_path, request_id))
+        ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
     else:
         cur.execute('''
             UPDATE sale_requests 
-            SET sale_price = ?, qr_image_path = ?
+            SET sale_price = ?, shipping_cost = ?, qr_image_path = ?, qr_image_path2 = ?
             WHERE id = ?
-        ''', (sale_price, qr_image_path, request_id))
+        ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
     
     conn.commit()
     cur.close()
