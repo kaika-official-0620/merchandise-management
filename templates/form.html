@@ -870,14 +870,12 @@ function updateSaleTypeValue() {
     }
 }
 
-let autoCalculateWholesale = true;
-
 function recalculateWholesalePrice() {
-    if (!autoCalculateWholesale) return;
     const purchasePrice = parseFloat(document.getElementById('purchase_price').value) || 0;
     const wholesaleFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
     const wholesalePrice = Math.round(purchasePrice * (1 + (wholesaleFeeRate / 100)));
     document.getElementById('wholesale_price').value = wholesalePrice;
+    document.getElementById('wholesale_price_hint').textContent = '仕入額と卸手数料（%）から自動計算されます（手動変更可）';
     calculateProfit();
 }
 
@@ -965,24 +963,15 @@ document.getElementById('commission').addEventListener('input', function() {
     calculateProfit();
 });
 
-// 卸価格を手動変更したら自動計算を無効化
+// 卸価格を手動変更した場合も利益を再計算
 document.getElementById('wholesale_price').addEventListener('input', function() {
-    autoCalculateWholesale = false;
     document.getElementById('wholesale_price_hint').textContent = '手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';
     calculateProfit();
 });
 
-// 仕入額・卸手数料率の変更時に卸価格を再計算（自動計算を再有効化）
-document.getElementById('purchase_price').addEventListener('input', function() {
-    autoCalculateWholesale = true;
-    document.getElementById('wholesale_price_hint').textContent = '仕入額と卸手数料（%）から自動計算されます（手動変更可）';
-    recalculateWholesalePrice();
-});
-document.getElementById('wholesale_fee_rate').addEventListener('input', function() {
-    autoCalculateWholesale = true;
-    document.getElementById('wholesale_price_hint').textContent = '仕入額と卸手数料（%）から自動計算されます（手動変更可）';
-    recalculateWholesalePrice();
-});
+// 仕入額・卸手数料率の変更時に卸価格を自動再計算
+document.getElementById('purchase_price').addEventListener('input', recalculateWholesalePrice);
+document.getElementById('wholesale_fee_rate').addEventListener('input', recalculateWholesalePrice);
 
 // 売上金以外の数値フィールドの変更時に利益を再計算
 document.querySelectorAll('input[type="number"]').forEach(input => {
@@ -991,16 +980,17 @@ document.querySelectorAll('input[type="number"]').forEach(input => {
     }
 });
 
-// 初期表示時に卸価格を計算（既存データで手動設定済みの場合はスキップ）
-const existingWholesale = parseInt(document.getElementById('wholesale_price').value) || 0;
-const existingPurchase = parseInt(document.getElementById('purchase_price').value) || 0;
-const existingFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
-const autoCalcWholesale = Math.round(existingPurchase * (1 + (existingFeeRate / 100)));
-if (existingWholesale > 0 && existingWholesale !== autoCalcWholesale) {
-    autoCalculateWholesale = false;
-    document.getElementById('wholesale_price_hint').textContent = '手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';
-} else {
-    recalculateWholesalePrice();
+// 初期表示時：既存データで手動設定済みならヒント表示、それ以外は自動計算
+{
+    const existingWholesale = parseInt(document.getElementById('wholesale_price').value) || 0;
+    const existingPurchase = parseInt(document.getElementById('purchase_price').value) || 0;
+    const existingFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
+    const autoCalcWholesale = Math.round(existingPurchase * (1 + (existingFeeRate / 100)));
+    if (existingWholesale > 0 && existingWholesale !== autoCalcWholesale) {
+        document.getElementById('wholesale_price_hint').textContent = '手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';
+    } else {
+        recalculateWholesalePrice();
+    }
 }
 
 // ステータスに応じてフィールドの表示を切り替え
