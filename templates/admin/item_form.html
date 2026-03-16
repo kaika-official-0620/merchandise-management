@@ -468,6 +468,7 @@
 </style>
 
 <script>
+(function() {
 let autoCalculateCommission = true;
 
 // DB設定から動的に手数料計算ルール（段階別固定額）を反映
@@ -1074,6 +1075,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// HTML属性(onchange/oninput)から呼べるようグローバルに公開
+window.updateStatusFields = updateStatusFields;
+window.toggleSupplierDetail = toggleSupplierDetail;
+window.recalculateWholesalePrice = recalculateWholesalePrice;
+window.calculateProfit = calculateProfit;
+})();
 </script>
 {% endblock %}
 
