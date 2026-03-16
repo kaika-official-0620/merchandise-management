@@ -11195,22 +11195,32 @@ def admin_items():
     """管理者商品一覧（管理者/オーナーの商品のみ）"""
     items = []
     users = []
+    sale_month = request.args.get('sale_month', '')
     
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 管理者/オーナーのユーザーIDを取得
-            cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
-            admin_users = cur.fetchall()
-            admin_user_ids = [u['id'] for u in admin_users]
             
-            # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
-            if admin_user_ids:
-                placeholders = ','.join(['%s'] * len(admin_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+            if sale_month:
+                cur.execute("""
+                    SELECT * FROM merchandise 
+                    WHERE sale_date IS NOT NULL 
+                      AND TO_CHAR(sale_date, 'YYYY-MM') = %s
+                    ORDER BY sale_date DESC
+                """, [sale_month])
             else:
-                cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
+                # 管理者/オーナーのユーザーIDを取得
+                cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
+                admin_users = cur.fetchall()
+                admin_user_ids = [u['id'] for u in admin_users]
+                
+                # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
+                if admin_user_ids:
+                    placeholders = ','.join(['%s'] * len(admin_user_ids))
+                    cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+                else:
+                    cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
@@ -11249,17 +11259,26 @@ def admin_items():
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            # 管理者/オーナーのユーザーIDを取得
-            cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
-            admin_users = cur.fetchall()
-            admin_user_ids = [u['id'] for u in admin_users]
             
-            # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
-            if admin_user_ids:
-                placeholders = ','.join(['?'] * len(admin_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+            if sale_month:
+                cur.execute("""
+                    SELECT * FROM merchandise 
+                    WHERE sale_date IS NOT NULL 
+                      AND strftime('%%Y-%%m', sale_date) = ?
+                    ORDER BY sale_date DESC
+                """, [sale_month])
             else:
-                cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
+                # 管理者/オーナーのユーザーIDを取得
+                cur.execute("SELECT id, username, display_name, role FROM users WHERE role IN ('admin', 'owner')")
+                admin_users = cur.fetchall()
+                admin_user_ids = [u['id'] for u in admin_users]
+                
+                # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
+                if admin_user_ids:
+                    placeholders = ','.join(['?'] * len(admin_user_ids))
+                    cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+                else:
+                    cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
@@ -11352,7 +11371,8 @@ def admin_items():
     
     return render_template('admin/admin_items.html', 
                           items=items, 
-                          users=[dict(u) for u in users])
+                          users=[dict(u) for u in users],
+                          sale_month=sale_month)
 
 
 @app.route('/admin/user-products')

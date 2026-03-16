@@ -158,7 +158,7 @@
                 {% for month in monthly_sales %}
                 <tr>
                     <td><strong>{{ month.month }}</strong></td>
-                    <td>{{ month.count }}件</td>
+                    <td><a href="{{ url_for('admin_items', sale_month=month.month) }}" style="color: #2563eb; text-decoration: none; font-weight: 600;" title="{{ month.month }} の販売商品を表示">{{ month.count }}件</a></td>
                     <td>¥{{ "{:,}".format(month.sales or 0) }}</td>
                     <td class="{% if month.profit and month.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                         ¥{{ "{:,}".format(month.profit or 0) }}
