@@ -909,8 +909,15 @@
 </style>
 
 <div class="page-header">
-    <h1>管理者の商品</h1>
+    <h1>{% if sale_month %}{{ sale_month }} の販売商品{% else %}管理者の商品{% endif %}</h1>
 </div>
+
+{% if sale_month %}
+<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+    <span style="font-size: 0.95rem; color: #1e40af;">📅 <strong>{{ sale_month }}</strong> に販売された商品を表示中（{{ items|length }}件）</span>
+    <a href="{{ url_for('admin_items') }}" style="margin-left: auto; padding: 0.4rem 0.8rem; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; color: #374151; font-size: 0.85rem; text-decoration: none; white-space: nowrap;">✕ フィルター解除</a>
+</div>
+{% endif %}
 
 <!-- 検索ボタン＆アクションボタン -->
 <div class="search-action-bar">
@@ -1148,7 +1155,7 @@
                 {% else %}
                 <tr>
                     <td colspan="17" style="text-align: center; padding: 40px; color: #94a3b8;">
-                        管理者の商品がありません
+                        {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}管理者の商品がありません{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -1234,7 +1241,7 @@
         {% else %}
         <div class="admin-item-card">
             <div class="admin-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                管理者の商品がありません
+                {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}管理者の商品がありません{% endif %}
             </div>
         </div>
         {% endfor %}
