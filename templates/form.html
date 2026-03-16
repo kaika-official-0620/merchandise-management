@@ -777,6 +777,7 @@ input:disabled, select:disabled, textarea:disabled {
 </style>
 
 <script>
+(function() {
 // 手数料の自動計算フラグ（手動変更されたらfalseに）
 let autoCalculateCommission = true;
 
@@ -1732,6 +1733,15 @@ function removeGoogleDriveAdditional(path) {
         item.remove();
     }
 }
+
+// HTML属性(onchange/oninput/onclick)から呼べるようグローバルに公開
+window.updateStatusFields = updateStatusFields;
+window.toggleSupplierDetail = toggleSupplierDetail;
+window.recalculateWholesalePrice = recalculateWholesalePrice;
+window.calculateProfit = calculateProfit;
+window.removeGoogleDrivePhoto = removeGoogleDrivePhoto;
+window.removeGoogleDriveAdditional = removeGoogleDriveAdditional;
+})();
 </script>
 {% endblock %}
 
