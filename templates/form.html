@@ -1344,6 +1344,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // ステータスフィールドの初期表示
     updateStatusFields();
     
+    // ステータス変更イベントリスナー（onchange属性のバックアップ）
+    var statusSelect = document.getElementById('item_status');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', updateStatusFields);
+    }
+    
     // 仕入先詳細の初期表示
     toggleSupplierDetail();
     

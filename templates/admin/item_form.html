@@ -951,10 +951,16 @@ document.addEventListener('DOMContentLoaded', function() {
     updateStatusFields();
     toggleSupplierDetail();
     
+    // ステータス変更イベントリスナー（onchange属性のバックアップ）
+    var statusSelect = document.getElementById('item_status');
+    if (statusSelect) {
+        statusSelect.addEventListener('change', updateStatusFields);
+    }
+    
     // 初期表示時に卸価格を計算（管理者フォームは新規登録のみなので常に自動計算）
     recalculateWholesalePrice();
     // 非同期ロード後にも再計算を確保
-    setTimeout(recalculateWholesalePrice, 500);
+    setTimeout(function() { recalculateWholesalePrice(); updateStatusFields(); }, 500);
     
     // 画像リサイズ処理
     const MAX_WIDTH = 1200;
