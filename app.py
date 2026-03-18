@@ -4407,16 +4407,24 @@ def add_item():
         # ステータスを取得（未出品/出品中/売却済み）
         item_status = request.form.get('item_status', 'unlisted')
         
+        # 卸価格：フォームで手動入力があれば使用、なければ仕入額と卸手数料から自動計算
+        purchase_price = int(float(request.form.get('purchase_price') or 0))
+        wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
+        calculated_wholesale = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
+        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        if wholesale_price <= 0:
+            wholesale_price = calculated_wholesale
+        
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
                     supplier_detail, id_document_path, consent_form_path,
-                    purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -4431,7 +4439,9 @@ def add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
+                wholesale_price,
+                wholesale_fee_rate,
+                purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
@@ -4451,10 +4461,10 @@ def add_item():
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
                     supplier_detail, id_document_path, consent_form_path,
-                    purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
+                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
                     sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -4469,7 +4479,9 @@ def add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                int(request.form.get('purchase_price') or 0),
+                wholesale_price,
+                wholesale_fee_rate,
+                purchase_price,
                 request.form.get('payment_method'),
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
@@ -4607,7 +4619,10 @@ def edit_item(id):
                 new_supplier_detail = request.form.get('supplier_detail')
                 new_purchase_price = int(request.form.get('purchase_price') or 0)
                 new_wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
-                new_wholesale_price = int(round(new_purchase_price * (1 + new_wholesale_fee_rate / 100)))
+                calculated_wholesale = int(round(new_purchase_price * (1 + new_wholesale_fee_rate / 100)))
+                new_wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+                if new_wholesale_price <= 0:
+                    new_wholesale_price = calculated_wholesale
                 new_payment_method = request.form.get('payment_method')
             else:
                 # 管理者は基本情報を元の値で維持（変更不可）、ただし画像は編集可能
@@ -11563,6 +11578,10 @@ def admin_add_item():
         purchase_price = int(float(request.form.get('purchase_price') or 0))
         wholesale_fee_rate = float(request.form.get('wholesale_fee_rate') or 0)
         calculated_wholesale_price = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
+        # フォームで手動入力された卸価格があればそれを使用、なければ自動計算値
+        wholesale_price = int(float(request.form.get('wholesale_price') or 0))
+        if wholesale_price <= 0:
+            wholesale_price = calculated_wholesale_price
 
         conn = get_db()
         if DATABASE_URL:
@@ -11648,7 +11667,7 @@ def admin_add_item():
                 request.form.get('supplier_detail'),
                 id_document_path,
                 consent_form_path,
-                calculated_wholesale_price,
+                wholesale_price,
                 wholesale_fee_rate,
                 purchase_price,
                 request.form.get('payment_method'),

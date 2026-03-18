@@ -474,7 +474,7 @@ input:disabled, select:disabled, textarea:disabled {
                        value="{{ item.wholesale_price if item and item.wholesale_price else 0 }}" min="0"
                        oninput="if(typeof recalculateWholesalePrice==='function'){document.getElementById('wholesale_price_hint').textContent='手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';calculateProfit()}"
                        {% if basic_readonly %}disabled{% endif %}>
-                <small class="form-help" id="wholesale_price_hint">仕入額と卸手数料（%）から自動計算されます（手動変更可）</small>
+                <small class="form-help" id="wholesale_price_hint">手動入力がなければ自動計算します（手動変更可）</small>
             </div>
             
             <div class="form-group">
@@ -879,7 +879,7 @@ function recalculateWholesalePrice() {
     const wholesaleFeeRate = parseFloat(document.getElementById('wholesale_fee_rate').value) || 0;
     const wholesalePrice = Math.round(purchasePrice * (1 + (wholesaleFeeRate / 100)));
     document.getElementById('wholesale_price').value = wholesalePrice;
-    document.getElementById('wholesale_price_hint').textContent = '仕入額と卸手数料（%）から自動計算されます（手動変更可）';
+    document.getElementById('wholesale_price_hint').textContent = '手動入力がなければ自動計算します（手動変更可）';
     calculateProfit();
 }
 
