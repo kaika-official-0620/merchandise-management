@@ -83,25 +83,48 @@
             <div class="form-group">
                 <label>サービス利用対象ユーザー</label>
                 <p class="form-hint">チェックしたユーザーのみがこのサービスを利用（閲覧・入札）できます</p>
+                <div class="filter-section">
+                    <div class="filter-row">
+                        <div class="filter-group filter-group-wide">
+                            <input type="text" id="user-search" class="filter-input" placeholder="クライアント名・会員番号で検索..." onkeyup="filterServiceUsers()">
+                        </div>
+                        <div class="filter-group">
+                            <select id="user-role-filter" class="filter-select" onchange="filterServiceUsers()">
+                                <option value="">すべての権限</option>
+                                <option value="user">ユーザー</option>
+                                <option value="admin">管理者</option>
+                                <option value="owner">オーナー</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="clearServiceUserFilters()">クリア</button>
+                    </div>
+                    <p class="form-hint" id="selected-user-count">0件選択中</p>
+                </div>
                 <div class="select-all-container">
                     <label class="checkbox-label select-all">
                         <input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this)">
-                        <span class="checkbox-name">すべて選択</span>
+                        <span class="checkbox-name">表示中をすべて選択</span>
                     </label>
                 </div>
                 <div class="user-checkboxes">
                     {% for user in users %}
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="selected_users" value="{{ user.id }}" 
-                               class="user-checkbox"
+                    <label class="checkbox-label" data-user-search="{{ (((user.display_name or '') ~ ' ' ~ (user.username or '')))|lower }}" data-user-role="{{ user.role }}">
+                        <input type="checkbox" name="selected_users" value="{{ user.id }}"
+                               class="user-checkbox" onchange="updateSelectedUserCount()"
                                {% if user.is_selected %}checked{% endif %}>
-                        <span class="checkbox-name">{{ user.display_name or user.username }}</span>
+                        <span class="checkbox-name">
+                            {{ user.display_name or user.username }}
+                            {% if user.username %}
+                            <small class="checkbox-meta">会員番号: {{ user.username }}</small>
+                            {% endif %}
+                        </span>
                         <span class="checkbox-role {% if user.role == 'owner' %}owner{% elif user.role == 'admin' %}admin{% else %}user{% endif %}">
                             {% if user.role == 'owner' %}オーナー{% elif user.role == 'admin' %}管理者{% else %}ユーザー{% endif %}
                         </span>
                     </label>
                     {% endfor %}
                 </div>
+                <div class="empty-message" id="user-filter-empty" style="display: none; padding: 1rem 0;">条件に一致するユーザーがいません。</div>
             </div>
             
             <button type="submit" class="btn btn-primary">設定を保存</button>
@@ -345,12 +368,18 @@
     min-width: 150px;
 }
 
+.filter-group-wide {
+    flex: 2 1 320px;
+    min-width: 280px;
+}
+
 .filter-input {
     width: 100%;
     padding: 0.6rem 0.75rem;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 0.9rem;
+    box-sizing: border-box;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -383,6 +412,10 @@
 
 @media (max-width: 768px) {
     .filter-group {
+        min-width: 100%;
+    }
+
+    .filter-group-wide {
         min-width: 100%;
     }
     
@@ -686,6 +719,15 @@
 .checkbox-name {
     flex: 1;
     font-weight: 500;
+    min-width: 0;
+}
+
+.checkbox-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 400;
 }
 
 .checkbox-role {
@@ -929,7 +971,6 @@
 
 <script>
 const AUCTION_ID = {{ auction_id }};
-
 function toggleProxyItem(itemId, btn) {
     fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
         method: 'POST',
@@ -1093,24 +1134,79 @@ function bulkAddItems() {
 }
 
 function toggleAllUsers(checkbox) {
-    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    const userCheckboxes = document.querySelectorAll('.user-checkboxes .checkbox-label:not([style*="display: none"]) .user-checkbox');
     userCheckboxes.forEach(cb => {
         cb.checked = checkbox.checked;
     });
+    updateSelectedUserCount();
+}
+
+function updateSelectedUserCount() {
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    const checkedCount = document.querySelectorAll('.user-checkbox:checked').length;
+    const selectAllCheckbox = document.getElementById('selectAllUsers');
+    const visibleCheckboxes = document.querySelectorAll('.user-checkboxes .checkbox-label:not([style*="display: none"]) .user-checkbox');
+    const visibleChecked = document.querySelectorAll('.user-checkboxes .checkbox-label:not([style*="display: none"]) .user-checkbox:checked');
+    const countEl = document.getElementById('selected-user-count');
+
+    if (countEl) {
+        countEl.textContent = checkedCount + '件選択中';
+    }
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = visibleCheckboxes.length > 0 && visibleCheckboxes.length === visibleChecked.length;
+        selectAllCheckbox.indeterminate = visibleChecked.length > 0 && visibleChecked.length < visibleCheckboxes.length;
+    }
+}
+
+function filterServiceUsers() {
+    const searchInput = document.getElementById('user-search');
+    const roleInput = document.getElementById('user-role-filter');
+    const searchText = ((searchInput && searchInput.value) || '').toLowerCase().trim();
+    const roleFilter = (roleInput && roleInput.value) || '';
+    const userLabels = document.querySelectorAll('.user-checkboxes .checkbox-label[data-user-search]');
+    let visibleCount = 0;
+
+    userLabels.forEach(label => {
+        const searchableText = label.dataset.userSearch || '';
+        const role = label.dataset.userRole || '';
+        let show = true;
+
+        if (searchText && !searchableText.includes(searchText)) {
+            show = false;
+        }
+
+        if (roleFilter && role !== roleFilter) {
+            show = false;
+        }
+
+        label.style.display = show ? '' : 'none';
+        if (show) {
+            visibleCount += 1;
+        }
+    });
+
+    const emptyEl = document.getElementById('user-filter-empty');
+    if (emptyEl) {
+        emptyEl.style.display = visibleCount > 0 ? 'none' : 'block';
+    }
+
+    updateSelectedUserCount();
+}
+
+function clearServiceUserFilters() {
+    document.getElementById('user-search').value = '';
+    document.getElementById('user-role-filter').value = '';
+    filterServiceUsers();
 }
 
 // 初期状態でチェックボックスの状態を確認
 document.addEventListener('DOMContentLoaded', function() {
-    const userCheckboxes = document.querySelectorAll('.user-checkbox');
-    const selectAllCheckbox = document.getElementById('selectAllUsers');
-    const allChecked = Array.from(userCheckboxes).every(cb => cb.checked);
-    if (selectAllCheckbox) {
-        selectAllCheckbox.checked = allChecked && userCheckboxes.length > 0;
-    }
-    
     // フィルター状態を復元
     restoreAvailableFilters();
-    
+    filterServiceUsers();
+    updateSelectedUserCount();
+
     // 一括操作バーを初期表示
     const bulkBar = document.getElementById('available-bulk-bar');
     if (bulkBar) {

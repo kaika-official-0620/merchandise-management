@@ -56,9 +56,6 @@
                         <span class="badge badge-owner">オーナー</span>
                         {% elif user.role == 'admin' %}
                         <span class="badge badge-admin">管理者</span>
-                        {% if user.admin_permissions %}
-                        <small class="permission-hint" title="制限あり">*</small>
-                        {% endif %}
                         {% else %}
                         <span class="badge badge-user">ユーザー</span>
                         {% endif %}
@@ -206,7 +203,7 @@
                 <strong>管理者</strong>
                 <span class="badge badge-admin" style="margin-left: 8px;">管理権限</span>
                 <p>ユーザー管理、分析、バックアップなど管理機能を利用可能。<br>
-                <small>※ 権限範囲を個別に設定可能（「*」マークは制限あり）</small></p>
+                <small>※ 権限範囲は個別に設定可能です。</small></p>
             </div>
         </div>
         <div class="help-item">
@@ -231,24 +228,30 @@
 
 .search-form {
     width: 100%;
+    max-width: 760px;
 }
 
 .search-input-group {
     display: flex;
     gap: 0.75rem;
     align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
 }
 
-.search-input {
+.search-input-group .search-input {
     flex: 1;
+    min-width: min(100%, 340px);
     padding: 0.625rem 1rem;
     border: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
     border-radius: 6px;
+    box-sizing: border-box;
     font-size: 0.9375rem;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.search-input:focus {
+.search-input-group .search-input:focus {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
@@ -258,12 +261,14 @@
     padding: 0.625rem 1.5rem;
     background: #3b82f6;
     color: white;
-    border: none;
+    border: 1px solid #2563eb;
     border-radius: 6px;
     font-size: 0.9375rem;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .btn-search:hover {
@@ -286,6 +291,11 @@
 }
 
 /* テーブルセルの折り返し防止（メールも含む） */
+.admin-section > .admin-table-container > .admin-table {
+    width: max-content;
+    min-width: 1320px;
+}
+
 .admin-table td,
 .admin-table th {
     white-space: nowrap;
@@ -297,7 +307,34 @@
     -webkit-overflow-scrolling: touch;
 }
 
+.action-buttons {
+    flex-wrap: nowrap;
+}
+
 @media (max-width: 768px) {
+    .search-section {
+        padding: 0.875rem;
+    }
+
+    .search-form {
+        max-width: none;
+    }
+
+    .search-input-group {
+        gap: 0.625rem;
+        align-items: stretch;
+    }
+
+    .search-input-group .search-input,
+    .search-input-group .btn-search,
+    .search-input-group .btn-secondary {
+        width: 100%;
+    }
+
+    .search-input-group .search-input {
+        min-width: 0;
+    }
+
     .admin-table {
         min-width: 1200px;
     }

@@ -353,7 +353,7 @@ input:disabled, select:disabled, textarea:disabled {
             <div class="basic-readonly-notice">
                 <strong>⚠️ 基本情報は編集できません</strong>
                 仕入れ情報（仕入日〜支払方法）はオーナーのみ編集可能です。<br>
-                <span style="color: #10b981;">✓ 商品写真の追加・削除は可能です。</span>
+                <span style="color: #10b981;">✓ スタッフ管理者は商品名のみ更新できます。</span>
             </div>
             {% endif %}
             
@@ -366,9 +366,16 @@ input:disabled, select:disabled, textarea:disabled {
             
             <div class="form-group">
                 <label for="product_name">商品名</label>
-                <input type="text" id="product_name" name="product_name" 
-                       value="{{ item.product_name if item else '' }}" required
-                       {% if basic_readonly %}disabled{% endif %}>
+                <input type="text" id="product_name" name="product_name"
+                       value="{{ item.product_name if item else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">メモ</label>
+                <textarea id="notes" name="notes" rows="4"
+                          placeholder="送料を抑えられるか、共有したい注意事項などを入力"
+                          {% if basic_readonly %}disabled{% endif %}>{{ item.notes if item and item.notes else '' }}</textarea>
+                <small class="form-help">管理画面と商品詳細で確認できます。</small>
             </div>
             
             <div class="form-group">
@@ -487,10 +494,10 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
-                <label for="photo">メイン写真（1枚目）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
+                <label for="photo">メイン写真（1枚目）</label>
                 <div class="photo-upload-options">
-                <input type="file" id="photo" name="photo" accept="image/*">
-                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive">
+                <input type="file" id="photo" name="photo" accept="image/*" {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" id="google-drive-photo-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
                             <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
@@ -506,7 +513,7 @@ input:disabled, select:disabled, textarea:disabled {
                 <div id="google-drive-photo-preview" class="google-drive-preview" style="display: none;">
                     <img id="google-drive-photo-img" src="" alt="選択した写真">
                     <span class="photo-label">Googleドライブから選択</span>
-                    <button type="button" class="remove-google-photo" onclick="removeGoogleDrivePhoto()">×</button>
+                    <button type="button" class="remove-google-photo" onclick="removeGoogleDrivePhoto()" {% if basic_readonly %}disabled{% endif %}>×</button>
                 </div>
                 {% if item and item.photo_path %}
                 <div class="current-photo">
@@ -517,10 +524,10 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
-                <label for="additional_photos">追加写真（最大19枚）{% if basic_readonly %}<span style="color: #10b981; font-size: 0.8rem; margin-left: 8px;">編集可</span>{% endif %}</label>
+                <label for="additional_photos">追加写真（最大19枚）</label>
                 <div class="photo-upload-options">
-                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
-                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive">
+                <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" id="google-drive-additional-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
                             <path d="M43.65 25L29.9 0c-1.35.8-2.5 1.9-3.3 3.3L1.2 43.45C.4 44.85 0 46.4 0 48h27.5L43.65 25z" fill="#00AC47"/>
@@ -544,7 +551,7 @@ input:disabled, select:disabled, textarea:disabled {
                         <img src="{{ url_for('static', filename=photo) }}" alt="追加写真{{ loop.index }}">
                         <span class="photo-number">{{ loop.index + 1 }}枚目</span>
                         <label class="delete-checkbox">
-                            <input type="checkbox" name="delete_photos" value="{{ photo }}">
+                            <input type="checkbox" name="delete_photos" value="{{ photo }}" {% if basic_readonly %}disabled{% endif %}>
                             <span>削除</span>
                         </label>
                     </div>
@@ -560,7 +567,7 @@ input:disabled, select:disabled, textarea:disabled {
             
             <div class="form-group">
                 <label for="item_status">ステータス</label>
-                <select id="item_status" name="item_status" onchange="updateStatusFields()">
+                <select id="item_status" name="item_status" onchange="updateStatusFields()" {% if basic_readonly %}disabled{% endif %}>
                     {% set current_status = 'sold' if item and item.sale_date else ('listed' if item and item.is_listed else 'unlisted') %}
                     <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
                     <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
@@ -572,14 +579,14 @@ input:disabled, select:disabled, textarea:disabled {
             <div id="listing-date-group" class="form-group" style="display: none;">
                 <label for="listing_date">出品日</label>
                 <input type="date" id="listing_date" name="listing_date" 
-                       value="{{ item.listing_date if item else '' }}">
+                       value="{{ item.listing_date if item else '' }}" {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <!-- 出品中・売却済み時のみ表示 -->
             <div id="listing-price-group" class="form-group" style="display: none;">
                 <label for="listing_price">出品価格</label>
                 <input type="number" id="listing_price" name="listing_price" 
-                       value="{{ item.listing_price if item else 0 }}" min="0">
+                       value="{{ item.listing_price if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             
@@ -587,7 +594,7 @@ input:disabled, select:disabled, textarea:disabled {
             <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
                 <input type="date" id="sale_date" name="sale_date" 
-                       value="{{ item.sale_date if item else '' }}">
+                       value="{{ item.sale_date if item else '' }}" {% if basic_readonly %}disabled{% endif %}>
             </div>
             
             <!-- 売却済み時のみ表示するフィールド -->
@@ -603,22 +610,26 @@ input:disabled, select:disabled, textarea:disabled {
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="normal"
-                                   {% if item and 'normal' in (item.sale_type or '') %}checked{% endif %}>
+                                   {% if item and 'normal' in (item.sale_type or '') %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
                             <span class="sale-type-label">通常（手数料10%）<span class="sale-type-note">※メルカリ・ラクマ・ヤフオクなど</span></span>
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="wholesale"
-                                   {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}>
+                                   {% if item and 'wholesale' in (item.sale_type or '') %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
                             <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="multi_listing"
-                                   {% if item and 'multi_listing' in (item.sale_type or '') %}checked{% endif %}>
+                                   {% if item and 'multi_listing' in (item.sale_type or '') %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
                             <span class="sale-type-label">同時出品サービス（手数料3%）</span>
                         </label>
                         <label class="sale-type-option">
                             <input type="checkbox" name="sale_type[]" value="auction"
-                                   {% if item and 'auction' in (item.sale_type or '') %}checked{% endif %}>
+                                   {% if item and 'auction' in (item.sale_type or '') %}checked{% endif %}
+                                   {% if basic_readonly %}disabled{% endif %}>
                             <span class="sale-type-label">オークション流し（手数料5%）</span>
                         </label>
                     </div>
@@ -629,33 +640,34 @@ input:disabled, select:disabled, textarea:disabled {
                 <div class="form-group">
                     <label for="sale_price">売上金（税込販売価格）</label>
                     <input type="number" id="sale_price" name="sale_price" 
-                           value="{{ item.sale_price if item else 0 }}" min="0">
+                           value="{{ item.sale_price if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
                 </div>
                 
                 <div class="form-group">
                     <label for="shipping_cost">送料</label>
                     <input type="number" id="shipping_cost" name="shipping_cost" 
-                           value="{{ item.shipping_cost if item else 0 }}" min="0">
+                           value="{{ item.shipping_cost if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
                     <small class="form-help" id="shipping_hint"></small>
                 </div>
                 
                 <div class="form-group">
                     <label for="sales_destination">販売先（メモ）</label>
                     <input type="text" id="sales_destination" name="sales_destination" 
-                           value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力">
+                           value="{{ item.sales_destination if item else '' }}" placeholder="販売先を入力" {% if basic_readonly %}disabled{% endif %}>
                 </div>
                 
                 <div class="form-group">
                     <label for="commission">手数料</label>
                     <input type="number" id="commission" name="commission" 
-                           value="{{ item.commission if item else 0 }}" min="0">
+                           value="{{ item.commission if item else 0 }}" min="0" {% if basic_readonly %}disabled{% endif %}>
                     <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
                 </div>
                 
                 <div class="form-group checkbox-group">
                     <label>
                         <input type="checkbox" name="is_shipped" 
-                               {% if item and item.is_shipped %}checked{% endif %}>
+                               {% if item and item.is_shipped %}checked{% endif %}
+                               {% if basic_readonly %}disabled{% endif %}>
                         発送済み
                     </label>
                 </div>
@@ -1744,4 +1756,3 @@ window.removeGoogleDriveAdditional = removeGoogleDriveAdditional;
 })();
 </script>
 {% endblock %}
-

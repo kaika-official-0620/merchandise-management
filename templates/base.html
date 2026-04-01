@@ -124,7 +124,7 @@
             <!-- 商品管理 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products', 'admin_sale_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    商品管理
+                    <span class="menu-label">商品管理</span>
                     {% if current_user.is_admin() and get_pending_sale_request_count() > 0 %}
                     <span class="menu-badge">{{ get_pending_sale_request_count() }}</span>
                     {% endif %}
@@ -134,13 +134,13 @@
                     {% if current_user.is_admin() %}
                     <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('admin_sale_requests') }}" class="{% if request.endpoint == 'admin_sale_requests' %}active{% endif %}">
-                        発送商品受信BOX
+                        <span class="menu-label">発送依頼・取引完了受信BOX</span>
                         {% if get_pending_sale_request_count() > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sale_request_count() }}</span>
                         {% endif %}
                     </a>
                     <a href="{{ url_for('admin_sales_agency_requests') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' %}active{% endif %}">
-                        販売代行サービス受信BOX
+                        <span class="menu-label">販売代行サービス受信BOX</span>
                         {% if get_pending_sales_agency_count() > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sales_agency_count() }}</span>
                         {% endif %}
@@ -148,7 +148,7 @@
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
-                        長期在庫商品
+                        <span class="menu-label">長期在庫商品</span>
                         {% if get_long_term_item_count() > 0 %}
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}
@@ -201,7 +201,7 @@
                     {% endif %}
                     <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
                     <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
-                        商品処分申請
+                        <span class="menu-label">商品処分申請</span>
                         {% if get_pending_disposal_count() > 0 %}
                         <span class="menu-badge">{{ get_pending_disposal_count() }}</span>
                         {% endif %}
@@ -212,7 +212,7 @@
             <!-- 問い合わせ管理（管理者用） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    問い合わせ管理
+                    <span class="menu-label">問い合わせ管理</span>
                     {% if get_unread_inquiry_count() > 0 %}
                     <span class="menu-badge">{{ get_unread_inquiry_count() }}</span>
                     {% endif %}
@@ -976,6 +976,21 @@
         font-style: italic;
         cursor: not-allowed;
     }
+
+    .table-edge-scrollable {
+        cursor: ew-resize;
+    }
+
+    img.image-fallback {
+        object-fit: contain !important;
+        background: #f8fafc;
+    }
+
+    @media (max-width: 768px) {
+        .table-edge-scrollable {
+            cursor: auto;
+        }
+    }
     </style>
     
     <script>
@@ -1255,9 +1270,229 @@
             document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             document.getElementById('resultRateProfit').textContent = '¥' + targetProfit.toLocaleString();
         }
+
+        (function setupEdgeHoverTableScroll() {
+            if (window.innerWidth <= 768) return;
+
+            const scrollContainerSelector = [
+                '.table-scroll',
+                '.table-container',
+                '.admin-table-container',
+                '.master-table-container',
+                '.cashflow-table-container',
+                '.bids-table-container',
+                '.inquiry-table-container',
+                '.logs-table-container',
+                '.report-table-wrapper'
+            ].join(', ');
+            const nestedScrollableSelector = [
+                ':scope > .table-scroll',
+                ':scope > .table-container',
+                ':scope > .admin-table-container',
+                ':scope > .master-table-container',
+                ':scope > .cashflow-table-container',
+                ':scope > .bids-table-container',
+                ':scope > .inquiry-table-container',
+                ':scope > .logs-table-container',
+                ':scope > .report-table-wrapper'
+            ].join(', ');
+            let activeTarget = null;
+            let activeDirection = 0;
+            let hoverStrength = 0;
+            let rafId = null;
+            let lastTimestamp = 0;
+
+            function canScroll(target) {
+                return target && target.scrollWidth > target.clientWidth + 12;
+            }
+
+            function canUseAsScrollTarget(target) {
+                return canScroll(target) && getComputedStyle(target).overflowX !== 'visible';
+            }
+
+            function resolveScrollTarget(container) {
+                if (!container) return null;
+
+                const nestedScroll = container.querySelector(nestedScrollableSelector);
+                if (nestedScroll && canUseAsScrollTarget(nestedScroll)) {
+                    return nestedScroll;
+                }
+
+                if (canUseAsScrollTarget(container)) {
+                    return container;
+                }
+
+                const parentContainer = container.parentElement
+                    ? container.parentElement.closest(scrollContainerSelector)
+                    : null;
+                if (parentContainer && canUseAsScrollTarget(parentContainer)) {
+                    return parentContainer;
+                }
+
+                return canScroll(container) ? container : null;
+            }
+
+            function stopAutoScroll() {
+                activeDirection = 0;
+                hoverStrength = 0;
+                if (activeTarget) {
+                    activeTarget.classList.remove('table-edge-scrollable');
+                }
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                lastTimestamp = 0;
+            }
+
+            function stepAutoScroll(timestamp) {
+                if (!activeTarget || !activeDirection || !canScroll(activeTarget)) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                if (!lastTimestamp) {
+                    lastTimestamp = timestamp;
+                }
+
+                const delta = timestamp - lastTimestamp;
+                lastTimestamp = timestamp;
+                const pixelsPerSecond = 180 + (820 * hoverStrength);
+                activeTarget.scrollLeft += activeDirection * pixelsPerSecond * (delta / 1000);
+
+                const atLeftEdge = activeDirection < 0 && activeTarget.scrollLeft <= 0;
+                const atRightEdge = activeDirection > 0 && (
+                    activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1
+                );
+                if (atLeftEdge || atRightEdge) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                rafId = requestAnimationFrame(stepAutoScroll);
+            }
+
+            function startAutoScroll(target, direction, strength) {
+                activeTarget = target;
+                activeDirection = direction;
+                hoverStrength = strength;
+                if (!rafId) {
+                    lastTimestamp = 0;
+                    rafId = requestAnimationFrame(stepAutoScroll);
+                }
+            }
+
+            function updatePointerScroll(target, event) {
+                if (!canScroll(target)) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                const threshold = Math.min(140, Math.max(72, rect.width * 0.16));
+                const offsetX = event.clientX - rect.left;
+                const leftRatio = 1 - Math.min(1, offsetX / threshold);
+                const rightRatio = Math.min(1, Math.max(0, (offsetX - (rect.width - threshold)) / threshold));
+
+                if (offsetX <= threshold && target.scrollLeft > 0) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, -1, Math.max(0.2, leftRatio));
+                    return;
+                }
+
+                if (offsetX >= rect.width - threshold && target.scrollLeft + target.clientWidth < target.scrollWidth - 1) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, 1, Math.max(0.2, rightRatio));
+                    return;
+                }
+
+                target.classList.remove('table-edge-scrollable');
+                if (activeTarget === target) {
+                    stopAutoScroll();
+                }
+            }
+
+            document.addEventListener('mousemove', function (event) {
+                const hoverContainer = event.target.closest(scrollContainerSelector);
+                const target = resolveScrollTarget(hoverContainer);
+
+                if (!target) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                if (event.clientY < rect.top || event.clientY > rect.bottom) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                updatePointerScroll(target, event);
+            }, { passive: true });
+
+            document.addEventListener('mouseout', function (event) {
+                if (!event.relatedTarget) {
+                    stopAutoScroll();
+                }
+            });
+
+            document.addEventListener('scroll', function () {
+                if (!activeTarget) return;
+                if (
+                    !canScroll(activeTarget) ||
+                    (activeDirection < 0 && activeTarget.scrollLeft <= 0) ||
+                    (activeDirection > 0 && activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1)
+                ) {
+                    stopAutoScroll();
+                }
+            }, { passive: true, capture: true });
+
+            window.addEventListener('blur', stopAutoScroll);
+            window.addEventListener('resize', stopAutoScroll, { passive: true });
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    stopAutoScroll();
+                }
+            });
+        })();
+
+        (function setupMissingImageFallback() {
+            const fallbackSvg = encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+                    <rect width="320" height="240" rx="18" fill="#f1f5f9"/>
+                    <rect x="24" y="24" width="272" height="192" rx="14" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>
+                    <path d="M92 158l34-42 26 30 38-50 38 62H92z" fill="#94a3b8"/>
+                    <circle cx="118" cy="92" r="14" fill="#cbd5e1"/>
+                    <text x="160" y="198" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="20" font-weight="600">画像なし</text>
+                </svg>`
+            );
+            const fallbackSrc = `data:image/svg+xml;charset=UTF-8,${fallbackSvg}`;
+
+            document.addEventListener('error', function (event) {
+                const target = event.target;
+                if (!(target instanceof HTMLImageElement)) return;
+                if (target.dataset.fallbackApplied === 'true') return;
+
+                const currentSrc = target.getAttribute('src') || '';
+                if (!currentSrc.includes('/static/uploads/')) return;
+
+                target.dataset.fallbackApplied = 'true';
+                target.dataset.originalSrc = currentSrc;
+                target.src = fallbackSrc;
+                target.alt = '画像が見つかりません';
+                target.classList.add('image-fallback');
+                if (!target.title) {
+                    target.title = '検証コピーに画像ファイルが無いため、代替画像を表示しています';
+                }
+            }, true);
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
-
-

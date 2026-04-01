@@ -584,6 +584,8 @@
                 <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
                 <dt>支払方法</dt>
                 <dd>{{ item.payment_method or '-' }}</dd>
+                <dt>メモ</dt>
+                <dd style="white-space: pre-wrap;">{{ item.notes or '-' }}</dd>
             </dl>
         </div>
         
@@ -976,4 +978,3 @@ function downloadImage(url, filename, button) {
 }
 </script>
 {% endblock %}
-
