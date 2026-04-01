@@ -176,7 +176,13 @@
                 <label for="product_name">商品名</label>
                 <input type="text" id="product_name" name="product_name" required>
             </div>
-            
+
+            <div class="form-group">
+                <label for="notes">メモ</label>
+                <textarea id="notes" name="notes" rows="4" placeholder="送料や注意事項などの共有メモを入力"></textarea>
+                <small class="form-help">登録後は管理画面と商品詳細から確認できます。</small>
+            </div>
+
             <div class="form-group">
                 <label for="kaika_product_code">開花商品番号</label>
                 <input type="text" id="kaika_product_code" name="kaika_product_code" placeholder="開花独自の管理番号">
@@ -1084,4 +1090,3 @@ window.calculateProfit = calculateProfit;
 })();
 </script>
 {% endblock %}
-

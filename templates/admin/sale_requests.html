@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}発送商品受信BOX - 株式会社 開花{% endblock %}
+{% block title %}発送依頼・取引完了受信BOX - 株式会社 開花{% endblock %}
 
 {% block content %}
 <style>
@@ -547,7 +547,7 @@
 </style>
 
 <div class="page-header">
-    <h1>発送商品受信BOX</h1>
+    <h1>発送依頼・取引完了受信BOX</h1>
 </div>
 
 <div class="sale-requests-container">
@@ -579,7 +579,7 @@
                     {% else %}❌ 却下
                     {% endif %}
                 </span>
-                <span class="request-date">申請日: {{ req.created_at.strftime('%Y/%m/%d %H:%M') if req.created_at else '-' }}</span>
+                <span class="request-date">申請日: {% if req.created_at %}{% if req.created_at is string %}{{ req.created_at[:16].replace('-', '/').replace('T', ' ') }}{% else %}{{ req.created_at.strftime('%Y/%m/%d %H:%M') }}{% endif %}{% else %}-{% endif %}</span>
             </div>
             <div class="request-body">
                 <div class="request-image" onclick="openImageModal('{{ url_for('static', filename=req.photo_path) if req.photo_path else '' }}', '商品画像: {{ req.product_name or "" }}')" title="クリックで拡大">
@@ -593,22 +593,47 @@
                     <div class="request-product-name">
                         <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank">{{ req.product_name or '商品名なし' }}</a>
                     </div>
+                    <div style="margin: 0.35rem 0 0.5rem;">
+                        <span style="display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 9999px; background: {% if req.request_type == 'completion_report' %}#dbeafe{% else %}#fef3c7{% endif %}; color: {% if req.request_type == 'completion_report' %}#1d4ed8{% else %}#92400e{% endif %}; font-size: 0.8rem; font-weight: 700;">
+                            {{ req.request_type_label }}
+                        </span>
+                    </div>
                     <div class="request-brand">{{ req.brand_name or '-' }}</div>
                     <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank" class="btn-detail">📋 商品詳細を確認</a>
                     <div class="request-user">申請者: <strong>{{ req.user_display_name or req.username }}</strong></div>
                     <div class="request-prices">
                         <div class="price-item">
-                            <span class="price-label">申請売上金額</span>
-                            <span class="price-value sale">¥{{ "{:,}".format(req.sale_price) }}</span>
+                            <span class="price-label">{% if req.request_type == 'completion_report' and req.status == 'approved' %}確定売上{% elif req.request_type == 'completion_report' %}売上確認{% else %}申請内容{% endif %}</span>
+                            <span class="price-value sale">
+                                {% if req.request_type == 'completion_report' and req.status == 'approved' %}
+                                ¥{{ "{:,}".format(req.sale_price or 0) }}
+                                {% elif req.request_type == 'completion_report' %}
+                                画像確認後に入力
+                                {% else %}
+                                発送前確認
+                                {% endif %}
+                            </span>
                         </div>
                         <div class="price-item">
-                            <span class="price-label">送料</span>
-                            <span class="price-value">¥{{ "{:,}".format(req.shipping_cost or 0) }}</span>
+                            <span class="price-label">{% if req.request_type == 'completion_report' and req.status == 'approved' %}確定送料{% else %}画像枚数{% endif %}</span>
+                            <span class="price-value">
+                                {% if req.request_type == 'completion_report' and req.status == 'approved' %}
+                                ¥{{ "{:,}".format(req.shipping_cost or 0) }}
+                                {% else %}
+                                {{ (1 if req.qr_image_path else 0) + (1 if req.qr_image_path2 else 0) }}枚
+                                {% endif %}
+                            </span>
                         </div>
                         <div class="price-item">
                             <span class="price-label">仕入額</span>
                             <span class="price-value purchase">¥{{ "{:,}".format(req.purchase_price or 0) }}</span>
                         </div>
+                        {% if req.request_type == 'completion_report' %}
+                        <div class="price-item">
+                            <span class="price-label">{% if req.status == 'approved' %}確定手数料{% else %}確認方法{% endif %}</span>
+                            <span class="price-value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.commission or 0) }}{% else %}画像で確認{% endif %}</span>
+                        </div>
+                        {% endif %}
                     </div>
                     {% if req.qr_image_path or req.qr_image_path2 %}
                     <div class="qr-section" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
@@ -622,12 +647,12 @@
                             <img src="{{ url_for('static', filename=req.qr_image_path2) }}" alt="画像2">
                         </span>
                         {% endif %}
-                        <span style="color: #64748b; font-size: 0.85rem;">📱 添付画像（クリックで拡大）</span>
+                        <span style="color: #64748b; font-size: 0.85rem;">📱 {% if req.request_type == 'shipping_request' %}商品画像 / QR画像{% else %}取引完了画面 / 補足画像{% endif %}（クリックで拡大）</span>
                     </div>
                     {% endif %}
                     {% if req.status != 'pending' %}
                     <div class="processed-info">
-                        処理日: <strong>{{ req.processed_at.strftime('%Y/%m/%d %H:%M') if req.processed_at else '-' }}</strong>
+                        処理日: <strong>{% if req.processed_at %}{% if req.processed_at is string %}{{ req.processed_at[:16].replace('-', '/').replace('T', ' ') }}{% else %}{{ req.processed_at.strftime('%Y/%m/%d %H:%M') }}{% endif %}{% else %}-{% endif %}</strong>
                         / 処理者: <strong>{{ req.processor_display_name or req.processor_name or '-' }}</strong>
                         {% if req.admin_note %}
                         <div class="admin-note">メモ: {{ req.admin_note }}</div>
@@ -637,10 +662,10 @@
                 </div>
                 {% if req.status == 'pending' %}
                 <div class="request-actions">
-                    <button class="btn-approve" onclick="openApproveModal({{ req.id }}, '{{ req.product_name }}')">
+                    <button class="btn-approve" onclick="openApproveModal({{ req.id }}, '{{ req.product_name|e }}', '{{ req.request_type }}', '{{ req.request_type_label }}', {{ req.sale_price or 0 }}, {{ req.shipping_cost or 0 }}, {{ req.commission or 0 }})">
                         ✓ 承認する
                     </button>
-                    <button class="btn-reject" onclick="openRejectModal({{ req.id }}, '{{ req.product_name }}')">
+                    <button class="btn-reject" onclick="openRejectModal({{ req.id }}, '{{ req.product_name|e }}', '{{ req.request_type_label }}')">
                         ✕ 却下する
                     </button>
                 </div>
@@ -652,7 +677,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-state-icon">📭</div>
-        <div class="empty-state-text">売却申請はありません</div>
+        <div class="empty-state-text">会員からの発送依頼・取引完了報告はありません</div>
     </div>
     {% endif %}
 </div>
@@ -661,13 +686,27 @@
 <div class="modal-overlay" id="approveModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>売却申請を承認</h3>
+            <h3 id="approveModalTitle">会員送信を承認</h3>
             <button class="modal-close" onclick="closeModal('approveModal')">&times;</button>
         </div>
         <form method="POST" id="approveForm">
             <div class="modal-body">
                 <p id="approveProductName" style="margin-bottom: 1rem; font-weight: 600;"></p>
-                <p style="color: #64748b; margin-bottom: 1rem;">承認すると商品ステータスが「売却済み」に更新されます。</p>
+                <p id="approveModalHelp" style="color: #64748b; margin-bottom: 1rem;">承認すると会員送信の内容が反映されます。</p>
+                <div id="approveCompletionFields" style="display: none; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label for="approveSalePrice">確定売上金額（税込）</label>
+                        <input type="number" id="approveSalePrice" name="approved_sale_price" min="1" placeholder="画像確認後の売上金額を入力">
+                    </div>
+                    <div class="form-group">
+                        <label for="approveShippingCost">確定送料</label>
+                        <input type="number" id="approveShippingCost" name="approved_shipping_cost" min="0" placeholder="画像確認後の送料を入力">
+                    </div>
+                    <div class="form-group">
+                        <label for="approveCommission">確定手数料</label>
+                        <input type="number" id="approveCommission" name="approved_commission" min="0" placeholder="画像確認後の手数料を入力">
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>メモ（任意）</label>
                     <textarea name="admin_note" rows="3" placeholder="管理者メモを入力..."></textarea>
@@ -685,7 +724,7 @@
 <div class="modal-overlay" id="rejectModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>売却申請を却下</h3>
+            <h3 id="rejectModalTitle">会員送信を却下</h3>
             <button class="modal-close" onclick="closeModal('rejectModal')">&times;</button>
         </div>
         <form method="POST" id="rejectForm">
@@ -715,14 +754,37 @@
 </div>
 
 <script>
-function openApproveModal(requestId, productName) {
-    document.getElementById('approveProductName').textContent = productName;
+function openApproveModal(requestId, productName, requestType, requestTypeLabel, salePrice, shippingCost, commission) {
+    const completionFields = document.getElementById('approveCompletionFields');
+    const salePriceInput = document.getElementById('approveSalePrice');
+    const shippingCostInput = document.getElementById('approveShippingCost');
+    const commissionInput = document.getElementById('approveCommission');
+
+    document.getElementById('approveProductName').textContent = productName + ' / ' + requestTypeLabel;
+    document.getElementById('approveModalTitle').textContent = requestTypeLabel + 'を承認';
+    document.getElementById('approveModalHelp').textContent = requestType === 'completion_report'
+        ? '画像を確認して売上・送料・手数料を入力すると、商品へ反映されて売却済みになります。'
+        : '承認すると発送対応済みとして扱い、会員側で取引完了報告を送れる状態になります。';
+    if (completionFields) {
+        completionFields.style.display = requestType === 'completion_report' ? 'block' : 'none';
+    }
+    if (salePriceInput) {
+        salePriceInput.required = requestType === 'completion_report';
+        salePriceInput.value = requestType === 'completion_report' ? (salePrice || '') : '';
+    }
+    if (shippingCostInput) {
+        shippingCostInput.value = requestType === 'completion_report' ? (shippingCost || 0) : '';
+    }
+    if (commissionInput) {
+        commissionInput.value = requestType === 'completion_report' ? (commission || 0) : '';
+    }
     document.getElementById('approveForm').action = '/admin/sale-request/' + requestId + '/approve';
     document.getElementById('approveModal').classList.add('open');
 }
 
-function openRejectModal(requestId, productName) {
-    document.getElementById('rejectProductName').textContent = productName;
+function openRejectModal(requestId, productName, requestTypeLabel) {
+    document.getElementById('rejectProductName').textContent = productName + ' / ' + requestTypeLabel;
+    document.getElementById('rejectModalTitle').textContent = requestTypeLabel + 'を却下';
     document.getElementById('rejectForm').action = '/admin/sale-request/' + requestId + '/reject';
     document.getElementById('rejectModal').classList.add('open');
 }

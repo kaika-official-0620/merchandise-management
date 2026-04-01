@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, make_response, abort, has_request_context
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from functools import wraps
 import os
 import io
@@ -87,6 +88,9 @@ def internal_error(error):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+
     import traceback
     error_details = traceback.format_exc()
     html = f'''
@@ -1049,8 +1053,10 @@ if DATABASE_URL:
                 id SERIAL PRIMARY KEY,
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                request_type VARCHAR(30) DEFAULT 'shipping_request',
                 sale_price INTEGER NOT NULL,
                 shipping_cost INTEGER DEFAULT 0,
+                commission INTEGER DEFAULT 0,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
@@ -1070,6 +1076,18 @@ if DATABASE_URL:
         # shipping_costカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipping_cost INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # request_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(30) DEFAULT 'shipping_request'")
+        except:
+            pass
+
+        # commissionカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS commission INTEGER DEFAULT 0")
         except:
             pass
         
@@ -2031,8 +2049,10 @@ else:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                request_type TEXT DEFAULT 'shipping_request',
                 sale_price INTEGER NOT NULL,
                 shipping_cost INTEGER DEFAULT 0,
+                commission INTEGER DEFAULT 0,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status TEXT DEFAULT 'pending',
@@ -2052,6 +2072,18 @@ else:
         # shipping_costカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN shipping_cost INTEGER DEFAULT 0")
+        except:
+            pass
+
+        # request_typeカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN request_type TEXT DEFAULT 'shipping_request'")
+        except:
+            pass
+
+        # commissionカラムを追加（既存テーブル用）
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN commission INTEGER DEFAULT 0")
         except:
             pass
         
@@ -2221,6 +2253,49 @@ class User(UserMixin):
             return ['全権限']
         return [self.ADMIN_PERMISSION_OPTIONS.get(p, p) for p in self.admin_permissions]
 
+def build_user_from_record(user):
+    if not user:
+        return None
+
+    try:
+        admin_permissions = user['admin_permissions']
+    except (KeyError, TypeError):
+        admin_permissions = None
+
+    try:
+        subscription_status = user['subscription_status']
+    except (KeyError, TypeError):
+        subscription_status = 'inactive'
+
+    try:
+        proxy_service_budget = user['proxy_service_budget'] or 0
+    except (KeyError, TypeError):
+        proxy_service_budget = 0
+
+    return User(
+        user['id'],
+        user['username'],
+        user['email'],
+        user['role'],
+        user['display_name'],
+        admin_permissions,
+        subscription_status,
+        proxy_service_budget
+    )
+
+def get_user_record_by_username(username):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    return user
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
@@ -2235,26 +2310,8 @@ def load_user(user_id):
     cur.close()
     conn.close()
     
-    if user:
-        # admin_permissionsを安全に取得
-        try:
-            admin_permissions = user['admin_permissions']
-        except (KeyError, TypeError):
-            admin_permissions = None
-        # subscription_statusを安全に取得
-        try:
-            subscription_status = user['subscription_status']
-        except (KeyError, TypeError):
-            subscription_status = 'inactive'
-        # proxy_service_budgetを安全に取得
-        try:
-            proxy_service_budget = user['proxy_service_budget'] or 0
-        except (KeyError, TypeError):
-            proxy_service_budget = 0
-        return User(user['id'], user['username'], user['email'], user['role'], user['display_name'], admin_permissions, subscription_status, proxy_service_budget)
-    return None
+    return build_user_from_record(user)
 
-# 管理者専用デコレータ
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -2785,19 +2842,31 @@ def index():
     cur.close()
     conn.close()
     
-    # 申請中の売却申請を取得
-    pending_requests = {}
+    # 売却関連申請を取得
+    pending_shipping_requests = {}
+    pending_completion_requests = {}
+    approved_shipping_requests = {}
     try:
         conn2 = get_db()
         if DATABASE_URL:
             cur2 = conn2.cursor(cursor_factory=RealDictCursor)
-            cur2.execute("SELECT * FROM sale_requests WHERE status = 'pending'")
+            cur2.execute("SELECT * FROM sale_requests ORDER BY created_at DESC")
         else:
             cur2 = conn2.cursor()
-            cur2.execute("SELECT * FROM sale_requests WHERE status = 'pending'")
+            cur2.execute("SELECT * FROM sale_requests ORDER BY created_at DESC")
         for req in cur2.fetchall():
             req_dict = dict(req)
-            pending_requests[req_dict['merchandise_id']] = req_dict
+            request_type = normalize_sale_request_type(req_dict.get('request_type'))
+            req_dict['request_type'] = request_type
+            req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+            merchandise_id = req_dict['merchandise_id']
+            if req_dict.get('status') == 'pending':
+                if request_type == 'completion_report':
+                    pending_completion_requests.setdefault(merchandise_id, req_dict)
+                else:
+                    pending_shipping_requests.setdefault(merchandise_id, req_dict)
+            elif req_dict.get('status') == 'approved' and request_type == 'shipping_request':
+                approved_shipping_requests.setdefault(merchandise_id, req_dict)
         cur2.close()
         conn2.close()
     except Exception as e:
@@ -2851,14 +2920,23 @@ def index():
         else:
             item_dict['updated_by_name'] = '-'
         
-        # 売却申請中かどうかを判定
+        # 発送依頼・取引完了報告の状態を判定
         item_id = item_dict.get('id')
-        if item_id in pending_requests:
-            item_dict['pending_sale_request'] = True
-            item_dict['sale_request'] = pending_requests[item_id]
-        else:
-            item_dict['pending_sale_request'] = False
-            item_dict['sale_request'] = None
+        shipping_request = pending_shipping_requests.get(item_id)
+        completion_request = pending_completion_requests.get(item_id)
+        approved_shipping_request = approved_shipping_requests.get(item_id)
+
+        item_dict['pending_shipping_request'] = shipping_request is not None
+        item_dict['shipping_request'] = shipping_request
+        item_dict['pending_completion_request'] = completion_request is not None
+        item_dict['completion_request'] = completion_request
+        item_dict['approved_shipping_request'] = approved_shipping_request
+        item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(item_dict.get('is_shipped'))
+        item_dict['can_send_completion_report'] = item_dict['shipping_request_approved'] and not item_dict.get('sale_date')
+
+        # 既存テンプレート互換
+        item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
+        item_dict['sale_request'] = completion_request or shipping_request
         
         # 販売代行サービス申請中かどうかを判定
         if item_id in sales_agency_items:
@@ -4419,12 +4497,12 @@ def add_item():
         if DATABASE_URL:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name,
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
-                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
-                    sales_destination, commission, is_shipped)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
+                    sales_destination, commission, is_shipped, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -4454,17 +4532,18 @@ def add_item():
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
                 int(request.form.get('commission') or 0),
-                'is_shipped' in request.form
+                'is_shipped' in request.form,
+                request.form.get('notes')
             ))
         else:
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name, 
+                INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name,
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
-                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost, 
-                    sales_destination, commission, is_shipped)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
+                    sales_destination, commission, is_shipped, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -4494,7 +4573,8 @@ def add_item():
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
                 int(request.form.get('commission') or 0),
-                1 if 'is_shipped' in request.form else 0
+                1 if 'is_shipped' in request.form else 0,
+                request.form.get('notes')
             ))
         
         conn.commit()
@@ -4624,8 +4704,9 @@ def edit_item(id):
                 if new_wholesale_price <= 0:
                     new_wholesale_price = calculated_wholesale
                 new_payment_method = request.form.get('payment_method')
+                new_notes = request.form.get('notes', '')
             else:
-                # 管理者は基本情報を元の値で維持（変更不可）、ただし画像は編集可能
+                # スタッフ管理者は基本情報を元の値で維持しつつ、商品名のみ編集可能
                 photo_path = item_dict['photo_path']
                 
                 # 既存の追加写真を取得
@@ -4671,9 +4752,9 @@ def edit_item(id):
                 id_document_path = item_dict.get('id_document_path')
                 consent_form_path = item_dict.get('consent_form_path')
                 
-                # 基本情報は元の値で維持（変更不可）
+                # 基本情報は元の値で維持（商品名のみ編集可、メモは既存値を保持）
                 new_purchase_date = item_dict['purchase_date']
-                new_product_name = item_dict['product_name']
+                new_product_name = request.form.get('product_name') or item_dict['product_name']
                 new_kaika_product_code = item_dict.get('kaika_product_code')
                 new_brand_name = item_dict['brand_name']
                 new_model_number = item_dict.get('model_number')
@@ -4684,9 +4765,29 @@ def edit_item(id):
                 new_wholesale_fee_rate = float(item_dict.get('wholesale_fee_rate') or 0)
                 new_wholesale_price = int(item_dict.get('wholesale_price') or 0)
                 new_payment_method = item_dict['payment_method']
+                new_notes = item_dict.get('notes') or ''
             
             # ステータスを取得（未出品/出品中/売却済み）
             item_status = request.form.get('item_status', 'unlisted')
+            if not is_owner_user:
+                item_status = 'sold' if item_dict.get('sale_date') else ('listed' if item_dict.get('is_listed') else 'unlisted')
+
+            listing_price_value = int(request.form.get('listing_price') or 0) if is_owner_user else int(item_dict.get('listing_price') or 0)
+            expected_shipping_value = int(request.form.get('expected_shipping') or 0) if is_owner_user else int(item_dict.get('expected_shipping') or 0)
+            expected_commission_value = int(request.form.get('expected_commission') or 0) if is_owner_user else int(item_dict.get('expected_commission') or 0)
+            listing_date_value = (request.form.get('listing_date') or None) if is_owner_user else (item_dict.get('listing_date') or None)
+            sale_date_value = (request.form.get('sale_date') or None) if is_owner_user else (item_dict.get('sale_date') or None)
+            sale_type_value = (request.form.get('sale_type') or 'normal') if is_owner_user else (item_dict.get('sale_type') or 'normal')
+            sale_price_value = int(request.form.get('sale_price') or 0) if is_owner_user else int(item_dict.get('sale_price') or 0)
+            shipping_cost_value = int(request.form.get('shipping_cost') or 0) if is_owner_user else int(item_dict.get('shipping_cost') or 0)
+            sales_destination_value = request.form.get('sales_destination') if is_owner_user else item_dict.get('sales_destination')
+            commission_value = int(request.form.get('commission') or 0) if is_owner_user else int(item_dict.get('commission') or 0)
+            is_shipped_value = ('is_shipped' in request.form) if is_owner_user else bool(item_dict.get('is_shipped'))
+            if not is_owner_user:
+                photo_path = item_dict.get('photo_path')
+                additional_photos_json = item_dict.get('additional_photos')
+                id_document_path = item_dict.get('id_document_path')
+                consent_form_path = item_dict.get('consent_form_path')
             
             # 管理者/オーナーは全商品編集可能
             if DATABASE_URL:
@@ -4700,7 +4801,7 @@ def edit_item(id):
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
                             shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
-                            updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                            notes = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                     ''', (
                         new_purchase_date,
@@ -4719,18 +4820,19 @@ def edit_item(id):
                         new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
-                        int(request.form.get('listing_price') or 0),
-                        int(request.form.get('expected_shipping') or 0),
-                        int(request.form.get('expected_commission') or 0),
+                        listing_price_value,
+                        expected_shipping_value,
+                        expected_commission_value,
                         item_status in ['listed', 'sold'],
-                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                        request.form.get('sale_date') or None if item_status == 'sold' else None,
-                        request.form.get('sale_type') or 'normal',
-                        int(request.form.get('sale_price') or 0),
-                        int(request.form.get('shipping_cost') or 0),
-                        request.form.get('sales_destination'),
-                        int(request.form.get('commission') or 0),
-                        'is_shipped' in request.form,
+                        listing_date_value if item_status in ['listed', 'sold'] else None,
+                        sale_date_value if item_status == 'sold' else None,
+                        sale_type_value,
+                        sale_price_value,
+                        shipping_cost_value,
+                        sales_destination_value,
+                        commission_value,
+                        is_shipped_value,
+                        new_notes,
                         current_user.id,
                         id
                     ))
@@ -4744,7 +4846,7 @@ def edit_item(id):
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
                             shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
-                            updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                            notes = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s AND user_id = %s
                     ''', (
                         new_purchase_date,
@@ -4763,18 +4865,19 @@ def edit_item(id):
                         new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
-                        int(request.form.get('listing_price') or 0),
-                        int(request.form.get('expected_shipping') or 0),
-                        int(request.form.get('expected_commission') or 0),
+                        listing_price_value,
+                        expected_shipping_value,
+                        expected_commission_value,
                         item_status in ['listed', 'sold'],
-                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                        request.form.get('sale_date') or None if item_status == 'sold' else None,
-                        request.form.get('sale_type') or 'normal',
-                        int(request.form.get('sale_price') or 0),
-                        int(request.form.get('shipping_cost') or 0),
-                        request.form.get('sales_destination'),
-                        int(request.form.get('commission') or 0),
-                        'is_shipped' in request.form,
+                        listing_date_value if item_status in ['listed', 'sold'] else None,
+                        sale_date_value if item_status == 'sold' else None,
+                        sale_type_value,
+                        sale_price_value,
+                        shipping_cost_value,
+                        sales_destination_value,
+                        commission_value,
+                        is_shipped_value,
+                        new_notes,
                         current_user.id,
                         id, current_user.id
                     ))
@@ -4789,7 +4892,7 @@ def edit_item(id):
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
                             shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
-                            updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                            notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                     ''', (
                         new_purchase_date,
@@ -4808,18 +4911,19 @@ def edit_item(id):
                         new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
-                        int(request.form.get('listing_price') or 0),
-                        int(request.form.get('expected_shipping') or 0),
-                        int(request.form.get('expected_commission') or 0),
+                        listing_price_value,
+                        expected_shipping_value,
+                        expected_commission_value,
                         1 if item_status in ['listed', 'sold'] else 0,
-                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                        request.form.get('sale_date') or None if item_status == 'sold' else None,
-                        request.form.get('sale_type') or 'normal',
-                        int(request.form.get('sale_price') or 0),
-                        int(request.form.get('shipping_cost') or 0),
-                        request.form.get('sales_destination'),
-                        int(request.form.get('commission') or 0),
-                        1 if 'is_shipped' in request.form else 0,
+                        listing_date_value if item_status in ['listed', 'sold'] else None,
+                        sale_date_value if item_status == 'sold' else None,
+                        sale_type_value,
+                        sale_price_value,
+                        shipping_cost_value,
+                        sales_destination_value,
+                        commission_value,
+                        1 if is_shipped_value else 0,
+                        new_notes,
                         current_user.id,
                         id
                     ))
@@ -4833,7 +4937,7 @@ def edit_item(id):
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
                             shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
-                            updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                            notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ? AND user_id = ?
                     ''', (
                         new_purchase_date,
@@ -4852,18 +4956,19 @@ def edit_item(id):
                         new_wholesale_fee_rate,
                         new_purchase_price,
                         new_payment_method,
-                        int(request.form.get('listing_price') or 0),
-                        int(request.form.get('expected_shipping') or 0),
-                        int(request.form.get('expected_commission') or 0),
+                        listing_price_value,
+                        expected_shipping_value,
+                        expected_commission_value,
                         1 if item_status in ['listed', 'sold'] else 0,
-                        request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                        request.form.get('sale_date') or None if item_status == 'sold' else None,
-                        request.form.get('sale_type') or 'normal',
-                        int(request.form.get('sale_price') or 0),
-                        int(request.form.get('shipping_cost') or 0),
-                        request.form.get('sales_destination'),
-                        int(request.form.get('commission') or 0),
-                        1 if 'is_shipped' in request.form else 0,
+                        listing_date_value if item_status in ['listed', 'sold'] else None,
+                        sale_date_value if item_status == 'sold' else None,
+                        sale_type_value,
+                        sale_price_value,
+                        shipping_cost_value,
+                        sales_destination_value,
+                        commission_value,
+                        1 if is_shipped_value else 0,
+                        new_notes,
                         current_user.id,
                         id, current_user.id
                     ))
@@ -5341,6 +5446,15 @@ def admin_users():
     
     # 検索クエリパラメータを取得
     search_query = request.args.get('search', '').strip()
+    user_order_sql = """
+        CASE
+            WHEN role = 'owner' THEN 0
+            WHEN role = 'admin' THEN 1
+            ELSE 2
+        END,
+        created_at DESC,
+        id DESC
+    """
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -5351,10 +5465,10 @@ def admin_users():
                 WHERE username ILIKE %s 
                    OR display_name ILIKE %s 
                    OR email ILIKE %s
-                ORDER BY created_at DESC
-            """, (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
+                ORDER BY """ + user_order_sql,
+            (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
         else:
-            cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+            cur.execute("SELECT * FROM users ORDER BY " + user_order_sql)
     else:
         cur = conn.cursor()
         if search_query:
@@ -5364,10 +5478,10 @@ def admin_users():
                 WHERE username LIKE ? 
                    OR display_name LIKE ? 
                    OR email LIKE ?
-                ORDER BY created_at DESC
-            """, (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
+                ORDER BY """ + user_order_sql,
+            (f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'))
         else:
-            cur.execute("SELECT * FROM users ORDER BY created_at DESC")
+            cur.execute("SELECT * FROM users ORDER BY " + user_order_sql)
         
     users = [dict(u) for u in cur.fetchall()]
     
@@ -7145,11 +7259,11 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 自分の商品かチェック（オーナーは全商品可）
-        if current_user.is_owner():
+        # 管理画面に表示できる商品は、管理者・オーナーとも掲載操作を許可する
+        if current_user.is_owner() or current_user.is_admin():
             cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s", (item_id,))
         else:
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s AND user_id = %s", 
+            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s AND user_id = %s",
                        (item_id, current_user.id))
         item = cur.fetchone()
         
@@ -7165,10 +7279,10 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
             new_value = True
     else:
         cur = conn.cursor()
-        if current_user.is_owner():
+        if current_user.is_owner() or current_user.is_admin():
             cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ?", (item_id,))
         else:
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ? AND user_id = ?", 
+            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ? AND user_id = ?",
                        (item_id, current_user.id))
         item = cur.fetchone()
         
@@ -7210,16 +7324,16 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
-                    if current_user.is_owner():
+                    if current_user.is_owner() or current_user.is_admin():
                         cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s", (auction_id, item_id))
                     else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s AND user_id = %s", 
+                        cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s AND user_id = %s",
                                    (auction_id, item_id, current_user.id))
                 else:
-                    if current_user.is_owner():
+                    if current_user.is_owner() or current_user.is_admin():
                         cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s", (item_id,))
                     else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s AND user_id = %s", 
+                        cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s AND user_id = %s",
                                    (item_id, current_user.id))
                 updated_count += cur.rowcount
             except:
@@ -7229,16 +7343,16 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
-                    if current_user.is_owner():
+                    if current_user.is_owner() or current_user.is_admin():
                         cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ?", (auction_id, item_id))
                     else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ? AND user_id = ?", 
+                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ? AND user_id = ?",
                                    (auction_id, item_id, current_user.id))
                 else:
-                    if current_user.is_owner():
+                    if current_user.is_owner() or current_user.is_admin():
                         cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ?", (item_id,))
                     else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ? AND user_id = ?", 
+                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ? AND user_id = ?",
                                    (item_id, current_user.id))
                 updated_count += cur.rowcount
             except:
@@ -7391,18 +7505,18 @@ def admin_proxy_service_finalize(auction_id):
                         user_id, purchase_date, photo_path, product_name, brand_name,
                         item_condition, store_name, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos, is_listed
+                        model_number, supplier_detail, additional_photos, is_listed, notes
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s
                     ) RETURNING id
                 """, (
                     winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
                     item.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
                     item.get('listing_price', 0), item.get('expected_shipping', 0), item.get('expected_commission', 0),
-                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos'), False
+                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos'), False, item.get('notes')
                 ))
                 new_item_id = cur.fetchone()['id']
                 
@@ -7480,18 +7594,18 @@ def admin_proxy_service_finalize(auction_id):
                         user_id, purchase_date, photo_path, product_name, brand_name,
                         item_condition, store_name, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos, is_listed
+                        model_number, supplier_detail, additional_photos, is_listed, notes
                     ) VALUES (
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?,
                         ?, ?, ?,
-                        ?, ?, ?, ?
+                        ?, ?, ?, ?, ?
                     )
                 """, (
                     winner_user_id, today, item_dict.get('photo_path'), item_dict.get('product_name'), item_dict.get('brand_name'),
                     item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
                     item_dict.get('listing_price') or 0, item_dict.get('expected_shipping') or 0, item_dict.get('expected_commission') or 0,
-                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos'), 0
+                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos'), 0, item_dict.get('notes')
                 ))
                 new_item_id = cur.lastrowid
                 
@@ -8006,7 +8120,7 @@ def proxy_service_bid():
         if not is_allowed:
             return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     
-    data = request.get_json() or request.form
+    data = request.get_json(silent=True) or request.form
     
     merchandise_id = data.get('merchandise_id')
     bid_amount = data.get('bid_amount')
@@ -8177,7 +8291,7 @@ def proxy_service_purchase():
     if not current_user.can_participate_auction():
         return jsonify({'success': False, 'error': '月謝のお支払いが確認できていないため、購入できません'}), 403
     
-    data = request.get_json() or request.form
+    data = request.get_json(silent=True) or request.form
     merchandise_id = data.get('merchandise_id')
     
     if not merchandise_id:
@@ -8194,7 +8308,9 @@ def proxy_service_purchase():
         
         # まず商品を取得してauction_idを確認
         cur.execute("""
-            SELECT id, listing_price, product_name, sale_date, auction_id 
+            SELECT id, listing_price, product_name, sale_date, auction_id,
+                   photo_path, brand_name, item_condition, expected_shipping,
+                   expected_commission, model_number, additional_photos, notes
             FROM merchandise 
             WHERE id = %s AND show_in_proxy_service = TRUE
         """, (merchandise_id,))
@@ -8269,12 +8385,53 @@ def proxy_service_purchase():
         # 入札履歴にも記録（購入記録として）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+
+        buyer_notes = (item.get('notes') or '').strip()
+        origin_note = f'代行仕入れサービス購入 / 元商品ID:{merchandise_id}'
+        if buyer_notes:
+            buyer_notes = f"{buyer_notes}\n{origin_note}"
+        else:
+            buyer_notes = origin_note
+
+        cur.execute("""
+            INSERT INTO merchandise (
+                user_id, purchase_date, photo_path, product_name, brand_name,
+                item_condition, store_name, purchase_price, payment_method,
+                listing_price, expected_shipping, expected_commission,
+                model_number, supplier_detail, additional_photos, is_listed, notes
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s, %s
+            )
+        """, (
+            user_id,
+            now.date(),
+            item.get('photo_path'),
+            item.get('product_name'),
+            item.get('brand_name'),
+            item.get('item_condition'),
+            '代行仕入れサービス',
+            purchase_price,
+            '代行仕入れ',
+            item.get('listing_price') or 0,
+            item.get('expected_shipping') or 0,
+            item.get('expected_commission') or 0,
+            item.get('model_number'),
+            '代行仕入れサービス',
+            item.get('additional_photos'),
+            False,
+            buyer_notes,
+        ))
     else:
         cur = conn.cursor()
         
         # まず商品を取得してauction_idを確認
         cur.execute("""
-            SELECT id, listing_price, product_name, sale_date, auction_id 
+            SELECT id, listing_price, product_name, sale_date, auction_id,
+                   photo_path, brand_name, item_condition, expected_shipping,
+                   expected_commission, model_number, additional_photos, notes
             FROM merchandise 
             WHERE id = ? AND show_in_proxy_service = 1
         """, (merchandise_id,))
@@ -8289,9 +8446,25 @@ def proxy_service_purchase():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
+
+        item_dict = {
+            'id': item[0],
+            'listing_price': item[1],
+            'product_name': item[2],
+            'sale_date': item[3],
+            'auction_id': item[4],
+            'photo_path': item[5],
+            'brand_name': item[6],
+            'item_condition': item[7],
+            'expected_shipping': item[8],
+            'expected_commission': item[9],
+            'model_number': item[10],
+            'additional_photos': item[11],
+            'notes': item[12],
+        }
         
         # 商品のauction_idに基づいて設定を取得
-        auction_id = item[4] if len(item) > 4 else None  # auction_id
+        auction_id = item_dict.get('auction_id')
         if auction_id:
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         else:
@@ -8310,7 +8483,7 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
-        purchase_price = item[1] or 0
+        purchase_price = item_dict.get('listing_price') or 0
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -8338,6 +8511,45 @@ def proxy_service_purchase():
         # 入札履歴にも記録
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+
+        buyer_notes = (item_dict.get('notes') or '').strip()
+        origin_note = f'代行仕入れサービス購入 / 元商品ID:{merchandise_id}'
+        if buyer_notes:
+            buyer_notes = f"{buyer_notes}\n{origin_note}"
+        else:
+            buyer_notes = origin_note
+
+        cur.execute("""
+            INSERT INTO merchandise (
+                user_id, purchase_date, photo_path, product_name, brand_name,
+                item_condition, store_name, purchase_price, payment_method,
+                listing_price, expected_shipping, expected_commission,
+                model_number, supplier_detail, additional_photos, is_listed, notes
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?
+            )
+        """, (
+            user_id,
+            now.strftime('%Y-%m-%d'),
+            item_dict.get('photo_path'),
+            item_dict.get('product_name'),
+            item_dict.get('brand_name'),
+            item_dict.get('item_condition'),
+            '代行仕入れサービス',
+            purchase_price,
+            '代行仕入れ',
+            item_dict.get('listing_price') or 0,
+            item_dict.get('expected_shipping') or 0,
+            item_dict.get('expected_commission') or 0,
+            item_dict.get('model_number'),
+            '代行仕入れサービス',
+            item_dict.get('additional_photos'),
+            0,
+            buyer_notes,
+        ))
     
     conn.commit()
     cur.close()
@@ -11646,13 +11858,13 @@ def admin_add_item():
         try:
             cur.execute(f'''
                 INSERT INTO merchandise (
-                    user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, 
-                    model_number, item_condition, store_name, supplier_detail, 
+                    user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name,
+                    model_number, item_condition, store_name, supplier_detail,
                     id_document_path, consent_form_path,
-                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, 
-                    expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price, 
-                    shipping_cost, sales_destination, commission, is_shipped
-                ) VALUES ({', '.join([placeholder] * 29)})
+                    wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping,
+                    expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price,
+                    shipping_cost, sales_destination, commission, is_shipped, notes
+                ) VALUES ({', '.join([placeholder] * 30)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
@@ -11682,7 +11894,8 @@ def admin_add_item():
                 int(request.form.get('shipping_cost') or 0),
                 request.form.get('sales_destination'),
                 int(request.form.get('commission') or 0),
-                'is_shipped' in request.form
+                'is_shipped' in request.form,
+                request.form.get('notes')
             ))
             conn.commit()
             
@@ -19736,6 +19949,99 @@ def inject_inquiry_count():
 
 # ========== 売却申請機能 ==========
 
+SALE_REQUEST_TYPES = {
+    'shipping_request': {
+        'label': '発送依頼',
+        'user_submit_success': '発送依頼を送信しました。開花側の確認をお待ちください。',
+        'user_update_success': '発送依頼の内容を修正しました',
+        'user_cancel_success': '発送依頼をキャンセルしました',
+        'admin_approve_success': '発送依頼を承認しました。発送対応を進めてください。',
+        'admin_reject_success': '発送依頼を差し戻しました',
+    },
+    'completion_report': {
+        'label': '取引完了報告',
+        'user_submit_success': '取引完了報告を送信しました。開花側の確認をお待ちください。',
+        'user_update_success': '取引完了報告の内容を修正しました',
+        'user_cancel_success': '取引完了報告をキャンセルしました',
+        'admin_approve_success': '取引完了報告を承認しました。売上情報を商品へ反映しました。',
+        'admin_reject_success': '取引完了報告を差し戻しました',
+    },
+}
+
+
+def normalize_sale_request_type(request_type):
+    if request_type in SALE_REQUEST_TYPES:
+        return request_type
+    return 'shipping_request'
+
+
+def get_sale_request_type_label(request_type):
+    return SALE_REQUEST_TYPES[normalize_sale_request_type(request_type)]['label']
+
+
+def get_sale_request_messages(request_type):
+    return SALE_REQUEST_TYPES[normalize_sale_request_type(request_type)]
+
+
+def save_sale_request_images(qr_image, qr_image2, existing_request=None):
+    upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
+    os.makedirs(upload_folder, exist_ok=True)
+
+    qr_image_path = existing_request.get('qr_image_path') if existing_request else None
+    if qr_image and qr_image.filename:
+        filename = secure_filename(qr_image.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename = timestamp + filename
+        qr_image.save(os.path.join(upload_folder, filename))
+        qr_image_path = 'uploads/qr/' + filename
+
+    qr_image_path2 = existing_request.get('qr_image_path2') if existing_request else None
+    if qr_image2 and qr_image2.filename:
+        filename2 = secure_filename(qr_image2.filename)
+        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        filename2 = timestamp2 + '2_' + filename2
+        qr_image2.save(os.path.join(upload_folder, filename2))
+        qr_image_path2 = 'uploads/qr/' + filename2
+
+    return qr_image_path, qr_image_path2
+
+
+def validate_sale_request_payload(request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2):
+    request_type = normalize_sale_request_type(request_type)
+
+    if request_type == 'shipping_request':
+        if not qr_image_path or not qr_image_path2:
+            return '発送依頼では画像を2枚登録してください'
+        return None
+
+    if not qr_image_path:
+        return '取引完了報告では完了画面の画像を1枚以上登録してください'
+    return None
+
+
+def has_approved_shipping_request(cur, item_id):
+    if DATABASE_URL:
+        cur.execute("""
+            SELECT id
+            FROM sale_requests
+            WHERE merchandise_id = %s
+              AND request_type = 'shipping_request'
+              AND status = 'approved'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (item_id,))
+    else:
+        cur.execute("""
+            SELECT id
+            FROM sale_requests
+            WHERE merchandise_id = ?
+              AND request_type = 'shipping_request'
+              AND status = 'approved'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (item_id,))
+    return cur.fetchone() is not None
+
 # 未処理の売却申請件数を取得
 def get_pending_sale_request_count():
     try:
@@ -19761,19 +20067,29 @@ def inject_sale_request_count():
 @app.route('/sale-request/submit/<int:item_id>', methods=['POST'])
 @login_required
 def submit_sale_request(item_id):
+    request_type = normalize_sale_request_type(request.form.get('request_type'))
     sale_price = request.form.get('sale_price', type=int)
-    shipping_cost = request.form.get('shipping_cost', type=int) or 0
+    shipping_cost = request.form.get('shipping_cost', type=int)
+    commission = request.form.get('commission', type=int)
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
-    
-    if not sale_price or sale_price <= 0:
-        flash('売上金額を正しく入力してください', 'error')
-        return redirect(url_for('index'))
+
+    if request_type == 'shipping_request':
+        sale_price = 0
+        shipping_cost = 0
+        commission = 0
+    else:
+        sale_price = sale_price or 0
+        shipping_cost = shipping_cost or 0
+        commission = commission or 0
     
     conn = None
     try:
         conn = get_db()
-        cur = conn.cursor()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
         
         # 商品が存在し、ユーザーのものか確認
         if DATABASE_URL:
@@ -19787,56 +20103,78 @@ def submit_sale_request(item_id):
             cur.close()
             conn.close()
             return redirect(url_for('index'))
+
+        item_dict = dict(item)
         
-        # 既に申請中かチェック
+        # 取引完了報告は発送依頼承認後のみ受け付ける
+        if request_type == 'completion_report' and not (item_dict.get('is_shipped') or has_approved_shipping_request(cur, item_id)):
+            flash('先に発送依頼の承認を受けてから、取引完了報告を送信してください', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+
+        # 同種の申請が既に申請中かチェック
         if DATABASE_URL:
-            cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = %s AND status = 'pending'", (item_id,))
+            cur.execute("""
+                SELECT *
+                FROM sale_requests
+                WHERE merchandise_id = %s
+                  AND request_type = %s
+                  AND status = 'pending'
+            """, (item_id, request_type))
         else:
-            cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = ? AND status = 'pending'", (item_id,))
+            cur.execute("""
+                SELECT *
+                FROM sale_requests
+                WHERE merchandise_id = ?
+                  AND request_type = ?
+                  AND status = 'pending'
+            """, (item_id, request_type))
         
         if cur.fetchone():
-            flash('この商品は既に売却申請中です', 'error')
+            flash(f"この商品は既に{get_sale_request_type_label(request_type)}を送信済みです", 'error')
             cur.close()
             conn.close()
             return redirect(url_for('index'))
         
-        # QR画像の保存
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
-        
-        qr_image_path = None
-        if qr_image and qr_image.filename:
-            filename = secure_filename(qr_image.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
-            filename = timestamp + filename
-            qr_image.save(os.path.join(upload_folder, filename))
-            qr_image_path = 'uploads/qr/' + filename
-        
-        qr_image_path2 = None
-        if qr_image2 and qr_image2.filename:
-            filename2 = secure_filename(qr_image2.filename)
-            timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
-            filename2 = timestamp2 + '2_' + filename2
-            qr_image2.save(os.path.join(upload_folder, filename2))
-            qr_image_path2 = 'uploads/qr/' + filename2
-        
-        # 売却申請を登録
+        qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2)
+        validation_error = validate_sale_request_payload(
+            request_type,
+            sale_price,
+            shipping_cost,
+            commission,
+            qr_image_path,
+            qr_image_path2,
+        )
+        if validation_error:
+            flash(validation_error, 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+
+        # 申請を登録
         if DATABASE_URL:
             cur.execute('''
-                INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
-                VALUES (%s, %s, %s, %s, %s, %s, 'pending')
-            ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
+                INSERT INTO sale_requests (
+                    merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
+                    qr_image_path, qr_image_path2, status
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+            ''', (item_id, current_user.id, request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2))
         else:
             cur.execute('''
-                INSERT INTO sale_requests (merchandise_id, user_id, sale_price, shipping_cost, qr_image_path, qr_image_path2, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending')
-            ''', (item_id, current_user.id, sale_price, shipping_cost, qr_image_path, qr_image_path2))
+                INSERT INTO sale_requests (
+                    merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
+                    qr_image_path, qr_image_path2, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            ''', (item_id, current_user.id, request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2))
         
         conn.commit()
         cur.close()
         conn.close()
         
-        flash('売却申請を送信しました。管理者の確認をお待ちください。', 'success')
+        flash(get_sale_request_messages(request_type)['user_submit_success'], 'success')
     except Exception as e:
         print(f"[ERROR] submit_sale_request: {e}", flush=True)
         import traceback
@@ -19847,7 +20185,7 @@ def submit_sale_request(item_id):
                 conn.close()
             except:
                 pass
-        flash('売却申請の送信中にエラーが発生しました。もう一度お試しください。', 'error')
+        flash(f"{get_sale_request_type_label(request_type)}の送信中にエラーが発生しました。もう一度お試しください。", 'error')
     
     return redirect(url_for('index'))
 
@@ -19882,7 +20220,7 @@ def admin_sale_requests():
                     CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
                     sr.created_at DESC
             ''')
-            requests_list = cur.fetchall()
+            requests_list = [dict(row) for row in cur.fetchall()]
             
             # 統計情報
             cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
@@ -19905,7 +20243,7 @@ def admin_sale_requests():
                     CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
                     sr.created_at DESC
             ''')
-            requests_list = cur.fetchall()
+            requests_list = [dict(row) for row in cur.fetchall()]
             
             # 統計情報
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
@@ -19915,6 +20253,11 @@ def admin_sale_requests():
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
             rejected_count = cur.fetchone()[0]
         
+        for req in requests_list:
+            req['request_type'] = normalize_sale_request_type(req.get('request_type'))
+            req['request_type_label'] = get_sale_request_type_label(req['request_type'])
+            req['commission'] = req.get('commission') or 0
+
         cur.close()
         conn.close()
     except Exception as e:
@@ -19938,14 +20281,22 @@ def approve_sale_request(request_id):
         return redirect(url_for('index'))
     
     admin_note = request.form.get('admin_note', '')
+    approved_sale_price_input = request.form.get('approved_sale_price', type=int)
+    approved_shipping_cost_input = request.form.get('approved_shipping_cost', type=int)
+    approved_commission_input = request.form.get('approved_commission', type=int)
     
     try:
         conn = get_db()
+        request_type = 'shipping_request'
         
-        # 申請情報を取得（sale_price, merchandise_idが必要）
+        # 申請情報を取得
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = %s", (request_id,))
+            cur.execute("""
+                SELECT id, merchandise_id, request_type, sale_price, shipping_cost, commission
+                FROM sale_requests
+                WHERE id = %s
+            """, (request_id,))
             sale_request = cur.fetchone()
             cur.close()
             
@@ -19954,28 +20305,78 @@ def approve_sale_request(request_id):
                 conn.close()
                 return redirect(url_for('admin_sale_requests'))
             
+            request_type = normalize_sale_request_type(sale_request.get('request_type'))
             sale_price = sale_request['sale_price']
             shipping_cost = sale_request.get('shipping_cost') or 0
+            commission = sale_request.get('commission') or 0
             merchandise_id = sale_request['merchandise_id']
+
+            approved_sale_price = sale_price or 0
+            approved_shipping_cost = shipping_cost
+            approved_commission = commission
+
+            if request_type == 'completion_report':
+                if approved_sale_price_input is not None:
+                    approved_sale_price = approved_sale_price_input
+                if approved_shipping_cost_input is not None:
+                    approved_shipping_cost = approved_shipping_cost_input
+                if approved_commission_input is not None:
+                    approved_commission = approved_commission_input
+
+                if approved_sale_price <= 0:
+                    flash('取引完了報告を承認するには売上金額を入力してください', 'error')
+                    conn.close()
+                    return redirect(url_for('admin_sale_requests'))
+                if approved_shipping_cost < 0 or approved_commission < 0:
+                    flash('送料と手数料は0以上で入力してください', 'error')
+                    conn.close()
+                    return redirect(url_for('admin_sale_requests'))
             
-            # 通常のカーソルでUPDATE実行
             cur = conn.cursor()
             cur.execute('''
                 UPDATE sale_requests 
-                SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s
+                SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s,
+                    sale_price = %s, shipping_cost = %s, commission = %s
                 WHERE id = %s
-            ''', (datetime.now(), current_user.id, admin_note, request_id))
+            ''', (
+                datetime.now(),
+                current_user.id,
+                admin_note,
+                approved_sale_price,
+                approved_shipping_cost,
+                approved_commission,
+                request_id,
+            ))
             
-            # 商品のステータスを売却済みに更新、売上金・送料も更新
-            cur.execute('''
-                UPDATE merchandise 
-                SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, sale_date = %s, updated_at = %s, updated_by = %s
-                WHERE id = %s
-            ''', (sale_price, shipping_cost, datetime.now().date(), datetime.now(), current_user.id, merchandise_id))
+            if request_type == 'completion_report':
+                cur.execute('''
+                    UPDATE merchandise 
+                    SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, commission = %s,
+                        is_shipped = TRUE, sale_date = %s, updated_at = %s, updated_by = %s
+                    WHERE id = %s
+                ''', (
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    datetime.now().date(),
+                    datetime.now(),
+                    current_user.id,
+                    merchandise_id,
+                ))
+            else:
+                cur.execute('''
+                    UPDATE merchandise 
+                    SET is_shipped = TRUE, updated_at = %s, updated_by = %s
+                    WHERE id = %s
+                ''', (datetime.now(), current_user.id, merchandise_id))
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
-            cur.execute("SELECT id, merchandise_id, sale_price, shipping_cost FROM sale_requests WHERE id = ?", (request_id,))
+            cur.execute("""
+                SELECT id, merchandise_id, request_type, sale_price, shipping_cost, commission
+                FROM sale_requests
+                WHERE id = ?
+            """, (request_id,))
             sale_request = cur.fetchone()
             
             if not sale_request:
@@ -19984,28 +20385,77 @@ def approve_sale_request(request_id):
                 conn.close()
                 return redirect(url_for('admin_sale_requests'))
             
+            request_type = normalize_sale_request_type(sale_request['request_type'])
             sale_price = sale_request['sale_price']
             shipping_cost = sale_request['shipping_cost'] or 0
+            commission = sale_request['commission'] or 0
             merchandise_id = sale_request['merchandise_id']
+
+            approved_sale_price = sale_price or 0
+            approved_shipping_cost = shipping_cost
+            approved_commission = commission
+
+            if request_type == 'completion_report':
+                if approved_sale_price_input is not None:
+                    approved_sale_price = approved_sale_price_input
+                if approved_shipping_cost_input is not None:
+                    approved_shipping_cost = approved_shipping_cost_input
+                if approved_commission_input is not None:
+                    approved_commission = approved_commission_input
+
+                if approved_sale_price <= 0:
+                    flash('取引完了報告を承認するには売上金額を入力してください', 'error')
+                    cur.close()
+                    conn.close()
+                    return redirect(url_for('admin_sale_requests'))
+                if approved_shipping_cost < 0 or approved_commission < 0:
+                    flash('送料と手数料は0以上で入力してください', 'error')
+                    cur.close()
+                    conn.close()
+                    return redirect(url_for('admin_sale_requests'))
             
             cur.execute('''
                 UPDATE sale_requests 
-                SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?
+                SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?,
+                    sale_price = ?, shipping_cost = ?, commission = ?
                 WHERE id = ?
-            ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, request_id))
+            ''', (
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                current_user.id,
+                admin_note,
+                approved_sale_price,
+                approved_shipping_cost,
+                approved_commission,
+                request_id,
+            ))
             
-            # 商品のステータスを売却済みに更新、売上金・送料も更新
-            cur.execute('''
-                UPDATE merchandise 
-                SET is_listed = 1, sale_price = ?, shipping_cost = ?, sale_date = ?, updated_at = ?, updated_by = ?
-                WHERE id = ?
-            ''', (sale_price, shipping_cost, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
+            if request_type == 'completion_report':
+                cur.execute('''
+                    UPDATE merchandise 
+                    SET is_listed = 1, sale_price = ?, shipping_cost = ?, commission = ?,
+                        is_shipped = 1, sale_date = ?, updated_at = ?, updated_by = ?
+                    WHERE id = ?
+                ''', (
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    datetime.now().strftime('%Y-%m-%d'),
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    current_user.id,
+                    merchandise_id,
+                ))
+            else:
+                cur.execute('''
+                    UPDATE merchandise 
+                    SET is_shipped = 1, updated_at = ?, updated_by = ?
+                    WHERE id = ?
+                ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
         conn.commit()
         cur.close()
         conn.close()
         
-        flash('売却申請を承認しました。商品ステータスが売却済みに更新されました。', 'success')
+        flash(get_sale_request_messages(request_type)['admin_approve_success'], 'success')
     except Exception as e:
         print(f"Error in approve_sale_request: {e}")
         import traceback
@@ -20025,8 +20475,13 @@ def reject_sale_request(request_id):
     admin_note = request.form.get('admin_note', '')
     
     conn = get_db()
+    request_type = 'shipping_request'
     
     if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT request_type FROM sale_requests WHERE id = %s", (request_id,))
+        sale_request = cur.fetchone()
+        request_type = normalize_sale_request_type((sale_request or {}).get('request_type'))
         cur = conn.cursor()
         cur.execute('''
             UPDATE sale_requests 
@@ -20035,6 +20490,9 @@ def reject_sale_request(request_id):
         ''', (datetime.now(), current_user.id, admin_note, request_id))
     else:
         cur = conn.cursor()
+        cur.execute("SELECT request_type FROM sale_requests WHERE id = ?", (request_id,))
+        sale_request = cur.fetchone()
+        request_type = normalize_sale_request_type(sale_request[0] if sale_request and sale_request[0] else None)
         cur.execute('''
             UPDATE sale_requests 
             SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?
@@ -20045,7 +20503,7 @@ def reject_sale_request(request_id):
     cur.close()
     conn.close()
     
-    flash('売却申請を却下しました', 'info')
+    flash(get_sale_request_messages(request_type)['admin_reject_success'], 'info')
     return redirect(url_for('admin_sale_requests'))
 
 # ユーザー：売却申請の修正
@@ -20053,13 +20511,10 @@ def reject_sale_request(request_id):
 @login_required
 def edit_sale_request(request_id):
     sale_price = request.form.get('sale_price', type=int)
-    shipping_cost = request.form.get('shipping_cost', type=int) or 0
+    shipping_cost = request.form.get('shipping_cost', type=int)
+    commission = request.form.get('commission', type=int)
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
-    
-    if not sale_price or sale_price <= 0:
-        flash('売上金額を正しく入力してください', 'error')
-        return redirect(url_for('index'))
     
     conn = None
     try:
@@ -20080,52 +20535,59 @@ def edit_sale_request(request_id):
         
         sale_request = cur.fetchone()
         if not sale_request:
-            flash('申請が見つからないか、既に処理済みです', 'error')
+            flash('送信内容が見つからないか、既に処理済みです', 'error')
             cur.close()
             conn.close()
             return redirect(url_for('index'))
         
         sale_request_dict = dict(sale_request)
-        
-        # QR画像の保存（新しい画像がある場合のみ）
-        upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
-        os.makedirs(upload_folder, exist_ok=True)
-        
-        qr_image_path = sale_request_dict.get('qr_image_path')
-        if qr_image and qr_image.filename:
-            filename = secure_filename(qr_image.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
-            filename = timestamp + filename
-            qr_image.save(os.path.join(upload_folder, filename))
-            qr_image_path = 'uploads/qr/' + filename
-        
-        qr_image_path2 = sale_request_dict.get('qr_image_path2')
-        if qr_image2 and qr_image2.filename:
-            filename2 = secure_filename(qr_image2.filename)
-            timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
-            filename2 = timestamp2 + '2_' + filename2
-            qr_image2.save(os.path.join(upload_folder, filename2))
-            qr_image_path2 = 'uploads/qr/' + filename2
-        
-        # 売却申請を更新
+        request_type = normalize_sale_request_type(sale_request_dict.get('request_type'))
+
+        if request_type == 'shipping_request':
+            sale_price = 0
+            shipping_cost = 0
+            commission = 0
+        else:
+            sale_price = sale_price if sale_price is not None else (sale_request_dict.get('sale_price') or 0)
+            shipping_cost = shipping_cost if shipping_cost is not None else (sale_request_dict.get('shipping_cost') or 0)
+            commission = commission if commission is not None else (sale_request_dict.get('commission') or 0)
+
+        qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2, sale_request_dict)
+        validation_error = validate_sale_request_payload(
+            request_type,
+            sale_price,
+            shipping_cost,
+            commission,
+            qr_image_path,
+            qr_image_path2,
+        )
+        if validation_error:
+            flash(validation_error, 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+
+        # 申請を更新
         if DATABASE_URL:
             cur.execute('''
                 UPDATE sale_requests 
-                SET sale_price = %s, shipping_cost = %s, qr_image_path = %s, qr_image_path2 = %s
+                SET sale_price = %s, shipping_cost = %s, commission = %s,
+                    qr_image_path = %s, qr_image_path2 = %s
                 WHERE id = %s
-            ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
+            ''', (sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, request_id))
         else:
             cur.execute('''
                 UPDATE sale_requests 
-                SET sale_price = ?, shipping_cost = ?, qr_image_path = ?, qr_image_path2 = ?
+                SET sale_price = ?, shipping_cost = ?, commission = ?,
+                    qr_image_path = ?, qr_image_path2 = ?
                 WHERE id = ?
-            ''', (sale_price, shipping_cost, qr_image_path, qr_image_path2, request_id))
+            ''', (sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, request_id))
         
         conn.commit()
         cur.close()
         conn.close()
         
-        flash('売却申請を修正しました', 'success')
+        flash(get_sale_request_messages(request_type)['user_update_success'], 'success')
     except Exception as e:
         print(f"[ERROR] edit_sale_request: {e}", flush=True)
         import traceback
@@ -20136,16 +20598,21 @@ def edit_sale_request(request_id):
                 conn.close()
             except:
                 pass
-        flash('売却申請の修正中にエラーが発生しました。もう一度お試しください。', 'error')
+        request_type = normalize_sale_request_type(locals().get('sale_request_dict', {}).get('request_type'))
+        flash(f"{get_sale_request_type_label(request_type)}の修正中にエラーが発生しました。もう一度お試しください。", 'error')
     
     return redirect(url_for('index'))
 
-# ユーザー：売却申請のキャンセル
+# ユーザー：送信内容のキャンセル
 @app.route('/sale-request/cancel/<int:request_id>', methods=['POST'])
 @login_required
 def cancel_sale_request(request_id):
     conn = get_db()
-    cur = conn.cursor()
+    request_type = 'shipping_request'
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
     
     # 申請情報を取得し、ユーザーのものか確認
     if DATABASE_URL:
@@ -20155,11 +20622,14 @@ def cancel_sale_request(request_id):
         cur.execute("SELECT * FROM sale_requests WHERE id = ? AND user_id = ? AND status = 'pending'", 
                    (request_id, current_user.id))
     
-    if not cur.fetchone():
-        flash('申請が見つからないか、既に処理済みです', 'error')
+    sale_request = cur.fetchone()
+    if not sale_request:
+        flash('送信内容が見つからないか、既に処理済みです', 'error')
         cur.close()
         conn.close()
         return redirect(url_for('index'))
+
+    request_type = normalize_sale_request_type(dict(sale_request).get('request_type'))
     
     # 申請を削除
     if DATABASE_URL:
@@ -20171,7 +20641,7 @@ def cancel_sale_request(request_id):
     cur.close()
     conn.close()
     
-    flash('売却申請をキャンセルしました', 'info')
+    flash(get_sale_request_messages(request_type)['user_cancel_success'], 'info')
     return redirect(url_for('index'))
 
 # =====================================================
@@ -20712,4 +21182,3 @@ def download_all_images(id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-

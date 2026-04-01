@@ -238,8 +238,36 @@
         width: 300px;
     }
 
+    .data-table th.store-col,
+    .data-table td.store-col {
+        min-width: 150px;
+    }
+
+    .data-table th.owner-col,
+    .data-table td.owner-col,
+    .data-table th.updater-col,
+    .data-table td.updater-col {
+        min-width: 120px;
+    }
+
     .data-table td.product-name-col {
         white-space: nowrap;
+    }
+
+    .data-table td.store-col,
+    .data-table td.owner-col,
+    .data-table td.updater-col {
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow-wrap: normal;
+    }
+
+    .data-table td.owner-col .badge-admin,
+    .data-table td.owner-col .badge-user {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        max-width: none;
     }
 
     .data-table tbody tr:hover {
@@ -1057,9 +1085,9 @@
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
                     <th>状態</th>
-                    <th class="sortable" data-sort="store_name">仕入先</th>
-                    <th>登録者</th>
-                    <th>最終更新者</th>
+                    <th class="sortable store-col" data-sort="store_name">仕入先</th>
+                    <th class="owner-col">登録者</th>
+                    <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
                     <th class="sortable" data-sort="purchase_price">卸価格</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
@@ -1100,7 +1128,12 @@
                         {% endif %}
                     </td>
                     <td>{{ item.kaika_product_code or '-' }}</td>
-                    <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td class="product-name-col">
+                        <strong>{{ item.product_name or '-' }}</strong>
+                        {% if item.notes %}
+                        <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;" title="{{ item.notes }}">メモ: {{ item.notes|truncate(36) }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
                     <td>
@@ -1109,9 +1142,9 @@
                             }}</span>
                         {% else %}-{% endif %}
                     </td>
-                    <td>{{ item.store_name or '-' }}</td>
-                    <td><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
-                    <td>{{ item.updated_by_name or '-' }}</td>
+                    <td class="store-col" title="{{ item.store_name or '-' }}">{{ item.store_name or '-' }}</td>
+                    <td class="owner-col"><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
+                    <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
                     <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
                     <td class="amount">
@@ -1200,6 +1233,9 @@
                 <div class="user-card-title">
                     <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
                     <h3>{{ item.product_name or '-' }}</h3>
+                    {% if item.notes %}
+                    <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;">メモ: {{ item.notes|truncate(48) }}</div>
+                    {% endif %}
                     <span class="user-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
                 </div>
                 <div class="user-card-status">
