@@ -460,7 +460,7 @@
 </style>
 <div class="page-actions">
     <div class="header-actions">
-        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-primary">編集</a>
+        <a href="{{ url_for('edit_item', id=item.id, back_url=back_url) }}" class="btn btn-primary">編集</a>
         <a href="{{ back_url }}" class="btn btn-secondary">一覧に戻る</a>
     </div>
 </div>

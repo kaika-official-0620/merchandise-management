@@ -2,6 +2,7 @@
 {% block title %}{{ user.display_name or user.username }}の商品一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <style>
     /* モバイル用カード表示 */
     .mobile-cards {
@@ -335,8 +336,8 @@
                     {% endif %}
                 </td>
                 <td class="action-cell">
-                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
-                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                    <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                     {% if item.can_delete %}
                     <button class="btn btn-sm btn-danger"
                         onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
@@ -402,8 +403,8 @@
         </div>
         <div class="card-footer">
             <div class="card-actions">
-                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
-                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 {% if item.can_delete %}
                 <button class="btn btn-sm btn-danger"
                     onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>

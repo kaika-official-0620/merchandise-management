@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }} - 株式会社 開花{% endblock %}
 
-{% macro request_card(req) %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% macro request_card(req, current_back_url) %}
 {% set purchase_price = req.purchase_price or 0 %}
 {% set confirmed_profit = (req.sale_price or 0) - purchase_price - (req.shipping_cost or 0) - (req.commission or 0) %}
 <article class="request-card {{ req.status }}">
@@ -38,11 +39,11 @@
             <div class="request-title-row">
                 <div>
                     <div class="request-product">
-                        <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank">{{ req.product_name or '商品名なし' }}</a>
+                        <a href="{{ url_for('view_item', id=req.merchandise_id, back_url=current_back_url) }}">{{ req.product_name or '商品名なし' }}</a>
                     </div>
                     <div class="request-sub">{{ req.brand_name or '-' }}</div>
                 </div>
-                <a href="{{ url_for('view_item', id=req.merchandise_id) }}" target="_blank" class="mini-link">商品詳細</a>
+                <a href="{{ url_for('view_item', id=req.merchandise_id, back_url=current_back_url) }}" class="mini-link">商品詳細</a>
             </div>
 
             <div class="request-meta">
@@ -296,7 +297,7 @@
         {% if current_requests %}
         <div class="requests-list">
             {% for req in current_requests %}
-            {{ request_card(req) }}
+                    {{ request_card(req, current_back_url) }}
             {% endfor %}
         </div>
         {% else %}

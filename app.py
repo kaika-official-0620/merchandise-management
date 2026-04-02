@@ -146,6 +146,46 @@ def inject_now():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def resolve_internal_back_url(candidate, fallback=''):
+    if not candidate:
+        return fallback
+
+    parsed = urlparse(candidate)
+    if parsed.scheme or parsed.netloc:
+        if not has_request_context():
+            return fallback
+        current_host = urlparse(request.host_url).netloc
+        if parsed.netloc != current_host:
+            return fallback
+
+    path = parsed.path or '/'
+    if not path.startswith('/'):
+        return fallback
+
+    normalized = path
+    if parsed.query:
+        normalized += f'?{parsed.query}'
+    if parsed.fragment:
+        normalized += f'#{parsed.fragment}'
+    return normalized
+
+def get_item_back_url(fallback):
+    explicit_back_url = resolve_internal_back_url(request.args.get('back_url', ''), '')
+    if explicit_back_url:
+        return explicit_back_url
+
+    referrer = resolve_internal_back_url(request.referrer or '', '')
+    if referrer:
+        referrer_path = urlparse(referrer).path
+        if not (
+            referrer_path.startswith('/view/')
+            or referrer_path.startswith('/edit/')
+            or referrer_path.startswith('/delete/')
+        ):
+            return referrer
+
+    return fallback
+
 # データベース設定（PostgreSQL or SQLite）
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -4779,6 +4819,10 @@ def edit_item(id):
             cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
     
     item = cur.fetchone()
+    if item is None:
+        flash('商品が見つかりません', 'error')
+        fallback_back_url = url_for('admin_items') if (current_user.is_admin() or current_user.is_owner()) else url_for('index')
+        return redirect(get_item_back_url(fallback_back_url))
     if not item:
         flash('商品が見つかりません', 'error')
         return redirect(url_for('index'))
@@ -5144,6 +5188,7 @@ def edit_item(id):
             
             # リダイレクト先を決定（フォームのhiddenフィールドから戻り先を取得）
             back_url = request.form.get('back_url', '')
+            back_url = resolve_internal_back_url(back_url, '')
             if back_url:
                 return redirect(back_url)
             
@@ -5165,6 +5210,9 @@ def edit_item(id):
             import traceback
             traceback.print_exc()
             flash(f'エラーが発生しました: {str(e)}', 'error')
+            retry_back_url = resolve_internal_back_url(request.form.get('back_url', ''), '')
+            if retry_back_url:
+                return redirect(url_for('edit_item', id=id, back_url=retry_back_url))
             return redirect(url_for('edit_item', id=id))
     
     cur.close()
@@ -5194,6 +5242,7 @@ def edit_item(id):
         back_url = url_for('admin_items')
     else:
         back_url = url_for('index')
+    back_url = get_item_back_url(back_url)
 
     return render_template('form.html', item=item_dict, back_url=back_url, fee_settings=get_fee_settings())
 
@@ -5220,6 +5269,10 @@ def view_item(id):
     cur.close()
     conn.close()
     
+    if item is None:
+        flash('商品が見つかりません', 'error')
+        fallback_back_url = url_for('admin_items') if (current_user.is_admin() or current_user.is_owner()) else url_for('index')
+        return redirect(get_item_back_url(fallback_back_url))
     if not item:
         flash('商品が見つかりません', 'error')
         return redirect(url_for('index'))
@@ -5270,6 +5323,7 @@ def view_item(id):
         back_url = url_for('admin_items')
     else:
         back_url = url_for('index')
+    back_url = get_item_back_url(back_url)
 
     return render_template('view.html', item=item_dict, back_url=back_url)
 
