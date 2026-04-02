@@ -406,6 +406,18 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
 }
 
+.sidebar-item-disabled {
+    display: flex;
+    align-items: center;
+    padding: 0.65rem 1.25rem 0.65rem 2rem;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
 /* サブカテゴリ（ネストされたカテゴリ） */
 .sidebar-subcategory {
     margin-bottom: 0.5rem;

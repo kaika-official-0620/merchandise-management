@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}発送依頼・取引完了受信BOX - 株式会社 開花{% endblock %}
+{% block title %}{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }} - 株式会社 開花{% endblock %}
 
 {% macro request_card(req) %}
 {% set purchase_price = req.purchase_price or 0 %}
@@ -9,7 +9,7 @@
         <div class="request-tags">
             <span class="request-kind {{ req.request_type }}">{{ req.request_type_label }}</span>
             <span class="request-status {{ req.status }}">
-                {% if req.status == 'pending' %}未処理{% elif req.status == 'approved' %}承認済み{% else %}却下{% endif %}
+                {% if req.status == 'pending' %}未対応{% elif req.status == 'approved' %}承認済み{% else %}差し戻し{% endif %}
             </span>
         </div>
         <div class="request-date">
@@ -50,32 +50,32 @@
                 <span>仕入額: <strong>¥{{ "{:,}".format(purchase_price) }}</strong></span>
             </div>
 
-            <div class="request-grid">
+            <div class="request-grid {% if req.request_type == 'shipping_request' %}shipping-grid{% endif %}">
                 {% if req.request_type == 'shipping_request' %}
                 <div class="info-box">
-                    <div class="label">送付画像</div>
+                    <div class="label">添付画像</div>
                     <div class="value">{{ (1 if req.qr_image_path else 0) + (1 if req.qr_image_path2 else 0) }}枚</div>
                 </div>
                 <div class="info-box">
                     <div class="label">確認内容</div>
-                    <div class="value small">商品画像 / 発送用QR</div>
+                    <div class="value small">売れた商品画像 / 発送用QR画像</div>
                 </div>
                 <div class="info-box">
                     <div class="label">承認後</div>
-                    <div class="value small">発送対応済み</div>
+                    <div class="value small">発送依頼済みに更新</div>
                 </div>
                 {% else %}
                 <div class="info-box">
                     <div class="label">売上金額</div>
-                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.sale_price or 0) }}{% else %}承認時に入力{% endif %}</div>
+                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.sale_price or 0) }}{% else %}画像確認後に入力{% endif %}</div>
                 </div>
                 <div class="info-box">
                     <div class="label">送料</div>
-                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.shipping_cost or 0) }}{% else %}画像確認{% endif %}</div>
+                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.shipping_cost or 0) }}{% else %}画像確認後に入力{% endif %}</div>
                 </div>
                 <div class="info-box">
                     <div class="label">手数料</div>
-                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.commission or 0) }}{% else %}画像確認{% endif %}</div>
+                    <div class="value">{% if req.status == 'approved' %}¥{{ "{:,}".format(req.commission or 0) }}{% else %}画像確認後に入力{% endif %}</div>
                 </div>
                 <div class="info-box">
                     <div class="label">利益見込み</div>
@@ -99,14 +99,18 @@
                 </button>
                 {% endif %}
                 <div class="attachment-help">
-                    {% if req.request_type == 'shipping_request' %}商品画像と発送用QRコード画像を確認できます。{% else %}取引完了画面と補足画像を確認できます。{% endif %}
+                    {% if req.request_type == 'shipping_request' %}
+                    売れた商品画像と発送用QR画像を確認できます。
+                    {% else %}
+                    取引完了画面や送料・手数料確認用の画像を確認できます。
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
 
             {% if req.status != 'pending' %}
             <div class="processed-info">
-                <span>処理者: <strong>{{ req.processor_display_name or req.processor_name or '-' }}</strong></span>
+                <span>対応者: <strong>{{ req.processor_display_name or req.processor_name or '-' }}</strong></span>
                 {% if req.admin_note %}<div class="admin-note">メモ: {{ req.admin_note }}</div>{% endif %}
             </div>
             {% endif %}
@@ -131,7 +135,7 @@
                 data-product-name="{{ req.product_name or '商品名なし' }}"
                 data-request-label="{{ req.request_type_label }}"
                 onclick="openRejectModal(this)">
-                却下する
+                差し戻す
             </button>
         </div>
         {% endif %}
@@ -140,16 +144,36 @@
 {% endmacro %}
 
 {% block content %}
+{% set current_requests = filtered_requests if filtered_requests is defined else (shipping_requests if active_box == 'shipping' else completion_requests) %}
+{% set box_counts = current_counts if current_counts is defined else (shipping_counts if active_box == 'shipping' else completion_counts) %}
 <style>
 .sale-requests-container{max-width:1280px;margin:0 auto}
-.stats-cards,.request-sections,.request-grid,.approve-preview{display:grid;gap:1rem}
-.stats-cards{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:1.5rem}
-.request-sections{grid-template-columns:repeat(2,minmax(0,1fr))}
-.stat-card,.request-section,.request-card,.empty-state,.modal-content{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 10px rgba(15,23,42,.08)}
+.page-tabs,.stats-cards,.request-grid,.approve-preview,.filter-grid{display:grid;gap:1rem}
+.page-tabs{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:1rem}
+.stats-cards{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:1.5rem}
+.tab-link,.stat-card,.request-section,.request-card,.empty-state,.modal-content{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 10px rgba(15,23,42,.08)}
+.tab-link{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.1rem;text-decoration:none;color:#0f172a;font-weight:700}
+.tab-link.active.shipping{border-color:#f59e0b;background:#fff7ed}
+.tab-link.active.completion{border-color:#3b82f6;background:#eff6ff}
+.tab-label{display:flex;align-items:center;gap:.6rem}
+.tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 .55rem;border-radius:999px;background:#ef4444;color:#fff;font-size:.8rem;font-weight:700}
 .stat-card{padding:1.1rem}
-.stat-card.pending{border-left:4px solid #f59e0b}.stat-card.approved{border-left:4px solid #10b981}.stat-card.rejected{border-left:4px solid #ef4444}
+.stat-card.pending{border-left:4px solid #f59e0b}.stat-card.approved{border-left:4px solid #10b981}.stat-card.rejected{border-left:4px solid #ef4444}.stat-card.total{border-left:4px solid #334155}
 .stat-label,.request-sub,.request-date,.attachment-help,.processed-info,.label{color:#64748b}
 .stat-value{font-size:2rem;font-weight:700;color:#0f172a}
+.filter-panel{margin-bottom:1.25rem;padding:1rem 1.1rem;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 10px rgba(15,23,42,.08)}
+.filter-panel-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}
+.filter-panel-head h3{margin:0 0 .2rem;font-size:1rem;color:#0f172a}
+.filter-panel-head p{margin:0;color:#64748b;font-size:.84rem}
+.filter-summary{display:inline-flex;align-items:center;justify-content:center;min-width:96px;padding:.55rem .8rem;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;color:#0f172a;font-size:.82rem;font-weight:700}
+.filter-grid{grid-template-columns:minmax(0,2.2fr) repeat(3,minmax(0,1fr))}
+.filter-field label{display:block;margin-bottom:.4rem;color:#334155;font-size:.8rem;font-weight:700}
+.filter-field input,.filter-field select{width:100%;padding:.75rem .85rem;border:1px solid #cbd5e1;border-radius:10px;box-sizing:border-box;background:#fff}
+.filter-actions{display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1rem}
+.btn-filter-submit,.btn-filter-clear{display:inline-flex;align-items:center;justify-content:center;padding:.75rem 1rem;border-radius:10px;font-weight:700;text-decoration:none;cursor:pointer}
+.btn-filter-submit{background:#0f172a;color:#fff;border:none}
+.btn-filter-clear{background:#fff;color:#475569;border:1px solid #cbd5e1}
+.request-section{overflow:hidden}
 .section-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;padding:1.1rem;border-bottom:1px solid #e2e8f0;background:#f8fafc}
 .section-head h2{margin:0 0 .25rem;font-size:1.08rem}.section-head p{margin:0;font-size:.84rem;color:#64748b}
 .section-pills{display:flex;gap:.45rem;flex-wrap:wrap;justify-content:flex-end}
@@ -170,6 +194,7 @@
 .request-product a,.mini-link{color:#0f172a;text-decoration:none}.request-product a{font-size:1.02rem;font-weight:700}.mini-link{padding:.45rem .75rem;background:#eff6ff;border-radius:8px;font-size:.8rem;font-weight:700;white-space:nowrap}
 .request-meta{display:flex;gap:.8rem 1.2rem;flex-wrap:wrap;margin-top:.7rem;font-size:.85rem;color:#475569}
 .request-grid{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:.9rem}
+.request-grid.shipping-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .info-box{padding:.8rem;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}.label{font-size:.74rem;margin-bottom:.25rem}.value{font-size:.92rem;font-weight:700;color:#0f172a}.value.small{font-size:.84rem;line-height:1.4}.value.positive{color:#047857}.value.negative{color:#b91c1c}
 .attachment-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.9rem;padding-top:.9rem;border-top:1px dashed #dbe2ea}
 .attachment-thumb{width:68px;height:68px;border-radius:10px}
@@ -185,56 +210,102 @@
 .approve-preview{display:none;grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:1rem}.approve-preview.open{display:grid}.preview-card{padding:.85rem;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.preview-label{display:block;font-size:.75rem;color:#64748b;margin-bottom:.25rem}.preview-value{display:block;font-size:1rem;font-weight:700;color:#0f172a}.preview-value.positive{color:#047857}.preview-value.negative{color:#b91c1c}
 .modal-footer{display:flex;gap:.75rem;border-top:1px solid #e2e8f0}.btn-cancel{background:#e2e8f0;border:none;color:#475569}
 .image-modal{flex-direction:column}.image-modal-content{max-width:92vw;max-height:78vh;border-radius:14px}.image-modal-close{position:absolute;top:18px;right:18px;width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;font-size:1.6rem}.image-modal-actions{margin-top:1rem;display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center}.image-modal-actions a{display:inline-flex;align-items:center;padding:.75rem 1rem;border-radius:10px;background:#fff;color:#0f172a;text-decoration:none;font-weight:700}
-@media (max-width:1100px){.request-sections{grid-template-columns:1fr}}
-@media (max-width:768px){.stats-cards,.request-grid,.approve-preview,.request-sections{grid-template-columns:1fr}.section-head,.request-card-head,.request-title-row{flex-direction:column;align-items:stretch}.section-pills{justify-content:flex-start}.request-card-body{grid-template-columns:1fr}.request-photo{width:100%;height:220px}.request-actions,.modal-footer{flex-direction:column}}
+@media (max-width:1100px){.stats-cards,.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:768px){.page-tabs,.stats-cards,.request-grid,.request-grid.shipping-grid,.approve-preview,.filter-grid{grid-template-columns:1fr}.filter-panel-head,.section-head,.request-card-head,.request-title-row{flex-direction:column;align-items:stretch}.section-pills{justify-content:flex-start}.request-card-body{grid-template-columns:1fr}.request-photo{width:100%;height:220px}.request-actions,.modal-footer,.filter-actions{flex-direction:column}.filter-summary{justify-content:flex-start}}
 </style>
 
-<div class="page-header"><h1>発送依頼BOX / 取引完了BOX</h1></div>
+<div class="page-header">
+    <h1>{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }}</h1>
+</div>
 
 <div class="sale-requests-container">
+    <div class="page-tabs">
+        <a href="{{ url_for('admin_shipping_requests') }}" class="tab-link shipping {% if active_box == 'shipping' %}active{% endif %}">
+            <span class="tab-label">発送依頼BOX</span>
+            <span class="tab-count">{{ shipping_counts.pending }}</span>
+        </a>
+        <a href="{{ url_for('admin_completion_requests') }}" class="tab-link completion {% if active_box == 'completion' %}active{% endif %}">
+            <span class="tab-label">取引完了BOX</span>
+            <span class="tab-count">{{ completion_counts.pending }}</span>
+        </a>
+    </div>
+
     <div class="stats-cards">
-        <div class="stat-card pending"><div class="stat-label">全体の未処理</div><div class="stat-value">{{ pending_count }}</div></div>
-        <div class="stat-card approved"><div class="stat-label">全体の承認済み</div><div class="stat-value">{{ approved_count }}</div></div>
-        <div class="stat-card rejected"><div class="stat-label">全体の却下</div><div class="stat-value">{{ rejected_count }}</div></div>
+        <div class="stat-card total"><div class="stat-label">全体件数</div><div class="stat-value">{{ current_requests|length }}</div></div>
+        <div class="stat-card pending"><div class="stat-label">未対応</div><div class="stat-value">{{ box_counts.pending }}</div></div>
+        <div class="stat-card approved"><div class="stat-label">承認済み</div><div class="stat-value">{{ box_counts.approved }}</div></div>
+        <div class="stat-card rejected"><div class="stat-label">差し戻し</div><div class="stat-value">{{ box_counts.rejected }}</div></div>
     </div>
 
-    <div class="request-sections">
-        <section class="request-section">
-            <div class="section-head">
-                <div><h2>発送依頼BOX</h2><p>商品画像と発送用QRコードを確認して承認します。</p></div>
-                <div class="section-pills">
-                    <span class="pill pending">未処理 {{ shipping_counts.pending }}</span>
-                    <span class="pill approved">承認 {{ shipping_counts.approved }}</span>
-                    <span class="pill rejected">却下 {{ shipping_counts.rejected }}</span>
-                </div>
+    <form method="GET" class="filter-panel">
+        <div class="filter-panel-head">
+            <div>
+                <h3>履歴の絞り込み</h3>
+                <p>商品名・ブランド名・申請者名・商品ID・ステータス・申請日で検索できます。</p>
             </div>
-            {% if shipping_requests %}
-            <div class="requests-list">{% for req in shipping_requests %}{{ request_card(req) }}{% endfor %}</div>
-            {% else %}
-            <div class="empty-state"><div class="empty-icon">📦</div><div>発送依頼はまだありません。</div></div>
-            {% endif %}
-        </section>
-
-        <section class="request-section">
-            <div class="section-head">
-                <div><h2>取引完了BOX</h2><p>取引完了画像を確認して売上・送料・手数料を確定します。</p></div>
-                <div class="section-pills">
-                    <span class="pill pending">未処理 {{ completion_counts.pending }}</span>
-                    <span class="pill approved">承認 {{ completion_counts.approved }}</span>
-                    <span class="pill rejected">却下 {{ completion_counts.rejected }}</span>
-                </div>
+            <div class="filter-summary">{{ current_requests|length }} 件表示</div>
+        </div>
+        <div class="filter-grid">
+            <div class="filter-field">
+                <label for="sale-request-q">キーワード</label>
+                <input id="sale-request-q" type="text" name="q" value="{{ filter_values.q if filter_values else '' }}" placeholder="商品名 / ブランド名 / 会員名 / 商品ID">
             </div>
-            {% if completion_requests %}
-            <div class="requests-list">{% for req in completion_requests %}{{ request_card(req) }}{% endfor %}</div>
-            {% else %}
-            <div class="empty-state"><div class="empty-icon">🧾</div><div>取引完了報告はまだありません。</div></div>
-            {% endif %}
-        </section>
-    </div>
+            <div class="filter-field">
+                <label for="sale-request-status">ステータス</label>
+                <select id="sale-request-status" name="status">
+                    <option value="">すべて</option>
+                    <option value="pending" {% if filter_values and filter_values.status == 'pending' %}selected{% endif %}>未対応</option>
+                    <option value="approved" {% if filter_values and filter_values.status == 'approved' %}selected{% endif %}>承認済み</option>
+                    <option value="rejected" {% if filter_values and filter_values.status == 'rejected' %}selected{% endif %}>差し戻し</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="sale-request-date-from">申請日 from</label>
+                <input id="sale-request-date-from" type="date" name="date_from" value="{{ filter_values.date_from if filter_values else '' }}">
+            </div>
+            <div class="filter-field">
+                <label for="sale-request-date-to">申請日 to</label>
+                <input id="sale-request-date-to" type="date" name="date_to" value="{{ filter_values.date_to if filter_values else '' }}">
+            </div>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn-filter-submit">絞り込む</button>
+            <a href="{{ url_for('admin_shipping_requests' if active_box == 'shipping' else 'admin_completion_requests') }}" class="btn-filter-clear">条件をクリア</a>
+        </div>
+    </form>
 
-    {% if not shipping_requests and not completion_requests %}
-    <div class="empty-state large"><div class="empty-icon">📭</div><div>会員からの発送依頼・取引完了報告はありません。</div></div>
-    {% endif %}
+    <section class="request-section">
+        <div class="section-head">
+            <div>
+                <h2>{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }}</h2>
+                <p>
+                    {% if active_box == 'shipping' %}
+                    売れた商品画像と発送用QR画像を確認して、発送依頼を承認できます。
+                    {% else %}
+                    取引完了画像を見ながら、売上・送料・手数料を確認して承認できます。
+                    {% endif %}
+                </p>
+            </div>
+            <div class="section-pills">
+                <span class="pill pending">未対応 {{ box_counts.pending }}</span>
+                <span class="pill approved">承認 {{ box_counts.approved }}</span>
+                <span class="pill rejected">差し戻し {{ box_counts.rejected }}</span>
+            </div>
+        </div>
+
+        {% if current_requests %}
+        <div class="requests-list">
+            {% for req in current_requests %}
+            {{ request_card(req) }}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">{% if active_box == 'shipping' %}📦{% else %}🧾{% endif %}</div>
+            <div>{% if active_box == 'shipping' %}発送依頼はまだありません。{% else %}取引完了報告はまだありません。{% endif %}</div>
+        </div>
+        {% endif %}
+    </section>
 </div>
 
 <div class="modal-overlay" id="approveModal">
@@ -244,6 +315,7 @@
             <button type="button" class="modal-close" onclick="closeModal('approveModal')">&times;</button>
         </div>
         <form method="POST" id="approveForm">
+            <input type="hidden" name="redirect_to" value="{{ request.path }}">
             <div class="modal-body">
                 <p id="approveProductName" style="margin:0 0 .5rem;font-weight:700;"></p>
                 <p id="approveModalHelp" style="margin:0 0 1rem;color:#64748b;"></p>
@@ -252,11 +324,11 @@
                     <div class="preview-card"><span class="preview-label">利益見込み</span><span class="preview-value" id="approveEstimatedProfitPreview">¥0</span></div>
                 </div>
                 <div id="approveCompletionFields" style="display:none;">
-                    <div class="form-group"><label for="approveSalePrice">確定売上金額（税込）</label><input type="number" id="approveSalePrice" name="approved_sale_price" min="1" placeholder="画像を確認して入力"></div>
-                    <div class="form-group"><label for="approveShippingCost">確定送料</label><input type="number" id="approveShippingCost" name="approved_shipping_cost" min="0" placeholder="画像を確認して入力"></div>
-                    <div class="form-group"><label for="approveCommission">確定手数料</label><input type="number" id="approveCommission" name="approved_commission" min="0" placeholder="画像を確認して入力"></div>
+                    <div class="form-group"><label for="approveSalePrice">売上金額</label><input type="number" id="approveSalePrice" name="approved_sale_price" min="1" placeholder="画像確認後に入力"></div>
+                    <div class="form-group"><label for="approveShippingCost">送料</label><input type="number" id="approveShippingCost" name="approved_shipping_cost" min="0" placeholder="画像確認後に入力"></div>
+                    <div class="form-group"><label for="approveCommission">手数料</label><input type="number" id="approveCommission" name="approved_commission" min="0" placeholder="画像確認後に入力"></div>
                 </div>
-                <div class="form-group"><label for="approveAdminNote">メモ（任意）</label><textarea id="approveAdminNote" name="admin_note" rows="3" placeholder="管理者メモを入力"></textarea></div>
+                <div class="form-group"><label for="approveAdminNote">管理メモ</label><textarea id="approveAdminNote" name="admin_note" rows="3" placeholder="確認内容を残せます"></textarea></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-cancel" onclick="closeModal('approveModal')">キャンセル</button>
@@ -269,17 +341,18 @@
 <div class="modal-overlay" id="rejectModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 id="rejectModalTitle">却下する</h3>
+            <h3 id="rejectModalTitle">差し戻す</h3>
             <button type="button" class="modal-close" onclick="closeModal('rejectModal')">&times;</button>
         </div>
         <form method="POST" id="rejectForm">
+            <input type="hidden" name="redirect_to" value="{{ request.path }}">
             <div class="modal-body">
                 <p id="rejectProductName" style="margin:0 0 1rem;font-weight:700;"></p>
-                <div class="form-group"><label for="rejectAdminNote">却下理由（任意）</label><textarea id="rejectAdminNote" name="admin_note" rows="3" placeholder="却下理由を入力"></textarea></div>
+                <div class="form-group"><label for="rejectAdminNote">差し戻し理由 / 管理メモ</label><textarea id="rejectAdminNote" name="admin_note" rows="3" placeholder="理由や確認内容を残せます"></textarea></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-cancel" onclick="closeModal('rejectModal')">キャンセル</button>
-                <button type="submit" class="btn btn-reject" style="background:#ef4444;color:#fff;">却下する</button>
+                <button type="submit" class="btn btn-reject" style="background:#ef4444;color:#fff;">差し戻す</button>
             </div>
         </form>
     </div>
@@ -325,8 +398,8 @@ function openApproveModal(button) {
     document.getElementById('approveModalTitle').textContent = requestLabel + 'を承認';
     document.getElementById('approveProductName').textContent = (button.dataset.productName || '商品') + ' / ' + requestLabel;
     document.getElementById('approveModalHelp').textContent = isCompletion
-        ? '画像を確認し、売上・送料・手数料を確定してから承認してください。'
-        : '商品画像と発送用QRコードを確認して承認してください。';
+        ? '画像を確認してから、売上金額・送料・手数料を入力して承認してください。'
+        : '売れた商品画像と発送用QR画像を確認して承認してください。';
     document.getElementById('approveAdminNote').value = '';
     document.getElementById('approveForm').action = '/admin/sale-request/' + requestId + '/approve';
     document.getElementById('approveCompletionFields').style.display = isCompletion ? 'block' : 'none';
@@ -342,7 +415,7 @@ function openApproveModal(button) {
 }
 
 function openRejectModal(button) {
-    document.getElementById('rejectModalTitle').textContent = (button.dataset.requestLabel || '発送依頼') + 'を却下';
+    document.getElementById('rejectModalTitle').textContent = (button.dataset.requestLabel || '発送依頼') + 'を差し戻す';
     document.getElementById('rejectProductName').textContent = (button.dataset.productName || '商品') + ' / ' + (button.dataset.requestLabel || '発送依頼');
     document.getElementById('rejectAdminNote').value = '';
     document.getElementById('rejectForm').action = '/admin/sale-request/' + button.dataset.requestId + '/reject';

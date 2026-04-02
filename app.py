@@ -2130,7 +2130,7 @@ class User(UserMixin):
         'shikiriosho': '精算書管理',
         'invoices': '買取明細書管理',
         'announcements': 'お知らせ管理',
-        'proxy_publish': '代行仕入れ公開',
+        'proxy_publish': '代行仕入れオークション掲載',
         'analytics': '分析',
         'backup': 'バックアップ'
     }
@@ -2289,6 +2289,29 @@ def build_user_from_record(user):
     )
 
 
+def get_all_admin_permission_keys():
+    return list(User.ADMIN_PERMISSION_OPTIONS.keys())
+
+
+def normalize_submitted_admin_permissions(role, selected_permissions):
+    if role != 'admin':
+        return None
+
+    valid_permissions = [
+        permission for permission in (selected_permissions or [])
+        if permission in User.ADMIN_PERMISSION_OPTIONS
+    ]
+
+    if not valid_permissions:
+        valid_permissions = get_all_admin_permission_keys()
+
+    return json.dumps(valid_permissions, ensure_ascii=False)
+
+
+def render_permission_denied(message, title='権限が付与されていません'):
+    return render_template('permission_denied.html', title=title, message=message), 403
+
+
 def ensure_proxy_publish_permission_seeded():
     """既存の管理者権限設定に代行仕入れ公開権限を後方互換で追加"""
     conn = None
@@ -2358,8 +2381,7 @@ def get_proxy_publish_denied_response(json_response=False):
     message = '代行仕入れの掲載・公開権限がありません'
     if json_response:
         return jsonify({'success': False, 'error': message}), 403
-    flash(message, 'error')
-    return redirect(url_for('index'))
+    return render_permission_denied(message)
 
 
 def resolve_default_proxy_auction_id(item_id=None):
@@ -2484,8 +2506,7 @@ def permission_required(permission):
                 flash('ログインが必要です', 'error')
                 return redirect(url_for('login'))
             if not current_user.has_permission(permission):
-                flash(f'この機能へのアクセス権限がありません', 'error')
-                return redirect(url_for('index'))
+                return render_permission_denied('この機能へのアクセス権限がありません')
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -5830,7 +5851,7 @@ def admin_add_user():
         
         # 管理者権限の設定を取得
         admin_permissions = request.form.getlist('admin_permissions')
-        admin_permissions_json = json.dumps(admin_permissions) if admin_permissions else None
+        admin_permissions_json = normalize_submitted_admin_permissions(role, admin_permissions)
         
         # オーナー権限の付与はオーナーのみ
         if role == 'owner' and not current_user.is_owner():
@@ -5906,7 +5927,7 @@ def admin_edit_user(id):
         
         # 管理者権限の設定を取得
         admin_permissions = request.form.getlist('admin_permissions')
-        admin_permissions_json = json.dumps(admin_permissions) if admin_permissions else None
+        admin_permissions_json = normalize_submitted_admin_permissions(role, admin_permissions)
         
         # 自分の権限は変更不可
         if id == current_user.id:
@@ -5981,7 +6002,7 @@ def admin_edit_user(id):
         except:
             user_dict['admin_permissions_list'] = []
     else:
-        user_dict['admin_permissions_list'] = []
+        user_dict['admin_permissions_list'] = get_all_admin_permission_keys() if user_dict.get('role') == 'admin' else []
     
     return render_template('admin/user_form.html', user=user_dict, permission_options=User.ADMIN_PERMISSION_OPTIONS)
 
@@ -20368,12 +20389,103 @@ def get_pending_sale_request_count():
         return 0
 
 
+def get_pending_sale_request_count_by_type(request_type):
+    request_type = normalize_sale_request_type(request_type)
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute(
+                "SELECT COUNT(*) FROM sale_requests WHERE status = 'pending' AND request_type = %s",
+                (request_type,)
+            )
+        else:
+            cur.execute(
+                "SELECT COUNT(*) FROM sale_requests WHERE status = 'pending' AND request_type = ?",
+                (request_type,)
+            )
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
 def get_sale_request_status_counts(requests_list):
     return {
         'pending': sum(1 for req in requests_list if req.get('status') == 'pending'),
         'approved': sum(1 for req in requests_list if req.get('status') == 'approved'),
         'rejected': sum(1 for req in requests_list if req.get('status') == 'rejected'),
     }
+
+
+def parse_sale_request_created_at(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().replace('T', ' ')
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M:%S', '%Y/%m/%d %H:%M'):
+            try:
+                return datetime.strptime(normalized, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def filter_sale_requests(requests_list, filters):
+    keyword = (filters.get('q') or '').strip().lower()
+    status = (filters.get('status') or '').strip()
+    date_from_raw = (filters.get('date_from') or '').strip()
+    date_to_raw = (filters.get('date_to') or '').strip()
+
+    date_from = None
+    date_to = None
+
+    if date_from_raw:
+        try:
+            date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
+        except ValueError:
+            date_from = None
+
+    if date_to_raw:
+        try:
+            date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
+        except ValueError:
+            date_to = None
+
+    filtered = []
+    for req in requests_list:
+        if status and req.get('status') != status:
+            continue
+
+        created_at = parse_sale_request_created_at(req.get('created_at'))
+        created_date = created_at.date() if created_at else None
+        if date_from and created_date and created_date < date_from:
+            continue
+        if date_to and created_date and created_date > date_to:
+            continue
+        if (date_from or date_to) and created_date is None:
+            continue
+
+        if keyword:
+            haystacks = [
+                req.get('product_name') or '',
+                req.get('brand_name') or '',
+                req.get('user_display_name') or '',
+                req.get('username') or '',
+                req.get('request_type_label') or '',
+                str(req.get('merchandise_id') or ''),
+            ]
+            combined = ' '.join(haystacks).lower()
+            if keyword not in combined:
+                continue
+
+        filtered.append(req)
+
+    return filtered
 
 
 def notify_admins_of_sale_request(item_dict, request_type):
@@ -20438,7 +20550,10 @@ def notify_admins_of_sale_request(item_dict, request_type):
 # テンプレートで使えるようにコンテキストプロセッサに追加
 @app.context_processor
 def inject_sale_request_count():
-    return dict(get_pending_sale_request_count=get_pending_sale_request_count)
+    return dict(
+        get_pending_sale_request_count=get_pending_sale_request_count,
+        get_pending_sale_request_count_by_type=get_pending_sale_request_count_by_type,
+    )
 
 # ユーザー：売却申請送信
 @app.route('/sale-request/submit/<int:item_id>', methods=['POST'])
@@ -20568,27 +20683,19 @@ def submit_sale_request(item_id):
     
     return redirect(url_for('index'))
 
-# 管理者：発送商品受信BOX（売却申請一覧）
-@app.route('/admin/sale-requests')
-@login_required
-def admin_sale_requests():
-    if not current_user.is_admin():
-        flash('管理者権限が必要です', 'error')
-        return redirect(url_for('index'))
-    
+def load_admin_sale_requests_data():
     requests_list = []
     shipping_requests = []
     completion_requests = []
     pending_count = 0
     approved_count = 0
     rejected_count = 0
-    
+
     try:
         conn = get_db()
-        
+
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # メインクエリ
             cur.execute('''
                 SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
                        u.username, u.display_name as user_display_name,
@@ -20602,8 +20709,7 @@ def admin_sale_requests():
                     sr.created_at DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
-            
-            # 統計情報
+
             cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
             pending_count = cur.fetchone()['count']
             cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'approved'")
@@ -20625,15 +20731,14 @@ def admin_sale_requests():
                     sr.created_at DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
-            
-            # 統計情報
+
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
             pending_count = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'approved'")
             approved_count = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
             rejected_count = cur.fetchone()[0]
-        
+
         for req in requests_list:
             req['request_type'] = normalize_sale_request_type(req.get('request_type'))
             req['request_type_label'] = get_sale_request_type_label(req['request_type'])
@@ -20645,30 +20750,80 @@ def admin_sale_requests():
         cur.close()
         conn.close()
     except Exception as e:
-        # テーブルが存在しない場合など - 空のリストを返す
         print(f"Error in admin_sale_requests: {e}")
         import traceback
         traceback.print_exc()
-    
-    return render_template('admin/sale_requests.html', 
-                         requests=requests_list,
-                         shipping_requests=shipping_requests,
-                         completion_requests=completion_requests,
-                         shipping_counts=get_sale_request_status_counts(shipping_requests),
-                         completion_counts=get_sale_request_status_counts(completion_requests),
-                         pending_count=pending_count,
-                         approved_count=approved_count,
-                         rejected_count=rejected_count)
+
+    return {
+        'requests': requests_list,
+        'shipping_requests': shipping_requests,
+        'completion_requests': completion_requests,
+        'shipping_counts': get_sale_request_status_counts(shipping_requests),
+        'completion_counts': get_sale_request_status_counts(completion_requests),
+        'pending_count': pending_count,
+        'approved_count': approved_count,
+        'rejected_count': rejected_count,
+    }
+
+
+@app.route('/admin/sale-requests')
+@login_required
+def admin_sale_requests():
+    if not current_user.is_admin():
+        return render_permission_denied('管理者権限が必要です')
+    return redirect(url_for('admin_shipping_requests'))
+
+
+@app.route('/admin/sale-requests/shipping')
+@login_required
+def admin_shipping_requests():
+    if not current_user.is_admin():
+        return render_permission_denied('管理者権限が必要です')
+
+    view_data = load_admin_sale_requests_data()
+    filters = {
+        'q': request.args.get('q', '').strip(),
+        'status': request.args.get('status', '').strip(),
+        'date_from': request.args.get('date_from', '').strip(),
+        'date_to': request.args.get('date_to', '').strip(),
+    }
+    filtered_requests = filter_sale_requests(view_data['shipping_requests'], filters)
+    view_data['filtered_requests'] = filtered_requests
+    view_data['current_counts'] = get_sale_request_status_counts(filtered_requests)
+    view_data['filter_values'] = filters
+    view_data['active_box'] = 'shipping'
+    return render_template('admin/sale_requests.html', **view_data)
+
+
+@app.route('/admin/sale-requests/completion')
+@login_required
+def admin_completion_requests():
+    if not current_user.is_admin():
+        return render_permission_denied('管理者権限が必要です')
+
+    view_data = load_admin_sale_requests_data()
+    filters = {
+        'q': request.args.get('q', '').strip(),
+        'status': request.args.get('status', '').strip(),
+        'date_from': request.args.get('date_from', '').strip(),
+        'date_to': request.args.get('date_to', '').strip(),
+    }
+    filtered_requests = filter_sale_requests(view_data['completion_requests'], filters)
+    view_data['filtered_requests'] = filtered_requests
+    view_data['current_counts'] = get_sale_request_status_counts(filtered_requests)
+    view_data['filter_values'] = filters
+    view_data['active_box'] = 'completion'
+    return render_template('admin/sale_requests.html', **view_data)
 
 # 管理者：売却申請承認
 @app.route('/admin/sale-request/<int:request_id>/approve', methods=['POST'])
 @login_required
 def approve_sale_request(request_id):
     if not current_user.is_admin():
-        flash('管理者権限が必要です', 'error')
-        return redirect(url_for('index'))
+        return render_permission_denied('管理者権限が必要です')
     
     admin_note = request.form.get('admin_note', '')
+    redirect_to = request.form.get('redirect_to') or request.referrer or url_for('admin_shipping_requests')
     approved_sale_price_input = request.form.get('approved_sale_price', type=int)
     approved_shipping_cost_input = request.form.get('approved_shipping_cost', type=int)
     approved_commission_input = request.form.get('approved_commission', type=int)
@@ -20691,7 +20846,7 @@ def approve_sale_request(request_id):
             if not sale_request:
                 flash('申請が見つかりません', 'error')
                 conn.close()
-                return redirect(url_for('admin_sale_requests'))
+                return redirect(redirect_to)
             
             request_type = normalize_sale_request_type(sale_request.get('request_type'))
             sale_price = sale_request['sale_price']
@@ -20714,11 +20869,11 @@ def approve_sale_request(request_id):
                 if approved_sale_price <= 0:
                     flash('取引完了報告を承認するには売上金額を入力してください', 'error')
                     conn.close()
-                    return redirect(url_for('admin_sale_requests'))
+                    return redirect(redirect_to)
                 if approved_shipping_cost < 0 or approved_commission < 0:
                     flash('送料と手数料は0以上で入力してください', 'error')
                     conn.close()
-                    return redirect(url_for('admin_sale_requests'))
+                    return redirect(redirect_to)
             
             cur = conn.cursor()
             cur.execute('''
@@ -20771,7 +20926,7 @@ def approve_sale_request(request_id):
                 flash('申請が見つかりません', 'error')
                 cur.close()
                 conn.close()
-                return redirect(url_for('admin_sale_requests'))
+                return redirect(redirect_to)
             
             request_type = normalize_sale_request_type(sale_request['request_type'])
             sale_price = sale_request['sale_price']
@@ -20795,12 +20950,12 @@ def approve_sale_request(request_id):
                     flash('取引完了報告を承認するには売上金額を入力してください', 'error')
                     cur.close()
                     conn.close()
-                    return redirect(url_for('admin_sale_requests'))
+                    return redirect(redirect_to)
                 if approved_shipping_cost < 0 or approved_commission < 0:
                     flash('送料と手数料は0以上で入力してください', 'error')
                     cur.close()
                     conn.close()
-                    return redirect(url_for('admin_sale_requests'))
+                    return redirect(redirect_to)
             
             cur.execute('''
                 UPDATE sale_requests 
@@ -20850,17 +21005,17 @@ def approve_sale_request(request_id):
         traceback.print_exc()
         flash(f'承認処理でエラーが発生しました: {str(e)}', 'error')
     
-    return redirect(url_for('admin_sale_requests'))
+    return redirect(redirect_to)
 
 # 管理者：売却申請却下
 @app.route('/admin/sale-request/<int:request_id>/reject', methods=['POST'])
 @login_required
 def reject_sale_request(request_id):
     if not current_user.is_admin():
-        flash('管理者権限が必要です', 'error')
-        return redirect(url_for('index'))
+        return render_permission_denied('管理者権限が必要です')
     
     admin_note = request.form.get('admin_note', '')
+    redirect_to = request.form.get('redirect_to') or request.referrer or url_for('admin_shipping_requests')
     
     conn = get_db()
     request_type = 'shipping_request'
@@ -20892,7 +21047,7 @@ def reject_sale_request(request_id):
     conn.close()
     
     flash(get_sale_request_messages(request_type)['admin_reject_success'], 'info')
-    return redirect(url_for('admin_sale_requests'))
+    return redirect(redirect_to)
 
 # ユーザー：売却申請の修正
 @app.route('/sale-request/edit/<int:request_id>', methods=['POST'])

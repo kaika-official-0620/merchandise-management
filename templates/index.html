@@ -1629,6 +1629,64 @@
         box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
     }
 
+    .sale-request-action-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        width: 100%;
+    }
+
+    .sale-request-complete-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 0.42rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        line-height: 1.2;
+        box-sizing: border-box;
+    }
+
+    .sale-request-complete-badge.shipping {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #c2410c;
+    }
+
+    .sale-request-complete-badge.completion {
+        background: #eff6ff;
+        border: 1px solid #93c5fd;
+        color: #1d4ed8;
+    }
+
+    .btn-shipping-request {
+        background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
+    }
+
+    .btn-shipping-request:hover {
+        background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+        box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
+    }
+
+    .btn-completion-request {
+        background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%) !important;
+    }
+
+    .btn-completion-request:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #1d4ed8 100%) !important;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-edit-shipping-request {
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+    }
+
+    .btn-edit-completion-request {
+        background: linear-gradient(135deg, #0f766e 0%, #0f766e 100%) !important;
+    }
+
     /* 売却申請モーダル */
     .sale-request-modal {
         display: none;
@@ -1694,6 +1752,32 @@
         margin-bottom: 1.5rem;
         font-weight: 600;
         color: #1e293b;
+    }
+
+    .sale-request-inline-message {
+        display: none;
+        margin: 0 0 1rem;
+        padding: 0.8rem 0.95rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        font-weight: 600;
+    }
+
+    .sale-request-inline-message.show {
+        display: block;
+    }
+
+    .sale-request-inline-message.error {
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        color: #b91c1c;
+    }
+
+    .sale-request-inline-message.success {
+        background: #ecfdf5;
+        border: 1px solid #6ee7b7;
+        color: #047857;
     }
 
     .sale-request-form .form-group {
@@ -1792,6 +1876,14 @@
 
     .sale-request-footer .btn-submit:hover {
         background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    }
+
+    .sale-request-footer .btn-submit.is-loading,
+    .sale-request-footer .btn-submit:disabled {
+        opacity: 0.72;
+        cursor: wait;
+        transform: none !important;
+        box-shadow: none !important;
     }
 
     /* スマホ用フィルター */
@@ -2273,25 +2365,52 @@
                         <span class="badge badge-waiting">承認待ち</span>
                         {% endif %}
                         {% elif item.pending_completion_request %}
-                        <button type="button" class="btn btn-sm btn-edit-request"
-                            onclick="event.preventDefault(); event.stopPropagation(); openEditRequestModal({{ item.completion_request.id }}, 'completion_report', '{{ item.product_name|e }}', {{ item.completion_request.sale_price or 0 }}, {{ item.completion_request.shipping_cost or 0 }}, {{ item.completion_request.commission or 0 }}, '{{ item.completion_request.qr_image_path or '' }}', '{{ item.completion_request.qr_image_path2 or '' }}')">
-                            完了報告を修正
-                        </button>
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
+                            <button type="button" class="btn btn-sm btn-edit-request btn-edit-completion-request js-sale-request-trigger"
+                                data-action="edit"
+                                data-request-id="{{ item.completion_request.id }}"
+                                data-request-type="completion_report"
+                                data-product-name="{{ item.product_name or '' }}"
+                                data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                                data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                                data-commission="{{ item.completion_request.commission or 0 }}"
+                                data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                                data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
+                                取引完了報告を修正
+                            </button>
+                        </div>
                         {% elif item.can_send_completion_report %}
-                        <button type="button" class="btn btn-sm btn-sale-request"
-                            onclick="event.preventDefault(); event.stopPropagation(); openCompletionRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                        <button type="button" class="btn btn-sm btn-sale-request btn-completion-request js-sale-request-trigger"
+                            data-action="create-completion"
+                            data-item-id="{{ item.id }}"
+                            data-product-name="{{ item.product_name or '' }}"
+                            data-listing-price="{{ item.listing_price or 0 }}">
                             取引完了報告
                         </button>
                         {% elif item.pending_shipping_request %}
-                        {# 送信済みの場合は修正ボタン #}
-                        <button type="button" class="btn btn-sm btn-edit-request"
-                            onclick="event.preventDefault(); event.stopPropagation(); openEditRequestModal({{ item.shipping_request.id }}, 'shipping_request', '{{ item.product_name|e }}', 0, 0, 0, '{{ item.shipping_request.qr_image_path or '' }}', '{{ item.shipping_request.qr_image_path2 or '' }}')">
-                            発送依頼を修正
-                        </button>
+                        {# 送信済みの場合は完了表示 + 修正ボタン #}
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge shipping">発送依頼送信済み</span>
+                            <button type="button" class="btn btn-sm btn-edit-request btn-edit-shipping-request js-sale-request-trigger"
+                                data-action="edit"
+                                data-request-id="{{ item.shipping_request.id }}"
+                                data-request-type="shipping_request"
+                                data-product-name="{{ item.product_name or '' }}"
+                                data-sale-price="0"
+                                data-shipping-cost="0"
+                                data-commission="0"
+                                data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                                data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
+                                発送依頼を修正
+                            </button>
+                        </div>
                         {% else %}
                         {# 未送信の場合は新規送信ボタン #}
-                        <button type="button" class="btn btn-sm btn-sale-request"
-                            onclick="event.preventDefault(); event.stopPropagation(); openShippingRequestModal({{ item.id }}, '{{ item.product_name|e }}')">
+                        <button type="button" class="btn btn-sm btn-sale-request btn-shipping-request js-sale-request-trigger"
+                            data-action="create-shipping"
+                            data-item-id="{{ item.id }}"
+                            data-product-name="{{ item.product_name or '' }}">
                             発送依頼を送る
                         </button>
                         {% endif %}
@@ -2446,25 +2565,52 @@
                 <span class="badge badge-waiting">承認待ち</span>
                 {% endif %}
                 {% elif item.pending_completion_request %}
-                <button type="button" class="btn btn-sm btn-edit-request"
-                    onclick="event.preventDefault(); event.stopPropagation(); openEditRequestModal({{ item.completion_request.id }}, 'completion_report', '{{ item.product_name|e }}', {{ item.completion_request.sale_price or 0 }}, {{ item.completion_request.shipping_cost or 0 }}, {{ item.completion_request.commission or 0 }}, '{{ item.completion_request.qr_image_path or '' }}', '{{ item.completion_request.qr_image_path2 or '' }}')">
-                    完了報告を修正
-                </button>
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
+                    <button type="button" class="btn btn-sm btn-edit-request btn-edit-completion-request js-sale-request-trigger"
+                        data-action="edit"
+                        data-request-id="{{ item.completion_request.id }}"
+                        data-request-type="completion_report"
+                        data-product-name="{{ item.product_name or '' }}"
+                        data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                        data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                        data-commission="{{ item.completion_request.commission or 0 }}"
+                        data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                        data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
+                        取引完了報告を修正
+                    </button>
+                </div>
                 {% elif item.can_send_completion_report %}
-                <button type="button" class="btn btn-sm btn-sale-request"
-                    onclick="event.preventDefault(); event.stopPropagation(); openCompletionRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
+                <button type="button" class="btn btn-sm btn-sale-request btn-completion-request js-sale-request-trigger"
+                    data-action="create-completion"
+                    data-item-id="{{ item.id }}"
+                    data-product-name="{{ item.product_name or '' }}"
+                    data-listing-price="{{ item.listing_price or 0 }}">
                     取引完了報告
                 </button>
                 {% elif item.pending_shipping_request %}
-                {# 送信済みの場合は修正ボタン #}
-                <button type="button" class="btn btn-sm btn-edit-request"
-                    onclick="event.preventDefault(); event.stopPropagation(); openEditRequestModal({{ item.shipping_request.id }}, 'shipping_request', '{{ item.product_name|e }}', 0, 0, 0, '{{ item.shipping_request.qr_image_path or '' }}', '{{ item.shipping_request.qr_image_path2 or '' }}')">
-                    発送依頼を修正
-                </button>
+                {# 送信済みの場合は完了表示 + 修正ボタン #}
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge shipping">発送依頼送信済み</span>
+                    <button type="button" class="btn btn-sm btn-edit-request btn-edit-shipping-request js-sale-request-trigger"
+                        data-action="edit"
+                        data-request-id="{{ item.shipping_request.id }}"
+                        data-request-type="shipping_request"
+                        data-product-name="{{ item.product_name or '' }}"
+                        data-sale-price="0"
+                        data-shipping-cost="0"
+                        data-commission="0"
+                        data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                        data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
+                        発送依頼を修正
+                    </button>
+                </div>
                 {% else %}
                 {# 未送信の場合は新規送信ボタン #}
-                <button type="button" class="btn btn-sm btn-sale-request"
-                    onclick="event.preventDefault(); event.stopPropagation(); openShippingRequestModal({{ item.id }}, '{{ item.product_name|e }}')">
+                <button type="button" class="btn btn-sm btn-sale-request btn-shipping-request js-sale-request-trigger"
+                    data-action="create-shipping"
+                    data-item-id="{{ item.id }}"
+                    data-product-name="{{ item.product_name or '' }}">
                     発送依頼を送る
                 </button>
                 {% endif %}
@@ -2937,6 +3083,62 @@
         if (uploadName) uploadName.textContent = '';
     }
 
+    function setSaleRequestMessage(prefix, message, type = 'error') {
+        const messageEl = document.getElementById(prefix + 'InlineMessage');
+        if (!messageEl) return;
+
+        if (!message) {
+            messageEl.textContent = '';
+            messageEl.className = 'sale-request-inline-message';
+            return;
+        }
+
+        messageEl.textContent = message;
+        messageEl.className = 'sale-request-inline-message show ' + type;
+    }
+
+    function setSaleRequestSubmitting(prefix, isSubmitting) {
+        const submitButton = document.getElementById(prefix + 'SubmitLabel');
+        if (!submitButton) return;
+
+        if (!submitButton.dataset.defaultLabel) {
+            submitButton.dataset.defaultLabel = submitButton.textContent;
+        }
+
+        submitButton.disabled = isSubmitting;
+        submitButton.classList.toggle('is-loading', isSubmitting);
+        submitButton.textContent = isSubmitting
+            ? (prefix === 'editRequest' ? '保存中...' : '送信中...')
+            : submitButton.dataset.defaultLabel;
+    }
+
+    function validateSaleRequestSubmission(prefix) {
+        const requestType = (document.getElementById(prefix + 'Type') || {}).value || 'shipping_request';
+        const imageInput1 = document.getElementById(prefix + 'QrImage');
+        const imageInput2 = document.getElementById(prefix + 'QrImage2');
+        const currentImage1 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage' : '');
+        const currentImage2 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage2' : '');
+        const hasExistingImage1 = currentImage1 && currentImage1.dataset.hasImage === 'true';
+        const hasExistingImage2 = currentImage2 && currentImage2.dataset.hasImage === 'true';
+        const hasNewImage1 = !!(imageInput1 && imageInput1.files && imageInput1.files.length);
+        const hasNewImage2 = !!(imageInput2 && imageInput2.files && imageInput2.files.length);
+        const hasImage1 = hasNewImage1 || hasExistingImage1;
+        const hasImage2 = hasNewImage2 || hasExistingImage2;
+
+        if (requestType === 'shipping_request') {
+            if (!hasImage1 || !hasImage2) {
+                setSaleRequestMessage(prefix, '発送依頼では「売れた商品画像」と「発送用QR画像」の2枚が必要です。');
+                return false;
+            }
+        } else if (!hasImage1) {
+            setSaleRequestMessage(prefix, '取引完了報告では、取引完了画面の画像を1枚以上選択してください。');
+            return false;
+        }
+
+        setSaleRequestMessage(prefix, '');
+        return true;
+    }
+
     function toggleSaleRequestFinancialFields(prefix, showFinancials) {
         ['Price', 'Shipping', 'Commission'].forEach((fieldName) => {
             const group = document.getElementById(prefix + fieldName + 'Group');
@@ -2944,9 +3146,12 @@
             if (!group || !input) return;
 
             group.style.display = showFinancials ? '' : 'none';
+            input.disabled = !showFinancials;
             input.required = showFinancials && fieldName === 'Price';
             if (!showFinancials) {
-                input.value = 0;
+                input.value = '';
+            } else if (!input.value) {
+                input.value = fieldName === 'Price' ? '' : 0;
             }
         });
     }
@@ -2974,17 +3179,18 @@
         if (imageLabel1) imageLabel1.textContent = config.image1;
         if (imageLabel2) imageLabel2.textContent = config.image2;
         if (imageHint) imageHint.textContent = config.imageHint;
-        if (imageInput1) imageInput1.required = isCreateMode && !!config.primaryRequired;
-        if (imageInput2) imageInput2.required = isCreateMode && !!config.requireSecondImage;
 
         toggleSaleRequestFinancialFields(prefix, config.showFinancials);
 
         if (priceInput && config.showFinancials) priceInput.value = listingPrice || '';
         if (shippingInput && config.showFinancials) shippingInput.value = shippingInput.value || 0;
         if (commissionInput && config.showFinancials) commissionInput.value = commissionInput.value || 0;
+        setSaleRequestSubmitting(prefix, false);
+        setSaleRequestMessage(prefix, '');
     }
 
     function openShippingRequestModal(itemId, productName) {
+        document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
         document.getElementById('saleRequestItemId').value = itemId;
         document.getElementById('saleRequestProductName').textContent = productName;
         document.getElementById('saleRequestQrImage').value = '';
@@ -2996,6 +3202,7 @@
     }
 
     function openCompletionRequestModal(itemId, productName, listingPrice) {
+        document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
         document.getElementById('saleRequestItemId').value = itemId;
         document.getElementById('saleRequestProductName').textContent = productName;
         document.getElementById('saleRequestQrImage').value = '';
@@ -3014,6 +3221,8 @@
     }
 
     function closeSaleRequestModal() {
+        setSaleRequestSubmitting('saleRequest', false);
+        setSaleRequestMessage('saleRequest', '');
         document.getElementById('saleRequestModal').classList.remove('open');
     }
 
@@ -3041,17 +3250,21 @@
         if (qrImagePath) {
             currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
             currentImage.style.display = 'block';
+            currentImage.dataset.hasImage = 'true';
         } else {
             currentImage.innerHTML = '';
             currentImage.style.display = 'none';
+            currentImage.dataset.hasImage = 'false';
         }
 
         if (qrImagePath2) {
             currentImage2.innerHTML = '<img src="/static/' + qrImagePath2 + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
             currentImage2.style.display = 'block';
+            currentImage2.dataset.hasImage = 'true';
         } else {
             currentImage2.innerHTML = '';
             currentImage2.style.display = 'none';
+            currentImage2.dataset.hasImage = 'false';
         }
 
         document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
@@ -3059,8 +3272,53 @@
     }
 
     function closeEditRequestModal() {
+        setSaleRequestSubmitting('editRequest', false);
+        setSaleRequestMessage('editRequest', '');
         document.getElementById('editRequestModal').classList.remove('open');
     }
+
+    document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('.js-sale-request-trigger');
+        if (!trigger) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const action = trigger.dataset.action;
+        const itemId = Number(trigger.dataset.itemId || 0);
+        const requestId = Number(trigger.dataset.requestId || 0);
+        const productName = trigger.dataset.productName || '';
+        const listingPrice = Number(trigger.dataset.listingPrice || 0);
+        const salePrice = Number(trigger.dataset.salePrice || 0);
+        const shippingCost = Number(trigger.dataset.shippingCost || 0);
+        const commission = Number(trigger.dataset.commission || 0);
+        const qrImagePath = trigger.dataset.qrImagePath || '';
+        const qrImagePath2 = trigger.dataset.qrImagePath2 || '';
+        const requestType = trigger.dataset.requestType || 'shipping_request';
+
+        if (action === 'create-shipping') {
+            openShippingRequestModal(itemId, productName);
+            return;
+        }
+
+        if (action === 'create-completion') {
+            openCompletionRequestModal(itemId, productName, listingPrice);
+            return;
+        }
+
+        if (action === 'edit') {
+            openEditRequestModal(
+                requestId,
+                requestType,
+                productName,
+                salePrice,
+                shippingCost,
+                commission,
+                qrImagePath,
+                qrImagePath2
+            );
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', function () {
         function setupFileUpload(inputId, areaId, textId, nameId, selectedText) {
@@ -3075,6 +3333,11 @@
                         uploadArea.classList.add('has-file');
                         uploadText.textContent = selectedText;
                         uploadName.textContent = this.files[0].name;
+                        if (inputId.startsWith('saleRequest')) {
+                            setSaleRequestMessage('saleRequest', '');
+                        } else if (inputId.startsWith('editRequest')) {
+                            setSaleRequestMessage('editRequest', '');
+                        }
                     } else {
                         uploadArea.classList.remove('has-file');
                         uploadName.textContent = '';
@@ -3106,6 +3369,28 @@
         setupFileUpload('saleRequestQrImage2', 'fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '選択済み');
         setupFileUpload('editRequestQrImage', 'editFileUploadArea', 'editFileUploadText', 'editFileUploadName', '新しい画像を選択済み');
         setupFileUpload('editRequestQrImage2', 'editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', '新しい画像を選択済み');
+
+        const saleRequestForm = document.getElementById('saleRequestForm');
+        if (saleRequestForm) {
+            saleRequestForm.addEventListener('submit', function (event) {
+                if (!validateSaleRequestSubmission('saleRequest')) {
+                    event.preventDefault();
+                    return;
+                }
+                setSaleRequestSubmitting('saleRequest', true);
+            });
+        }
+
+        const editRequestForm = document.getElementById('editRequestForm');
+        if (editRequestForm) {
+            editRequestForm.addEventListener('submit', function (event) {
+                if (!validateSaleRequestSubmission('editRequest')) {
+                    event.preventDefault();
+                    return;
+                }
+                setSaleRequestSubmitting('editRequest', true);
+            });
+        }
     });
 
     document.getElementById('saleRequestModal')?.addEventListener('click', function (e) {
@@ -3127,15 +3412,15 @@
     <div class="sale-request-content">
         <div class="sale-request-header">
             <h3 id="saleRequestTitle">📦 発送依頼を送る</h3>
-            <button class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
+            <button type="button" class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
         </div>
-        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm"
-            onsubmit="this.action='/sale-request/submit/' + document.getElementById('saleRequestItemId').value;">
+        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm">
             <input type="hidden" id="saleRequestItemId" name="item_id" value="">
             <input type="hidden" id="saleRequestType" name="request_type" value="shipping_request">
             <div class="sale-request-body">
                 <div class="sale-request-product" id="saleRequestProductName"></div>
                 <p class="sale-request-help" id="saleRequestHelp">発送依頼では「何の商品が売れたか分かる画像」と「発送用QRコード画像」の2点を送ってください。</p>
+                <div class="sale-request-inline-message" id="saleRequestInlineMessage"></div>
 
                 <div class="sale-request-form">
                     <div class="form-group" id="saleRequestPriceGroup" style="display: none;">
@@ -3196,7 +3481,7 @@
     <div class="sale-request-content" style="background: white;">
         <div class="sale-request-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
             <h3 id="editRequestTitle">📝 発送依頼の修正</h3>
-            <button class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+            <button type="button" class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
         </div>
         <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
             <input type="hidden" id="editRequestId" name="request_id" value="">
@@ -3204,6 +3489,7 @@
             <div class="sale-request-body">
                 <div class="sale-request-product" id="editRequestProductName"></div>
                 <p class="sale-request-help" id="editRequestHelp">発送依頼または取引完了報告の画像を修正できます。</p>
+                <div class="sale-request-inline-message" id="editRequestInlineMessage"></div>
 
                 <div class="sale-request-form">
                     <div class="form-group" id="editRequestPriceGroup" style="display: none;">
@@ -3226,7 +3512,7 @@
 
                     <div class="form-group">
                         <label>現在の画像1</label>
-                        <div id="editCurrentImage" style="margin-bottom: 10px; display: none;"></div>
+                        <div id="editCurrentImage" data-has-image="false" style="margin-bottom: 10px; display: none;"></div>
                     </div>
 
                     <div class="form-group">
@@ -3243,7 +3529,7 @@
 
                     <div class="form-group">
                         <label>現在の画像2</label>
-                        <div id="editCurrentImage2" style="margin-bottom: 10px; display: none;"></div>
+                        <div id="editCurrentImage2" data-has-image="false" style="margin-bottom: 10px; display: none;"></div>
                     </div>
 
                     <div class="form-group">
