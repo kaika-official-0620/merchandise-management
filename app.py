@@ -2130,6 +2130,7 @@ class User(UserMixin):
         'shikiriosho': '精算書管理',
         'invoices': '買取明細書管理',
         'announcements': 'お知らせ管理',
+        'proxy_publish': '代行仕入れ公開',
         'analytics': '分析',
         'backup': 'バックアップ'
     }
@@ -2244,6 +2245,10 @@ class User(UserMixin):
             'user': 'ユーザー'
         }
         return role_names.get(self.role, self.role)
+
+    def can_manage_proxy_service(self):
+        """代行仕入れの公開・掲載管理ができるか"""
+        return self.has_permission('proxy_publish')
     
     def get_permissions_display(self):
         """権限の表示用リストを取得"""
@@ -2282,6 +2287,144 @@ def build_user_from_record(user):
         subscription_status,
         proxy_service_budget
     )
+
+
+def ensure_proxy_publish_permission_seeded():
+    """既存の管理者権限設定に代行仕入れ公開権限を後方互換で追加"""
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT id, admin_permissions
+                FROM users
+                WHERE role = 'admin' AND admin_permissions IS NOT NULL
+            """)
+            rows = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, admin_permissions
+                FROM users
+                WHERE role = 'admin' AND admin_permissions IS NOT NULL
+            """)
+            rows = [dict(row) for row in cur.fetchall()]
+
+        updated_count = 0
+        for row in rows:
+            raw_permissions = row.get('admin_permissions')
+            if not raw_permissions:
+                continue
+            try:
+                permissions = json.loads(raw_permissions) if isinstance(raw_permissions, str) else list(raw_permissions)
+            except Exception:
+                continue
+
+            if not isinstance(permissions, list) or 'proxy_publish' in permissions:
+                continue
+
+            permissions.append('proxy_publish')
+            updated_permissions = json.dumps(permissions, ensure_ascii=False)
+            if DATABASE_URL:
+                cur.execute(
+                    "UPDATE users SET admin_permissions = %s WHERE id = %s",
+                    (updated_permissions, row['id'])
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET admin_permissions = ? WHERE id = ?",
+                    (updated_permissions, row['id'])
+                )
+            updated_count += 1
+
+        if updated_count:
+            conn.commit()
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[WARN] ensure_proxy_publish_permission_seeded failed: {e}")
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+
+
+def get_proxy_publish_denied_response(json_response=False):
+    message = '代行仕入れの掲載・公開権限がありません'
+    if json_response:
+        return jsonify({'success': False, 'error': message}), 403
+    flash(message, 'error')
+    return redirect(url_for('index'))
+
+
+def resolve_default_proxy_auction_id(item_id=None):
+    """商品一覧の簡易掲載ボタン用に既定の公開先オークションを決定する"""
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if item_id is not None:
+                cur.execute("SELECT auction_id FROM merchandise WHERE id = %s", (item_id,))
+                item_row = cur.fetchone()
+                if item_row and item_row.get('auction_id'):
+                    auction_id = item_row.get('auction_id')
+                    cur.close()
+                    conn.close()
+                    return auction_id, None
+
+            cur.execute("""
+                SELECT id, is_public
+                FROM proxy_service_settings
+                ORDER BY CASE WHEN is_public THEN 0 ELSE 1 END, id DESC
+            """)
+            auctions = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            if item_id is not None:
+                cur.execute("SELECT auction_id FROM merchandise WHERE id = ?", (item_id,))
+                item_row = cur.fetchone()
+                if item_row and item_row['auction_id']:
+                    auction_id = item_row['auction_id']
+                    cur.close()
+                    conn.close()
+                    return auction_id, None
+
+            cur.execute("""
+                SELECT id, is_public
+                FROM proxy_service_settings
+                ORDER BY CASE WHEN is_public = 1 THEN 0 ELSE 1 END, id DESC
+            """)
+            auctions = [dict(row) for row in cur.fetchall()]
+
+        cur.close()
+        conn.close()
+
+        if not auctions:
+            return None, '代行仕入れ公開先のオークションがまだ作成されていません'
+
+        public_auctions = [auction for auction in auctions if auction.get('is_public')]
+        if len(public_auctions) == 1:
+            return public_auctions[0]['id'], None
+        if len(auctions) == 1:
+            return auctions[0]['id'], None
+        if len(public_auctions) > 1:
+            return None, '公開中のオークションが複数あります。代行仕入れ管理画面から掲載先を選んでください'
+        return None, 'オークションが複数あります。代行仕入れ管理画面から掲載先を選んでください'
+    except Exception as e:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        print(f"[WARN] resolve_default_proxy_auction_id failed: {e}")
+        return None, '掲載先オークションの判定中にエラーが発生しました'
 
 def get_user_record_by_username(username):
     conn = get_db()
@@ -2393,6 +2536,7 @@ def get_active_announcements():
 
 # データベース初期化
 init_db()
+ensure_proxy_publish_permission_seeded()
 
 # デバッグ: どのDBを使用しているか表示
 if DATABASE_URL:
@@ -6852,6 +6996,9 @@ def admin_proxy_service():
     if not (current_user.is_owner() or current_user.is_admin()):
         flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
     
     try:
         conn = get_db()
@@ -6963,6 +7110,9 @@ def admin_proxy_service_create():
     if not (current_user.is_owner() or current_user.is_admin()):
         flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
     
     conn = get_db()
     
@@ -7029,8 +7179,18 @@ def admin_proxy_service_detail(auction_id):
     if not (current_user.is_owner() or current_user.is_admin()):
         flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
     
     try:
+        summary = {
+            'active_count': 0,
+            'sold_count': 0,
+            'bid_entry_count': 0,
+            'participated_item_count': 0,
+            'fixed_purchase_count': 0,
+        }
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -7056,11 +7216,13 @@ def admin_proxy_service_detail(auction_id):
             # このオークションに掲載中の商品を取得
             cur.execute("""
                 SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       COALESCE(up.display_name, up.username, '未設定') as published_by_name,
                        (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
                        (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
                        (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
+                LEFT JOIN users up ON m.updated_by = up.id
                 WHERE m.auction_id = %s AND m.sale_date IS NULL
                 ORDER BY m.id DESC
             """, (auction_id,))
@@ -7090,6 +7252,34 @@ def admin_proxy_service_detail(auction_id):
                 LIMIT 100
             """, (auction_id,))
             available_items = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END), 0) as active_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END), 0) as sold_count
+                FROM merchandise
+                WHERE auction_id = %s
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as bid_entry_count,
+                       COUNT(DISTINCT merchandise_id) as participated_item_count
+                FROM proxy_service_bids
+                WHERE merchandise_id IN (
+                    SELECT id FROM merchandise WHERE auction_id = %s
+                )
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as fixed_purchase_count
+                FROM merchandise
+                WHERE auction_id = %s
+                  AND sale_date IS NOT NULL
+                  AND sales_destination LIKE %s
+            """, (auction_id, '即決購入:%'))
+            summary.update(dict(cur.fetchone() or {}))
         else:
             import sqlite3
             cur = conn.cursor()
@@ -7116,11 +7306,13 @@ def admin_proxy_service_detail(auction_id):
             # このオークションに掲載中の商品を取得
             cur.execute("""
                 SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       COALESCE(up.display_name, up.username, '未設定') as published_by_name,
                        (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
                        (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
                        (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
+                LEFT JOIN users up ON m.updated_by = up.id
                 WHERE m.auction_id = ? AND m.sale_date IS NULL
                 ORDER BY m.id DESC
             """, (auction_id,))
@@ -7150,6 +7342,34 @@ def admin_proxy_service_detail(auction_id):
                 LIMIT 100
             """, (auction_id,))
             available_items = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END), 0) as active_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END), 0) as sold_count
+                FROM merchandise
+                WHERE auction_id = ?
+            """, (auction_id,))
+            summary = dict(cur.fetchone() or {})
+
+            cur.execute("""
+                SELECT COUNT(*) as bid_entry_count,
+                       COUNT(DISTINCT merchandise_id) as participated_item_count
+                FROM proxy_service_bids
+                WHERE merchandise_id IN (
+                    SELECT id FROM merchandise WHERE auction_id = ?
+                )
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as fixed_purchase_count
+                FROM merchandise
+                WHERE auction_id = ?
+                  AND sale_date IS NOT NULL
+                  AND sales_destination LIKE ?
+            """, (auction_id, '即決購入:%'))
+            summary.update(dict(cur.fetchone() or {}))
         
         cur.close()
         conn.close()
@@ -7160,6 +7380,7 @@ def admin_proxy_service_detail(auction_id):
                              items=[dict(i) for i in items],
                              bids=[dict(b) for b in bids],
                              available_items=[dict(i) for i in available_items],
+                             summary=summary,
                              auction_id=auction_id)
     except Exception as e:
         import traceback
@@ -7174,6 +7395,9 @@ def admin_proxy_service_delete(auction_id):
     """オークション削除"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
     
     conn = get_db()
     if DATABASE_URL:
@@ -7202,6 +7426,9 @@ def admin_proxy_service_settings(auction_id):
     if not (current_user.is_owner() or current_user.is_admin()):
         flash('この機能はオーナーまたは管理者のみ利用可能です', 'error')
         return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
     
     is_public = request.form.get('is_public') == 'on'
     auction_name = request.form.get('auction_name', 'オークション')
@@ -7255,16 +7482,15 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
     """商品の代行サービス表示フラグを切り替え（特定オークション用）"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
     
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         # 管理画面に表示できる商品は、管理者・オーナーとも掲載操作を許可する
-        if current_user.is_owner() or current_user.is_admin():
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s", (item_id,))
-        else:
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s AND user_id = %s",
-                       (item_id, current_user.id))
+        cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s", (item_id,))
         item = cur.fetchone()
         
         if not item:
@@ -7272,28 +7498,52 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
         
         # トグル: このオークションに属していたら外す、属していなければ追加
         if item['auction_id'] == auction_id:
-            cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s", (item_id,))
+            cur.execute("""
+                UPDATE merchandise
+                SET show_in_proxy_service = FALSE,
+                    auction_id = NULL,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (current_user.id, item_id))
             new_value = False
         else:
-            cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s", (auction_id, item_id))
+            cur.execute("""
+                UPDATE merchandise
+                SET show_in_proxy_service = TRUE,
+                    auction_id = %s,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (auction_id, current_user.id, item_id))
             new_value = True
     else:
         cur = conn.cursor()
-        if current_user.is_owner() or current_user.is_admin():
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ?", (item_id,))
-        else:
-            cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ? AND user_id = ?",
-                       (item_id, current_user.id))
+        cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ?", (item_id,))
         item = cur.fetchone()
         
         if not item:
             return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
         
         if item[1] == auction_id:
-            cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ?", (item_id,))
+            cur.execute("""
+                UPDATE merchandise
+                SET show_in_proxy_service = 0,
+                    auction_id = NULL,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (current_user.id, item_id))
             new_value = False
         else:
-            cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ?", (auction_id, item_id))
+            cur.execute("""
+                UPDATE merchandise
+                SET show_in_proxy_service = 1,
+                    auction_id = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (auction_id, current_user.id, item_id))
             new_value = True
     
     conn.commit()
@@ -7302,12 +7552,28 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
     
     return jsonify({'success': True, 'new_value': new_value})
 
+@app.route('/admin/proxy-service/toggle-item/<int:item_id>', methods=['POST'])
+@login_required
+def admin_proxy_service_toggle_item_quick(item_id):
+    """商品一覧の簡易掲載ボタン用トグル"""
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    auction_id, error_message = resolve_default_proxy_auction_id(item_id=item_id)
+    if not auction_id:
+        return jsonify({'success': False, 'error': error_message}), 400
+
+    return admin_proxy_service_toggle_item(auction_id, item_id)
+
 @app.route('/admin/proxy-service/<int:auction_id>/bulk-toggle', methods=['POST'])
 @login_required
 def admin_proxy_service_bulk_toggle(auction_id):
     """複数商品の代行サービス表示フラグを一括切り替え"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
     
     data = request.get_json()
     item_ids = data.get('item_ids', [])
@@ -7324,17 +7590,23 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
-                    if current_user.is_owner() or current_user.is_admin():
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s", (auction_id, item_id))
-                    else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = TRUE, auction_id = %s WHERE id = %s AND user_id = %s",
-                                   (auction_id, item_id, current_user.id))
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET show_in_proxy_service = TRUE,
+                            auction_id = %s,
+                            updated_by = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (auction_id, current_user.id, item_id))
                 else:
-                    if current_user.is_owner() or current_user.is_admin():
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s", (item_id,))
-                    else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = FALSE, auction_id = NULL WHERE id = %s AND user_id = %s",
-                                   (item_id, current_user.id))
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET show_in_proxy_service = FALSE,
+                            auction_id = NULL,
+                            updated_by = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (current_user.id, item_id))
                 updated_count += cur.rowcount
             except:
                 pass
@@ -7343,17 +7615,23 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
-                    if current_user.is_owner() or current_user.is_admin():
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ?", (auction_id, item_id))
-                    else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 1, auction_id = ? WHERE id = ? AND user_id = ?",
-                                   (auction_id, item_id, current_user.id))
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET show_in_proxy_service = 1,
+                            auction_id = ?,
+                            updated_by = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (auction_id, current_user.id, item_id))
                 else:
-                    if current_user.is_owner() or current_user.is_admin():
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ?", (item_id,))
-                    else:
-                        cur.execute("UPDATE merchandise SET show_in_proxy_service = 0, auction_id = NULL WHERE id = ? AND user_id = ?",
-                                   (item_id, current_user.id))
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET show_in_proxy_service = 0,
+                            auction_id = NULL,
+                            updated_by = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (current_user.id, item_id))
                 updated_count += cur.rowcount
             except:
                 pass
@@ -7462,14 +7740,25 @@ def admin_proxy_service_finalize(auction_id):
     """オークション終了・落札確定処理（特定オークション用）"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
     
     conn = get_db()
     finalized_count = 0
+    already_sold_count = 0
+    unmatched_count = 0
     today = datetime.now().strftime('%Y-%m-%d')
     now = datetime.now()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT COUNT(*) as count
+            FROM merchandise
+            WHERE auction_id = %s AND sale_date IS NOT NULL
+        """, (auction_id,))
+        already_sold_count = (cur.fetchone() or {}).get('count', 0)
         
         # このオークションで入札がある商品を取得（商品の全情報も取得）
         cur.execute("""
@@ -7481,6 +7770,7 @@ def admin_proxy_service_finalize(auction_id):
             WHERE m.auction_id = %s AND m.sale_date IS NULL
         """, (auction_id,))
         items = cur.fetchall()
+        pending_item_count = len(items)
         
         for item in items:
             if item['winner_user_id'] and item['winning_bid']:
@@ -7555,8 +7845,15 @@ def admin_proxy_service_finalize(auction_id):
         
         # このオークションを非公開に
         cur.execute("UPDATE proxy_service_settings SET is_public = FALSE WHERE id = %s", (auction_id,))
+        unmatched_count = max(0, pending_item_count - finalized_count)
     else:
         cur = conn.cursor()
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM merchandise
+            WHERE auction_id = ? AND sale_date IS NOT NULL
+        """, (auction_id,))
+        already_sold_count = cur.fetchone()[0]
         
         # このオークションで入札がある商品を取得（商品の全情報も取得）
         cur.execute("""
@@ -7568,6 +7865,7 @@ def admin_proxy_service_finalize(auction_id):
             WHERE m.auction_id = ? AND m.sale_date IS NULL
         """, (auction_id,))
         items = cur.fetchall()
+        pending_item_count = len(items)
         
         for item in items:
             item_dict = dict(item)
@@ -7644,6 +7942,7 @@ def admin_proxy_service_finalize(auction_id):
         
         # このオークションを非公開に
         cur.execute("UPDATE proxy_service_settings SET is_public = 0 WHERE id = ?", (auction_id,))
+        unmatched_count = max(0, pending_item_count - finalized_count)
     
     conn.commit()
     cur.close()
@@ -7651,8 +7950,10 @@ def admin_proxy_service_finalize(auction_id):
     
     return jsonify({
         'success': True, 
-        'message': f'{finalized_count}件の商品を落札者に割り当てました。計算書を送信待ちに追加しました。',
-        'finalized_count': finalized_count
+        'message': f'落札確定 {finalized_count}件 / 即決購入済み {already_sold_count}件 / 成約なし {unmatched_count}件 を反映しました。',
+        'finalized_count': finalized_count,
+        'already_sold_count': already_sold_count,
+        'unmatched_count': unmatched_count
     })
 
 @app.route('/admin/auction-keisan')
@@ -8358,6 +8659,10 @@ def proxy_service_purchase():
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
         
         purchase_price = item['listing_price'] or 0
+        if purchase_price <= 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -8484,6 +8789,10 @@ def proxy_service_purchase():
             return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
         purchase_price = item_dict.get('listing_price') or 0
+        if purchase_price <= 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -20058,6 +20367,74 @@ def get_pending_sale_request_count():
     except Exception as e:
         return 0
 
+
+def get_sale_request_status_counts(requests_list):
+    return {
+        'pending': sum(1 for req in requests_list if req.get('status') == 'pending'),
+        'approved': sum(1 for req in requests_list if req.get('status') == 'approved'),
+        'rejected': sum(1 for req in requests_list if req.get('status') == 'rejected'),
+    }
+
+
+def notify_admins_of_sale_request(item_dict, request_type):
+    """発送依頼・取引完了報告をLINE連携済み管理者へ通知"""
+    request_type = normalize_sale_request_type(request_type)
+    request_label = get_sale_request_type_label(request_type)
+    requester_name = current_user.display_name or current_user.username
+    product_name = item_dict.get('product_name') or '商品'
+    item_id = item_dict.get('id')
+
+    message = f"""【{request_label}通知】
+
+{requester_name}さんから {request_label} が届きました。
+
+商品名: {product_name}
+商品ID: {item_id}
+依頼種別: {request_label}
+
+管理画面の受信BOXから確認してください。"""
+
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT line_user_id
+                FROM users
+                WHERE role IN ('admin', 'owner')
+                  AND line_user_id IS NOT NULL
+            """)
+            admins = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT line_user_id
+                FROM users
+                WHERE role IN ('admin', 'owner')
+                  AND line_user_id IS NOT NULL
+            """)
+            admins = [dict(row) for row in cur.fetchall()]
+
+        for admin in admins:
+            line_id = admin.get('line_user_id')
+            if line_id:
+                try:
+                    send_line_push(line_id, message)
+                except Exception as line_error:
+                    print(f"[WARN] sale request LINE notify failed: {line_error}")
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[WARN] notify_admins_of_sale_request failed: {e}")
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 # テンプレートで使えるようにコンテキストプロセッサに追加
 @app.context_processor
 def inject_sale_request_count():
@@ -20173,6 +20550,8 @@ def submit_sale_request(item_id):
         conn.commit()
         cur.close()
         conn.close()
+
+        notify_admins_of_sale_request(item_dict, request_type)
         
         flash(get_sale_request_messages(request_type)['user_submit_success'], 'success')
     except Exception as e:
@@ -20198,6 +20577,8 @@ def admin_sale_requests():
         return redirect(url_for('index'))
     
     requests_list = []
+    shipping_requests = []
+    completion_requests = []
     pending_count = 0
     approved_count = 0
     rejected_count = 0
@@ -20258,6 +20639,9 @@ def admin_sale_requests():
             req['request_type_label'] = get_sale_request_type_label(req['request_type'])
             req['commission'] = req.get('commission') or 0
 
+        shipping_requests = [req for req in requests_list if req.get('request_type') == 'shipping_request']
+        completion_requests = [req for req in requests_list if req.get('request_type') == 'completion_report']
+
         cur.close()
         conn.close()
     except Exception as e:
@@ -20268,6 +20652,10 @@ def admin_sale_requests():
     
     return render_template('admin/sale_requests.html', 
                          requests=requests_list,
+                         shipping_requests=shipping_requests,
+                         completion_requests=completion_requests,
+                         shipping_counts=get_sale_request_status_counts(shipping_requests),
+                         completion_counts=get_sale_request_status_counts(completion_requests),
                          pending_count=pending_count,
                          approved_count=approved_count,
                          rejected_count=rejected_count)

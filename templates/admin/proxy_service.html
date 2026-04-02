@@ -15,6 +15,29 @@
 </div>
 
 <div class="proxy-admin-container">
+    <div class="summary-card-grid">
+        <div class="summary-card">
+            <span class="summary-card-label">公開中</span>
+            <strong class="summary-card-value">{{ summary.active_count or 0 }}件</strong>
+        </div>
+        <div class="summary-card">
+            <span class="summary-card-label">成約済み</span>
+            <strong class="summary-card-value">{{ summary.sold_count or 0 }}件</strong>
+        </div>
+        <div class="summary-card">
+            <span class="summary-card-label">入札件数</span>
+            <strong class="summary-card-value">{{ summary.bid_entry_count or 0 }}件</strong>
+        </div>
+        <div class="summary-card">
+            <span class="summary-card-label">入札あり商品</span>
+            <strong class="summary-card-value">{{ summary.participated_item_count or 0 }}件</strong>
+        </div>
+        <div class="summary-card">
+            <span class="summary-card-label">即決購入</span>
+            <strong class="summary-card-value">{{ summary.fixed_purchase_count or 0 }}件</strong>
+        </div>
+    </div>
+
     <!-- 設定フォーム -->
     <div class="settings-card">
         <h2>基本設定</h2>
@@ -167,7 +190,7 @@
                  data-name="{{ (item.product_name or '')|lower }}"
                  data-brand="{{ (item.brand_name or '')|lower }}"
                  data-owner="{{ item.owner_name }}"
-                 data-has-bid="{{ 'yes' if item.highest_bid else 'no' }}">
+                 data-has-bid="{{ 'yes' if item.bid_count else 'no' }}">
                 <div class="item-photo">
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
@@ -179,19 +202,28 @@
                     <div class="item-name">{{ item.product_name or '-' }}</div>
                     <div class="item-brand">{{ item.brand_name or '-' }}</div>
                     <div class="item-start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
-                    {% if item.highest_bid %}
+                    {% if item.bid_count %}
                     <div class="item-bid-info">
-                        <span class="bid-amount">最高入札: ¥{{ "{:,}".format(item.highest_bid) }}</span>
+                        <span class="bid-amount">
+                            {% if item.highest_bid %}
+                            最高入札: ¥{{ "{:,}".format(item.highest_bid) }}
+                            {% else %}
+                            入札あり
+                            {% endif %}
+                        </span>
                         <span class="bid-count">({{ item.bid_count }}件)</span>
                     </div>
-                    <div class="item-bidder">入札者: {{ item.highest_bidder }}</div>
+                    {% if item.highest_bidder %}
+                    <div class="item-bidder">最高入札者: {{ item.highest_bidder }}</div>
+                    {% endif %}
                     {% else %}
                     <div class="item-no-bid">入札なし</div>
                     {% endif %}
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                    <div class="item-owner">掲載者: {{ item.published_by_name or '未設定' }}</div>
                 </div>
                 <div class="item-actions">
-                    <button class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
+                    <button type="button" class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
                         公開解除
                     </button>
                 </div>
@@ -275,7 +307,7 @@
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
                 </div>
                 <div class="item-actions">
-                    <button class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
                         掲載する
                     </button>
                 </div>
@@ -786,6 +818,33 @@
     gap: 0.5rem;
 }
 
+/* サマリー */
+.summary-card-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.summary-card {
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.summary-card-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 0.35rem;
+}
+
+.summary-card-value {
+    font-size: 1.45rem;
+    color: #1e293b;
+}
+
 /* 一括操作バー */
 .bulk-action-bar {
     display: flex;
@@ -960,11 +1019,19 @@
     .proxy-admin-container {
         grid-template-columns: 1fr;
     }
+
+    .summary-card-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 768px) {
     .proxy-items-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .summary-card-grid {
+        grid-template-columns: 1fr;
     }
 }
 </style>
