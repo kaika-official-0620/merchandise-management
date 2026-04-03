@@ -8,6 +8,31 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1a1a2e">
+    <style>
+        .history-back-bar {
+            margin-bottom: 0.9rem;
+        }
+
+        .history-back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            background: #fff;
+            color: #475569;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-back-button:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+    </style>
     <!-- PWA / ホーム画面追加時の設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -63,8 +88,22 @@
             <button class="sidebar-close" onclick="toggleSidebar()">×</button>
         </div>
         <div class="sidebar-nav">
+            {% if current_user.is_admin() %}
+            <div class="sidebar-group-label">ホーム</div>
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika', 'user_analytics'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    全体売上管理
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika', 'user_analytics'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">全体売上管理</a>
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー管理分析</a>
+                </div>
+            </div>
+            {% endif %}
             <!-- ========== ユーザー機能 ========== -->
-            <div class="sidebar-group-label">ユーザー機能</div>
+            <div class="sidebar-group-label">ユーザー管理</div>
             
             {% if current_user.is_admin() %}
             <!-- 管理者用：書類 -->
@@ -168,14 +207,14 @@
             <!-- データ確認 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint == 'user_analytics' %}active{% endif %}" onclick="toggleCategory(this)">
-                    データ確認
+                    ユーザー管理分析
                     <span class="category-arrow">▼</span>
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint == 'user_analytics' %}open{% endif %}">
                     {% if current_user.is_admin() %}
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー全体の分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント別分析</a>
                     {% else %}
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">マイ分析</a>
                     {% endif %}
                 </div>
             </div>
@@ -292,14 +331,13 @@
             
             <!-- データ確認 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    データ確認
+                <button class="sidebar-category-toggle {% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}" onclick="toggleCategory(this)">
+                    開花分析
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint == 'admin_analytics_kaika' %}open{% endif %}">
                     {% if current_user.has_permission('analytics') %}
-                    <a href="{{ url_for('admin_analytics') }}" class="{% if request.endpoint == 'admin_analytics' %}active{% endif %}">すべてのアカウントの分析</a>
-                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花（管理者）の分析</a>
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理の分析</a>
                     {% else %}
                     <span class="sidebar-item-disabled">分析権限が付与されていません</span>
                     {% endif %}
@@ -361,6 +399,7 @@
     {% endif %}
     
     <main class="container">
+        {% set history_back_fallback = url_for('admin_items') if current_user.is_authenticated and current_user.is_admin() else (url_for('index') if current_user.is_authenticated else url_for('login')) %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -372,6 +411,18 @@
             {% endif %}
         {% endwith %}
         
+        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] %}
+        {% if not hide_history_back %}
+        <div class="history-back-bar">
+            <button
+                type="button"
+                class="history-back-button"
+                onclick="try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && window.history.length > 1) { window.history.back(); } else { window.location.href='{{ history_back_fallback }}'; } } catch (error) { window.location.href='{{ history_back_fallback }}'; }">
+                ← 1つ前の画面に戻る
+            </button>
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
     

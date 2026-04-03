@@ -641,10 +641,11 @@
                     {% set type_names = [] %}
                     {% for st in sale_types %}
                         {% if st == 'photo_packing' %}{% set _ = type_names.append('撮影梱包等代行') %}
-                        {% elif st == 'wholesale' %}{% set _ = type_names.append('業者卸販売') %}
-                        {% elif st == 'multi_listing' %}{% set _ = type_names.append('同時出品') %}
-                        {% elif st == 'auction' %}{% set _ = type_names.append('オークション流し') %}
-                        {% elif st == 'normal' %}{% set _ = type_names.append('通常') %}
+                        {% elif st == 'wholesale' %}{% set _ = type_names.append('業者販売') %}
+                        {% elif st == 'multi_listing' %}{% set _ = type_names.append('ライブコマース') %}
+                        {% elif st == 'live_commerce' %}{% set _ = type_names.append('ライブコマース') %}
+                        {% elif st == 'auction' %}{% set _ = type_names.append('オークション販売') %}
+                        {% elif st == 'normal' %}{% set _ = type_names.append('通常販売') %}
                         {% endif %}
                     {% endfor %}
                     {{ type_names|join(' + ') }}
@@ -653,7 +654,7 @@
                 <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
                 <dt>送料</dt>
                 <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
-                <dt>販売先（メモ）</dt>
+                    <dt>販売先</dt>
                 <dd>{{ item.sales_destination or '-' }}</dd>
                 <dt>手数料</dt>
                 <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>

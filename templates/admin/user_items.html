@@ -114,6 +114,51 @@
         color: #ef4444;
     }
 
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+        color: inherit;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        font-size: 0.72rem;
+        line-height: 1.6;
+        color: #475569;
+        white-space: nowrap;
+    }
+
+    .fee-breakdown-note {
+        color: #94a3b8;
+        font-size: 0.68rem;
+    }
+
+    .admin-table th.fee-col,
+    .admin-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .admin-table th.shipping-col,
+    .admin-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
+    }
+
     .card-footer {
         padding: 8px 12px;
         background: #f8fafc;
@@ -292,10 +337,11 @@
                 <th>商品名</th>
                 <th>店舗名</th>
                 <th>仕入日</th>
-                <th>仕入額</th>
-                <th>出品価格</th>
-                <th>売上金</th>
-                <th>利益</th>
+                <th>仕入れ額</th>
+                <th class="fee-col">手数料</th>
+                <th class="shipping-col">送料</th>
+                <th>売上</th>
+                <th>最終利益</th>
                 <th>状態</th>
                 <th>操作</th>
             </tr>
@@ -314,9 +360,26 @@
                 <td><strong>{{ item.product_name or '-' }}</strong></td>
                 <td>{{ item.store_name or '-' }}</td>
                 <td>{{ item.purchase_date or '-' }}</td>
-                <td>¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
-                <td>¥{{ "{:,}".format(item.listing_price or 0) }}</td>
-                <td>{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{% else %}-{% endif %}</td>
+                <td>¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                <td class="fee-col">
+                    {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                    <details class="fee-breakdown">
+                        <summary>¥{{ "{:,}".format(item.display_fee_total or 0) }}</summary>
+                        <div class="fee-breakdown-body">
+                            {% for fee_detail in item.fee_breakdown_details or [] %}
+                            {% if not fee_detail.startswith('送料:') %}
+                            <div>{{ fee_detail }}</div>
+                            {% endif %}
+                            {% endfor %}
+                            {% if item.kaika_fee %}
+                            <div class="fee-breakdown-note">開花手数料は仕入れ額に含めて計算しています。</div>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% else %}-{% endif %}
+                </td>
+                <td class="shipping-col">{% if item.sale_date or item.display_shipping_cost %}¥{{ "{:,}".format(item.display_shipping_cost or 0) }}{% else %}-{% endif %}</td>
+                <td>{% if item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or 0) }}{% else %}-{% endif %}</td>
                 <td>
                     {% if item.sale_date %}
                     <span class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
@@ -346,7 +409,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="11" class="empty-cell">商品がありません</td>
+                <td colspan="12" class="empty-cell">商品がありません</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -387,17 +450,31 @@
                     <span class="card-info-value">{{ item.purchase_date or '-' }}</span>
                 </div>
                 <div class="card-info-item">
-                    <span class="card-info-label">仕入額</span>
-                    <span class="card-info-value">¥{{ "{:,}".format(item.purchase_price or 0) }}</span>
+                    <span class="card-info-label">仕入れ額</span>
+                    <span class="card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
                 </div>
                 <div class="card-info-item">
-                    <span class="card-info-label">出品価格</span>
-                    <span class="card-info-value">¥{{ "{:,}".format(item.listing_price or 0) }}</span>
+                    <span class="card-info-label">手数料</span>
+                    <span class="card-info-value">
+                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                        {% else %}-{% endif %}
+                    </span>
                 </div>
                 <div class="card-info-item">
-                    <span class="card-info-label">売上金</span>
-                    <span class="card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
+                    <span class="card-info-label">送料</span>
+                    <span class="card-info-value">{% if item.sale_date or item.display_shipping_cost %}¥{{ "{:,}".format(item.display_shipping_cost or 0) }}{% else %}-{% endif %}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">売上</span>
+                    <span class="card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or 0) }}{%
                         else %}-{% endif %}</span>
+                </div>
+                <div class="card-info-item">
+                    <span class="card-info-label">最終利益</span>
+                    <span class="card-info-value {% if item.sale_date %}{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}{% endif %}">
+                        {% if item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                    </span>
                 </div>
             </div>
         </div>

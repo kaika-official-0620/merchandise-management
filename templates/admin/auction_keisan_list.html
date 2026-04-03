@@ -1,208 +1,107 @@
 {% extends "base.html" %}
-
-{% block title %}オークション計算書管理 - 物販管理システム{% endblock %}
+{% block title %}オークション計算書 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>オークション計算書管理</h1>
-    <p class="page-description">オークション落札で自動作成された計算書を確認・編集し、ユーザーに送信できます</p>
-</div>
-
-<div class="stats-cards">
-    <div class="stat-card draft">
-        <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'draft')|list|length }}</div>
-        <div class="stat-label">未送信</div>
-    </div>
-    <div class="stat-card submitted">
-        <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'submitted')|list|length }}</div>
-        <div class="stat-label">送信済み</div>
-    </div>
-    <div class="stat-card total">
-        <div class="stat-value">{{ keisan_list|length }}</div>
-        <div class="stat-label">合計</div>
-    </div>
-</div>
-
-<div class="table-container">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>書類No.</th>
-                <th>ユーザー</th>
-                <th>件名</th>
-                <th>発行日</th>
-                <th>合計金額</th>
-                <th>ステータス</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for doc in keisan_list %}
-            <tr>
-                <td class="doc-no">{{ doc.document_no }}</td>
-                <td>
-                    <span class="user-name">{{ doc.user_name or doc.username }}</span>
-                </td>
-                <td>{{ doc.subject or '-' }}</td>
-                <td>{{ doc.issue_date }}</td>
-                <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
-                <td>
-                    {% if doc.status == 'submitted' %}
-                        <span class="status-badge status-submitted">送信済み</span>
-                    {% elif doc.status == 'completed' %}
-                        <span class="status-badge status-completed">完了</span>
-                    {% else %}
-                        <span class="status-badge status-draft">未送信</span>
-                    {% endif %}
-                </td>
-                <td class="actions">
-                    <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
-                    {% if doc.status == 'draft' %}
-                    <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
-                    <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display: inline;">
-                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('この計算書をユーザーに送信しますか？')">送信</button>
-                    </form>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="7" class="text-center text-muted">オークション計算書がありません</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
 <style>
-.page-header {
-    margin-bottom: 24px;
-}
-
-.page-header h1 {
-    margin: 0 0 8px 0;
-}
-
-.page-description {
-    color: #64748b;
-    margin: 0;
-}
-
-.stats-cards {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: white;
-    padding: 16px 24px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    border-left: 4px solid;
-}
-
-.stat-card.draft { border-color: #f59e0b; }
-.stat-card.submitted { border-color: #3b82f6; }
-.stat-card.total { border-color: #6366f1; }
-
-.stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.stat-label {
-    color: #64748b;
-    font-size: 0.875rem;
-}
-
-.table-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table th,
-.data-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-    white-space: nowrap;
-}
-
-.data-table th {
-    background: #f8fafc;
-    font-weight: 600;
-    color: #475569;
-}
-
-.doc-no {
-    font-family: 'Consolas', monospace;
-    font-weight: 500;
-    font-size: 0.875rem;
-}
-
-.user-name {
-    font-weight: 500;
-}
-
-.amount {
-    font-family: 'Consolas', monospace;
-    font-weight: 600;
-    color: #10b981;
-}
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.status-draft { background: #fef3c7; color: #b45309; }
+.keisan-page { max-width: 1280px; margin: 0 auto; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.stat-card, .table-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
+.stat-card { padding: 1rem 1.1rem; }
+.stat-label { color: #64748b; font-size: .84rem; }
+.stat-value { margin-top: .3rem; font-size: 1.9rem; font-weight: 800; color: #0f172a; }
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.data-table th, .data-table td { padding: .9rem 1rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.data-table th { background: #f8fafc; color: #334155; text-align: left; white-space: nowrap; }
+.data-table tbody tr:hover { background: #f8fafc; }
+.doc-no { font-family: Consolas, monospace; font-weight: 700; color: #1d4ed8; }
+.item-summary { color: #334155; line-height: 1.55; min-width: 260px; }
+.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.status-draft { background: #fef3c7; color: #92400e; }
 .status-submitted { background: #dbeafe; color: #1d4ed8; }
-.status-completed { background: #d1fae5; color: #059669; }
-
-.actions {
-    display: flex;
-    gap: 6px;
-}
-
-.btn-sm { 
-    padding: 4px 10px; 
-    font-size: 12px;
-    border-radius: 4px;
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
-}
-.btn-info { background: #3b82f6; color: white; }
-.btn-secondary { background: #64748b; color: white; }
-.btn-success { background: #10b981; color: white; }
-
-.text-center { text-align: center; }
-.text-muted { color: #94a3b8; padding: 24px; }
-
-@media (max-width: 768px) {
-    .stats-cards {
-        flex-wrap: wrap;
-    }
-    
-    .stat-card {
-        flex: 1;
-        min-width: 100px;
-    }
-    
-    .data-table {
-        min-width: 800px;
-    }
-}
+.status-completed { background: #d1fae5; color: #065f46; }
+.amount { font-weight: 800; color: #047857; white-space: nowrap; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: .55rem .85rem; border-radius: 10px; text-decoration: none; font-weight: 700; border: none; cursor: pointer; }
+.btn-info { background: #0f172a; color: #fff; }
+.btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
+.btn-success { background: #10b981; color: #fff; }
+.empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
+@media (max-width: 768px) { .stats { grid-template-columns: 1fr; } }
 </style>
+
+<div class="page-header">
+    <h1>オークション計算書</h1>
+    <p class="page-description">落札後に自動作成された計算書を確認し、そのままクライアントへ送信できます。</p>
+</div>
+
+<div class="keisan-page">
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-label">下書き</div>
+            <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'draft')|list|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">送信済み</div>
+            <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'submitted')|list|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">合計</div>
+            <div class="stat-value">{{ keisan_list|length }}</div>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>計算書No.</th>
+                    <th>クライアント</th>
+                    <th>対象商品</th>
+                    <th>件名</th>
+                    <th>発行日</th>
+                    <th>合計金額</th>
+                    <th>状態</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in keisan_list %}
+                <tr>
+                    <td class="doc-no">{{ doc.document_no }}</td>
+                    <td>{{ doc.user_name or doc.username }}</td>
+                    <td class="item-summary">{{ doc.item_names }}</td>
+                    <td>{{ doc.subject or '-' }}</td>
+                    <td>{{ doc.issue_date }}</td>
+                    <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                    <td>
+                        {% if doc.status == 'submitted' %}
+                        <span class="status-chip status-submitted">送信済み</span>
+                        {% elif doc.status == 'completed' %}
+                        <span class="status-chip status-completed">完了</span>
+                        {% else %}
+                        <span class="status-chip status-draft">下書き</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-info">詳細</a>
+                            {% if doc.status == 'draft' %}
+                            <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                            <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display:inline;">
+                                <button type="submit" class="btn btn-success" onclick="return confirm('この計算書をクライアントへ送信しますか？')">送信</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="empty-state">オークション計算書はまだありません。</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}

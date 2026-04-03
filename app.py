@@ -15,7 +15,7 @@ import tempfile
 import time
 import calendar
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from urllib.parse import urlparse
 
 # Stripe連携
@@ -1130,6 +1130,30 @@ if DATABASE_URL:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS commission INTEGER DEFAULT 0")
         except:
             pass
+
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipment_status VARCHAR(30)")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipment_marked_at TIMESTAMP")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS shipment_marked_by INTEGER REFERENCES users(id)")
+        except:
+            pass
+
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sale_request_events (
+                id SERIAL PRIMARY KEY,
+                sale_request_id INTEGER REFERENCES sale_requests(id) ON DELETE CASCADE,
+                event_type VARCHAR(50) NOT NULL,
+                actor_user_id INTEGER REFERENCES users(id),
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -2126,6 +2150,30 @@ else:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN commission INTEGER DEFAULT 0")
         except:
             pass
+
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN shipment_status TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN shipment_marked_at TIMESTAMP")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN shipment_marked_by INTEGER REFERENCES users(id)")
+        except:
+            pass
+
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sale_request_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_request_id INTEGER REFERENCES sale_requests(id) ON DELETE CASCADE,
+                event_type TEXT NOT NULL,
+                actor_user_id INTEGER REFERENCES users(id),
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # 販売代行申請テーブル
         cur.execute('''
@@ -2424,6 +2472,30 @@ def get_proxy_publish_denied_response(json_response=False):
     return render_permission_denied(message)
 
 
+def get_effective_proxy_price(item):
+    if not item:
+        return 0
+
+    if isinstance(item, dict):
+        wholesale_price = item.get('wholesale_price')
+        listing_price = item.get('listing_price')
+    else:
+        wholesale_price = getattr(item, 'wholesale_price', 0)
+        listing_price = getattr(item, 'listing_price', 0)
+
+    try:
+        wholesale_price = int(wholesale_price or 0)
+    except (TypeError, ValueError):
+        wholesale_price = 0
+
+    try:
+        listing_price = int(listing_price or 0)
+    except (TypeError, ValueError):
+        listing_price = 0
+
+    return wholesale_price if wholesale_price > 0 else listing_price
+
+
 def resolve_default_proxy_auction_id(item_id=None):
     """商品一覧の簡易掲載ボタン用に既定の公開先オークションを決定する"""
     conn = None
@@ -2564,6 +2636,196 @@ def calculate_profit_rate(profit, purchase_price):
 def calculate_expected_profit(listing_price, purchase_price, expected_shipping, expected_commission):
     return listing_price - purchase_price - expected_shipping - expected_commission
 
+KAIKA_SALE_TYPE_ALIASES = {
+    'photo_packing': 'normal',
+    'multi_listing': 'live_commerce',
+}
+
+KAIKA_SALE_TYPES = {'normal', 'wholesale', 'auction', 'live_commerce'}
+SALE_TYPE_LABELS = {
+    'normal': '通常販売',
+    'photo_packing': '撮影梱包発送代行',
+    'wholesale': '業者販売',
+    'multi_listing': 'ライブコマース',
+    'auction': 'オークション販売',
+    'live_commerce': 'ライブコマース',
+    'proxy_service': '代行仕入れ',
+}
+
+def normalize_kaika_sale_type(sale_type):
+    raw_value = (sale_type or '').strip()
+    if not raw_value:
+        return 'normal'
+
+    for part in [segment.strip() for segment in raw_value.split(',') if segment.strip()]:
+        normalized = KAIKA_SALE_TYPE_ALIASES.get(part, part)
+        if normalized in KAIKA_SALE_TYPES:
+            return normalized
+
+    return 'normal'
+
+
+KAIKA_FIXED_SALES_DESTINATIONS = {
+    'wholesale': SALE_TYPE_LABELS['wholesale'],
+    'auction': SALE_TYPE_LABELS['auction'],
+    'live_commerce': SALE_TYPE_LABELS['live_commerce'],
+}
+
+
+def resolve_kaika_sales_destination(sale_type, destination):
+    normalized_type = normalize_kaika_sale_type(sale_type)
+    if normalized_type == 'normal':
+        return (destination or '').strip()
+    return KAIKA_FIXED_SALES_DESTINATIONS.get(normalized_type, '')
+
+def parse_commission_rate(commission_rate, default=10.0):
+    try:
+        return max(float(commission_rate or default), 0.0)
+    except (TypeError, ValueError):
+        return max(float(default), 0.0)
+
+
+def parse_money_value(value, default=0):
+    try:
+        return max(int(float(value or default)), 0)
+    except (TypeError, ValueError):
+        return max(int(default), 0)
+
+
+def calculate_kaika_marketplace_fee(sale_type, sale_price, commission_rate=None, manual_commission=None):
+    normalized_type = normalize_kaika_sale_type(sale_type)
+    sale_price_value = max(int(sale_price or 0), 0)
+    if normalized_type == 'normal':
+        fee_rate = parse_commission_rate(commission_rate, 10.0)
+        return int(sale_price_value * (fee_rate / 100.0))
+    return 0
+
+def split_sale_types(sale_type):
+    return [part.strip() for part in (sale_type or '').split(',') if part and part.strip()]
+
+def get_sale_type_labels(sale_type):
+    labels = []
+    for sale_type_value in split_sale_types(sale_type):
+        label = SALE_TYPE_LABELS.get(sale_type_value, sale_type_value)
+        if label not in labels:
+            labels.append(label)
+    return labels
+
+def get_user_role_by_id(user_id):
+    if not user_id:
+        return None
+
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            row = cur.fetchone()
+            cur.close()
+            return row.get('role') if row else None
+
+        cur = conn.cursor()
+        cur.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        cur.close()
+        return row[0] if row else None
+    except Exception as exc:
+        print(f"[WARN] get_user_role_by_id failed: {exc}")
+        return None
+    finally:
+        conn.close()
+
+def is_kaika_inventory_item(item_dict):
+    if not item_dict:
+        return False
+
+    user_id = item_dict.get('user_id')
+    if user_id is None:
+        return True
+
+    return get_user_role_by_id(user_id) in ('owner', 'admin')
+
+def format_sales_destination(destination, sale_type=''):
+    text = (destination or '').strip()
+    if text:
+        normalized_prefixes = {
+            '即決購入:': 'クライアント',
+            '代行仕入れ落札:': 'クライアント',
+            '代行仕入れ購入:': 'クライアント',
+            'クライアント:': 'クライアント',
+        }
+        for prefix, label in normalized_prefixes.items():
+            if text.startswith(prefix):
+                name = text.split(':', 1)[1].strip() if ':' in text else ''
+                return f'{label}: {name}' if name else label
+        return text
+
+    if sale_type == 'auction':
+        return '代行仕入れ落札'
+    return '-'
+
+def apply_inventory_display_metrics(item, scope='admin'):
+    purchase_price = int(item.get('purchase_price') or 0)
+    wholesale_price = int(item.get('wholesale_price') or 0)
+    sale_price = int(item.get('sale_price') or 0)
+    shipping_cost = int(item.get('shipping_cost') or 0)
+    commission = int(item.get('commission') or 0)
+
+    if scope == 'user':
+        display_purchase_price = wholesale_price or purchase_price
+        kaika_fee = max((wholesale_price or 0) - purchase_price, 0) if wholesale_price and purchase_price else 0
+    else:
+        display_purchase_price = purchase_price
+        kaika_fee = 0
+
+    item['display_purchase_price'] = display_purchase_price
+    item['display_sale_price'] = sale_price
+    display_fee_total = commission + kaika_fee
+    item['marketplace_fee'] = commission
+    item['shipping_fee'] = shipping_cost
+    item['kaika_fee'] = kaika_fee
+    item['display_fee_total'] = display_fee_total
+    item['display_commission_total'] = display_fee_total
+    item['display_shipping_cost'] = shipping_cost
+    item['sales_destination_display'] = format_sales_destination(item.get('sales_destination'), item.get('sale_type'))
+    item['sale_type_labels'] = get_sale_type_labels(item.get('sale_type'))
+    item['sale_type_summary'] = ' / '.join(item['sale_type_labels']) if item['sale_type_labels'] else '-'
+
+    fee_breakdown_details = []
+    sale_type_values = split_sale_types(item.get('sale_type'))
+    if commission:
+        if scope == 'user':
+            fee_breakdown_details.append(f"販売手数料合計: ¥{commission:,}")
+        elif 'normal' in sale_type_values:
+            destination_label = format_sales_destination(item.get('sales_destination'), item.get('sale_type'))
+            fee_breakdown_details.append(f"{destination_label if destination_label != '-' else '通常販売'} 手数料: ¥{commission:,}")
+        elif 'live_commerce' in sale_type_values or 'multi_listing' in sale_type_values:
+            fee_breakdown_details.append(f"ライブコマース手数料: ¥{commission:,}")
+        elif 'wholesale' in sale_type_values:
+            fee_breakdown_details.append(f"業者販売手数料: ¥{commission:,}")
+        elif 'auction' in sale_type_values:
+            fee_breakdown_details.append(f"オークション販売手数料: ¥{commission:,}")
+        else:
+            fee_breakdown_details.append(f"媒体手数料: ¥{commission:,}")
+    if kaika_fee:
+        if wholesale_price and purchase_price:
+            fee_breakdown_details.append(
+                f"開花手数料（仕入れ額に含む）: 卸価格 ¥{wholesale_price:,} - 開花仕入額 ¥{purchase_price:,} = ¥{kaika_fee:,}"
+            )
+        else:
+            fee_breakdown_details.append(f"開花手数料（仕入れ額に含む）: ¥{kaika_fee:,}")
+    if shipping_cost:
+        fee_breakdown_details.append(f"送料: ¥{shipping_cost:,}")
+    if not fee_breakdown_details:
+        fee_breakdown_details.append("追加手数料はありません。")
+    item['fee_breakdown_details'] = fee_breakdown_details
+
+    if item.get('sale_date'):
+        item['profit'] = calculate_profit(sale_price, display_purchase_price, shipping_cost, commission)
+        item['profit_rate'] = calculate_profit_rate(item['profit'], display_purchase_price)
+
+    return item
+
 def get_active_announcements():
     """アクティブなお知らせを取得"""
     conn = get_db()
@@ -2654,6 +2916,17 @@ def migrate_add_scope_column():
                 except Exception as e:
                     print(f"Migration warning for {table}: {e}")
         
+        if not DATABASE_URL:
+            try:
+                cur.execute("PRAGMA table_info(merchandise)")
+                merchandise_columns = [col[1] for col in cur.fetchall()]
+                if 'scope' not in merchandise_columns:
+                    cur.execute("ALTER TABLE merchandise ADD COLUMN scope TEXT DEFAULT 'admin'")
+                    conn.commit()
+                    print("Added scope column to merchandise")
+            except Exception as e:
+                print(f"Migration warning for merchandise: {e}")
+
         cur.close()
         conn.close()
         print("Scope column migration completed")
@@ -2670,9 +2943,9 @@ migrate_add_scope_column()
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        # 管理者/オーナーの場合は管理者商品一覧へ
+        # 管理者/オーナーの場合は管理者ホームへ
         if current_user.is_admin() or current_user.is_owner():
-            return redirect(url_for('admin_items'))
+            return redirect(url_for('admin_dashboard'))
         return redirect(url_for('index'))
     
     if request.method == 'POST':
@@ -2755,7 +3028,7 @@ def login():
             
             # 管理者/オーナーの場合は管理者商品一覧へ、一般ユーザーはダッシュボードへ
             if user['role'] in ['admin', 'owner']:
-                return redirect(url_for('admin_items'))
+                return redirect(url_for('admin_dashboard'))
             else:
                 return redirect(url_for('index'))
         else:
@@ -2887,7 +3160,7 @@ def profile():
 def index():
     # 管理者/オーナーの場合は管理者商品一覧へリダイレクト
     if current_user.is_admin() or current_user.is_owner():
-        return redirect(url_for('admin_items'))
+        return redirect(url_for('admin_dashboard'))
     
     filter_type = request.args.get('filter', '')
     search = request.args.get('search', '')
@@ -3051,6 +3324,7 @@ def index():
     pending_shipping_requests = {}
     pending_completion_requests = {}
     approved_shipping_requests = {}
+    shipped_shipping_requests = {}
     try:
         conn2 = get_db()
         if DATABASE_URL:
@@ -3072,6 +3346,8 @@ def index():
                     pending_shipping_requests.setdefault(merchandise_id, req_dict)
             elif req_dict.get('status') == 'approved' and request_type == 'shipping_request':
                 approved_shipping_requests.setdefault(merchandise_id, req_dict)
+                if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
+                    shipped_shipping_requests.setdefault(merchandise_id, req_dict)
         cur2.close()
         conn2.close()
     except Exception as e:
@@ -3130,14 +3406,17 @@ def index():
         shipping_request = pending_shipping_requests.get(item_id)
         completion_request = pending_completion_requests.get(item_id)
         approved_shipping_request = approved_shipping_requests.get(item_id)
+        shipped_shipping_request = shipped_shipping_requests.get(item_id)
 
         item_dict['pending_shipping_request'] = shipping_request is not None
         item_dict['shipping_request'] = shipping_request
         item_dict['pending_completion_request'] = completion_request is not None
         item_dict['completion_request'] = completion_request
         item_dict['approved_shipping_request'] = approved_shipping_request
-        item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(item_dict.get('is_shipped'))
-        item_dict['can_send_completion_report'] = item_dict['shipping_request_approved'] and not item_dict.get('sale_date')
+        item_dict['shipped_shipping_request'] = shipped_shipping_request
+        item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+        item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+        item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
 
         # 既存テンプレート互換
         item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
@@ -3187,6 +3466,8 @@ def index():
                 item_dict.get('expected_shipping', 0) or 0,
                 item_dict.get('expected_commission', 0) or 0
             )
+
+        apply_inventory_display_metrics(item_dict, scope='user')
         
         # 全画像リスト（メイン + 追加）
         item_dict['all_photos'] = []
@@ -4202,6 +4483,14 @@ def user_analytics():
     
     # 管理者かどうかで条件を変更
     is_admin = current_user.is_admin()
+    selected_client_id = request.args.get('client_id', '').strip() if is_admin else ''
+    try:
+        selected_client_id_int = int(selected_client_id) if selected_client_id else None
+    except (TypeError, ValueError):
+        selected_client_id_int = None
+    selected_client_name = ''
+    available_users = []
+    client_summaries = []
 
     # メモ保存
     if request.method == 'POST':
@@ -4223,16 +4512,37 @@ def user_analytics():
         cur_memo.close()
         conn.close()
         flash('分析メモを保存しました', 'success')
-        return redirect(url_for('user_analytics', start_month=start_month, end_month=end_month))
+        return redirect(url_for(
+            'user_analytics',
+            start_month=start_month,
+            end_month=end_month,
+            client_id=selected_client_id if is_admin and selected_client_id_int else None
+        ))
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 管理者の場合: user_id IS NOT NULL（管理者以外の全ユーザー）
-        # 一般ユーザーの場合: user_id = current_user.id
         if is_admin:
-            user_condition = "user_id IS NOT NULL"
-            user_params = ()
+            cur.execute("""
+                SELECT id, username, display_name
+                FROM users
+                WHERE role = 'user'
+                ORDER BY COALESCE(display_name, username), id
+            """)
+            available_users = [dict(row) for row in cur.fetchall()]
+            available_user_map = {
+                user['id']: (user.get('display_name') or user.get('username') or f"ID:{user['id']}")
+                for user in available_users
+            }
+            if selected_client_id_int and selected_client_id_int in available_user_map:
+                user_condition = "user_id = %s"
+                user_params = (selected_client_id_int,)
+                selected_client_name = available_user_map[selected_client_id_int]
+            else:
+                selected_client_id_int = None
+                selected_client_id = ''
+                user_condition = "user_id IS NOT NULL"
+                user_params = ()
         else:
             user_condition = "user_id = %s"
             user_params = (current_user.id,)
@@ -4410,17 +4720,65 @@ def user_analytics():
         except Exception as e:
             print(f"Cashflow query error: {e}")
             analytics_data['cashflow'] = []
-        
+
+        if is_admin:
+            client_where = "WHERE u.role = 'user'"
+            client_params = []
+            if selected_client_id_int:
+                client_where += " AND u.id = %s"
+                client_params.append(selected_client_id_int)
+
+            cur.execute(f"""
+                SELECT
+                    u.id as user_id,
+                    COALESCE(u.display_name, u.username) as client_name,
+                    COUNT(m.id) as total_items,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END), 0) as sold_count,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(
+                        CASE WHEN m.sale_date IS NOT NULL {sale_date_filter}
+                        THEN m.sale_price - COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price) - m.shipping_cost - m.commission
+                        ELSE 0 END
+                    ), 0) as total_profit,
+                    COALESCE(SUM(
+                        CASE WHEN m.sale_date IS NULL
+                        THEN COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price)
+                        ELSE 0 END
+                    ), 0) as inventory_value
+                FROM users u
+                LEFT JOIN merchandise m ON m.user_id = u.id
+                {client_where}
+                GROUP BY u.id, COALESCE(u.display_name, u.username)
+                ORDER BY total_sales DESC, client_name ASC
+            """, tuple(client_params))
+            client_summaries = [dict(row) for row in cur.fetchall()]
+
     else:
         import sqlite3
         cur = conn.cursor()
         cur.row_factory = sqlite3.Row
         
-        # 管理者の場合: user_id IS NOT NULL（管理者以外の全ユーザー）
-        # 一般ユーザーの場合: user_id = current_user.id
         if is_admin:
-            user_condition = "user_id IS NOT NULL"
-            user_params = ()
+            cur.execute("""
+                SELECT id, username, display_name
+                FROM users
+                WHERE role = 'user'
+                ORDER BY COALESCE(display_name, username), id
+            """)
+            available_users = [dict(row) for row in cur.fetchall()]
+            available_user_map = {
+                user['id']: (user.get('display_name') or user.get('username') or f"ID:{user['id']}")
+                for user in available_users
+            }
+            if selected_client_id_int and selected_client_id_int in available_user_map:
+                user_condition = "user_id = ?"
+                user_params = (selected_client_id_int,)
+                selected_client_name = available_user_map[selected_client_id_int]
+            else:
+                selected_client_id_int = None
+                selected_client_id = ''
+                user_condition = "user_id IS NOT NULL"
+                user_params = ()
         else:
             user_condition = "user_id = ?"
             user_params = (current_user.id,)
@@ -4598,12 +4956,48 @@ def user_analytics():
         except Exception as e:
             print(f"Cashflow query error: {e}")
             analytics_data['cashflow'] = []
-    
+
+        if is_admin:
+            client_where = "WHERE u.role = 'user'"
+            client_params = []
+            if selected_client_id_int:
+                client_where += " AND u.id = ?"
+                client_params.append(selected_client_id_int)
+
+            cur.execute(f"""
+                SELECT
+                    u.id as user_id,
+                    COALESCE(u.display_name, u.username) as client_name,
+                    COUNT(m.id) as total_items,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END), 0) as sold_count,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(
+                        CASE WHEN m.sale_date IS NOT NULL {sale_date_filter}
+                        THEN m.sale_price - COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price) - m.shipping_cost - m.commission
+                        ELSE 0 END
+                    ), 0) as total_profit,
+                    COALESCE(SUM(
+                        CASE WHEN m.sale_date IS NULL
+                        THEN COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price)
+                        ELSE 0 END
+                    ), 0) as inventory_value
+                FROM users u
+                LEFT JOIN merchandise m ON m.user_id = u.id
+                {client_where}
+                GROUP BY u.id, COALESCE(u.display_name, u.username)
+                ORDER BY total_sales DESC, client_name ASC
+            """, tuple(client_params))
+            client_summaries = [dict(row) for row in cur.fetchall()]
+
     cur.close()
     conn.close()
     
     # 管理者の場合は分析対象がわかるようにフラグを渡す
     analytics_data['is_admin_view'] = is_admin
+    analytics_data['available_users'] = available_users
+    analytics_data['selected_client_id'] = selected_client_id_int
+    analytics_data['selected_client_name'] = selected_client_name
+    analytics_data['client_summaries'] = client_summaries
     analytics_data.setdefault('top_destination', {})
     analytics_data.setdefault('auction_stats', {})
     analytics_data.setdefault('analytics_memo', '')
@@ -4689,6 +5083,14 @@ def add_item():
         
         # ステータスを取得（未出品/出品中/売却済み）
         item_status = request.form.get('item_status', 'unlisted')
+        sale_type_value = normalize_kaika_sale_type(request.form.get('sale_type') or 'normal')
+        sale_price_value = parse_money_value(request.form.get('sale_price'), 0)
+        commission_value = calculate_kaika_marketplace_fee(
+            sale_type_value,
+            sale_price_value,
+            request.form.get('commission_rate'),
+            request.form.get('commission')
+        )
         
         # 卸価格：フォームで手動入力があれば使用、なければ仕入額と卸手数料から自動計算
         purchase_price = int(float(request.form.get('purchase_price') or 0))
@@ -4726,17 +5128,17 @@ def add_item():
                 wholesale_fee_rate,
                 purchase_price,
                 request.form.get('payment_method'),
-                int(request.form.get('listing_price') or 0),
-                int(request.form.get('expected_shipping') or 0),
-                int(request.form.get('expected_commission') or 0),
+                parse_money_value(request.form.get('listing_price'), 0),
+                parse_money_value(request.form.get('expected_shipping'), 0),
+                parse_money_value(request.form.get('expected_commission'), 0),
                 item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
                 request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                 request.form.get('sale_date') or None if item_status == 'sold' else None,
-                request.form.get('sale_type') or 'normal',
-                int(request.form.get('sale_price') or 0),
-                int(request.form.get('shipping_cost') or 0),
-                request.form.get('sales_destination'),
-                int(request.form.get('commission') or 0),
+                sale_type_value,
+                sale_price_value,
+                parse_money_value(request.form.get('shipping_cost'), 0),
+                resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination')),
+                commission_value,
                 'is_shipped' in request.form,
                 request.form.get('notes')
             ))
@@ -4773,11 +5175,11 @@ def add_item():
                 1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
                 request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
                 request.form.get('sale_date') or None if item_status == 'sold' else None,
-                request.form.get('sale_type') or 'normal',
-                int(request.form.get('sale_price') or 0),
-                int(request.form.get('shipping_cost') or 0),
-                request.form.get('sales_destination'),
-                int(request.form.get('commission') or 0),
+                sale_type_value,
+                sale_price_value,
+                parse_money_value(request.form.get('shipping_cost'), 0),
+                resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination')),
+                commission_value,
                 1 if 'is_shipped' in request.form else 0,
                 request.form.get('notes')
             ))
@@ -4787,7 +5189,7 @@ def add_item():
         flash('商品を登録しました', 'success')
         return redirect(url_for('index'))
     
-    return render_template('form.html', item=None, fee_settings=get_fee_settings())
+    return render_template('form.html', item=None, fee_settings=get_fee_settings(), is_kaika_scope=True)
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -4981,17 +5383,32 @@ def edit_item(id):
             if not is_owner_user:
                 item_status = 'sold' if item_dict.get('sale_date') else ('listed' if item_dict.get('is_listed') else 'unlisted')
 
+            is_kaika_scope = is_kaika_inventory_item(item_dict)
             listing_price_value = int(request.form.get('listing_price') or 0) if is_owner_user else int(item_dict.get('listing_price') or 0)
             expected_shipping_value = int(request.form.get('expected_shipping') or 0) if is_owner_user else int(item_dict.get('expected_shipping') or 0)
             expected_commission_value = int(request.form.get('expected_commission') or 0) if is_owner_user else int(item_dict.get('expected_commission') or 0)
             listing_date_value = (request.form.get('listing_date') or None) if is_owner_user else (item_dict.get('listing_date') or None)
             sale_date_value = (request.form.get('sale_date') or None) if is_owner_user else (item_dict.get('sale_date') or None)
-            sale_type_value = (request.form.get('sale_type') or 'normal') if is_owner_user else (item_dict.get('sale_type') or 'normal')
-            sale_price_value = int(request.form.get('sale_price') or 0) if is_owner_user else int(item_dict.get('sale_price') or 0)
-            shipping_cost_value = int(request.form.get('shipping_cost') or 0) if is_owner_user else int(item_dict.get('shipping_cost') or 0)
-            sales_destination_value = request.form.get('sales_destination') if is_owner_user else item_dict.get('sales_destination')
-            commission_value = int(request.form.get('commission') or 0) if is_owner_user else int(item_dict.get('commission') or 0)
-            is_shipped_value = ('is_shipped' in request.form) if is_owner_user else bool(item_dict.get('is_shipped'))
+            raw_sale_type_value = (request.form.get('sale_type') or 'normal') if is_owner_user else (item_dict.get('sale_type') or 'normal')
+            sale_type_value = normalize_kaika_sale_type(raw_sale_type_value) if (is_owner_user and is_kaika_scope) else raw_sale_type_value
+            sale_price_value = parse_money_value(request.form.get('sale_price'), 0) if is_owner_user else parse_money_value(item_dict.get('sale_price'), 0)
+            shipping_cost_value = parse_money_value(request.form.get('shipping_cost'), 0) if is_owner_user else parse_money_value(item_dict.get('shipping_cost'), 0)
+            sales_destination_value = (
+                resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination'))
+                if (is_owner_user and is_kaika_scope)
+                else (request.form.get('sales_destination') if is_owner_user else item_dict.get('sales_destination'))
+            )
+            commission_value = (
+                calculate_kaika_marketplace_fee(
+                    sale_type_value,
+                    sale_price_value,
+                    request.form.get('commission_rate'),
+                    request.form.get('commission')
+                )
+                if (is_owner_user and is_kaika_scope)
+                else (parse_money_value(request.form.get('commission'), 0) if is_owner_user else parse_money_value(item_dict.get('commission'), 0))
+            )
+            is_shipped_value = bool(item_dict.get('is_shipped'))
             if not is_owner_user:
                 photo_path = item_dict.get('photo_path')
                 additional_photos_json = item_dict.get('additional_photos')
@@ -5244,7 +5661,13 @@ def edit_item(id):
         back_url = url_for('index')
     back_url = get_item_back_url(back_url)
 
-    return render_template('form.html', item=item_dict, back_url=back_url, fee_settings=get_fee_settings())
+    return render_template(
+        'form.html',
+        item=item_dict,
+        back_url=back_url,
+        fee_settings=get_fee_settings(),
+        is_kaika_scope=is_kaika_inventory_item(item_dict)
+    )
 
 @app.route('/view/<int:id>')
 @login_required
@@ -5651,11 +6074,239 @@ def delete_customer(id):
 # ===================
 
 @app.route('/admin')
+@app.route('/admin/home')
 @login_required
 @admin_required
 def admin_dashboard():
-    """管理者ダッシュボード - 分析ページにリダイレクト"""
-    return redirect(url_for('admin_analytics'))
+    """管理者ホームダッシュボード"""
+    def normalize_item_date(raw_value):
+        if not raw_value:
+            return None
+        if isinstance(raw_value, datetime):
+            return raw_value.date()
+        if isinstance(raw_value, date):
+            return raw_value
+        if isinstance(raw_value, str):
+            for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S'):
+                try:
+                    sample = raw_value[:26] if fmt.endswith('%f') else raw_value[:19] if ' ' in fmt or 'T' in fmt else raw_value[:10]
+                    return datetime.strptime(sample, fmt).date()
+                except ValueError:
+                    continue
+        return None
+
+    def to_int(value):
+        try:
+            if value in (None, ''):
+                return 0
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+    def classify_scope(item_dict, role_map):
+        item_user_id = item_dict.get('user_id')
+        if item_user_id is None:
+            return 'kaika'
+        role = role_map.get(item_user_id)
+        if role:
+            return 'user' if role == 'user' else 'kaika'
+        return 'kaika' if is_kaika_inventory_item(item_dict) else 'user'
+
+    def build_summary(label, description, items_subset, list_url, analytics_url):
+        today = datetime.now().date()
+        current_month_start = today.replace(day=1)
+        summary = {
+            'label': label,
+            'description': description,
+            'list_url': list_url,
+            'analytics_url': analytics_url,
+            'total_items': len(items_subset),
+            'sold_count': 0,
+            'unsold_count': 0,
+            'total_purchase': 0,
+            'inventory_value': 0,
+            'total_sales': 0,
+            'total_profit': 0,
+            'current_month_sales': 0,
+            'current_month_profit': 0,
+            'current_month_sold_count': 0,
+        }
+
+        for item in items_subset:
+            purchase_price = to_int(item.get('purchase_price'))
+            sale_price = to_int(item.get('sale_price'))
+            shipping_cost = to_int(item.get('shipping_cost'))
+            commission = to_int(item.get('commission'))
+            sale_date = normalize_item_date(item.get('sale_date'))
+
+            summary['total_purchase'] += purchase_price
+
+            if sale_date:
+                profit = sale_price - purchase_price - shipping_cost - commission
+                summary['sold_count'] += 1
+                summary['total_sales'] += sale_price
+                summary['total_profit'] += profit
+                if sale_date >= current_month_start:
+                    summary['current_month_sales'] += sale_price
+                    summary['current_month_profit'] += profit
+                    summary['current_month_sold_count'] += 1
+            else:
+                summary['unsold_count'] += 1
+                summary['inventory_value'] += purchase_price
+
+        return summary
+
+    def build_service_fee_summary(items_subset):
+        today = datetime.now().date()
+        current_month_start = today.replace(day=1)
+        fee_summary = {
+            'total_fee_revenue': 0,
+            'current_month_fee_revenue': 0,
+            'sold_count': 0,
+        }
+
+        for item in items_subset:
+            sale_date = normalize_item_date(item.get('sale_date'))
+            if not sale_date:
+                continue
+            fee_value = to_int(item.get('commission'))
+            fee_summary['sold_count'] += 1
+            fee_summary['total_fee_revenue'] += fee_value
+            if sale_date >= current_month_start:
+                fee_summary['current_month_fee_revenue'] += fee_value
+
+        return fee_summary
+
+    user_lookup = {}
+    user_roles = {}
+    items = []
+
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, username, display_name, role FROM users")
+            users = [dict(row) for row in cur.fetchall()]
+            cur.execute("""
+                SELECT id, user_id, product_name, purchase_price, sale_price, shipping_cost, commission,
+                       sale_date, purchase_date, sales_destination, sale_type
+                FROM merchandise
+                ORDER BY COALESCE(sale_date, purchase_date, CURRENT_DATE) DESC, id DESC
+            """)
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT id, username, display_name, role FROM users")
+            users = [dict(row) for row in cur.fetchall()]
+            cur.execute("""
+                SELECT id, user_id, product_name, purchase_price, sale_price, shipping_cost, commission,
+                       sale_date, purchase_date, sales_destination, sale_type
+                FROM merchandise
+                ORDER BY COALESCE(sale_date, purchase_date, date('now')) DESC, id DESC
+            """)
+            items = [dict(row) for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+
+        for user in users:
+            user_lookup[user['id']] = user.get('display_name') or user.get('username') or f"ID:{user['id']}"
+            user_roles[user['id']] = user.get('role')
+    except Exception as e:
+        print(f"Admin home dashboard error: {e}")
+        import traceback
+        traceback.print_exc()
+        users = []
+        items = []
+
+    kaika_items = []
+    user_items = []
+    recent_sales = []
+    monthly_map = {}
+
+    for item in items:
+        scope = classify_scope(item, user_roles)
+        item['dashboard_scope'] = scope
+        if scope == 'user':
+            user_items.append(item)
+        else:
+            kaika_items.append(item)
+
+        sale_date = normalize_item_date(item.get('sale_date'))
+        if not sale_date:
+            continue
+
+        purchase_price = to_int(item.get('purchase_price'))
+        sale_price = to_int(item.get('sale_price'))
+        shipping_cost = to_int(item.get('shipping_cost'))
+        commission = to_int(item.get('commission'))
+        profit = sale_price - purchase_price - shipping_cost - commission
+        month_key = sale_date.strftime('%Y-%m')
+        monthly_entry = monthly_map.setdefault(month_key, {
+            'month': month_key,
+            'company_sales': 0,
+            'kaika_sales': 0,
+            'user_sales': 0,
+            'company_profit': 0,
+        })
+        monthly_entry['company_sales'] += sale_price
+        monthly_entry['company_profit'] += profit
+        if scope == 'user':
+            monthly_entry['user_sales'] += sale_price
+        else:
+            monthly_entry['kaika_sales'] += sale_price
+
+        recent_sales.append({
+            'id': item.get('id'),
+            'product_name': item.get('product_name') or '-',
+            'sale_date': sale_date,
+            'sales_destination': format_sales_destination(item.get('sales_destination'), item.get('sale_type')),
+            'sale_price': sale_price,
+            'profit': profit,
+            'scope_label': 'ユーザー管理' if scope == 'user' else '開花管理',
+            'owner_name': user_lookup.get(item.get('user_id')) if scope == 'user' else '開花管理',
+        })
+
+    company_summary = build_summary(
+        '全体売上管理',
+        '開花管理とユーザー管理の売上・利益・在庫をまとめて確認できます。',
+        items,
+        url_for('admin_dashboard'),
+        url_for('admin_dashboard'),
+    )
+    kaika_summary = build_summary(
+        '開花管理分析',
+        '開花が直接管理している商品の売上・利益・在庫の状況です。',
+        kaika_items,
+        url_for('admin_items'),
+        url_for('admin_analytics_kaika'),
+    )
+    user_summary = build_summary(
+        'ユーザー管理分析',
+        '会員商品の売上・利益・在庫と、ユーザー側で動いた実績をまとめています。',
+        user_items,
+        url_for('admin_user_products'),
+        url_for('user_analytics'),
+    )
+
+    user_fee_summary = build_service_fee_summary(user_items)
+    kaika_summary['user_service_fee_revenue'] = user_fee_summary['total_fee_revenue']
+    kaika_summary['current_month_user_service_fee_revenue'] = user_fee_summary['current_month_fee_revenue']
+    company_summary['user_service_fee_revenue'] = user_fee_summary['total_fee_revenue']
+    company_summary['current_month_user_service_fee_revenue'] = user_fee_summary['current_month_fee_revenue']
+
+    monthly_overview = [monthly_map[key] for key in sorted(monthly_map.keys(), reverse=True)[:6]]
+    recent_sales.sort(key=lambda row: (row['sale_date'] or date.min, row['id'] or 0), reverse=True)
+    recent_sales = recent_sales[:8]
+
+    return render_template(
+        'admin/home.html',
+        company_summary=company_summary,
+        kaika_summary=kaika_summary,
+        user_summary=user_summary,
+        monthly_overview=monthly_overview,
+        recent_sales=recent_sales,
+    )
 
 @app.route('/admin/users')
 @login_required
@@ -6120,6 +6771,9 @@ def admin_user_items(id):
         
         processed_items.append(item_dict)
     
+    for item in processed_items:
+        apply_inventory_display_metrics(item, scope='user')
+
     return render_template('admin/user_items.html', user=dict(user), items=processed_items)
 
 @app.route('/admin/analytics', methods=['GET', 'POST'])
@@ -6783,6 +7437,7 @@ def admin_analytics_kaika():
     """開花（管理者）商品の分析ページ（管理者/オーナーの商品）"""
     analytics_data = {}
     overall_stats = {}
+    service_fee_stats = {}
     
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
@@ -6831,6 +7486,17 @@ def admin_analytics_kaika():
                 WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
             cur.execute(query, base_params + date_params if (base_params or date_params) else None)
             overall_stats = dict(cur.fetchone() or {})
+
+            cur.execute(f"""
+                SELECT
+                    COUNT(*) as sold_count,
+                    COALESCE(SUM(m.commission), 0) as total_fee_revenue
+                FROM merchandise m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.role = 'user'
+                  AND m.sale_date IS NOT NULL {date_condition}
+            """, date_params if date_params else None)
+            service_fee_stats = dict(cur.fetchone() or {})
             
             # 月別売上・利益推移
             cur.execute(f"""
@@ -6878,6 +7544,20 @@ def admin_analytics_kaika():
                 ORDER BY count DESC
             """, base_params + date_params if (base_params or date_params) else None)
             analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+            cur.execute(f"""
+                SELECT
+                    COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+                FROM merchandise
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
+                ORDER BY total_sales DESC
+                LIMIT 8
+            """, base_params + date_params if (base_params or date_params) else None)
+            analytics_data['destination_stats'] = [dict(row) for row in cur.fetchall()]
             
             # 在庫統計
             cur.execute(f"""
@@ -6932,6 +7612,17 @@ def admin_analytics_kaika():
                 WHERE {user_condition} """ + (date_condition.replace("sale_date", "purchase_date") if date_from or date_to else "")
             cur.execute(query, base_params + date_params if (base_params or date_params) else ())
             overall_stats = dict(cur.fetchone() or {})
+
+            cur.execute(f"""
+                SELECT
+                    COUNT(*) as sold_count,
+                    COALESCE(SUM(m.commission), 0) as total_fee_revenue
+                FROM merchandise m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.role = 'user'
+                  AND m.sale_date IS NOT NULL {date_condition}
+            """, date_params if date_params else ())
+            service_fee_stats = dict(cur.fetchone() or {})
             
             # 月別売上・利益推移
             cur.execute(f"""
@@ -6979,6 +7670,20 @@ def admin_analytics_kaika():
                 ORDER BY count DESC
             """, base_params + date_params if (base_params or date_params) else ())
             analytics_data['sale_type_stats'] = [dict(s) for s in cur.fetchall()]
+
+            cur.execute(f"""
+                SELECT
+                    COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定') as sales_destination,
+                    COUNT(*) as count,
+                    COALESCE(SUM(sale_price), 0) as total_sales,
+                    COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit
+                FROM merchandise
+                WHERE {user_condition} AND sale_date IS NOT NULL {date_condition}
+                GROUP BY COALESCE(NULLIF(TRIM(sales_destination), ''), '販売先未設定')
+                ORDER BY total_sales DESC
+                LIMIT 8
+            """, base_params + date_params if (base_params or date_params) else ())
+            analytics_data['destination_stats'] = [dict(row) for row in cur.fetchall()]
             
             # 在庫統計
             cur.execute(f"""
@@ -7001,9 +7706,12 @@ def admin_analytics_kaika():
     # デフォルト値を設定（エラー時も表示されるように）
     if not overall_stats:
         overall_stats = {'total_items': 0, 'total_purchase': 0, 'total_sales': 0, 'total_profit': 0}
+    if not service_fee_stats:
+        service_fee_stats = {'sold_count': 0, 'total_fee_revenue': 0}
     
     return render_template('admin/analytics_kaika.html',
                          overall_stats=overall_stats,
+                         service_fee_stats=service_fee_stats,
                          date_from=date_from,
                          date_to=date_to,
                          **analytics_data)
@@ -7316,7 +8024,7 @@ def admin_proxy_service_detail(auction_id):
             
             # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.wholesale_price, m.photo_path, 
                        COALESCE(u.display_name, '不明') as owner_name,
                        m.auction_id
                 FROM merchandise m
@@ -7406,7 +8114,7 @@ def admin_proxy_service_detail(auction_id):
             
             # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path, 
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.wholesale_price, m.photo_path, 
                        COALESCE(u.display_name, '不明') as owner_name,
                        m.auction_id
                 FROM merchandise m
@@ -7446,15 +8154,22 @@ def admin_proxy_service_detail(auction_id):
             """, (auction_id, '即決購入:%'))
             summary.update(dict(cur.fetchone() or {}))
         
+        item_dicts = [dict(i) for i in items]
+        available_item_dicts = [dict(i) for i in available_items]
+        for item_dict in item_dicts:
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+        for item_dict in available_item_dicts:
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+
         cur.close()
         conn.close()
         
         return render_template('admin/proxy_service.html',
                              settings=dict(settings) if settings else {},
                              users=[dict(u) for u in users],
-                             items=[dict(i) for i in items],
+                             items=item_dicts,
                              bids=[dict(b) for b in bids],
-                             available_items=[dict(i) for i in available_items],
+                             available_items=available_item_dicts,
                              summary=summary,
                              auction_id=auction_id)
     except Exception as e:
@@ -7473,7 +8188,18 @@ def admin_proxy_service_delete(auction_id):
 
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
-    
+
+    data = request.get_json(silent=True) or request.form
+    raw_proxy_price = data.get('proxy_price')
+    proxy_price = None
+    if raw_proxy_price not in (None, ''):
+        try:
+            proxy_price = int(raw_proxy_price)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': '公開価格は整数で入力してください'}), 400
+        if proxy_price <= 0:
+            return jsonify({'success': False, 'error': '公開価格は1円以上で入力してください'}), 400
+
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
@@ -7560,12 +8286,32 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
 
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raw_body = request.get_data(as_text=True) or ''
+        if raw_body:
+            try:
+                data = json.loads(raw_body)
+            except (TypeError, ValueError):
+                data = None
+    if not isinstance(data, dict):
+        data = request.form
+    raw_proxy_price = data.get('proxy_price')
+    proxy_price = None
+    if raw_proxy_price not in (None, ''):
+        try:
+            proxy_price = int(raw_proxy_price)
+            if proxy_price <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': '公開価格は1円以上で入力してください'}), 400
     
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         # 管理画面に表示できる商品は、管理者・オーナーとも掲載操作を許可する
-        cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = %s", (item_id,))
+        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price FROM merchandise WHERE id = %s", (item_id,))
         item = cur.fetchone()
         
         if not item:
@@ -7583,18 +8329,20 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
             """, (current_user.id, item_id))
             new_value = False
         else:
+            selected_price = proxy_price or get_effective_proxy_price(dict(item))
             cur.execute("""
                 UPDATE merchandise
                 SET show_in_proxy_service = TRUE,
                     auction_id = %s,
+                    wholesale_price = %s,
                     updated_by = %s,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
-            """, (auction_id, current_user.id, item_id))
+            """, (auction_id, selected_price, current_user.id, item_id))
             new_value = True
     else:
         cur = conn.cursor()
-        cur.execute("SELECT show_in_proxy_service, auction_id FROM merchandise WHERE id = ?", (item_id,))
+        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price FROM merchandise WHERE id = ?", (item_id,))
         item = cur.fetchone()
         
         if not item:
@@ -7611,14 +8359,20 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
             """, (current_user.id, item_id))
             new_value = False
         else:
+            item_dict = {
+                'listing_price': item[2] if len(item) > 2 else 0,
+                'wholesale_price': item[3] if len(item) > 3 else 0,
+            }
+            selected_price = proxy_price or get_effective_proxy_price(item_dict)
             cur.execute("""
                 UPDATE merchandise
                 SET show_in_proxy_service = 1,
                     auction_id = ?,
+                    wholesale_price = ?,
                     updated_by = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (auction_id, current_user.id, item_id))
+            """, (auction_id, selected_price, current_user.id, item_id))
             new_value = True
     
     conn.commit()
@@ -7650,9 +8404,19 @@ def admin_proxy_service_bulk_toggle(auction_id):
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raw_body = request.get_data(as_text=True) or ''
+        if raw_body:
+            try:
+                data = json.loads(raw_body)
+            except (TypeError, ValueError):
+                data = None
+    if not isinstance(data, dict):
+        data = request.form
     item_ids = data.get('item_ids', [])
     action = data.get('action', 'add')  # 'add' or 'remove'
+    item_prices = data.get('item_prices', {}) or {}
     
     if not item_ids:
         return jsonify({'success': False, 'error': '商品が選択されていません'}), 400
@@ -7665,14 +8429,20 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
+                    selected_price = item_prices.get(str(item_id)) or item_prices.get(item_id)
+                    try:
+                        selected_price = int(selected_price) if selected_price not in (None, '') else None
+                    except (TypeError, ValueError):
+                        selected_price = None
                     cur.execute("""
                         UPDATE merchandise
                         SET show_in_proxy_service = TRUE,
                             auction_id = %s,
+                            wholesale_price = COALESCE(%s, wholesale_price, listing_price),
                             updated_by = %s,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
-                    """, (auction_id, current_user.id, item_id))
+                    """, (auction_id, selected_price, current_user.id, item_id))
                 else:
                     cur.execute("""
                         UPDATE merchandise
@@ -7690,14 +8460,20 @@ def admin_proxy_service_bulk_toggle(auction_id):
         for item_id in item_ids:
             try:
                 if action == 'add':
+                    selected_price = item_prices.get(str(item_id)) or item_prices.get(item_id)
+                    try:
+                        selected_price = int(selected_price) if selected_price not in (None, '') else None
+                    except (TypeError, ValueError):
+                        selected_price = None
                     cur.execute("""
                         UPDATE merchandise
                         SET show_in_proxy_service = 1,
                             auction_id = ?,
+                            wholesale_price = COALESCE(?, wholesale_price, listing_price),
                             updated_by = ?,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
-                    """, (auction_id, current_user.id, item_id))
+                    """, (auction_id, selected_price, current_user.id, item_id))
                 else:
                     cur.execute("""
                         UPDATE merchandise
@@ -7736,7 +8512,7 @@ def admin_proxy_service_history():
             # 落札済み商品（代行サービス経由で売却された商品）
             # proxy_service_bidsに入札があり、sale_dateが入っている商品
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price,
+                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price, m.sales_destination,
                        m.photo_path, m.listing_price,
                        u.display_name as winner_name,
                        pb.bid_amount as winning_bid,
@@ -7770,7 +8546,7 @@ def admin_proxy_service_history():
             
             # 落札済み商品
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price,
+                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price, m.sales_destination,
                        m.photo_path, m.listing_price,
                        u.display_name as winner_name,
                        pb.bid_amount as winning_bid,
@@ -7853,6 +8629,8 @@ def admin_proxy_service_finalize(auction_id):
                 winning_bid = item['winning_bid']
                 winner_name = item['winner_name'] or ''
                 original_id = item['id']
+                original_purchase_price = int(item.get('purchase_price') or 0)
+                client_wholesale_fee_rate = round(((winning_bid - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
                 
                 # 1. 管理者側の商品を「売却済み」にする
                 cur.execute("""
@@ -7860,26 +8638,27 @@ def admin_proxy_service_finalize(auction_id):
                     SET sale_date = %s,
                         sale_price = %s,
                         sale_type = 'auction',
+                        sales_destination = %s,
                         show_in_proxy_service = FALSE
                     WHERE id = %s
-                """, (today, winning_bid, original_id))
+                """, (today, winning_bid, f'代行仕入れ落札: {winner_name}', original_id))
                 
                 # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
                 cur.execute("""
                     INSERT INTO merchandise (
                         user_id, purchase_date, photo_path, product_name, brand_name,
-                        item_condition, store_name, purchase_price, payment_method,
+                        item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
                         model_number, supplier_detail, additional_photos, is_listed, notes
                     ) VALUES (
                         %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
                         %s, %s, %s,
                         %s, %s, %s, %s, %s
                     ) RETURNING id
                 """, (
                     winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
-                    item.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
+                    item.get('item_condition'), '代行仕入れサービス', winning_bid, client_wholesale_fee_rate, winning_bid, '代行仕入れ',
                     item.get('listing_price', 0), item.get('expected_shipping', 0), item.get('expected_commission', 0),
                     item.get('model_number'), '代行仕入れサービス', item.get('additional_photos'), False, item.get('notes')
                 ))
@@ -7898,16 +8677,16 @@ def admin_proxy_service_finalize(auction_id):
                 """, (
                     doc_no, winner_user_id, today, winner_name,
                     '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}', 'draft', True
+                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}\n落札者: {winner_name}', 'submitted', True
                 ))
                 keisan_id = cur.fetchone()['id']
                 
                 # 計算書明細を追加
                 cur.execute("""
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, quantity, unit_price, amount
-                    ) VALUES (%s, %s, %s, %s, %s, %s)
-                """, (keisan_id, 1, item.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (keisan_id, 1, item.get('product_name', '商品'), new_item_id, 1, winning_bid, winning_bid))
                 
                 # 4. 落札者の利用可能額を減算
                 cur.execute("""
@@ -7950,6 +8729,8 @@ def admin_proxy_service_finalize(auction_id):
             if winner_user_id and winning_bid:
                 winner_name = item_dict.get('winner_name') or ''
                 original_id = item_dict['id']
+                original_purchase_price = int(item_dict.get('purchase_price') or 0)
+                client_wholesale_fee_rate = round(((winning_bid - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
                 
                 # 1. 管理者側の商品を「売却済み」にする
                 cur.execute("""
@@ -7957,26 +8738,27 @@ def admin_proxy_service_finalize(auction_id):
                     SET sale_date = ?,
                         sale_price = ?,
                         sale_type = 'auction',
+                        sales_destination = ?,
                         show_in_proxy_service = 0
                     WHERE id = ?
-                """, (today, winning_bid, original_id))
+                """, (today, winning_bid, f'代行仕入れ落札: {winner_name}', original_id))
                 
                 # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
                 cur.execute("""
                     INSERT INTO merchandise (
                         user_id, purchase_date, photo_path, product_name, brand_name,
-                        item_condition, store_name, purchase_price, payment_method,
+                        item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                         listing_price, expected_shipping, expected_commission,
                         model_number, supplier_detail, additional_photos, is_listed, notes
                     ) VALUES (
                         ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?,
                         ?, ?, ?,
                         ?, ?, ?, ?, ?
                     )
                 """, (
                     winner_user_id, today, item_dict.get('photo_path'), item_dict.get('product_name'), item_dict.get('brand_name'),
-                    item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, '代行仕入れ',
+                    item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, client_wholesale_fee_rate, winning_bid, '代行仕入れ',
                     item_dict.get('listing_price') or 0, item_dict.get('expected_shipping') or 0, item_dict.get('expected_commission') or 0,
                     item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos'), 0, item_dict.get('notes')
                 ))
@@ -7995,16 +8777,16 @@ def admin_proxy_service_finalize(auction_id):
                 """, (
                     doc_no, winner_user_id, today, winner_name,
                     '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}', 'draft', 1
+                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}\n落札者: {winner_name}', 'submitted', 1
                 ))
                 keisan_id = cur.lastrowid
                 
                 # 計算書明細を追加
                 cur.execute("""
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, quantity, unit_price, amount
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                """, (keisan_id, 1, item_dict.get('product_name', '商品'), 1, winning_bid, winning_bid))
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (keisan_id, 1, item_dict.get('product_name', '商品'), new_item_id, 1, winning_bid, winning_bid))
                 
                 # 4. 落札者の利用可能額を減算
                 cur.execute("""
@@ -8058,6 +8840,34 @@ def admin_auction_keisan_list():
             ORDER BY k.created_at DESC
         """)
         keisan_list = [dict(row) for row in cur.fetchall()]
+
+    keisan_ids = [doc.get('id') for doc in keisan_list if doc.get('id')]
+    item_map = {}
+    if keisan_ids:
+        if DATABASE_URL:
+            placeholders = ','.join(['%s'] * len(keisan_ids))
+            cur.execute(
+                f"SELECT keisan_id, item_name, merchandise_id FROM user_keisan_items WHERE keisan_id IN ({placeholders}) ORDER BY keisan_id, item_no",
+                tuple(keisan_ids)
+            )
+            item_rows = [dict(row) for row in cur.fetchall()]
+        else:
+            placeholders = ','.join(['?'] * len(keisan_ids))
+            cur.execute(
+                f"SELECT keisan_id, item_name, merchandise_id FROM user_keisan_items WHERE keisan_id IN ({placeholders}) ORDER BY keisan_id, item_no",
+                tuple(keisan_ids)
+            )
+            item_rows = [dict(row) for row in cur.fetchall()]
+
+        for row in item_rows:
+            item_map.setdefault(row['keisan_id'], []).append(row)
+
+    for doc in keisan_list:
+        doc_items = item_map.get(doc.get('id'), [])
+        doc['item_rows'] = doc_items
+        doc['item_names'] = ' / '.join(
+            [row.get('item_name') for row in doc_items if row.get('item_name')]
+        ) or '-'
     
     cur.close()
     conn.close()
@@ -8461,12 +9271,42 @@ def public_proxy_service(auction_id):
         """, (auction_id,))
         items = cur.fetchall()
     
+    item_dicts = [dict(i) for i in items]
+    item_ids = [item_dict.get('id') for item_dict in item_dicts if item_dict.get('id')]
+    if item_ids:
+        if DATABASE_URL:
+            placeholders = ','.join(['%s'] * len(item_ids))
+            cur.execute(
+                f"SELECT id, wholesale_price FROM merchandise WHERE id IN ({placeholders})",
+                tuple(item_ids)
+            )
+            price_map = {
+                row['id']: row.get('wholesale_price')
+                for row in cur.fetchall()
+            }
+        else:
+            placeholders = ','.join(['?'] * len(item_ids))
+            cur.execute(
+                f"SELECT id, wholesale_price FROM merchandise WHERE id IN ({placeholders})",
+                tuple(item_ids)
+            )
+            price_map = {
+                row[0]: row[1]
+                for row in cur.fetchall()
+            }
+        for item_dict in item_dicts:
+            item_dict['wholesale_price'] = price_map.get(item_dict.get('id'))
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+    else:
+        for item_dict in item_dicts:
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+
     cur.close()
     conn.close()
     
     return render_template('proxy_service_public.html',
                          settings=settings_dict,
-                         items=[dict(i) for i in items],
+                         items=item_dicts,
                          end_datetime=end_dt if 'end_dt' in dir() else settings_dict.get('end_datetime'),
                          auction_id=auction_id)
 
@@ -8522,7 +9362,7 @@ def proxy_service_bid():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # まず商品を取得してauction_idを確認
-        cur.execute("SELECT id, listing_price, auction_id FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
+        cur.execute("SELECT id, listing_price, wholesale_price, auction_id FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
         item = cur.fetchone()
         if not item:
             cur.close()
@@ -8557,7 +9397,8 @@ def proxy_service_bid():
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = %s ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        min_bid = highest['bid_amount'] + 1 if highest else (item['listing_price'] or 0)
+        effective_price = get_effective_proxy_price(dict(item))
+        min_bid = highest['bid_amount'] + 1 if highest else effective_price
         
         if bid_amount < min_bid:
             cur.close()
@@ -8578,7 +9419,7 @@ def proxy_service_bid():
         cur = conn.cursor()
         
         # まず商品を取得してauction_idを確認
-        cur.execute("SELECT id, listing_price, auction_id FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
+        cur.execute("SELECT id, listing_price, wholesale_price, auction_id FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
         item = cur.fetchone()
         if not item:
             cur.close()
@@ -8586,7 +9427,7 @@ def proxy_service_bid():
             return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
         
         # 商品のauction_idに基づいて設定を取得
-        auction_id = item[2] if len(item) > 2 else None  # auction_id
+        auction_id = item[3] if len(item) > 3 else None  # auction_id
         if auction_id:
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         else:
@@ -8627,7 +9468,14 @@ def proxy_service_bid():
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = ? ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        min_bid = highest[0] + 1 if highest else (item[1] or 0)
+        item_dict = {
+            'id': item[0],
+            'listing_price': item[1],
+            'wholesale_price': item[2],
+            'auction_id': item[3] if len(item) > 3 else None,
+        }
+        effective_price = get_effective_proxy_price(item_dict)
+        min_bid = highest[0] + 1 if highest else effective_price
         
         if bid_amount < min_bid:
             cur.close()
@@ -8686,7 +9534,8 @@ def proxy_service_purchase():
         cur.execute("""
             SELECT id, listing_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
-                   expected_commission, model_number, additional_photos, notes
+                   expected_commission, model_number, additional_photos, notes,
+                   purchase_price, wholesale_price, wholesale_fee_rate
             FROM merchandise 
             WHERE id = %s AND show_in_proxy_service = TRUE
         """, (merchandise_id,))
@@ -8733,13 +9582,15 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
         
-        purchase_price = item['listing_price'] or 0
+        purchase_price = get_effective_proxy_price(dict(item))
         if purchase_price <= 0:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
         
         # 利用可能金額チェック
+        original_purchase_price = int(item.get('purchase_price') or 0)
+        client_wholesale_fee_rate = round(((purchase_price - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
         if not current_user.can_purchase_proxy_item(purchase_price):
             remaining = current_user.get_proxy_service_remaining_budget()
             cur.close()
@@ -8751,6 +9602,7 @@ def proxy_service_purchase():
             UPDATE merchandise 
             SET sale_date = %s, 
                 sale_price = %s,
+                sale_type = 'proxy_service',
                 sales_destination = %s,
                 show_in_proxy_service = FALSE
             WHERE id = %s AND sale_date IS NULL
@@ -8776,15 +9628,15 @@ def proxy_service_purchase():
         cur.execute("""
             INSERT INTO merchandise (
                 user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, purchase_price, payment_method,
+                item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                 listing_price, expected_shipping, expected_commission,
                 model_number, supplier_detail, additional_photos, is_listed, notes
             ) VALUES (
                 %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s,
                 %s, %s, %s, %s, %s
-            )
+            ) RETURNING id
         """, (
             user_id,
             now.date(),
@@ -8793,6 +9645,8 @@ def proxy_service_purchase():
             item.get('brand_name'),
             item.get('item_condition'),
             '代行仕入れサービス',
+            purchase_price,
+            client_wholesale_fee_rate,
             purchase_price,
             '代行仕入れ',
             item.get('listing_price') or 0,
@@ -8804,6 +9658,35 @@ def proxy_service_purchase():
             False,
             buyer_notes,
         ))
+        new_item_id = cur.fetchone()['id']
+
+        doc_no = f"PXY-{now.strftime('%Y%m%d%H%M%S%f')}-{user_id}"
+        cur.execute("""
+            INSERT INTO user_keisan (
+                document_no, user_id, issue_date, recipient_name,
+                subject, total_amount, notes, status, is_admin_created
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s
+            ) RETURNING id
+        """, (
+            doc_no,
+            user_id,
+            now.date(),
+            buyer_name,
+            '代行仕入れサービス購入',
+            purchase_price,
+            f'商品名: {item.get("product_name", "商品")}\n商品ID: {merchandise_id}\n購入者: {buyer_name}',
+            'submitted',
+            True
+        ))
+        keisan_id = cur.fetchone()['id']
+
+        cur.execute("""
+            INSERT INTO user_keisan_items (
+                keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (keisan_id, 1, item.get('product_name', '商品'), new_item_id, 1, purchase_price, purchase_price))
     else:
         cur = conn.cursor()
         
@@ -8811,7 +9694,8 @@ def proxy_service_purchase():
         cur.execute("""
             SELECT id, listing_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
-                   expected_commission, model_number, additional_photos, notes
+                   expected_commission, model_number, additional_photos, notes,
+                   purchase_price, wholesale_price, wholesale_fee_rate
             FROM merchandise 
             WHERE id = ? AND show_in_proxy_service = 1
         """, (merchandise_id,))
@@ -8841,6 +9725,9 @@ def proxy_service_purchase():
             'model_number': item[10],
             'additional_photos': item[11],
             'notes': item[12],
+            'purchase_price': item[13],
+            'wholesale_price': item[14],
+            'wholesale_fee_rate': item[15],
         }
         
         # 商品のauction_idに基づいて設定を取得
@@ -8863,11 +9750,14 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
-        purchase_price = item_dict.get('listing_price') or 0
+        purchase_price = get_effective_proxy_price(item_dict)
         if purchase_price <= 0:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
+
+        original_purchase_price = int(item_dict.get('purchase_price') or 0)
+        client_wholesale_fee_rate = round(((purchase_price - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -8881,6 +9771,7 @@ def proxy_service_purchase():
             UPDATE merchandise 
             SET sale_date = ?, 
                 sale_price = ?,
+                sale_type = 'proxy_service',
                 sales_destination = ?,
                 show_in_proxy_service = 0
             WHERE id = ? AND sale_date IS NULL
@@ -8906,13 +9797,13 @@ def proxy_service_purchase():
         cur.execute("""
             INSERT INTO merchandise (
                 user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, purchase_price, payment_method,
+                item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                 listing_price, expected_shipping, expected_commission,
                 model_number, supplier_detail, additional_photos, is_listed, notes
             ) VALUES (
                 ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?,
                 ?, ?, ?, ?, ?
             )
         """, (
@@ -8924,6 +9815,8 @@ def proxy_service_purchase():
             item_dict.get('item_condition'),
             '代行仕入れサービス',
             purchase_price,
+            client_wholesale_fee_rate,
+            purchase_price,
             '代行仕入れ',
             item_dict.get('listing_price') or 0,
             item_dict.get('expected_shipping') or 0,
@@ -8934,6 +9827,35 @@ def proxy_service_purchase():
             0,
             buyer_notes,
         ))
+        new_item_id = cur.lastrowid
+
+        doc_no = f"PXY-{now.strftime('%Y%m%d%H%M%S%f')}-{user_id}"
+        cur.execute("""
+            INSERT INTO user_keisan (
+                document_no, user_id, issue_date, recipient_name,
+                subject, total_amount, notes, status, is_admin_created
+            ) VALUES (
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?
+            )
+        """, (
+            doc_no,
+            user_id,
+            now.strftime('%Y-%m-%d'),
+            buyer_name,
+            '代行仕入れサービス購入',
+            purchase_price,
+            f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {merchandise_id}\n購入者: {buyer_name}',
+            'submitted',
+            1
+        ))
+        keisan_id = cur.lastrowid
+
+        cur.execute("""
+            INSERT INTO user_keisan_items (
+                keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (keisan_id, 1, item_dict.get('product_name', '商品'), new_item_id, 1, purchase_price, purchase_price))
     
     conn.commit()
     cur.close()
@@ -11816,7 +12738,8 @@ def admin_items():
             if sale_month:
                 cur.execute("""
                     SELECT * FROM merchandise 
-                    WHERE sale_date IS NOT NULL 
+                    WHERE sale_date IS NOT NULL
+                      AND COALESCE(scope, 'admin') = 'admin'
                       AND TO_CHAR(sale_date, 'YYYY-MM') = %s
                     ORDER BY sale_date DESC
                 """, [sale_month])
@@ -11829,9 +12752,12 @@ def admin_items():
                 # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
                 if admin_user_ids:
                     placeholders = ','.join(['%s'] * len(admin_user_ids))
-                    cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+                    cur.execute(
+                        f"SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND (user_id IN ({placeholders}) OR user_id IS NULL) ORDER BY created_at DESC",
+                        admin_user_ids
+                    )
                 else:
-                    cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
+                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
@@ -11866,7 +12792,8 @@ def admin_items():
                     except:
                         pass
                 
-                items.append(item_dict)
+                if is_kaika_inventory_item(item_dict):
+                    items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
@@ -11874,7 +12801,8 @@ def admin_items():
             if sale_month:
                 cur.execute("""
                     SELECT * FROM merchandise 
-                    WHERE sale_date IS NOT NULL 
+                    WHERE sale_date IS NOT NULL
+                      AND COALESCE(scope, 'admin') = 'admin'
                       AND strftime('%%Y-%%m', sale_date) = ?
                     ORDER BY sale_date DESC
                 """, [sale_month])
@@ -11887,9 +12815,12 @@ def admin_items():
                 # 管理者/オーナーの商品のみ取得（user_id IS NULLの管理者商品も含む）
                 if admin_user_ids:
                     placeholders = ','.join(['?'] * len(admin_user_ids))
-                    cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) OR user_id IS NULL ORDER BY created_at DESC", admin_user_ids)
+                    cur.execute(
+                        f"SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND (user_id IN ({placeholders}) OR user_id IS NULL) ORDER BY created_at DESC",
+                        admin_user_ids
+                    )
                 else:
-                    cur.execute("SELECT * FROM merchandise WHERE user_id IS NULL ORDER BY created_at DESC")
+                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND user_id IS NULL ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
@@ -11923,7 +12854,8 @@ def admin_items():
                     except:
                         pass
                 
-                items.append(item_dict)
+                if is_kaika_inventory_item(item_dict):
+                    items.append(item_dict)
         
         cur.close()
         conn.close()
@@ -11953,6 +12885,7 @@ def admin_items():
                 item['profit_rate'] = 0
         
         # 最終更新者名を追加
+        apply_inventory_display_metrics(item, scope='admin')
         updated_by_id = item.get('updated_by')
         if updated_by_id:
             item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
@@ -12041,7 +12974,8 @@ def admin_user_products():
                     except:
                         pass
                 
-                items.append(item_dict)
+                if not is_kaika_inventory_item(item_dict):
+                    items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
@@ -12087,7 +13021,8 @@ def admin_user_products():
                     except:
                         pass
                 
-                items.append(item_dict)
+                if not is_kaika_inventory_item(item_dict):
+                    items.append(item_dict)
         
         cur.close()
         conn.close()
@@ -12144,6 +13079,9 @@ def admin_user_products():
                     can_delete = diff.days < 1
             item['can_delete'] = can_delete
     
+    for item in items:
+        apply_inventory_display_metrics(item, scope='user')
+
     return render_template('admin/user_products.html', 
                           items=items, 
                           users=[dict(u) for u in users])
@@ -12238,6 +13176,18 @@ def admin_add_item():
         item_status = request.form.get('item_status', 'unlisted')
         is_listed = item_status in ['listed', 'sold']
         sale_date = request.form.get('sale_date') if item_status == 'sold' else None
+        sale_type_value = request.form.get('sale_type') or 'normal'
+        sale_price_value = parse_money_value(request.form.get('sale_price'), 0)
+        if form_mode == 'admin':
+            sale_type_value = normalize_kaika_sale_type(sale_type_value)
+            commission_value = calculate_kaika_marketplace_fee(
+                sale_type_value,
+                sale_price_value,
+                request.form.get('commission_rate'),
+                request.form.get('commission')
+            )
+        else:
+            commission_value = parse_money_value(request.form.get('commission'), 0)
         
         try:
             cur.execute(f'''
@@ -12273,11 +13223,11 @@ def admin_add_item():
                 is_listed,
                 request.form.get('listing_date') or None,
                 sale_date or None,
-                request.form.get('sale_type') or 'normal',
-                int(request.form.get('sale_price') or 0),
-                int(request.form.get('shipping_cost') or 0),
+                sale_type_value,
+                sale_price_value,
+                parse_money_value(request.form.get('shipping_cost'), 0),
                 request.form.get('sales_destination'),
-                int(request.form.get('commission') or 0),
+                commission_value,
                 'is_shipped' in request.form,
                 request.form.get('notes')
             ))
@@ -17959,6 +18909,104 @@ def get_fee_settings():
         print(f"[WARN] fee_settings読込失敗（デフォルト使用）: {e}")
         return {}
 
+def _get_int_fee_setting(settings, key, default):
+    try:
+        return int(float(settings.get(key) or default))
+    except (TypeError, ValueError):
+        return default
+
+def _build_fee_tier_rows(settings, prefix, default_max_values, default_fee_values):
+    rows = []
+    current_min = 0
+    for index, (default_max, default_fee) in enumerate(zip(default_max_values, default_fee_values), start=1):
+        max_value = None if default_max is None else _get_int_fee_setting(settings, f'{prefix}_t{index}_max', default_max)
+        fee_value = _get_int_fee_setting(settings, f'{prefix}_t{index}_fee', default_fee)
+        if max_value is None:
+            range_label = f'¥{current_min:,}以上'
+        elif current_min == 0:
+            range_label = f'¥0 〜 ¥{max_value:,}'
+        else:
+            range_label = f'¥{current_min:,} 〜 ¥{max_value:,}'
+        rows.append({
+            'range': range_label,
+            'fee': f'¥{fee_value:,}',
+        })
+        if max_value is None:
+            break
+        current_min = max_value + 1
+    return rows
+
+def build_fee_detail_context(service_type, settings):
+    normal_rate = _get_int_fee_setting(settings, 'commission_normal', 10)
+    detail_map = {
+        'normal': {
+            'title': '通常販売の詳細',
+            'summary': '販売媒体ごとの手数料率を確認できます。',
+            'rows': [
+                {'range': 'メルカリ・ラクマ・ヤフオク等の売上', 'fee': f'{normal_rate}%'},
+            ],
+            'notes': [
+                '売上金額に対して、現在設定されている販売媒体手数料率を適用します。',
+            ],
+        },
+        'photo_packing': {
+            'title': '撮影梱包発送代行の詳細',
+            'summary': '現在設定されている撮影梱包発送代行の料金テーブルです。',
+            'rows': _build_fee_tier_rows(
+                settings,
+                'photo_packing',
+                [19999, 49999, 99999, None],
+                [500, 650, 800, 1000],
+            ),
+            'notes': [
+                '現在の運用では、販売媒体側の手数料を別で反映します。',
+            ],
+        },
+        'wholesale': {
+            'title': '業者販売の詳細',
+            'summary': '現在設定されている業者販売の料金テーブルです。',
+            'rows': _build_fee_tier_rows(
+                settings,
+                'wholesale',
+                [19999, 49999, 99999, 199999, None],
+                [500, 1000, 1500, 2000, 3000],
+            ),
+            'notes': [],
+        },
+        'multi_listing': {
+            'title': '同時出品サービスの詳細',
+            'summary': '現在設定されている同時出品サービスの料金テーブルです。',
+            'rows': _build_fee_tier_rows(
+                settings,
+                'multi_listing',
+                [19999, 49999, None],
+                [300, 400, 500],
+            ),
+            'notes': [],
+        },
+        'auction': {
+            'title': 'オークション販売の詳細',
+            'summary': '現在設定されているオークション販売の料金テーブルです。',
+            'rows': _build_fee_tier_rows(
+                settings,
+                'auction',
+                [19999, 49999, 99999, None],
+                [300, 400, 500, 700],
+            ),
+            'notes': [],
+        },
+    }
+    return detail_map.get(service_type)
+
+@app.route('/admin/fee-detail/<service_type>')
+@login_required
+@admin_required
+def admin_fee_detail(service_type):
+    detail = build_fee_detail_context(service_type, get_fee_settings())
+    if not detail:
+        abort(404)
+    return render_template('admin/fee_detail.html', detail=detail)
+
 def get_monthly_fee(item_count):
     """当月の商品登録数から月額利用料を計算（DB設定優先、未設定時はデフォルト値）"""
     settings = get_fee_settings()
@@ -19823,6 +20871,34 @@ def inquiry_new():
     
     return render_template('inquiry/form.html', categories=INQUIRY_CATEGORIES)
 
+
+def parse_inquiry_image_paths(raw_value):
+    if not raw_value:
+        return []
+
+    if isinstance(raw_value, list):
+        return [str(path).strip() for path in raw_value if str(path).strip()]
+
+    if isinstance(raw_value, (tuple, set)):
+        return [str(path).strip() for path in raw_value if str(path).strip()]
+
+    if isinstance(raw_value, str):
+        value = raw_value.strip()
+        if not value:
+            return []
+
+        if value.startswith('['):
+            try:
+                decoded = json.loads(value)
+                if isinstance(decoded, list):
+                    return [str(path).strip() for path in decoded if str(path).strip()]
+            except Exception:
+                pass
+
+        return [value]
+
+    return [str(raw_value).strip()]
+
 @app.route('/inquiry/<int:id>')
 @login_required
 def inquiry_view(id):
@@ -19850,6 +20926,7 @@ def inquiry_view(id):
             inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')
         if inquiry.get('updated_at') and hasattr(inquiry['updated_at'], 'strftime'):
             inquiry['updated_at'] = inquiry['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+        image_paths = parse_inquiry_image_paths(inquiry.get('image_path'))
         
         # 返信を取得
         if DATABASE_URL:
@@ -19881,6 +20958,7 @@ def inquiry_view(id):
         
         return render_template('inquiry/view.html',
                              inquiry=inquiry,
+                             image_paths=image_paths,
                              replies=replies,
                              categories=INQUIRY_CATEGORIES,
                              statuses=INQUIRY_STATUS)
@@ -20152,6 +21230,7 @@ def admin_inquiry_view(id):
             inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')
         if inquiry.get('updated_at') and hasattr(inquiry['updated_at'], 'strftime'):
             inquiry['updated_at'] = inquiry['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+        image_paths = parse_inquiry_image_paths(inquiry.get('image_path'))
         
         # 返信を取得
         if DATABASE_URL:
@@ -20183,6 +21262,7 @@ def admin_inquiry_view(id):
         
         return render_template('admin/inquiry_view.html',
                              inquiry=inquiry,
+                             image_paths=image_paths,
                              replies=replies,
                              categories=INQUIRY_CATEGORIES,
                              statuses=INQUIRY_STATUS)
@@ -20542,6 +21622,179 @@ def filter_sale_requests(requests_list, filters):
     return filtered
 
 
+SALE_REQUEST_EVENT_LABELS = {
+    'submitted': '送信',
+    'updated': '内容修正',
+    'cancelled': '送信取消',
+    'approved': '承認',
+    'rejected': '差戻し',
+    'shipment_marked': '発送完了',
+    'shipment_reverted': '発送取消',
+}
+
+
+def get_sale_request_event_label(event_type):
+    return SALE_REQUEST_EVENT_LABELS.get(event_type, event_type)
+
+
+def normalize_shipment_status(status):
+    if status in {'pending_review', 'approved_waiting_shipment', 'shipped', 'rejected'}:
+        return status
+    return None
+
+
+def get_shipment_status_label(status):
+    status = normalize_shipment_status(status)
+    labels = {
+        'pending_review': '確認待ち',
+        'approved_waiting_shipment': '発送待ち',
+        'shipped': '発送済み',
+        'rejected': '差戻し',
+    }
+    return labels.get(status, '')
+
+
+def has_shipped_sale_request(cur, item_id):
+    if DATABASE_URL:
+        cur.execute("""
+            SELECT id
+            FROM sale_requests
+            WHERE merchandise_id = %s
+              AND request_type = 'shipping_request'
+              AND (
+                    shipment_status = 'shipped'
+                    OR (status = 'approved' AND shipment_marked_at IS NOT NULL)
+                  )
+            ORDER BY COALESCE(shipment_marked_at, processed_at, created_at) DESC
+            LIMIT 1
+        """, (item_id,))
+    else:
+        cur.execute("""
+            SELECT id
+            FROM sale_requests
+            WHERE merchandise_id = ?
+              AND request_type = 'shipping_request'
+              AND (
+                    shipment_status = 'shipped'
+                    OR (status = 'approved' AND shipment_marked_at IS NOT NULL)
+                  )
+            ORDER BY COALESCE(shipment_marked_at, processed_at, created_at) DESC
+            LIMIT 1
+        """, (item_id,))
+    return cur.fetchone() is not None
+
+
+def record_sale_request_event(conn, sale_request_id, event_type, actor_user_id=None, note=None):
+    if not sale_request_id or not event_type:
+        return
+
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO sale_request_events (sale_request_id, event_type, actor_user_id, note)
+            VALUES (%s, %s, %s, %s)
+        """, (sale_request_id, event_type, actor_user_id, note))
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO sale_request_events (sale_request_id, event_type, actor_user_id, note)
+            VALUES (?, ?, ?, ?)
+        """, (sale_request_id, event_type, actor_user_id, note))
+    cur.close()
+
+
+def load_sale_request_events(conn, request_ids):
+    request_ids = [int(request_id) for request_id in (request_ids or []) if request_id]
+    if not request_ids:
+        return {}
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        placeholders = ','.join(['%s'] * len(request_ids))
+        cur.execute(f"""
+            SELECT e.sale_request_id, e.event_type, e.note, e.created_at,
+                   u.display_name as actor_display_name, u.username as actor_username
+            FROM sale_request_events e
+            LEFT JOIN users u ON e.actor_user_id = u.id
+            WHERE e.sale_request_id IN ({placeholders})
+            ORDER BY e.created_at DESC, e.id DESC
+        """, tuple(request_ids))
+        rows = [dict(row) for row in cur.fetchall()]
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        placeholders = ','.join(['?'] * len(request_ids))
+        cur.execute(f"""
+            SELECT e.sale_request_id, e.event_type, e.note, e.created_at,
+                   u.display_name as actor_display_name, u.username as actor_username
+            FROM sale_request_events e
+            LEFT JOIN users u ON e.actor_user_id = u.id
+            WHERE e.sale_request_id IN ({placeholders})
+            ORDER BY e.created_at DESC, e.id DESC
+        """, tuple(request_ids))
+        rows = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+
+    events_map = {}
+    for row in rows:
+        row['event_label'] = get_sale_request_event_label(row.get('event_type'))
+        events_map.setdefault(row['sale_request_id'], []).append(row)
+    return events_map
+
+
+def notify_sale_request_user_status(item_dict, user_id, event_type, actor_name=None):
+    if not user_id:
+        return
+
+    actor_name = actor_name or (current_user.display_name or current_user.username)
+    event_label = get_sale_request_event_label(event_type)
+    product_name = (item_dict or {}).get('product_name') or '商品'
+
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT line_user_id, display_name, username
+                FROM users
+                WHERE id = %s
+            """, (user_id,))
+            user_row = cur.fetchone()
+            user_info = dict(user_row) if user_row else None
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT line_user_id, display_name, username
+                FROM users
+                WHERE id = ?
+            """, (user_id,))
+            user_row = cur.fetchone()
+            user_info = dict(user_row) if user_row else None
+
+        if user_info and user_info.get('line_user_id'):
+            message = f"""【商品ステータス更新】
+
+{product_name}
+状態: {event_label}
+担当: {actor_name}
+
+マイページから最新状況をご確認ください。"""
+            send_line_push(user_info['line_user_id'], message)
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[WARN] notify_sale_request_user_status failed: {e}")
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def notify_admins_of_sale_request(item_dict, request_type):
     """発送依頼・取引完了報告をLINE連携済み管理者へ通知"""
     request_type = normalize_sale_request_type(request_type)
@@ -20653,7 +21906,7 @@ def submit_sale_request(item_id):
         item_dict = dict(item)
         
         # 取引完了報告は発送依頼承認後のみ受け付ける
-        if request_type == 'completion_report' and not (item_dict.get('is_shipped') or has_approved_shipping_request(cur, item_id)):
+        if request_type == 'completion_report' and not (item_dict.get('is_shipped') or has_shipped_sale_request(cur, item_id)):
             flash('先に発送依頼の承認を受けてから、取引完了報告を送信してください', 'error')
             cur.close()
             conn.close()
@@ -20703,18 +21956,41 @@ def submit_sale_request(item_id):
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    qr_image_path, qr_image_path2, status
+                    qr_image_path, qr_image_path2, status, shipment_status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-            ''', (item_id, current_user.id, request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2))
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+            ''', (
+                item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
+                qr_image_path, qr_image_path2,
+                'pending_review' if request_type == 'shipping_request' else None
+            ))
         else:
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    qr_image_path, qr_image_path2, status
+                    qr_image_path, qr_image_path2, status, shipment_status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-            ''', (item_id, current_user.id, request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            ''', (
+                item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
+                qr_image_path, qr_image_path2,
+                'pending_review' if request_type == 'shipping_request' else None
+            ))
+
+        sale_request_id = cur.lastrowid if not DATABASE_URL else None
+        if DATABASE_URL:
+            cur.execute("SELECT LASTVAL() as id")
+            last_row = cur.fetchone()
+            sale_request_id = (last_row or {}).get('id') if isinstance(last_row, dict) else None
+
+        if sale_request_id:
+            record_sale_request_event(
+                conn,
+                sale_request_id,
+                'submitted',
+                actor_user_id=current_user.id,
+                note=get_sale_request_type_label(request_type)
+            )
         
         conn.commit()
         cur.close()
@@ -20751,16 +22027,24 @@ def load_admin_sale_requests_data():
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute('''
-                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                SELECT sr.*,
+                       m.product_name, m.brand_name, m.photo_path, m.purchase_price, m.is_shipped, m.sale_date,
                        u.username, u.display_name as user_display_name,
-                       p.username as processor_name, p.display_name as processor_display_name
+                       p.username as processor_name, p.display_name as processor_display_name,
+                       sm.username as shipment_marker_username, sm.display_name as shipment_marker_display_name
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 JOIN users u ON sr.user_id = u.id
                 LEFT JOIN users p ON sr.processed_by = p.id
-                ORDER BY 
-                    CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
-                    sr.created_at DESC
+                LEFT JOIN users sm ON sr.shipment_marked_by = sm.id
+                ORDER BY
+                    CASE
+                        WHEN sr.status = 'pending' THEN 0
+                        WHEN sr.request_type = 'shipping_request'
+                             AND COALESCE(sr.shipment_status, '') = 'approved_waiting_shipment' THEN 1
+                        ELSE 2
+                    END,
+                    COALESCE(sr.shipment_marked_at, sr.processed_at, sr.created_at) DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
 
@@ -20773,16 +22057,24 @@ def load_admin_sale_requests_data():
         else:
             cur = conn.cursor()
             cur.execute('''
-                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                SELECT sr.*,
+                       m.product_name, m.brand_name, m.photo_path, m.purchase_price, m.is_shipped, m.sale_date,
                        u.username, u.display_name as user_display_name,
-                       p.username as processor_name, p.display_name as processor_display_name
+                       p.username as processor_name, p.display_name as processor_display_name,
+                       sm.username as shipment_marker_username, sm.display_name as shipment_marker_display_name
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 JOIN users u ON sr.user_id = u.id
                 LEFT JOIN users p ON sr.processed_by = p.id
-                ORDER BY 
-                    CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END,
-                    sr.created_at DESC
+                LEFT JOIN users sm ON sr.shipment_marked_by = sm.id
+                ORDER BY
+                    CASE
+                        WHEN sr.status = 'pending' THEN 0
+                        WHEN sr.request_type = 'shipping_request'
+                             AND COALESCE(sr.shipment_status, '') = 'approved_waiting_shipment' THEN 1
+                        ELSE 2
+                    END,
+                    COALESCE(sr.shipment_marked_at, sr.processed_at, sr.created_at) DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
 
@@ -20793,10 +22085,36 @@ def load_admin_sale_requests_data():
             cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
             rejected_count = cur.fetchone()[0]
 
+        request_ids = [req.get('id') for req in requests_list if req.get('id')]
+        events_map = load_sale_request_events(conn, request_ids)
+
         for req in requests_list:
             req['request_type'] = normalize_sale_request_type(req.get('request_type'))
             req['request_type_label'] = get_sale_request_type_label(req['request_type'])
             req['commission'] = req.get('commission') or 0
+            shipment_status = normalize_shipment_status(req.get('shipment_status'))
+            if req['request_type'] == 'shipping_request' and not shipment_status:
+                if req.get('status') == 'pending':
+                    shipment_status = 'pending_review'
+                elif req.get('status') == 'rejected':
+                    shipment_status = 'rejected'
+                elif req.get('shipment_marked_at') or req.get('is_shipped'):
+                    shipment_status = 'shipped'
+                elif req.get('status') == 'approved':
+                    shipment_status = 'approved_waiting_shipment'
+            req['shipment_status'] = shipment_status
+            req['shipment_status_label'] = get_shipment_status_label(shipment_status) if shipment_status else ''
+            req['events'] = events_map.get(req.get('id'), [])
+            req['can_mark_shipped'] = (
+                req['request_type'] == 'shipping_request'
+                and req.get('status') == 'approved'
+                and req.get('shipment_status') != 'shipped'
+            )
+            req['can_revert_shipment'] = (
+                req['request_type'] == 'shipping_request'
+                and req.get('shipment_status') == 'shipped'
+                and not req.get('sale_date')
+            )
 
         shipping_requests = [req for req in requests_list if req.get('request_type') == 'shipping_request']
         completion_requests = [req for req in requests_list if req.get('request_type') == 'completion_report']
@@ -20890,15 +22208,17 @@ def approve_sale_request(request_id):
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
-                SELECT id, merchandise_id, request_type, sale_price, shipping_cost, commission
-                FROM sale_requests
-                WHERE id = %s
+                SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
+                       sr.shipping_cost, sr.commission, sr.shipment_status, m.product_name
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = %s
             """, (request_id,))
             sale_request = cur.fetchone()
-            cur.close()
             
             if not sale_request:
                 flash('申請が見つかりません', 'error')
+                cur.close()
                 conn.close()
                 return redirect(redirect_to)
             
@@ -20907,6 +22227,11 @@ def approve_sale_request(request_id):
             shipping_cost = sale_request.get('shipping_cost') or 0
             commission = sale_request.get('commission') or 0
             merchandise_id = sale_request['merchandise_id']
+            request_user_id = sale_request['user_id']
+            item_dict = {
+                'id': merchandise_id,
+                'product_name': sale_request.get('product_name'),
+            }
 
             approved_sale_price = sale_price or 0
             approved_shipping_cost = shipping_cost
@@ -20930,22 +22255,21 @@ def approve_sale_request(request_id):
                     return redirect(redirect_to)
             
             cur = conn.cursor()
-            cur.execute('''
-                UPDATE sale_requests 
-                SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s,
-                    sale_price = %s, shipping_cost = %s, commission = %s
-                WHERE id = %s
-            ''', (
-                datetime.now(),
-                current_user.id,
-                admin_note,
-                approved_sale_price,
-                approved_shipping_cost,
-                approved_commission,
-                request_id,
-            ))
-            
             if request_type == 'completion_report':
+                cur.execute('''
+                    UPDATE sale_requests 
+                    SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s,
+                        sale_price = %s, shipping_cost = %s, commission = %s
+                    WHERE id = %s
+                ''', (
+                    datetime.now(),
+                    current_user.id,
+                    admin_note,
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    request_id,
+                ))
                 cur.execute('''
                     UPDATE merchandise 
                     SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, commission = %s,
@@ -20962,17 +22286,34 @@ def approve_sale_request(request_id):
                 ))
             else:
                 cur.execute('''
+                    UPDATE sale_requests 
+                    SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s,
+                        sale_price = %s, shipping_cost = %s, commission = %s,
+                        shipment_status = 'approved_waiting_shipment'
+                    WHERE id = %s
+                ''', (
+                    datetime.now(),
+                    current_user.id,
+                    admin_note,
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    request_id,
+                ))
+                cur.execute('''
                     UPDATE merchandise 
-                    SET is_shipped = TRUE, updated_at = %s, updated_by = %s
+                    SET updated_at = %s, updated_by = %s
                     WHERE id = %s
                 ''', (datetime.now(), current_user.id, merchandise_id))
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
             cur.execute("""
-                SELECT id, merchandise_id, request_type, sale_price, shipping_cost, commission
-                FROM sale_requests
-                WHERE id = ?
+                SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
+                       sr.shipping_cost, sr.commission, sr.shipment_status, m.product_name
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = ?
             """, (request_id,))
             sale_request = cur.fetchone()
             
@@ -20987,6 +22328,11 @@ def approve_sale_request(request_id):
             shipping_cost = sale_request['shipping_cost'] or 0
             commission = sale_request['commission'] or 0
             merchandise_id = sale_request['merchandise_id']
+            request_user_id = sale_request['user_id']
+            item_dict = {
+                'id': merchandise_id,
+                'product_name': sale_request['product_name'],
+            }
 
             approved_sale_price = sale_price or 0
             approved_shipping_cost = shipping_cost
@@ -21011,22 +22357,21 @@ def approve_sale_request(request_id):
                     conn.close()
                     return redirect(redirect_to)
             
-            cur.execute('''
-                UPDATE sale_requests 
-                SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?,
-                    sale_price = ?, shipping_cost = ?, commission = ?
-                WHERE id = ?
-            ''', (
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                current_user.id,
-                admin_note,
-                approved_sale_price,
-                approved_shipping_cost,
-                approved_commission,
-                request_id,
-            ))
-            
             if request_type == 'completion_report':
+                cur.execute('''
+                    UPDATE sale_requests 
+                    SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?,
+                        sale_price = ?, shipping_cost = ?, commission = ?
+                    WHERE id = ?
+                ''', (
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    current_user.id,
+                    admin_note,
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    request_id,
+                ))
                 cur.execute('''
                     UPDATE merchandise 
                     SET is_listed = 1, sale_price = ?, shipping_cost = ?, commission = ?,
@@ -21043,15 +22388,39 @@ def approve_sale_request(request_id):
                 ))
             else:
                 cur.execute('''
+                    UPDATE sale_requests 
+                    SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?,
+                        sale_price = ?, shipping_cost = ?, commission = ?,
+                        shipment_status = 'approved_waiting_shipment'
+                    WHERE id = ?
+                ''', (
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    current_user.id,
+                    admin_note,
+                    approved_sale_price,
+                    approved_shipping_cost,
+                    approved_commission,
+                    request_id,
+                ))
+                cur.execute('''
                     UPDATE merchandise 
-                    SET is_shipped = 1, updated_at = ?, updated_by = ?
+                    SET updated_at = ?, updated_by = ?
                     WHERE id = ?
                 ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
+        record_sale_request_event(
+            conn,
+            request_id,
+            'approved',
+            actor_user_id=current_user.id,
+            note=get_sale_request_type_label(request_type)
+        )
+
         conn.commit()
         cur.close()
         conn.close()
         
+        notify_sale_request_user_status(item_dict, request_user_id, 'approved')
         flash(get_sale_request_messages(request_type)['admin_approve_success'], 'success')
     except Exception as e:
         print(f"Error in approve_sale_request: {e}")
@@ -21073,34 +22442,254 @@ def reject_sale_request(request_id):
     
     conn = get_db()
     request_type = 'shipping_request'
+    item_dict = {}
+    request_user_id = None
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT request_type FROM sale_requests WHERE id = %s", (request_id,))
+        cur.execute("""
+            SELECT sr.request_type, sr.user_id, sr.merchandise_id, m.product_name
+            FROM sale_requests sr
+            JOIN merchandise m ON sr.merchandise_id = m.id
+            WHERE sr.id = %s
+        """, (request_id,))
         sale_request = cur.fetchone()
         request_type = normalize_sale_request_type((sale_request or {}).get('request_type'))
+        request_user_id = (sale_request or {}).get('user_id')
+        item_dict = {
+            'id': (sale_request or {}).get('merchandise_id'),
+            'product_name': (sale_request or {}).get('product_name'),
+        }
         cur = conn.cursor()
         cur.execute('''
             UPDATE sale_requests 
-            SET status = 'rejected', processed_at = %s, processed_by = %s, admin_note = %s
+            SET status = 'rejected', processed_at = %s, processed_by = %s, admin_note = %s,
+                shipment_status = %s
             WHERE id = %s
-        ''', (datetime.now(), current_user.id, admin_note, request_id))
+        ''', (datetime.now(), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
     else:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT request_type FROM sale_requests WHERE id = ?", (request_id,))
+        cur.execute("""
+            SELECT sr.request_type, sr.user_id, sr.merchandise_id, m.product_name
+            FROM sale_requests sr
+            JOIN merchandise m ON sr.merchandise_id = m.id
+            WHERE sr.id = ?
+        """, (request_id,))
         sale_request = cur.fetchone()
-        request_type = normalize_sale_request_type(sale_request[0] if sale_request and sale_request[0] else None)
+        sale_request = dict(sale_request) if sale_request else None
+        request_type = normalize_sale_request_type((sale_request or {}).get('request_type'))
+        request_user_id = (sale_request or {}).get('user_id')
+        item_dict = {
+            'id': (sale_request or {}).get('merchandise_id'),
+            'product_name': (sale_request or {}).get('product_name'),
+        }
+        cur = conn.cursor()
         cur.execute('''
             UPDATE sale_requests 
-            SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?
+            SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?,
+                shipment_status = ?
             WHERE id = ?
-        ''', (datetime.now(), current_user.id, admin_note, request_id))
+        ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
     
+    record_sale_request_event(
+        conn,
+        request_id,
+        'rejected',
+        actor_user_id=current_user.id,
+        note=get_sale_request_type_label(request_type)
+    )
     conn.commit()
     cur.close()
     conn.close()
     
+    notify_sale_request_user_status(item_dict, request_user_id, 'rejected')
     flash(get_sale_request_messages(request_type)['admin_reject_success'], 'info')
+    return redirect(redirect_to)
+
+@app.route('/admin/sale-request/<int:request_id>/shipment', methods=['POST'])
+@login_required
+def admin_sale_request_shipment(request_id):
+    if not current_user.is_admin():
+        return render_permission_denied('問い合わせ管理の権限が必要です')
+
+    action = (request.form.get('action') or 'mark').strip().lower()
+    redirect_to = request.form.get('redirect_to') or request.referrer or url_for('admin_shipping_requests')
+    conn = None
+
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT sr.id, sr.user_id, sr.merchandise_id, sr.request_type, sr.status, sr.shipment_status,
+                       sr.shipment_marked_at, m.product_name, m.sale_date
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = %s
+            """, (request_id,))
+            sale_request = cur.fetchone()
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT sr.id, sr.user_id, sr.merchandise_id, sr.request_type, sr.status, sr.shipment_status,
+                       sr.shipment_marked_at, m.product_name, m.sale_date
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = ?
+            """, (request_id,))
+            sale_request = cur.fetchone()
+
+        sale_request = dict(sale_request) if sale_request else None
+        if not sale_request:
+            cur.close()
+            conn.close()
+            flash('発送依頼が見つかりません', 'error')
+            return redirect(redirect_to)
+
+        if normalize_sale_request_type(sale_request.get('request_type')) != 'shipping_request':
+            cur.close()
+            conn.close()
+            flash('発送依頼のみ操作できます', 'error')
+            return redirect(redirect_to)
+
+        item_dict = {
+            'id': sale_request.get('merchandise_id'),
+            'product_name': sale_request.get('product_name'),
+        }
+        now = datetime.now()
+
+        if action == 'revert':
+            if DATABASE_URL:
+                check_cur = conn.cursor(cursor_factory=RealDictCursor)
+                check_cur.execute("""
+                    SELECT COUNT(*) as count
+                    FROM sale_requests
+                    WHERE merchandise_id = %s
+                      AND request_type = 'completion_report'
+                      AND status IN ('pending', 'approved')
+                """, (sale_request['merchandise_id'],))
+                completion_count = (check_cur.fetchone() or {}).get('count', 0)
+                exec_cur = conn.cursor()
+            else:
+                check_cur = conn.cursor()
+                check_cur.execute("""
+                    SELECT COUNT(*)
+                    FROM sale_requests
+                    WHERE merchandise_id = ?
+                      AND request_type = 'completion_report'
+                      AND status IN ('pending', 'approved')
+                """, (sale_request['merchandise_id'],))
+                completion_count = check_cur.fetchone()[0]
+                exec_cur = conn.cursor()
+
+            if completion_count or sale_request.get('sale_date'):
+                check_cur.close()
+                cur.close()
+                conn.close()
+                flash('取引完了報告が進んでいるため、発送状態は戻せません', 'error')
+                return redirect(redirect_to)
+
+            if DATABASE_URL:
+                exec_cur.execute("""
+                    UPDATE sale_requests
+                    SET shipment_status = 'approved_waiting_shipment',
+                        shipment_marked_at = NULL,
+                        shipment_marked_by = NULL
+                    WHERE id = %s
+                """, (request_id,))
+                exec_cur.execute("""
+                    UPDATE merchandise
+                    SET is_shipped = FALSE,
+                        updated_at = %s,
+                        updated_by = %s
+                    WHERE id = %s
+                """, (now, current_user.id, sale_request['merchandise_id']))
+            else:
+                exec_cur.execute("""
+                    UPDATE sale_requests
+                    SET shipment_status = 'approved_waiting_shipment',
+                        shipment_marked_at = NULL,
+                        shipment_marked_by = NULL
+                    WHERE id = ?
+                """, (request_id,))
+                exec_cur.execute("""
+                    UPDATE merchandise
+                    SET is_shipped = 0,
+                        updated_at = ?,
+                        updated_by = ?
+                    WHERE id = ?
+                """, (now.strftime('%Y-%m-%d %H:%M:%S'), current_user.id, sale_request['merchandise_id']))
+
+            record_sale_request_event(conn, request_id, 'shipment_reverted', actor_user_id=current_user.id)
+            conn.commit()
+            check_cur.close()
+            cur.close()
+            conn.close()
+
+            notify_sale_request_user_status(item_dict, sale_request.get('user_id'), 'shipment_reverted')
+            flash('発送状態を発送待ちに戻しました', 'info')
+            return redirect(redirect_to)
+
+        if sale_request.get('status') != 'approved':
+            cur.close()
+            conn.close()
+            flash('承認済みの発送依頼のみ発送済みにできます', 'error')
+            return redirect(redirect_to)
+
+        if DATABASE_URL:
+            exec_cur = conn.cursor()
+            exec_cur.execute("""
+                UPDATE sale_requests
+                SET shipment_status = 'shipped',
+                    shipment_marked_at = %s,
+                    shipment_marked_by = %s
+                WHERE id = %s
+            """, (now, current_user.id, request_id))
+            exec_cur.execute("""
+                UPDATE merchandise
+                SET is_shipped = TRUE,
+                    updated_at = %s,
+                    updated_by = %s
+                WHERE id = %s
+            """, (now, current_user.id, sale_request['merchandise_id']))
+        else:
+            exec_cur = conn.cursor()
+            exec_cur.execute("""
+                UPDATE sale_requests
+                SET shipment_status = 'shipped',
+                    shipment_marked_at = ?,
+                    shipment_marked_by = ?
+                WHERE id = ?
+            """, (now.strftime('%Y-%m-%d %H:%M:%S'), current_user.id, request_id))
+            exec_cur.execute("""
+                UPDATE merchandise
+                SET is_shipped = 1,
+                    updated_at = ?,
+                    updated_by = ?
+                WHERE id = ?
+            """, (now.strftime('%Y-%m-%d %H:%M:%S'), current_user.id, sale_request['merchandise_id']))
+
+        record_sale_request_event(conn, request_id, 'shipment_marked', actor_user_id=current_user.id)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        notify_sale_request_user_status(item_dict, sale_request.get('user_id'), 'shipment_marked')
+        flash('発送しましたに更新しました', 'success')
+    except Exception as e:
+        print(f"Error in admin_sale_request_shipment: {e}")
+        import traceback
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        flash('発送状態の更新でエラーが発生しました', 'error')
+
     return redirect(redirect_to)
 
 # ユーザー：売却申請の修正
@@ -21179,6 +22768,14 @@ def edit_sale_request(request_id):
                     qr_image_path = ?, qr_image_path2 = ?
                 WHERE id = ?
             ''', (sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, request_id))
+
+        record_sale_request_event(
+            conn,
+            request_id,
+            'updated',
+            actor_user_id=current_user.id,
+            note=get_sale_request_type_label(request_type)
+        )
         
         conn.commit()
         cur.close()

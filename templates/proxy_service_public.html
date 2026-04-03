@@ -743,7 +743,7 @@
                     <!-- 即決モード -->
                     <div class="fixed-price">
                         <div class="price-label">販売価格</div>
-                        <div class="price-amount">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                        <div class="price-amount">¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
                     </div>
                     
                     {% if current_user.is_authenticated and current_user.can_participate_auction() %}
@@ -758,7 +758,7 @@
                     {% endif %}
                     {% else %}
                     <!-- オークションモード -->
-                    <div class="start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="start-price">公開価格: ¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
                     
                     {% if item.highest_bid %}
                     <div class="current-bid">
@@ -776,7 +776,7 @@
                             {% if item.highest_bid %}
                             <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.highest_bid + 1 }}" id="amount-{{ item.id }}">
                             {% else %}
-                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.listing_price or 0 }}" id="amount-{{ item.id }}">
+                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.proxy_price or item.listing_price or 0 }}" id="amount-{{ item.id }}">
                             {% endif %}
                             <button type="submit" class="btn-bid">入札する</button>
                         </div>
