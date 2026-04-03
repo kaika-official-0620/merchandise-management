@@ -3,297 +3,43 @@
 
 {% block content %}
 <style>
-.proxy-history-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.history-tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 0;
-}
-
-.history-tab {
-    padding: 0.75rem 1.5rem;
-    background: transparent;
-    border: none;
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: #64748b;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    transition: all 0.2s;
-}
-
-.history-tab:hover {
-    color: #374151;
-}
-
-.history-tab.active {
-    color: #059669;
-    border-bottom-color: #059669;
-}
-
-.history-section {
-    display: none;
-}
-
-.history-section.active {
-    display: block;
-}
-
-.stats-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.stat-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    text-align: center;
-}
-
-.stat-card.finalized {
-    border-left: 4px solid #10b981;
-}
-
-.stat-card.bids {
-    border-left: 4px solid #3b82f6;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-}
-
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-}
-
-.stat-card.finalized .stat-value {
-    color: #10b981;
-}
-
-.stat-card.bids .stat-value {
-    color: #3b82f6;
-}
-
-/* 落札済み商品リスト */
-.finalized-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.finalized-item {
-    background: white;
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    border-left: 4px solid #10b981;
-}
-
-.finalized-item img {
-    width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 8px;
-    flex-shrink: 0;
-}
-
-.finalized-item-placeholder {
-    width: 60px;
-    height: 60px;
-    background: #e2e8f0;
-    border-radius: 8px;
-    flex-shrink: 0;
-}
-
-.finalized-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.finalized-name {
-    font-weight: 600;
-    color: #1e293b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.finalized-brand {
-    font-size: 0.85rem;
-    color: #64748b;
-}
-
-.finalized-details {
-    display: flex;
-    gap: 1.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.finalized-detail {
-    text-align: center;
-}
-
-.finalized-detail-label {
-    font-size: 0.75rem;
-    color: #94a3b8;
-    display: block;
-}
-
-.finalized-detail-value {
-    font-weight: 600;
-    color: #1e293b;
-}
-
-.finalized-detail-value.price {
-    color: #059669;
-}
-
-/* 入札履歴テーブル */
-.bid-history-table {
-    width: 100%;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    overflow: hidden;
-}
-
-.bid-history-table table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.bid-history-table th {
-    background: #f8fafc;
-    padding: 0.75rem 1rem;
-    text-align: left;
-    font-weight: 600;
-    color: #374151;
-    font-size: 0.85rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.bid-history-table td {
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 0.9rem;
-}
-
-.bid-history-table tr:last-child td {
-    border-bottom: none;
-}
-
-.bid-history-table tr:hover {
-    background: #f8fafc;
-}
-
-.bid-item-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.bid-item-info img {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 6px;
-}
-
-.bid-item-name {
-    font-weight: 500;
-    color: #1e293b;
-    max-width: 200px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.bid-amount {
-    font-weight: 600;
-    color: #059669;
-}
-
-.bid-status {
-    display: inline-block;
-    padding: 0.2rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.bid-status.won {
-    background: #d1fae5;
-    color: #059669;
-}
-
-.bid-status.lost {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.bid-status.pending {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.no-data {
-    text-align: center;
-    padding: 3rem;
-    background: white;
-    border-radius: 12px;
-    color: #64748b;
-}
-
-.back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    color: #64748b;
-    text-decoration: none;
-    font-size: 0.9rem;
-}
-
-.back-link:hover {
-    color: #374151;
-}
-
-@media (max-width: 768px) {
-    .finalized-item {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .finalized-details {
-        width: 100%;
-        justify-content: space-between;
-    }
-    
-    .bid-history-table {
-        overflow-x: auto;
-    }
-    
-    .bid-history-table table {
-        min-width: 600px;
-    }
+.history-page { max-width: 1240px; margin: 0 auto; }
+.history-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
+.btn-link, .tab-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: .65rem 1rem; border-radius: 10px; text-decoration: none; font-weight: 700; border: 1px solid #cbd5e1; background: #fff; color: #475569; cursor: pointer; }
+.btn-link.primary { background: #0f172a; border-color: #0f172a; color: #fff; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.summary-card, .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
+.summary-card { padding: 1rem 1.1rem; }
+.summary-label { color: #64748b; font-size: .84rem; }
+.summary-value { margin-top: .35rem; font-size: 1.9rem; font-weight: 800; color: #0f172a; }
+.tabs { display: flex; gap: .75rem; margin-bottom: 1rem; }
+.tab-btn.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+.panel { padding: 1rem 1.1rem; }
+.section { display: none; }
+.section.active { display: block; }
+.card-list { display: flex; flex-direction: column; gap: 1rem; }
+.history-card { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 1rem; padding: 1rem; border-radius: 14px; border: 1px solid #e2e8f0; background: #f8fafc; }
+.history-card img { width: 90px; height: 90px; object-fit: cover; border-radius: 12px; }
+.thumb-placeholder { width: 90px; height: 90px; border-radius: 12px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; color: #94a3b8; }
+.history-name { font-size: 1.03rem; font-weight: 800; color: #0f172a; }
+.history-sub { color: #64748b; margin-top: .18rem; }
+.detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: .9rem; }
+.detail-box { padding: .8rem; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; }
+.detail-label { color: #64748b; font-size: .76rem; margin-bottom: .2rem; }
+.detail-value { color: #0f172a; font-weight: 700; }
+.detail-value.price { color: #047857; }
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 840px; }
+.data-table th, .data-table td { padding: .85rem 1rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.data-table th { background: #f8fafc; color: #334155; }
+.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.status-chip.won { background: #dcfce7; color: #166534; }
+.status-chip.pending { background: #fef3c7; color: #92400e; }
+.amount { font-weight: 800; color: #047857; }
+.empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
+@media (max-width: 900px) {
+  .summary-grid, .detail-grid { grid-template-columns: 1fr; }
+  .history-card { grid-template-columns: 1fr; }
 }
 </style>
 
@@ -301,103 +47,107 @@
     <h1>代行サービス履歴</h1>
 </div>
 
-<div class="proxy-history-container">
-    {% if current_user.is_owner() %}
-    <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 代行サービス管理に戻る</a>
-    {% endif %}
-    
-    <!-- 統計 -->
-    <div class="stats-summary">
-        <div class="stat-card finalized">
-            <div class="stat-label">落札済み商品</div>
-            <div class="stat-value">{{ finalized_items|length }}</div>
+<div class="history-page">
+    <div class="history-actions">
+        <a href="{{ url_for('admin_proxy_service') }}" class="btn-link">代行サービス管理へ戻る</a>
+        <a href="{{ url_for('admin_auction_keisan_list') }}" class="btn-link primary">オークション計算書を見る</a>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-label">成約済み商品</div>
+            <div class="summary-value">{{ finalized_items|length }}</div>
         </div>
-        <div class="stat-card bids">
-            <div class="stat-label">入札件数</div>
-            <div class="stat-value">{{ bid_history|length }}</div>
+        <div class="summary-card">
+            <div class="summary-label">入札履歴</div>
+            <div class="summary-value">{{ bid_history|length }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">計算書メニュー</div>
+            <div class="summary-value">利用可</div>
         </div>
     </div>
-    
-    <!-- タブ -->
-    <div class="history-tabs">
-        <button class="history-tab active" onclick="showTab('finalized')">落札済み商品</button>
-        <button class="history-tab" onclick="showTab('bids')">入札履歴</button>
+
+    <div class="tabs">
+        <button type="button" class="tab-btn active" data-target="finalized">成約履歴</button>
+        <button type="button" class="tab-btn" data-target="bids">入札履歴</button>
     </div>
-    
-    <!-- 落札済み商品 -->
-    <div id="finalized-section" class="history-section active">
+
+    <section class="panel section active" id="finalized">
         {% if finalized_items %}
-        <div class="finalized-list">
+        <div class="card-list">
             {% for item in finalized_items %}
-            <div class="finalized-item">
+            <article class="history-card">
                 {% if item.photo_path %}
                 <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
                 {% else %}
-                <div class="finalized-item-placeholder"></div>
+                <div class="thumb-placeholder">No Image</div>
                 {% endif %}
-                <div class="finalized-info">
-                    <div class="finalized-name">{{ item.product_name }}</div>
-                    {% if item.brand_name %}
-                    <div class="finalized-brand">{{ item.brand_name }}</div>
-                    {% endif %}
+                <div>
+                    <div class="history-name">{{ item.product_name }}</div>
+                    <div class="history-sub">{{ item.brand_name or '-' }}</div>
+                    <div class="detail-grid">
+                        <div class="detail-box">
+                            <div class="detail-label">購入者</div>
+                            <div class="detail-value">{{ item.winner_name or '-' }}</div>
+                        </div>
+                        <div class="detail-box">
+                            <div class="detail-label">落札額</div>
+                            <div class="detail-value price">¥{{ "{:,}".format(item.winning_bid or item.sale_price or 0) }}</div>
+                        </div>
+                        <div class="detail-box">
+                            <div class="detail-label">成約日</div>
+                            <div class="detail-value">{{ item.sale_date[:10].replace('-', '/') if item.sale_date else '-' }}</div>
+                        </div>
+                        <div class="detail-box">
+                            <div class="detail-label">売上反映</div>
+                            <div class="detail-value">{{ item.sales_destination or '-' }}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="finalized-details">
-                    <div class="finalized-detail">
-                        <span class="finalized-detail-label">落札者</span>
-                        <span class="finalized-detail-value">{{ item.winner_name or '-' }}</span>
-                    </div>
-                    <div class="finalized-detail">
-                        <span class="finalized-detail-label">落札金額</span>
-                        <span class="finalized-detail-value price">¥{{ "{:,}".format(item.winning_bid or item.sale_price or 0) }}</span>
-                    </div>
-                    <div class="finalized-detail">
-                        <span class="finalized-detail-label">落札日</span>
-                        <span class="finalized-detail-value">{{ item.sale_date[:10].replace('-', '/') if item.sale_date else '-' }}</span>
-                    </div>
-                </div>
-            </div>
+            </article>
             {% endfor %}
         </div>
         {% else %}
-        <div class="no-data">
-            <p>落札済み商品はありません</p>
-        </div>
+        <div class="empty-state">成約済みの商品はまだありません。</div>
         {% endif %}
-    </div>
-    
-    <!-- 入札履歴 -->
-    <div id="bids-section" class="history-section">
+    </section>
+
+    <section class="panel section" id="bids">
         {% if bid_history %}
-        <div class="bid-history-table">
-            <table>
+        <div class="table-wrap">
+            <table class="data-table">
                 <thead>
                     <tr>
                         <th>商品</th>
                         <th>入札者</th>
-                        <th>入札金額</th>
-                        <th>入札日時</th>
-                        <th>状態</th>
+                        <th>入札額</th>
+                        <th>日時</th>
+                        <th>結果</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for bid in bid_history %}
                     <tr>
-                        <td>
-                            <div class="bid-item-info">
-                                {% if bid.photo_path %}
-                                <img src="{{ url_for('static', filename=bid.photo_path) }}" alt="">
-                                {% endif %}
-                                <span class="bid-item-name">{{ bid.product_name }}</span>
-                            </div>
-                        </td>
+                        <td>{{ bid.product_name }}</td>
                         <td>{{ bid.user_display_name or bid.bidder_name or '-' }}</td>
-                        <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
-                        <td>{{ bid.created_at[:16].replace('-', '/').replace('T', ' ') if bid.created_at else '-' }}</td>
+                        <td class="amount">¥{{ "{:,}".format(bid.bid_amount or 0) }}</td>
+                        <td>
+                            {% if bid.created_at %}
+                                {% if bid.created_at is string %}
+                                    {{ bid.created_at[:16].replace('-', '/').replace('T', ' ') }}
+                                {% else %}
+                                    {{ bid.created_at.strftime('%Y/%m/%d %H:%M') }}
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td>
                             {% if bid.sale_date %}
-                            <span class="bid-status won">落札済</span>
+                            <span class="status-chip won">落札</span>
                             {% else %}
-                            <span class="bid-status pending">入札中</span>
+                            <span class="status-chip pending">入札中</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -406,22 +156,19 @@
             </table>
         </div>
         {% else %}
-        <div class="no-data">
-            <p>入札履歴はありません</p>
-        </div>
+        <div class="empty-state">入札履歴はまだありません。</div>
         {% endif %}
-    </div>
+    </section>
 </div>
 
 <script>
-function showTab(tab) {
-    // タブをアクティブに
-    document.querySelectorAll('.history-tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
-    
-    // セクションを表示
-    document.querySelectorAll('.history-section').forEach(s => s.classList.remove('active'));
-    document.getElementById(tab + '-section').classList.add('active');
-}
+document.querySelectorAll('.tab-btn').forEach((button) => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((el) => el.classList.remove('active'));
+    document.querySelectorAll('.section').forEach((el) => el.classList.remove('active'));
+    button.classList.add('active');
+    document.getElementById(button.dataset.target)?.classList.add('active');
+  });
+});
 </script>
 {% endblock %}

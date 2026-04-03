@@ -9,6 +9,8 @@
     </h1>
     <div class="header-actions">
         <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">代行サービス履歴</a>
+        <a href="{{ url_for('admin_auction_keisan_list') }}" class="btn btn-secondary">オークション計算書</a>
         <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
         <button onclick="deleteAuction()" class="btn btn-outline-danger">削除</button>
     </div>
@@ -201,7 +203,7 @@
                 <div class="item-info">
                     <div class="item-name">{{ item.product_name or '-' }}</div>
                     <div class="item-brand">{{ item.brand_name or '-' }}</div>
-                    <div class="item-start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="item-start-price">公開価格: ¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
                     {% if item.bid_count %}
                     <div class="item-bid-info">
                         <span class="bid-amount">
@@ -303,8 +305,12 @@
                 <div class="item-info">
                     <div class="item-name">{{ item.product_name or '-' }}</div>
                     <div class="item-brand">{{ item.brand_name or '-' }}</div>
-                    <div class="item-price">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="item-price">公開価格: ¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                    <div class="price-input-row">
+                        <label for="proxy-price-{{ item.id }}">公開価格</label>
+                        <input type="number" id="proxy-price-{{ item.id }}" class="proxy-price-input" min="1" value="{{ item.proxy_price or item.listing_price or 0 }}">
+                    </div>
                 </div>
                 <div class="item-actions">
                     <button type="button" class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
@@ -1004,6 +1010,25 @@
     margin-top: 0.25rem;
 }
 
+.proxy-item-card .price-input-row {
+    margin-top: 0.55rem;
+}
+
+.proxy-item-card .price-input-row label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.proxy-item-card .proxy-price-input {
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
 .proxy-item-card .item-actions {
     padding: 0 0.75rem 0.75rem;
 }
@@ -1060,6 +1085,17 @@ function toggleProxyItem(itemId, btn) {
 }
 
 function addProxyItem(itemId, btn) {
+    const priceInput = document.getElementById(`proxy-price-${itemId}`);
+    const proxyPrice = priceInput ? parseInt(priceInput.value, 10) : NaN;
+    if (!priceInput || Number.isNaN(proxyPrice) || proxyPrice <= 0) {
+        alert('公開価格は1円以上で入力してください');
+        if (priceInput) {
+            priceInput.focus();
+            priceInput.select();
+        }
+        return;
+    }
+
     btn.disabled = true;
     btn.textContent = '処理中...';
     
@@ -1070,7 +1106,10 @@ function addProxyItem(itemId, btn) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+            proxy_price: proxyPrice
+        })
     })
     .then(response => response.json())
     .then(data => {
@@ -1164,10 +1203,25 @@ function toggleAllAvailableItems(checkbox) {
 function bulkAddItems() {
     const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
     const itemIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
+    const itemPrices = {};
     
     if (itemIds.length === 0) {
         alert('商品を選択してください');
         return;
+    }
+
+    for (const itemId of itemIds) {
+        const priceInput = document.getElementById(`proxy-price-${itemId}`);
+        const proxyPrice = priceInput ? parseInt(priceInput.value, 10) : NaN;
+        if (!priceInput || Number.isNaN(proxyPrice) || proxyPrice <= 0) {
+            alert('公開価格は1円以上で入力してください');
+            if (priceInput) {
+                priceInput.focus();
+                priceInput.select();
+            }
+            return;
+        }
+        itemPrices[itemId] = proxyPrice;
     }
     
     if (!confirm(itemIds.length + '件の商品を一括で掲載しますか？')) {
@@ -1184,7 +1238,8 @@ function bulkAddItems() {
         },
         body: JSON.stringify({
             item_ids: itemIds,
-            action: 'add'
+            action: 'add',
+            item_prices: itemPrices
         })
     })
     .then(response => response.json())

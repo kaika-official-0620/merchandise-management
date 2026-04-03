@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}管理者の商品 - 株式会社 開花{% endblock %}
+{% block title %}開花商品管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
@@ -199,15 +199,15 @@
 
     .data-table {
         width: 100%;
-        min-width: 1400px;
+        min-width: 1520px;
         border-collapse: collapse;
-        font-size: 0.9rem;
+        font-size: 1.04rem;
         border: 1px solid #d1d5db;
     }
 
     .data-table th {
         background: #f8fafc;
-        padding: 12px 10px;
+        padding: 13px 11px;
         text-align: left;
         font-weight: 600;
         color: #475569;
@@ -228,7 +228,7 @@
     }
 
     .data-table td {
-        padding: 10px;
+        padding: 12px 11px;
         border: 1px solid #d1d5db;
         vertical-align: middle;
     }
@@ -249,6 +249,75 @@
     .data-table th.updater-col,
     .data-table td.updater-col {
         min-width: 120px;
+    }
+
+    .data-table th.fee-col,
+    .data-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .data-table th.shipping-col,
+    .data-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
+    }
+
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+        color: inherit;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        min-width: 220px;
+        line-height: 1.6;
+        white-space: normal;
+    }
+
+    .fee-detail-line {
+        white-space: normal;
+    }
+
+    .fee-summary-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #2563eb;
+        font-size: 0.66rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .fee-summary-meta {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
+        font-size: 0.68rem;
+        color: #64748b;
+        line-height: 1.5;
+        white-space: normal;
     }
 
     .data-table td.product-name-col {
@@ -491,6 +560,32 @@
         color: #ef4444;
     }
 
+    .item-checkbox,
+    #select-all {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #93c5fd;
+        border-radius: 999px;
+        background: #fff;
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0 !important;
+        cursor: pointer;
+        box-sizing: border-box;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .item-checkbox:checked,
+    #select-all:checked {
+        border-color: #2563eb;
+        background:
+            radial-gradient(circle at center, #2563eb 0 42%, transparent 46%),
+            #ffffff;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
     /* コンディションバッジ */
     .condition-badge {
         display: inline-block;
@@ -545,15 +640,6 @@
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.75rem;
-    }
-
-    /* 一括操作エリア */
-    .bulk-actions {
-        background: #f8fafc;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
     }
 
     /* モーダル */
@@ -871,7 +957,7 @@
 
         .admin-card-title h3 {
             margin: 0;
-            font-size: 0.7rem;
+            font-size: 0.9rem;
             font-weight: 500;
             color: #1e293b;
             line-height: 1.3;
@@ -891,26 +977,109 @@
 
         /* 価格のみコンパクト表示 */
         .admin-card-info-grid {
-            display: block;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
         }
 
         .admin-card-info-item {
-            display: none;
-        }
-
-        /* 仕入価格のみ表示 */
-        .admin-card-info-item:first-child {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
         }
 
         .admin-card-info-label {
-            display: none;
+            display: block;
+            font-size: 0.78rem;
+            color: #94a3b8;
         }
 
         .admin-card-info-value {
-            font-size: 0.75rem;
+            font-size: 0.9rem;
             font-weight: 600;
             color: #1e293b;
+        }
+
+        .fee-breakdown {
+            display: inline-block;
+            text-align: left;
+        }
+
+        .fee-breakdown summary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            list-style: none;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        .fee-breakdown summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .fee-breakdown-body {
+            margin-top: 6px;
+            padding: 8px 10px;
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            background: #f8fbff;
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #475569;
+            white-space: nowrap;
+        }
+
+        .sale-type-inline {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .sale-type-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #4338ca;
+            font-size: 0.68rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .fee-detail-line {
+            white-space: normal;
+        }
+
+        .fee-breakdown-note {
+            color: #94a3b8;
+            font-size: 0.68rem;
+        }
+
+        .fee-summary-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #2563eb;
+            font-size: 0.66rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .fee-summary-meta {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 8px;
+            font-size: 0.68rem;
+            color: #64748b;
+            line-height: 1.5;
+            white-space: normal;
         }
 
         .admin-card-info-value.positive {
@@ -938,7 +1107,7 @@
 </style>
 
 <div class="page-header">
-    <h1>{% if sale_month %}{{ sale_month }} の販売商品{% else %}管理者の商品{% endif %}</h1>
+    <h1>{% if sale_month %}{{ sale_month }} の販売商品{% else %}開花商品管理{% endif %}</h1>
 </div>
 
 {% if sale_month %}
@@ -959,7 +1128,7 @@
         </button>
     </div>
     <div class="action-buttons-group">
-        <a href="{{ url_for('admin_add_item', mode='admin') }}" class="btn btn-primary">+ 管理者商品登録</a>
+        <a href="{{ url_for('admin_add_item', mode='admin') }}" class="btn btn-primary">+ 商品登録</a>
     </div>
 </div>
 
@@ -1027,7 +1196,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>卸価格</label>
+                <label>仕入れ額</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1039,7 +1208,7 @@
                 <input type="number" id="tab-filter-sale-max" placeholder="以下">
             </div>
             <div class="filter-item">
-                <label>利益</label>
+                <label>最終利益</label>
                 <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-profit-max" placeholder="以下">
@@ -1054,32 +1223,12 @@
     </div>
 </div>
 
-{% if items %}
-<div class="bulk-actions">
-    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST"
-        style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; gap: 6px;">
-            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
-            <span>すべて選択</span>
-        </label>
-        <select name="target_user_id" required style="min-width: 200px;">
-            <option value="">転送先ユーザーを選択</option>
-            {% for user in users %}
-            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
-    </form>
-</div>
-{% endif %}
-
 <!-- 商品テーブル -->
 <div class="table-container">
     <div class="table-scroll">
         <table class="data-table" id="itemsTable">
             <thead>
                 <tr>
-                    <th style="width: 40px;"></th>
                     <th style="width: 60px;">写真</th>
                     <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
                     <th class="sortable product-name-col" data-sort="product_name">商品名</th>
@@ -1090,10 +1239,12 @@
                     <th class="owner-col">登録者</th>
                     <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">卸価格</th>
-                    <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable" data-sort="purchase_price">仕入れ額</th>
+                    <th class="sortable fee-col" data-sort="commission_total">手数料</th>
+                    <th class="shipping-col">送料</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
-                    <th class="sortable" data-sort="profit">利益</th>
+                    <th class="sortable" data-sort="sales_destination">販売先</th>
+                    <th class="sortable" data-sort="profit">最終利益</th>
                     <th>販売状況</th>
                     <th style="width: 100px;">操作</th>
                 </tr>
@@ -1105,18 +1256,14 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
-                    data-sales-destination="{{ item.sales_destination or '' }}"
+                    data-sales-destination="{{ item.sales_destination_display or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
-                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.wholesale_price or 0 }}"
-                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.display_purchase_price or 0 }}"
+                    data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.display_sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
-                    <td>
-                        <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
-                            class="item-checkbox">
-                    </td>
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1148,17 +1295,32 @@
                     </td>
                     <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
-                    <td class="amount">
-                        {% if item.listing_price %}
-                        ¥{{ "{:,}".format(item.listing_price) }}
+                    <td class="amount">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                    <td class="amount fee-col">
+                        {% if item.sale_date or item.display_fee_total %}
+                        <details class="fee-breakdown">
+                            <summary><span>¥{{ "{:,}".format(item.display_fee_total or 0) }}</span><span class="fee-summary-toggle">内訳</span></summary>
+                            <div class="fee-breakdown-body">
+                                {% for fee_detail in item.fee_breakdown_details or [] %}
+                                {% if not fee_detail.startswith('送料:') %}
+                                <div class="fee-detail-line">{{ fee_detail }}</div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount shipping-col">
+                        {% if item.sale_date or item.display_shipping_cost %}
+                        ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount">
                         {% if item.sale_date %}
-                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
+                    <td>{{ item.sales_destination_display if item.sale_date else '-' }}</td>
                     <td
                         class="amount {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
                         {% if item.sale_date %}
@@ -1188,8 +1350,8 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="17" style="text-align: center; padding: 40px; color: #94a3b8;">
-                        {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}管理者の商品がありません{% endif %}
+                    <td colspan="18" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}開花商品がありません{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -1213,10 +1375,6 @@
         <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
             <div
                 class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
-                <div class="admin-card-checkbox">
-                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
-                        class="item-checkbox">
-                </div>
                 <div class="admin-card-photo">
                     {% if item.all_photos and item.all_photos|length > 1 %}
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
@@ -1253,18 +1411,39 @@
             <div class="admin-card-body">
                 <div class="admin-card-info-grid">
                     <div class="admin-card-info-item">
-                        <span class="admin-card-info-label">卸価格</span>
-                        <span class="admin-card-info-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
+                        <span class="admin-card-info-label">仕入れ額</span>
+                        <span class="admin-card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
                     </div>
                     <div class="admin-card-info-item">
-                        <span class="admin-card-info-label">出品</span>
-                        <span class="admin-card-info-value">{% if item.listing_price %}¥{{
-                            "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
+                        <span class="admin-card-info-label">手数料</span>
+                        <span class="admin-card-info-value">
+                            {% if item.sale_date or item.display_fee_total %}
+                            ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">送料</span>
+                        <span class="admin-card-info-value">
+                            {% if item.sale_date or item.display_shipping_cost %}
+                            ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
                     </div>
                     <div class="admin-card-info-item">
                         <span class="admin-card-info-label">売上</span>
-                        <span class="admin-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or
+                        <span class="admin-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or
                             0) }}{% else %}-{% endif %}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">販売先</span>
+                        <span class="admin-card-info-value">{{ item.sales_destination_display if item.sale_date else '-' }}</span>
+                    </div>
+                    <div class="admin-card-info-item">
+                        <span class="admin-card-info-label">最終利益</span>
+                        <span class="admin-card-info-value {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                            {% if item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -1278,7 +1457,7 @@
         {% else %}
         <div class="admin-item-card">
             <div class="admin-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}管理者の商品がありません{% endif %}
+                {% if sale_month %}{{ sale_month }} に販売された商品はありません{% else %}開花商品がありません{% endif %}
             </div>
         </div>
         {% endfor %}
@@ -1584,6 +1763,7 @@
     function sortTable(column, ascending) {
         const tbody = document.querySelector('#itemsTable tbody');
         const rows = Array.from(tbody.querySelectorAll('tr'));
+        const datasetKey = column.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 
         rows.sort((a, b) => {
             if (!a.dataset.id) return 1;
@@ -1593,19 +1773,19 @@
 
             switch (column) {
                 case 'purchase_price':
-                case 'listing_price':
+                case 'commission_total':
                 case 'sale_price':
                 case 'profit':
-                    aVal = parseInt(a.dataset[column.replace('_', '')] || a.dataset[column] || '0') || 0;
-                    bVal = parseInt(b.dataset[column.replace('_', '')] || b.dataset[column] || '0') || 0;
+                    aVal = parseInt(a.dataset[datasetKey] || '0') || 0;
+                    bVal = parseInt(b.dataset[datasetKey] || '0') || 0;
                     break;
                 case 'kaika_product_code':
                     aVal = (a.dataset.kaikaProductCode || '');
                     bVal = (b.dataset.kaikaProductCode || '');
                     break;
                 default:
-                    aVal = a.dataset[column.replace('_', '')] || '';
-                    bVal = b.dataset[column.replace('_', '')] || '';
+                    aVal = a.dataset[datasetKey] || '';
+                    bVal = b.dataset[datasetKey] || '';
             }
 
             if (ascending) {

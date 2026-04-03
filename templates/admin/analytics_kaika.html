@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}開花（管理者）分析 - 株式会社 開花{% endblock %}
+{% block title %}開花管理分析 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>開花（管理者）商品の分析</h1>
-    <p class="page-description">管理者商品（user_id = NULL）のみの分析データ</p>
+    <h1>開花管理分析</h1>
+    <p class="page-description">開花側で管理している商品の売上・利益・販売先を詳しく確認できます。</p>
 </div>
 
 <!-- 日付フィルター -->
@@ -61,6 +61,13 @@
             </span>
         </div>
     </a>
+    <div class="admin-stat-card">
+        <div class="stat-label-top">ユーザー管理手数料</div>
+        <div class="stat-content">
+            <span class="stat-value">¥{{ "{:,}".format(service_fee_stats.total_fee_revenue or 0) }}</span>
+            <span class="stat-subvalue">{{ service_fee_stats.sold_count or 0 }}件分</span>
+        </div>
+    </div>
 </div>
 
 <!-- 在庫統計 -->
@@ -188,6 +195,36 @@
     </div>
     {% endif %}
 </div>
+
+{% if destination_stats %}
+<div class="admin-section">
+    <h2>販売先別の実績</h2>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>販売先</th>
+                    <th>販売件数</th>
+                    <th>売上</th>
+                    <th>利益</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for destination in destination_stats %}
+                <tr>
+                    <td>{{ destination.sales_destination }}</td>
+                    <td>{{ destination.count }}件</td>
+                    <td>¥{{ "{:,}".format(destination.total_sales or 0) }}</td>
+                    <td class="{% if destination.total_profit and destination.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(destination.total_profit or 0) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
 
 <style>
 /* 日付フィルター */
@@ -399,9 +436,16 @@
         font-size: 0.65rem;
     }
     
-    .admin-stat-card .stat-value {
-        font-size: 0.9rem;
-    }
+.admin-stat-card .stat-value {
+    font-size: 0.9rem;
+}
+
+.admin-stat-card .stat-subvalue {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.76rem;
+    color: #64748b;
+}
     
     .admin-section h2 {
         font-size: 0.95rem;

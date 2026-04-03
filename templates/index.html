@@ -622,7 +622,7 @@
 
     .data-table {
         width: 100%;
-        min-width: 1400px;
+        min-width: 1520px;
         border-collapse: collapse;
         font-size: 0.9rem;
         border: 1px solid #d1d5db;
@@ -951,6 +951,35 @@
         color: #ef4444;
     }
 
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        min-width: 220px;
+    }
+
+    .fee-breakdown-note {
+        color: #94a3b8;
+        font-size: 0.68rem;
+    }
+
     /* コンディションバッジ */
     .condition-badge {
         display: inline-block;
@@ -1059,6 +1088,18 @@
     .data-table th.updater-col,
     .data-table td.updater-col {
         min-width: 120px;
+    }
+
+    .data-table th.fee-col,
+    .data-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .data-table th.shipping-col,
+    .data-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
     }
 
     /* ====================
@@ -1662,6 +1703,12 @@
         color: #1d4ed8;
     }
 
+    .sale-request-complete-badge.approved {
+        background: #ecfeff;
+        border: 1px solid #67e8f9;
+        color: #0f766e;
+    }
+
     .btn-shipping-request {
         background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
     }
@@ -2257,6 +2304,8 @@
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
                     <th class="sortable" data-sort="purchase_price">卸価格</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable fee-col" data-sort="commission_total">手数料</th>
+                    <th class="shipping-col">送料</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
                     <th class="sortable" data-sort="profit">利益</th>
                     <th>販売状況</th>
@@ -2270,7 +2319,7 @@
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
                     data-purchase-price="{{ item.wholesale_price or 0 }}"
-                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}" data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
@@ -2306,9 +2355,28 @@
                         ¥{{ "{:,}".format(item.listing_price) }}
                         {% else %}-{% endif %}
                     </td>
+                    <td class="amount fee-col">
+                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        <details class="fee-breakdown">
+                            <summary>¥{{ "{:,}".format(item.display_fee_total or 0) }}</summary>
+                            <div class="fee-breakdown-body">
+                                {% for fee_detail in item.fee_breakdown_details or [] %}
+                                {% if not fee_detail.startswith('送料:') %}
+                                <div>{{ fee_detail }}</div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount shipping-col">
+                        {% if item.sale_date or item.display_shipping_cost %}
+                        ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                        {% else %}-{% endif %}
+                    </td>
                     <td class="amount">
                         {% if item.sale_date %}
-                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td
@@ -2328,7 +2396,9 @@
                         {% elif item.pending_shipping_request %}
                         <span class="status-badge pending-sale">発送依頼確認中</span>
                         {% elif item.can_send_completion_report %}
-                        <span class="status-badge listed">発送対応済み</span>
+                        <span class="status-badge listed">発送されました</span>
+                        {% elif item.approved_shipping_request %}
+                        <span class="status-badge listed">発送準備中</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -2389,6 +2459,10 @@
                             data-listing-price="{{ item.listing_price or 0 }}">
                             取引完了報告
                         </button>
+                        {% elif item.approved_shipping_request %}
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge approved">発送準備中</span>
+                        </div>
                         {% elif item.pending_shipping_request %}
                         {# 送信済みの場合は完了表示 + 修正ボタン #}
                         <div class="sale-request-action-stack">
@@ -2421,7 +2495,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{% if is_shared_view %}16{% else %}15{% endif %}"
+                    <td colspan="{% if is_shared_view %}18{% else %}17{% endif %}"
                         style="text-align: center; padding: 40px; color: #94a3b8;">
                         {% if current_user.is_admin() %}
                         商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
@@ -2460,7 +2534,7 @@
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
-            data-sale-price="{{ item.sale_price or 0 }}"
+            data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
             data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
@@ -2502,7 +2576,9 @@
                     {% elif item.pending_shipping_request %}
                     <span class="status-badge pending-sale">発送依頼確認中</span>
                     {% elif item.can_send_completion_report %}
-                    <span class="status-badge listed">発送対応済み</span>
+                    <span class="status-badge listed">発送されました</span>
+                    {% elif item.approved_shipping_request %}
+                    <span class="status-badge listed">発送準備中</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -2525,6 +2601,22 @@
                         <span class="price-label">売上</span>
                         <span class="price-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
                             else %}-{% endif %}</span>
+                    </div>
+                    <div class="price-item">
+                        <span class="price-label">手数料</span>
+                        <span class="price-value">
+                            {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                            ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
+                    </div>
+                    <div class="price-item">
+                        <span class="price-label">送料</span>
+                        <span class="price-value">
+                            {% if item.sale_date or item.display_shipping_cost %}
+                            ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
                     </div>
                     {% if item.sale_date %}
                     <div class="price-item profit">
@@ -2589,6 +2681,10 @@
                     data-listing-price="{{ item.listing_price or 0 }}">
                     取引完了報告
                 </button>
+                {% elif item.approved_shipping_request %}
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge approved">発送準備中</span>
+                </div>
                 {% elif item.pending_shipping_request %}
                 {# 送信済みの場合は完了表示 + 修正ボタン #}
                 <div class="sale-request-action-stack">
@@ -2931,6 +3027,7 @@
             switch (column) {
                 case 'purchase_price':
                 case 'listing_price':
+                case 'commission_total':
                 case 'sale_price':
                 case 'profit':
                     aVal = parseInt(a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
@@ -2962,11 +3059,12 @@
             'brand_name': 4,
             'item_condition': 5,
             'store_name': 6,
-            'purchase_date': 7,
-            'purchase_price': 8,
-            'listing_price': 9,
-            'sale_price': 10,
-            'profit': 11
+            'purchase_date': 9,
+            'purchase_price': 10,
+            'listing_price': 11,
+            'commission_total': 12,
+            'sale_price': 14,
+            'profit': 15
         };
         return map[column] || 2;
     }
