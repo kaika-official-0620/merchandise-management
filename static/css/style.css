@@ -2231,3 +2231,173 @@ body.sidebar-open {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
 }
+
+/* ===================
+   読みやすさ調整
+   =================== */
+body {
+    line-height: 1.8;
+    letter-spacing: 0.028em;
+}
+
+p,
+li,
+.page-description,
+.form-group .form-help,
+.analytics-detail-note,
+.brand-detail,
+.menu-label {
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+}
+
+.page-header {
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.page-header h1,
+.page-title,
+.admin-section h2 {
+    line-height: 1.45;
+    letter-spacing: 0.04em;
+}
+
+.page-description {
+    max-width: 78ch;
+    color: var(--text-secondary);
+    font-size: 0.98rem;
+}
+
+.sidebar-group-label {
+    letter-spacing: 0.14em;
+}
+
+.sidebar-nav a,
+.sidebar-category-toggle,
+.sidebar-category-items a,
+.sidebar-item-disabled {
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.menu-label {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.form-group label {
+    line-height: 1.65;
+    letter-spacing: 0.025em;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    line-height: 1.65;
+}
+
+.radio-option,
+.checkbox-group label {
+    line-height: 1.65;
+}
+
+.radio-label strong,
+.radio-label small {
+    line-height: 1.7;
+}
+
+.admin-section {
+    padding: 1.6rem;
+}
+
+.admin-table-container,
+.client-table-wrap {
+    padding-bottom: 0.35rem;
+    scrollbar-gutter: stable both-edges;
+}
+
+.admin-table {
+    min-width: max-content;
+    font-size: 0.95rem;
+}
+
+.admin-table th {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.admin-table td {
+    min-width: 118px;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.9rem 1.05rem;
+    vertical-align: top;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    line-height: 1.75;
+}
+
+.admin-table td small {
+    margin-top: 0.25rem;
+    line-height: 1.65;
+}
+
+.admin-stat-card,
+.analytics-card,
+.home-link-panel,
+.company-metric-card,
+.client-analysis-card,
+.client-total-card {
+    border-radius: 16px;
+}
+
+.stat-label-top,
+.company-metric-card__label,
+.client-total-card__label,
+.card-info-label {
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+}
+
+.stat-value,
+.company-metric-card__value,
+.client-total-card__value {
+    line-height: 1.4;
+}
+
+.fee-breakdown {
+    max-width: 100%;
+}
+
+.fee-breakdown-body {
+    white-space: normal !important;
+    min-width: 220px;
+    max-width: 340px;
+    font-size: 0.78rem !important;
+    line-height: 1.75 !important;
+    letter-spacing: 0.015em;
+}
+
+.wide-text-cell {
+    min-width: 320px;
+}
+
+@media (max-width: 768px) {
+    .page-description {
+        font-size: 0.88rem;
+    }
+
+    .admin-table {
+        font-size: 0.84rem;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 0.65rem 0.75rem;
+    }
+}

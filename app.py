@@ -186,6 +186,148 @@ def get_item_back_url(fallback):
 
     return fallback
 
+
+def normalize_month_period(start_month='', end_month='', preset='', default_to_current=False):
+    today = date.today()
+    current_month = today.strftime('%Y-%m')
+    current_year_start = f'{today.year}-01'
+    normalized_preset = (preset or '').strip()
+
+    if normalized_preset == 'month':
+        start_month = current_month
+        end_month = current_month
+    elif normalized_preset == 'year':
+        start_month = current_year_start
+        end_month = current_month
+    elif normalized_preset == 'all':
+        start_month = ''
+        end_month = ''
+    elif default_to_current and not start_month and not end_month:
+        start_month = current_month
+        end_month = current_month
+        normalized_preset = 'month'
+
+    if not normalized_preset:
+        if start_month == current_month and end_month == current_month:
+            normalized_preset = 'month'
+        elif start_month == current_year_start and end_month == current_month:
+            normalized_preset = 'year'
+        elif not start_month and not end_month:
+            normalized_preset = 'all'
+        else:
+            normalized_preset = 'custom'
+
+    return start_month, end_month, normalized_preset
+
+
+def build_month_period_label(start_month='', end_month=''):
+    if start_month and end_month:
+        return start_month if start_month == end_month else f'{start_month} 〜 {end_month}'
+    if start_month:
+        return f'{start_month} 〜'
+    if end_month:
+        return f'〜 {end_month}'
+    return '全期間'
+
+
+def coerce_to_date(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+            try:
+                return datetime.strptime(normalized[:19], fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def normalize_date_period(date_from='', date_to='', preset='', default_to_year=False):
+    today = date.today()
+    normalized_preset = (preset or '').strip()
+
+    if normalized_preset == 'year':
+        date_from = f'{today.year}-01-01'
+        date_to = today.strftime('%Y-%m-%d')
+    elif normalized_preset == 'all':
+        date_from = ''
+        date_to = ''
+    elif default_to_year and not date_from and not date_to:
+        date_from = f'{today.year}-01-01'
+        date_to = today.strftime('%Y-%m-%d')
+        normalized_preset = 'year'
+
+    if not normalized_preset:
+        if date_from == f'{today.year}-01-01' and date_to == today.strftime('%Y-%m-%d'):
+            normalized_preset = 'year'
+        elif not date_from and not date_to:
+            normalized_preset = 'all'
+        else:
+            normalized_preset = 'custom'
+
+    return date_from, date_to, normalized_preset
+
+
+def build_date_period_label(date_from='', date_to=''):
+    if date_from and date_to:
+        return f'{date_from} 〜 {date_to}'
+    if date_from:
+        return f'{date_from} 〜'
+    if date_to:
+        return f'〜 {date_to}'
+    return '全期間'
+
+
+def safe_int(value):
+    try:
+        if value in (None, ''):
+            return 0
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def format_metric_value(value, value_type='currency'):
+    if value_type == 'count':
+        return f"{safe_int(value):,}件"
+    if value_type == 'percent':
+        return f"{safe_int(value):,}%"
+    if value_type == 'text':
+        return str(value or '-')
+    return f"¥{safe_int(value):,}"
+
+
+def build_detail_line(label, value, value_type='currency'):
+    return {
+        'label': label,
+        'value': value,
+        'value_type': value_type,
+        'display': format_metric_value(value, value_type),
+    }
+
+
+def build_metric_payload(metric_id, label, value, value_type='currency', value_class='', subvalue='', title='', formula='', lines=None, note=''):
+    return {
+        'id': metric_id,
+        'label': label,
+        'value': value,
+        'value_type': value_type,
+        'display_value': format_metric_value(value, value_type),
+        'value_class': value_class,
+        'subvalue': subvalue,
+        'title': title or label,
+        'formula': formula,
+        'lines': lines or [],
+        'note': note,
+    }
+
 # データベース設定（PostgreSQL or SQLite）
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -2711,6 +2853,149 @@ def get_sale_type_labels(sale_type):
             labels.append(label)
     return labels
 
+
+USER_SERVICE_FEE_TIER_DEFAULTS = {
+    'photo_packing': ([19999, 49999, 99999, None], [500, 650, 800, 1000]),
+    'wholesale': ([19999, 49999, 99999, 199999, None], [500, 1000, 1500, 2000, 3000]),
+    'multi_listing': ([19999, 49999, None], [300, 400, 500]),
+    'auction': ([19999, 49999, 99999, None], [300, 400, 500, 700]),
+}
+
+
+def calculate_tier_service_fee(prefix, sale_price, settings=None):
+    config = USER_SERVICE_FEE_TIER_DEFAULTS.get(prefix)
+    if not config:
+        return 0
+
+    settings = settings or {}
+    max_values, fee_values = config
+    sale_price_value = safe_int(sale_price)
+
+    for index, (default_max, default_fee) in enumerate(zip(max_values, fee_values), start=1):
+        max_value = None if default_max is None else _get_int_fee_setting(settings, f'{prefix}_t{index}_max', default_max)
+        fee_value = _get_int_fee_setting(settings, f'{prefix}_t{index}_fee', default_fee)
+        if max_value is None or sale_price_value <= max_value:
+            return fee_value
+
+    return 0
+
+
+def build_user_fee_components(item, settings=None):
+    settings = settings if settings is not None else get_fee_settings()
+    sale_type_values = split_sale_types(item.get('sale_type'))
+    sale_price = safe_int(item.get('sale_price'))
+    commission_total = safe_int(item.get('commission'))
+    purchase_price = safe_int(item.get('purchase_price'))
+    wholesale_price = safe_int(item.get('wholesale_price'))
+    destination_label = format_sales_destination(item.get('sales_destination'), item.get('sale_type'))
+    if destination_label == '-':
+        destination_label = '販売媒体'
+
+    service_components = []
+
+    def add_service_component(label, amount, component_type):
+        amount_value = safe_int(amount)
+        if amount_value <= 0:
+            return
+        service_components.append({
+            'label': label,
+            'amount': amount_value,
+            'type': component_type,
+            'is_kaika_revenue': True,
+        })
+
+    if 'photo_packing' in sale_type_values:
+        add_service_component(
+            '撮影梱包発送代行手数料',
+            calculate_tier_service_fee('photo_packing', sale_price, settings),
+            'photo_packing',
+        )
+    if 'multi_listing' in sale_type_values or 'live_commerce' in sale_type_values:
+        add_service_component(
+            '同時出品サービス手数料' if 'multi_listing' in sale_type_values else 'ライブコマース手数料',
+            calculate_tier_service_fee('multi_listing', sale_price, settings),
+            'multi_listing',
+        )
+    if 'wholesale' in sale_type_values:
+        add_service_component(
+            '業者販売手数料',
+            calculate_tier_service_fee('wholesale', sale_price, settings),
+            'wholesale',
+        )
+    if 'auction' in sale_type_values:
+        add_service_component(
+            'オークション出品代行手数料',
+            calculate_tier_service_fee('auction', sale_price, settings),
+            'auction',
+        )
+
+    service_fee_total = sum(component['amount'] for component in service_components)
+    if commission_total and service_fee_total > commission_total:
+        remaining_commission = commission_total
+        adjusted_components = []
+        for index, component in enumerate(service_components):
+            if remaining_commission <= 0:
+                break
+            if index == len(service_components) - 1:
+                adjusted_amount = remaining_commission
+            else:
+                adjusted_amount = min(component['amount'], remaining_commission)
+            if adjusted_amount <= 0:
+                continue
+            updated_component = dict(component)
+            updated_component['amount'] = adjusted_amount
+            adjusted_components.append(updated_component)
+            remaining_commission -= adjusted_amount
+        service_components = adjusted_components
+        service_fee_total = sum(component['amount'] for component in service_components)
+
+    marketplace_fee = 0
+    if 'normal' in sale_type_values:
+        marketplace_fee = max(commission_total - service_fee_total, 0)
+    elif commission_total > service_fee_total:
+        fallback_label = '販売手数料'
+        if 'live_commerce' in sale_type_values or 'multi_listing' in sale_type_values:
+            fallback_label = '同時出品サービス手数料'
+        elif 'wholesale' in sale_type_values:
+            fallback_label = '業者販売手数料'
+        elif 'auction' in sale_type_values:
+            fallback_label = 'オークション出品代行手数料'
+        elif 'photo_packing' in sale_type_values:
+            fallback_label = '撮影梱包発送代行手数料'
+        add_service_component(fallback_label, commission_total - service_fee_total, 'service_adjustment')
+        service_fee_total = sum(component['amount'] for component in service_components)
+
+    components = []
+    if marketplace_fee:
+        marketplace_rate = round((marketplace_fee / sale_price) * 100, 1) if sale_price > 0 else 0
+        components.append({
+            'label': f'{destination_label}手数料',
+            'amount': marketplace_fee,
+            'type': 'marketplace',
+            'rate_label': f'{marketplace_rate:g}%' if marketplace_rate else '',
+            'is_kaika_revenue': False,
+        })
+
+    components.extend(service_components)
+
+    kaika_fee = max(wholesale_price - purchase_price, 0) if wholesale_price and purchase_price else 0
+    if kaika_fee:
+        components.append({
+            'label': '開花手数料',
+            'amount': kaika_fee,
+            'type': 'kaika_fee',
+            'is_kaika_revenue': True,
+            'note': f'卸価格 ¥{wholesale_price:,} - 開花仕入額 ¥{purchase_price:,}',
+        })
+
+    return {
+        'components': components,
+        'marketplace_fee': marketplace_fee,
+        'service_fee_total': service_fee_total,
+        'kaika_fee': kaika_fee,
+        'kaika_revenue_total': sum(component['amount'] for component in components if component.get('is_kaika_revenue')),
+    }
+
 def get_user_role_by_id(user_id):
     if not user_id:
         return None
@@ -2760,20 +3045,28 @@ def format_sales_destination(destination, sale_type=''):
                 return f'{label}: {name}' if name else label
         return text
 
-    if sale_type == 'auction':
-        return '代行仕入れ落札'
+    sale_type_values = split_sale_types(sale_type)
+    if 'live_commerce' in sale_type_values:
+        return SALE_TYPE_LABELS.get('live_commerce', 'ライブコマース')
+    if 'multi_listing' in sale_type_values:
+        return SALE_TYPE_LABELS.get('multi_listing', '同時出品サービス')
+    if 'wholesale' in sale_type_values:
+        return SALE_TYPE_LABELS.get('wholesale', '業者販売')
+    if 'auction' in sale_type_values or sale_type == 'auction':
+        return SALE_TYPE_LABELS.get('auction', 'オークション販売')
     return '-'
 
-def apply_inventory_display_metrics(item, scope='admin'):
+def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
     purchase_price = int(item.get('purchase_price') or 0)
     wholesale_price = int(item.get('wholesale_price') or 0)
     sale_price = int(item.get('sale_price') or 0)
     shipping_cost = int(item.get('shipping_cost') or 0)
     commission = int(item.get('commission') or 0)
+    user_fee_breakdown = build_user_fee_components(item, fee_settings) if scope == 'user' else None
 
     if scope == 'user':
         display_purchase_price = wholesale_price or purchase_price
-        kaika_fee = max((wholesale_price or 0) - purchase_price, 0) if wholesale_price and purchase_price else 0
+        kaika_fee = safe_int(user_fee_breakdown.get('kaika_fee')) if user_fee_breakdown else 0
     else:
         display_purchase_price = purchase_price
         kaika_fee = 0
@@ -2781,8 +3074,9 @@ def apply_inventory_display_metrics(item, scope='admin'):
     item['display_purchase_price'] = display_purchase_price
     item['display_sale_price'] = sale_price
     display_fee_total = commission + kaika_fee
-    item['marketplace_fee'] = commission
+    item['marketplace_fee'] = safe_int(user_fee_breakdown.get('marketplace_fee')) if user_fee_breakdown else commission
     item['shipping_fee'] = shipping_cost
+    item['kaika_service_fee'] = safe_int(user_fee_breakdown.get('service_fee_total')) if user_fee_breakdown else 0
     item['kaika_fee'] = kaika_fee
     item['display_fee_total'] = display_fee_total
     item['display_commission_total'] = display_fee_total
@@ -2793,10 +3087,23 @@ def apply_inventory_display_metrics(item, scope='admin'):
 
     fee_breakdown_details = []
     sale_type_values = split_sale_types(item.get('sale_type'))
-    if commission:
-        if scope == 'user':
-            fee_breakdown_details.append(f"販売手数料合計: ¥{commission:,}")
-        elif 'normal' in sale_type_values:
+    if scope == 'user' and user_fee_breakdown:
+        for component in user_fee_breakdown.get('components', []):
+            if component.get('type') == 'marketplace':
+                if component.get('rate_label'):
+                    fee_breakdown_details.append(
+                        f"{component['label']}: {component['rate_label']}（¥{component['amount']:,}）"
+                    )
+                else:
+                    fee_breakdown_details.append(f"{component['label']}: ¥{component['amount']:,}")
+            elif component.get('type') == 'kaika_fee' and component.get('note'):
+                fee_breakdown_details.append(
+                    f"{component['label']}: ¥{component['amount']:,}（{component['note']}）"
+                )
+            else:
+                fee_breakdown_details.append(f"{component['label']}: ¥{component['amount']:,}")
+    elif commission:
+        if 'normal' in sale_type_values:
             destination_label = format_sales_destination(item.get('sales_destination'), item.get('sale_type'))
             fee_breakdown_details.append(f"{destination_label if destination_label != '-' else '通常販売'} 手数料: ¥{commission:,}")
         elif 'live_commerce' in sale_type_values or 'multi_listing' in sale_type_values:
@@ -2807,7 +3114,7 @@ def apply_inventory_display_metrics(item, scope='admin'):
             fee_breakdown_details.append(f"オークション販売手数料: ¥{commission:,}")
         else:
             fee_breakdown_details.append(f"媒体手数料: ¥{commission:,}")
-    if kaika_fee:
+    if kaika_fee and scope != 'user':
         if wholesale_price and purchase_price:
             fee_breakdown_details.append(
                 f"開花手数料（仕入れ額に含む）: 卸価格 ¥{wholesale_price:,} - 開花仕入額 ¥{purchase_price:,} = ¥{kaika_fee:,}"
@@ -3384,6 +3691,7 @@ def index():
         print(f"Error fetching sales agency requests: {e}", flush=True)
     
     # アイテムに計算フィールド追加
+    fee_settings = get_fee_settings()
     processed_items = []
     for item in items:
         item_dict = dict(item)
@@ -3467,7 +3775,7 @@ def index():
                 item_dict.get('expected_commission', 0) or 0
             )
 
-        apply_inventory_display_metrics(item_dict, scope='user')
+        apply_inventory_display_metrics(item_dict, scope='user', fee_settings=fee_settings)
         
         # 全画像リスト（メイン + 追加）
         item_dict['all_photos'] = []
@@ -4480,14 +4788,23 @@ def user_analytics():
     # 期間フィルター取得
     start_month = request.args.get('start_month', '')
     end_month = request.args.get('end_month', '')
+    period_preset = request.args.get('period_preset', '')
     
     # 管理者かどうかで条件を変更
     is_admin = current_user.is_admin()
     selected_client_id = request.args.get('client_id', '').strip() if is_admin else ''
+    client_keyword = request.args.get('client_keyword', '').strip() if is_admin else ''
     try:
         selected_client_id_int = int(selected_client_id) if selected_client_id else None
     except (TypeError, ValueError):
         selected_client_id_int = None
+
+    start_month, end_month, period_preset = normalize_month_period(
+        start_month,
+        end_month,
+        period_preset,
+        default_to_current=is_admin
+    )
     selected_client_name = ''
     available_users = []
     client_summaries = []
@@ -4516,6 +4833,8 @@ def user_analytics():
             'user_analytics',
             start_month=start_month,
             end_month=end_month,
+            period_preset=period_preset,
+            client_keyword=client_keyword if is_admin and client_keyword else None,
             client_id=selected_client_id if is_admin and selected_client_id_int else None
         ))
     
@@ -4733,8 +5052,10 @@ def user_analytics():
                     u.id as user_id,
                     COALESCE(u.display_name, u.username) as client_name,
                     COUNT(m.id) as total_items,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NULL THEN 1 ELSE 0 END), 0) as inventory_count,
                     COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END), 0) as sold_count,
                     COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.commission ELSE 0 END), 0) as total_fees,
                     COALESCE(SUM(
                         CASE WHEN m.sale_date IS NOT NULL {sale_date_filter}
                         THEN m.sale_price - COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price) - m.shipping_cost - m.commission
@@ -4752,6 +5073,16 @@ def user_analytics():
                 ORDER BY total_sales DESC, client_name ASC
             """, tuple(client_params))
             client_summaries = [dict(row) for row in cur.fetchall()]
+            if client_keyword:
+                lowered_keyword = client_keyword.lower()
+                client_summaries = [
+                    row for row in client_summaries
+                    if lowered_keyword in (row.get('client_name') or '').lower()
+                ]
+                available_users = [
+                    user for user in available_users
+                    if lowered_keyword in (user.get('display_name') or user.get('username') or '').lower()
+                ]
 
     else:
         import sqlite3
@@ -4969,8 +5300,10 @@ def user_analytics():
                     u.id as user_id,
                     COALESCE(u.display_name, u.username) as client_name,
                     COUNT(m.id) as total_items,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NULL THEN 1 ELSE 0 END), 0) as inventory_count,
                     COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN 1 ELSE 0 END), 0) as sold_count,
                     COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.sale_price ELSE 0 END), 0) as total_sales,
+                    COALESCE(SUM(CASE WHEN m.sale_date IS NOT NULL {sale_date_filter} THEN m.commission ELSE 0 END), 0) as total_fees,
                     COALESCE(SUM(
                         CASE WHEN m.sale_date IS NOT NULL {sale_date_filter}
                         THEN m.sale_price - COALESCE(NULLIF(m.wholesale_price, 0), m.purchase_price) - m.shipping_cost - m.commission
@@ -4988,6 +5321,16 @@ def user_analytics():
                 ORDER BY total_sales DESC, client_name ASC
             """, tuple(client_params))
             client_summaries = [dict(row) for row in cur.fetchall()]
+            if client_keyword:
+                lowered_keyword = client_keyword.lower()
+                client_summaries = [
+                    row for row in client_summaries
+                    if lowered_keyword in (row.get('client_name') or '').lower()
+                ]
+                available_users = [
+                    user for user in available_users
+                    if lowered_keyword in (user.get('display_name') or user.get('username') or '').lower()
+                ]
 
     cur.close()
     conn.close()
@@ -4997,7 +5340,86 @@ def user_analytics():
     analytics_data['available_users'] = available_users
     analytics_data['selected_client_id'] = selected_client_id_int
     analytics_data['selected_client_name'] = selected_client_name
+    analytics_data['client_keyword'] = client_keyword
     analytics_data['client_summaries'] = client_summaries
+    analytics_data['period_preset'] = period_preset
+    analytics_data['period_label'] = build_month_period_label(start_month, end_month)
+    if is_admin:
+        client_total_summary = {
+            'total_items': sum(safe_int(row.get('total_items')) for row in client_summaries),
+            'inventory_count': sum(safe_int(row.get('inventory_count')) for row in client_summaries),
+            'sold_count': sum(safe_int(row.get('sold_count')) for row in client_summaries),
+            'inventory_value': sum(safe_int(row.get('inventory_value')) for row in client_summaries),
+            'total_sales': sum(safe_int(row.get('total_sales')) for row in client_summaries),
+            'total_fees': sum(safe_int(row.get('total_fees')) for row in client_summaries),
+            'total_profit': sum(safe_int(row.get('total_profit')) for row in client_summaries),
+        }
+        analytics_data['client_total_summary'] = client_total_summary
+        analytics_data['client_total_metrics'] = [
+            build_metric_payload(
+                'client-overview-sales',
+                '対象期間売上',
+                client_total_summary['total_sales'],
+                title='クライアント全体の対象期間売上',
+                formula='対象期間売上 = 表示中クライアントの売上合計',
+                lines=[
+                    build_detail_line('対象期間売上', client_total_summary['total_sales']),
+                    build_detail_line('販売済み件数', client_total_summary['sold_count'], 'count'),
+                    build_detail_line('商品登録数', client_total_summary['total_items'], 'count'),
+                ],
+                note='表示期間は上部の当月・今年・全期間・カスタム絞り込みに連動します。',
+            ),
+            build_metric_payload(
+                'client-overview-profit',
+                '対象期間利益',
+                client_total_summary['total_profit'],
+                value_class='profit-positive' if safe_int(client_total_summary['total_profit']) > 0 else 'profit-negative',
+                title='クライアント全体の対象期間利益',
+                formula='対象期間利益 = 売上 - 卸/仕入額 - 送料 - 手数料',
+                lines=[
+                    build_detail_line('対象期間売上', client_total_summary['total_sales']),
+                    build_detail_line('開花手数料', client_total_summary['total_fees']),
+                    build_detail_line('現在庫評価', client_total_summary['inventory_value']),
+                ],
+                note='利益は対象期間内に売却された商品の集計です。',
+            ),
+            build_metric_payload(
+                'client-overview-fees',
+                '開花手数料',
+                client_total_summary['total_fees'],
+                title='クライアント全体からの手数料収益',
+                formula='開花手数料 = クライアント商品の commission 合計',
+                lines=[
+                    build_detail_line('対象期間手数料', client_total_summary['total_fees']),
+                    build_detail_line('対象期間売上', client_total_summary['total_sales']),
+                ],
+            ),
+            build_metric_payload(
+                'client-overview-inventory',
+                '現在庫評価',
+                client_total_summary['inventory_value'],
+                title='クライアント全体の現在庫評価',
+                formula='現在庫評価 = 現在残っている在庫の仕入額/卸額合計',
+                lines=[
+                    build_detail_line('現在庫数', client_total_summary['inventory_count'], 'count'),
+                    build_detail_line('在庫評価', client_total_summary['inventory_value']),
+                ],
+            ),
+        ]
+
+        for client in client_summaries:
+            client['detail_title'] = f"{client.get('client_name') or 'クライアント'} の分析内訳"
+            client['detail_formula'] = '利益 = 売上 - 卸/仕入額 - 送料 - 手数料'
+            client['detail_lines'] = [
+                build_detail_line('商品登録数', client.get('total_items'), 'count'),
+                build_detail_line('販売済み件数', client.get('sold_count'), 'count'),
+                build_detail_line('現在庫数', client.get('inventory_count'), 'count'),
+                build_detail_line('現在庫評価', client.get('inventory_value')),
+                build_detail_line('対象期間売上', client.get('total_sales')),
+                build_detail_line('開花手数料', client.get('total_fees')),
+                build_detail_line('対象期間利益', client.get('total_profit')),
+            ]
+            client['detail_note'] = 'クライアント名を押すと、そのクライアントの商品一覧と月次サマリーへ移動できます。'
     analytics_data.setdefault('top_destination', {})
     analytics_data.setdefault('auction_stats', {})
     analytics_data.setdefault('analytics_memo', '')
@@ -6127,8 +6549,12 @@ def admin_dashboard():
             'inventory_value': 0,
             'total_sales': 0,
             'total_profit': 0,
+            'total_shipping': 0,
+            'total_commission': 0,
             'current_month_sales': 0,
             'current_month_profit': 0,
+            'current_month_shipping': 0,
+            'current_month_commission': 0,
             'current_month_sold_count': 0,
         }
 
@@ -6146,9 +6572,13 @@ def admin_dashboard():
                 summary['sold_count'] += 1
                 summary['total_sales'] += sale_price
                 summary['total_profit'] += profit
+                summary['total_shipping'] += shipping_cost
+                summary['total_commission'] += commission
                 if sale_date >= current_month_start:
                     summary['current_month_sales'] += sale_price
                     summary['current_month_profit'] += profit
+                    summary['current_month_shipping'] += shipping_cost
+                    summary['current_month_commission'] += commission
                     summary['current_month_sold_count'] += 1
             else:
                 summary['unsold_count'] += 1
@@ -6156,12 +6586,15 @@ def admin_dashboard():
 
         return summary
 
+    fee_settings = get_fee_settings()
+
     def build_service_fee_summary(items_subset):
         today = datetime.now().date()
         current_month_start = today.replace(day=1)
         fee_summary = {
             'total_fee_revenue': 0,
             'current_month_fee_revenue': 0,
+            'total_marketplace_fee': 0,
             'sold_count': 0,
         }
 
@@ -6169,13 +6602,134 @@ def admin_dashboard():
             sale_date = normalize_item_date(item.get('sale_date'))
             if not sale_date:
                 continue
-            fee_value = to_int(item.get('commission'))
+            fee_components = build_user_fee_components(item, fee_settings)
+            fee_value = safe_int(fee_components.get('kaika_revenue_total'))
+            marketplace_fee = safe_int(fee_components.get('marketplace_fee'))
             fee_summary['sold_count'] += 1
             fee_summary['total_fee_revenue'] += fee_value
+            fee_summary['total_marketplace_fee'] += marketplace_fee
             if sale_date >= current_month_start:
                 fee_summary['current_month_fee_revenue'] += fee_value
 
         return fee_summary
+
+    def build_monthly_subscription_summary(users_subset, items_subset):
+        today = datetime.now().date()
+        current_month_key = today.strftime('%Y-%m')
+        monthly_item_counts = {}
+
+        for item in items_subset:
+            user_id = item.get('user_id')
+            if not user_id:
+                continue
+            purchase_date = normalize_item_date(item.get('purchase_date')) or today
+            if purchase_date.strftime('%Y-%m') != current_month_key:
+                continue
+            monthly_item_counts[user_id] = monthly_item_counts.get(user_id, 0) + 1
+
+        summary = {
+            'current_month_fee_revenue': 0,
+            'client_count': 0,
+        }
+        for user in users_subset:
+            if user.get('role') != 'user':
+                continue
+            summary['client_count'] += 1
+            summary['current_month_fee_revenue'] += get_monthly_fee(monthly_item_counts.get(user.get('id'), 0))
+
+        return summary
+
+    def build_kaika_sale_type_breakdown(items_subset):
+        today = datetime.now().date()
+        current_month_start = today.replace(day=1)
+        labels = {
+            'normal': '自社通常販売',
+            'wholesale': '自社業者販売',
+            'auction': '自社オークション販売',
+            'live_commerce': '自社ライブコマース',
+            'proxy_service': '代行仕入れ',
+            'other': 'その他',
+        }
+        breakdown = {
+            key: {
+                'label': label,
+                'sales': 0,
+                'profit': 0,
+                'count': 0,
+                'current_month_sales': 0,
+                'current_month_profit': 0,
+                'current_month_count': 0,
+            }
+            for key, label in labels.items()
+        }
+
+        def resolve_bucket(item_dict):
+            sale_type_values = split_sale_types(item_dict.get('sale_type'))
+            if 'proxy_service' in sale_type_values:
+                return 'proxy_service'
+            normalized_type = normalize_kaika_sale_type(item_dict.get('sale_type'))
+            if normalized_type in breakdown:
+                return normalized_type
+            return 'other'
+
+        for item in items_subset:
+            sale_date = normalize_item_date(item.get('sale_date'))
+            if not sale_date:
+                continue
+            bucket = breakdown[resolve_bucket(item)]
+            purchase_price = to_int(item.get('purchase_price'))
+            sale_price = to_int(item.get('sale_price'))
+            shipping_cost = to_int(item.get('shipping_cost'))
+            commission = to_int(item.get('commission'))
+            profit = sale_price - purchase_price - shipping_cost - commission
+            bucket['sales'] += sale_price
+            bucket['profit'] += profit
+            bucket['count'] += 1
+            if sale_date >= current_month_start:
+                bucket['current_month_sales'] += sale_price
+                bucket['current_month_profit'] += profit
+                bucket['current_month_count'] += 1
+
+        return breakdown
+
+    def build_user_service_revenue_breakdown(items_subset):
+        today = datetime.now().date()
+        current_month_start = today.replace(day=1)
+        labels = {
+            'photo_packing': '撮影梱包発送手数料',
+            'multi_listing': '同時販売・ライブコマース手数料',
+            'wholesale': '業者販売手数料',
+            'auction': 'オークション販売手数料',
+            'kaika_fee': '開花手数料',
+            'service_adjustment': 'サービス調整額',
+            'other': 'その他サービス収益',
+        }
+        breakdown = {
+            key: {
+                'label': label,
+                'total': 0,
+                'current_month': 0,
+            }
+            for key, label in labels.items()
+        }
+
+        for item in items_subset:
+            sale_date = normalize_item_date(item.get('sale_date'))
+            if not sale_date:
+                continue
+            fee_components = build_user_fee_components(item, fee_settings)
+            for component in fee_components.get('components', []):
+                if not component.get('is_kaika_revenue'):
+                    continue
+                component_key = component.get('type')
+                if component_key not in breakdown:
+                    component_key = 'other'
+                amount = safe_int(component.get('amount'))
+                breakdown[component_key]['total'] += amount
+                if sale_date >= current_month_start:
+                    breakdown[component_key]['current_month'] += amount
+
+        return breakdown
 
     user_lookup = {}
     user_roles = {}
@@ -6188,7 +6742,7 @@ def admin_dashboard():
             cur.execute("SELECT id, username, display_name, role FROM users")
             users = [dict(row) for row in cur.fetchall()]
             cur.execute("""
-                SELECT id, user_id, product_name, purchase_price, sale_price, shipping_cost, commission,
+                SELECT id, user_id, product_name, purchase_price, wholesale_price, sale_price, shipping_cost, commission,
                        sale_date, purchase_date, sales_destination, sale_type
                 FROM merchandise
                 ORDER BY COALESCE(sale_date, purchase_date, CURRENT_DATE) DESC, id DESC
@@ -6200,7 +6754,7 @@ def admin_dashboard():
             cur.execute("SELECT id, username, display_name, role FROM users")
             users = [dict(row) for row in cur.fetchall()]
             cur.execute("""
-                SELECT id, user_id, product_name, purchase_price, sale_price, shipping_cost, commission,
+                SELECT id, user_id, product_name, purchase_price, wholesale_price, sale_price, shipping_cost, commission,
                        sale_date, purchase_date, sales_destination, sale_type
                 FROM merchandise
                 ORDER BY COALESCE(sale_date, purchase_date, date('now')) DESC, id DESC
@@ -6275,14 +6829,14 @@ def admin_dashboard():
         url_for('admin_dashboard'),
     )
     kaika_summary = build_summary(
-        '開花管理分析',
-        '開花が直接管理している商品の売上・利益・在庫の状況です。',
+        '開花売上分析',
+        '開花の自社販売に加えて、クライアント支援収益やシステム利用料まで含めた全体収益を確認できます。',
         kaika_items,
         url_for('admin_items'),
-        url_for('admin_analytics_kaika'),
+        url_for('admin_analytics_kaika_sales'),
     )
     user_summary = build_summary(
-        'ユーザー管理分析',
+        'ユーザー売上分析',
         '会員商品の売上・利益・在庫と、ユーザー側で動いた実績をまとめています。',
         user_items,
         url_for('admin_user_products'),
@@ -6290,10 +6844,268 @@ def admin_dashboard():
     )
 
     user_fee_summary = build_service_fee_summary(user_items)
+    monthly_subscription_summary = build_monthly_subscription_summary(users, items)
+    kaika_sale_breakdown = build_kaika_sale_type_breakdown(kaika_items)
+    user_service_breakdown = build_user_service_revenue_breakdown(user_items)
     kaika_summary['user_service_fee_revenue'] = user_fee_summary['total_fee_revenue']
     kaika_summary['current_month_user_service_fee_revenue'] = user_fee_summary['current_month_fee_revenue']
+    kaika_summary['monthly_subscription_revenue'] = monthly_subscription_summary['current_month_fee_revenue']
+    kaika_summary['sale_type_breakdown'] = kaika_sale_breakdown
+    kaika_summary['service_revenue_breakdown'] = user_service_breakdown
+    kaika_summary['combined_revenue'] = (
+        safe_int(kaika_summary['total_sales'])
+        + safe_int(user_fee_summary['total_fee_revenue'])
+        + safe_int(monthly_subscription_summary['current_month_fee_revenue'])
+    )
+    kaika_summary['combined_profit'] = (
+        safe_int(kaika_summary['total_profit'])
+        + safe_int(user_fee_summary['total_fee_revenue'])
+        + safe_int(monthly_subscription_summary['current_month_fee_revenue'])
+    )
     company_summary['user_service_fee_revenue'] = user_fee_summary['total_fee_revenue']
     company_summary['current_month_user_service_fee_revenue'] = user_fee_summary['current_month_fee_revenue']
+    company_summary['monthly_subscription_revenue'] = monthly_subscription_summary['current_month_fee_revenue']
+    company_summary['combined_revenue'] = (
+        safe_int(company_summary['total_sales'])
+        + safe_int(user_fee_summary['total_fee_revenue'])
+        + safe_int(monthly_subscription_summary['current_month_fee_revenue'])
+    )
+    company_summary['combined_profit'] = (
+        safe_int(company_summary['total_profit'])
+        + safe_int(user_fee_summary['total_fee_revenue'])
+        + safe_int(monthly_subscription_summary['current_month_fee_revenue'])
+    )
+    user_summary['user_service_fee_revenue'] = user_fee_summary['total_fee_revenue']
+    user_summary['current_month_user_service_fee_revenue'] = user_fee_summary['current_month_fee_revenue']
+    user_summary['client_total_sales'] = user_summary['total_sales']
+    user_summary['client_total_profit'] = user_summary['total_profit']
+    user_summary['client_inventory_value'] = user_summary['inventory_value']
+
+    company_summary['metric_cards'] = [
+        build_metric_payload(
+            'company-total-sales',
+            '総売上',
+            company_summary['total_sales'],
+            title='会社全体の総売上',
+            formula='総売上 = 開花商品の売上 + クライアント商品の売上',
+            lines=[
+                build_detail_line('開花商品売上', kaika_summary['total_sales']),
+                build_detail_line('クライアント商品売上', user_summary['total_sales']),
+            ],
+            note='商品そのものの売上合計です。支援手数料は別で管理しています。',
+        ),
+        build_metric_payload(
+            'company-total-profit',
+            '総利益',
+            company_summary['total_profit'],
+            value_class='profit-positive' if safe_int(company_summary['total_profit']) > 0 else 'profit-negative',
+            title='会社全体の総利益',
+            formula='総利益 = 開花商品利益 + クライアント商品利益',
+            lines=[
+                build_detail_line('開花商品利益', kaika_summary['total_profit']),
+                build_detail_line('クライアント商品利益', user_summary['total_profit']),
+            ],
+            note='ここでは商品売買ベースの利益を合算しています。',
+        ),
+        build_metric_payload(
+            'company-current-sales',
+            '今月売上',
+            company_summary['current_month_sales'],
+            title='当月の会社全体売上',
+            formula='今月売上 = 今月売却された開花商品売上 + 今月売却されたクライアント商品売上',
+            lines=[
+                build_detail_line('今月の開花商品売上', kaika_summary['current_month_sales']),
+                build_detail_line('今月のクライアント商品売上', user_summary['current_month_sales']),
+            ],
+            note='表示期間は当月固定です。',
+        ),
+        build_metric_payload(
+            'company-current-profit',
+            '今月利益',
+            company_summary['current_month_profit'],
+            value_class='profit-positive' if safe_int(company_summary['current_month_profit']) > 0 else 'profit-negative',
+            title='当月の会社全体利益',
+            formula='今月利益 = 今月売却商品の売上 - 仕入額 - 送料 - 手数料',
+            lines=[
+                build_detail_line('今月の開花商品利益', kaika_summary['current_month_profit']),
+                build_detail_line('今月のクライアント商品利益', user_summary['current_month_profit']),
+            ],
+        ),
+        build_metric_payload(
+            'company-sold-count',
+            '販売済み商品数',
+            company_summary['sold_count'],
+            value_type='count',
+            title='販売済み商品数',
+            formula='販売済み商品数 = 売却日が入っている商品数',
+            lines=[
+                build_detail_line('開花商品', kaika_summary['sold_count'], 'count'),
+                build_detail_line('クライアント商品', user_summary['sold_count'], 'count'),
+            ],
+        ),
+        build_metric_payload(
+            'company-inventory',
+            '未販売在庫',
+            company_summary['unsold_count'],
+            value_type='count',
+            subvalue=f"在庫評価 ¥{safe_int(company_summary['inventory_value']):,}",
+            title='現在の未販売在庫',
+            formula='未販売在庫 = 売却日が入っていない商品の件数 / 在庫評価 = 仕入額合計',
+            lines=[
+                build_detail_line('開花在庫数', kaika_summary['unsold_count'], 'count'),
+                build_detail_line('開花在庫評価', kaika_summary['inventory_value']),
+                build_detail_line('クライアント在庫数', user_summary['unsold_count'], 'count'),
+                build_detail_line('クライアント在庫評価', user_summary['inventory_value']),
+            ],
+        ),
+    ]
+
+    kaika_summary['panel_metrics'] = [
+        build_metric_payload(
+            'kaika-direct-sales',
+            '開花自社販売売上',
+            kaika_summary['total_sales'],
+            title='開花自社販売の売上',
+            formula='開花自社販売売上 = 開花管理の商品で売却済みになっている商品の売上合計',
+            lines=[
+                build_detail_line(
+                    f"{kaika_sale_breakdown['normal']['label']}（{kaika_sale_breakdown['normal']['count']}件）",
+                    kaika_sale_breakdown['normal']['sales'],
+                ),
+                build_detail_line(
+                    f"{kaika_sale_breakdown['wholesale']['label']}（{kaika_sale_breakdown['wholesale']['count']}件）",
+                    kaika_sale_breakdown['wholesale']['sales'],
+                ),
+                build_detail_line(
+                    f"{kaika_sale_breakdown['auction']['label']}（{kaika_sale_breakdown['auction']['count']}件）",
+                    kaika_sale_breakdown['auction']['sales'],
+                ),
+                build_detail_line(
+                    f"{kaika_sale_breakdown['live_commerce']['label']}（{kaika_sale_breakdown['live_commerce']['count']}件）",
+                    kaika_sale_breakdown['live_commerce']['sales'],
+                ),
+                build_detail_line(
+                    f"{kaika_sale_breakdown['proxy_service']['label']}（{kaika_sale_breakdown['proxy_service']['count']}件）",
+                    kaika_sale_breakdown['proxy_service']['sales'],
+                ),
+                build_detail_line(
+                    f"{kaika_sale_breakdown['other']['label']}（{kaika_sale_breakdown['other']['count']}件）",
+                    kaika_sale_breakdown['other']['sales'],
+                ),
+            ],
+            note='代行仕入れでクライアントに販売した分も、開花在庫から売れた売上としてここに含めています。',
+        ),
+        build_metric_payload(
+            'kaika-service-revenue',
+            '開花サービス収益',
+            kaika_summary['user_service_fee_revenue'],
+            title='クライアント支援で開花に入る収益',
+            formula='開花サービス収益 = 撮影梱包発送・業者販売・同時販売・オークション販売・開花手数料など、クライアント支援で開花が受け取る金額の合計',
+            lines=[
+                build_detail_line(user_service_breakdown['photo_packing']['label'], user_service_breakdown['photo_packing']['total']),
+                build_detail_line(user_service_breakdown['wholesale']['label'], user_service_breakdown['wholesale']['total']),
+                build_detail_line(user_service_breakdown['multi_listing']['label'], user_service_breakdown['multi_listing']['total']),
+                build_detail_line(user_service_breakdown['auction']['label'], user_service_breakdown['auction']['total']),
+                build_detail_line(user_service_breakdown['kaika_fee']['label'], user_service_breakdown['kaika_fee']['total']),
+                build_detail_line(user_service_breakdown['service_adjustment']['label'], user_service_breakdown['service_adjustment']['total']),
+                build_detail_line('除外している販売媒体手数料', user_fee_summary['total_marketplace_fee']),
+            ],
+            note='メルカリ等の販売媒体手数料は開花の利益ではないため、除外して表示しています。',
+        ),
+        build_metric_payload(
+            'kaika-system-fee',
+            'システム利用料',
+            kaika_summary['monthly_subscription_revenue'],
+            title='今月のシステム利用料見込み',
+            formula='システム利用料 = 登録中クライアントごとの当月登録件数から算出した月額利用料の合計',
+            lines=[
+                build_detail_line('今月のシステム利用料見込み', kaika_summary['monthly_subscription_revenue']),
+                build_detail_line('対象クライアント数', monthly_subscription_summary['client_count'], 'count'),
+            ],
+            note='システム利用料は当月の登録件数から計算した見込み額です。',
+        ),
+        build_metric_payload(
+            'kaika-combined-revenue',
+            '開花売上合計',
+            kaika_summary['combined_revenue'],
+            title='開花に入る売上の合計',
+            formula='開花売上合計 = 開花自社販売売上 + 開花サービス収益 + システム利用料',
+            lines=[
+                build_detail_line('開花自社販売売上', kaika_summary['total_sales']),
+                build_detail_line('開花サービス収益', kaika_summary['user_service_fee_revenue']),
+                build_detail_line('システム利用料', kaika_summary['monthly_subscription_revenue']),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-combined-profit',
+            '開花利益合計',
+            kaika_summary['combined_profit'],
+            value_class='profit-positive' if safe_int(kaika_summary['combined_profit']) > 0 else 'profit-negative',
+            title='開花利益の合計',
+            formula='開花利益合計 = 開花自社販売利益 + 開花サービス収益 + システム利用料',
+            lines=[
+                build_detail_line('開花自社販売利益', kaika_summary['total_profit']),
+                build_detail_line('撮影梱包発送手数料', user_service_breakdown['photo_packing']['total']),
+                build_detail_line('業者販売手数料', user_service_breakdown['wholesale']['total']),
+                build_detail_line('同時販売・ライブコマース手数料', user_service_breakdown['multi_listing']['total']),
+                build_detail_line('オークション販売手数料', user_service_breakdown['auction']['total']),
+                build_detail_line('開花手数料', user_service_breakdown['kaika_fee']['total']),
+                build_detail_line('システム利用料', kaika_summary['monthly_subscription_revenue']),
+            ],
+            note='クライアント支援で受け取る手数料とシステム利用料は、そのまま開花利益として加算しています。',
+        ),
+    ]
+
+    user_summary['panel_metrics'] = [
+        build_metric_payload(
+            'client-total-sales',
+            'クライアント総売上',
+            user_summary['client_total_sales'],
+            title='クライアント全体の売上',
+            formula='クライアント総売上 = 全クライアント商品の売上合計',
+            lines=[
+                build_detail_line('売上合計', user_summary['client_total_sales']),
+                build_detail_line('今月売上', user_summary['current_month_sales']),
+                build_detail_line('販売済み件数', user_summary['sold_count'], 'count'),
+            ],
+        ),
+        build_metric_payload(
+            'client-total-profit',
+            'クライアント総利益',
+            user_summary['client_total_profit'],
+            value_class='profit-positive' if safe_int(user_summary['client_total_profit']) > 0 else 'profit-negative',
+            title='クライアント全体の利益',
+            formula='クライアント総利益 = 売上 - 卸/仕入額 - 送料 - 手数料',
+            lines=[
+                build_detail_line('クライアント総売上', user_summary['client_total_sales']),
+                build_detail_line('クライアント総仕入額', user_summary['total_purchase']),
+                build_detail_line('クライアント送料', user_summary['total_shipping']),
+                build_detail_line('クライアント手数料', user_summary['total_commission']),
+            ],
+        ),
+        build_metric_payload(
+            'client-fee-revenue',
+            '開花受取手数料',
+            user_summary['user_service_fee_revenue'],
+            title='クライアント管理から得た開花手数料収益',
+            formula='開花受取手数料 = クライアント商品の開花側手数料の合計',
+            lines=[
+                build_detail_line('累計手数料収益', user_summary['user_service_fee_revenue']),
+                build_detail_line('今月手数料収益', user_summary['current_month_user_service_fee_revenue']),
+            ],
+        ),
+        build_metric_payload(
+            'client-inventory',
+            'クライアント在庫評価',
+            user_summary['client_inventory_value'],
+            title='クライアント商品の在庫評価',
+            formula='クライアント在庫評価 = 売却日が入っていないクライアント商品の仕入額合計',
+            lines=[
+                build_detail_line('現在庫数', user_summary['unsold_count'], 'count'),
+                build_detail_line('在庫評価', user_summary['client_inventory_value']),
+            ],
+        ),
+    ]
 
     monthly_overview = [monthly_map[key] for key in sorted(monthly_map.keys(), reverse=True)[:6]]
     recent_sales.sort(key=lambda row: (row['sale_date'] or date.min, row['id'] or 0), reverse=True)
@@ -6715,6 +7527,21 @@ def admin_edit_user(id):
 @login_required
 @permission_required('users')
 def admin_user_items(id):
+    status_filter = (request.args.get('status', 'all') or 'all').strip()
+    if status_filter not in {'all', 'sold', 'unsold'}:
+        status_filter = 'all'
+
+    start_month = request.args.get('start_month', '')
+    end_month = request.args.get('end_month', '')
+    period_preset = request.args.get('period_preset', '')
+    start_month, end_month, period_preset = normalize_month_period(
+        start_month,
+        end_month,
+        period_preset,
+        default_to_current=True
+    )
+    page_back_url = resolve_internal_back_url(request.args.get('back_url', ''), '') or url_for('admin_users')
+
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -6735,19 +7562,45 @@ def admin_user_items(id):
     if not user:
         flash('ユーザーが見つかりません', 'error')
         return redirect(url_for('admin_users'))
+
+    user_dict = dict(user)
+
+    period_start_date = coerce_to_date(f'{start_month}-01') if start_month else None
+    period_end_date = None
+    if end_month:
+        try:
+            period_year, period_month = map(int, end_month.split('-'))
+            period_end_date = date(period_year, period_month, calendar.monthrange(period_year, period_month)[1])
+        except (TypeError, ValueError):
+            period_end_date = None
+
+    def is_sale_in_period(sale_date_value):
+        sale_date_obj = coerce_to_date(sale_date_value)
+        if not sale_date_obj:
+            return False
+        if period_start_date and sale_date_obj < period_start_date:
+            return False
+        if period_end_date and sale_date_obj > period_end_date:
+            return False
+        return True
     
+    fee_settings = get_fee_settings()
     processed_items = []
+    summary = {
+        'total_items': 0,
+        'inventory_count': 0,
+        'inventory_value': 0,
+        'sold_count': 0,
+        'period_sales': 0,
+        'period_fees': 0,
+        'period_profit': 0,
+    }
+    monthly_summary_map = {}
+
     for item in items:
         item_dict = dict(item)
         if item_dict.get('photo_path'):
             item_dict['photo_path'] = item_dict['photo_path'].replace('\\', '/')
-        if item_dict.get('sale_date'):
-            item_dict['profit'] = calculate_profit(
-                item_dict.get('sale_price', 0) or 0,
-                item_dict.get('purchase_price', 0) or 0,
-                item_dict.get('shipping_cost', 0) or 0,
-                item_dict.get('commission', 0) or 0
-            )
         
         # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
         if current_user.is_owner():
@@ -6768,13 +7621,98 @@ def admin_user_items(id):
                     diff = datetime.now() - created_at
                     can_delete = diff.days < 1
             item_dict['can_delete'] = can_delete
-        
-        processed_items.append(item_dict)
-    
-    for item in processed_items:
-        apply_inventory_display_metrics(item, scope='user')
 
-    return render_template('admin/user_items.html', user=dict(user), items=processed_items)
+        apply_inventory_display_metrics(item_dict, scope='user', fee_settings=fee_settings)
+        item_dict['sale_date_obj'] = coerce_to_date(item_dict.get('sale_date'))
+        item_dict['purchase_date_obj'] = coerce_to_date(item_dict.get('purchase_date'))
+
+        summary['total_items'] += 1
+        if item_dict.get('sale_date_obj'):
+            month_key = item_dict['sale_date_obj'].strftime('%Y-%m')
+            monthly_entry = monthly_summary_map.setdefault(month_key, {
+                'month': month_key,
+                'sold_count': 0,
+                'sales': 0,
+                'fees': 0,
+                'profit': 0,
+            })
+            monthly_entry['sold_count'] += 1
+            monthly_entry['sales'] += int(item_dict.get('display_sale_price') or 0)
+            monthly_entry['fees'] += int(item_dict.get('display_fee_total') or 0)
+            monthly_entry['profit'] += int(item_dict.get('profit') or 0)
+
+            if is_sale_in_period(item_dict.get('sale_date_obj')):
+                summary['sold_count'] += 1
+                summary['period_sales'] += int(item_dict.get('display_sale_price') or 0)
+                summary['period_fees'] += int(item_dict.get('display_fee_total') or 0)
+                summary['period_profit'] += int(item_dict.get('profit') or 0)
+        else:
+            summary['inventory_count'] += 1
+            summary['inventory_value'] += int(item_dict.get('display_purchase_price') or 0)
+
+        processed_items.append(item_dict)
+
+    filtered_items = []
+    for item in processed_items:
+        is_sold_item = bool(item.get('sale_date_obj'))
+        if status_filter == 'sold':
+            if not is_sold_item or not is_sale_in_period(item.get('sale_date_obj')):
+                continue
+        elif status_filter == 'unsold':
+            if is_sold_item:
+                continue
+        filtered_items.append(item)
+
+    monthly_summary = [
+        monthly_summary_map[key]
+        for key in sorted(monthly_summary_map.keys(), reverse=True)[:12]
+    ]
+
+    analytics_links = {
+        'all': url_for(
+            'admin_user_items',
+            id=id,
+            status='all',
+            start_month=start_month,
+            end_month=end_month,
+            period_preset=period_preset,
+            back_url=page_back_url
+        ),
+        'sold': url_for(
+            'admin_user_items',
+            id=id,
+            status='sold',
+            start_month=start_month,
+            end_month=end_month,
+            period_preset=period_preset,
+            back_url=page_back_url
+        ),
+        'unsold': url_for(
+            'admin_user_items',
+            id=id,
+            status='unsold',
+            start_month=start_month,
+            end_month=end_month,
+            period_preset=period_preset,
+            back_url=page_back_url
+        ),
+    }
+
+    return render_template(
+        'admin/user_items.html',
+        user=user_dict,
+        items=filtered_items,
+        all_items=processed_items,
+        summary=summary,
+        monthly_summary=monthly_summary,
+        status_filter=status_filter,
+        start_month=start_month,
+        end_month=end_month,
+        period_preset=period_preset,
+        period_label=build_month_period_label(start_month, end_month),
+        back_url=page_back_url,
+        analytics_links=analytics_links
+    )
 
 @app.route('/admin/analytics', methods=['GET', 'POST'])
 @login_required
@@ -7430,6 +8368,321 @@ def admin_analytics():
                          debug_info=debug_info,
                          **analytics_data)
 
+@app.route('/admin/analytics/kaika-sales')
+@login_required
+@admin_required
+def admin_analytics_kaika_sales():
+    """ホーム向けの開花売上分析ページ"""
+
+    def normalize_item_date(raw_value):
+        if not raw_value:
+            return None
+        if isinstance(raw_value, datetime):
+            return raw_value.date()
+        if isinstance(raw_value, date):
+            return raw_value
+        if isinstance(raw_value, str):
+            for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S'):
+                try:
+                    sample = raw_value[:26] if fmt.endswith('%f') else raw_value[:19] if ' ' in fmt or 'T' in fmt else raw_value[:10]
+                    return datetime.strptime(sample, fmt).date()
+                except ValueError:
+                    continue
+        return None
+
+    def to_int(value):
+        try:
+            if value in (None, ''):
+                return 0
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+    def classify_scope(item_dict, role_map):
+        item_user_id = item_dict.get('user_id')
+        if item_user_id is None:
+            return 'kaika'
+        role = role_map.get(item_user_id)
+        if role:
+            return 'user' if role == 'user' else 'kaika'
+        return 'kaika' if is_kaika_inventory_item(item_dict) else 'user'
+
+    def build_kaika_sale_type_breakdown(items_subset):
+        labels = {
+            'normal': '自社通常販売',
+            'wholesale': '自社業者販売',
+            'auction': '自社オークション販売',
+            'live_commerce': '自社ライブコマース',
+            'proxy_service': '代行仕入れ',
+            'other': 'その他',
+        }
+        breakdown = {
+            key: {
+                'label': label,
+                'sales': 0,
+                'profit': 0,
+                'count': 0,
+            }
+            for key, label in labels.items()
+        }
+
+        def resolve_bucket(item_dict):
+            sale_type_values = split_sale_types(item_dict.get('sale_type'))
+            if 'proxy_service' in sale_type_values:
+                return 'proxy_service'
+            normalized_type = normalize_kaika_sale_type(item_dict.get('sale_type'))
+            if normalized_type in breakdown:
+                return normalized_type
+            return 'other'
+
+        for item in items_subset:
+            sale_date = normalize_item_date(item.get('sale_date'))
+            if not sale_date:
+                continue
+            bucket = breakdown[resolve_bucket(item)]
+            purchase_price = to_int(item.get('purchase_price'))
+            sale_price = to_int(item.get('sale_price'))
+            shipping_cost = to_int(item.get('shipping_cost'))
+            commission = to_int(item.get('commission'))
+            profit = sale_price - purchase_price - shipping_cost - commission
+            bucket['sales'] += sale_price
+            bucket['profit'] += profit
+            bucket['count'] += 1
+
+        return breakdown
+
+    def build_user_service_revenue_breakdown(items_subset):
+        labels = {
+            'photo_packing': '撮影梱包発送手数料',
+            'multi_listing': '同時出品・ライブコマース手数料',
+            'wholesale': '業者販売手数料',
+            'auction': 'オークション販売手数料',
+            'kaika_fee': '開花手数料',
+            'service_adjustment': 'サービス調整額',
+            'other': 'その他サービス収益',
+        }
+        breakdown = {
+            key: {
+                'label': label,
+                'total': 0,
+                'count': 0,
+            }
+            for key, label in labels.items()
+        }
+
+        for item in items_subset:
+            sale_date = normalize_item_date(item.get('sale_date'))
+            if not sale_date:
+                continue
+            fee_components = build_user_fee_components(item, fee_settings)
+            for component in fee_components.get('components', []):
+                if not component.get('is_kaika_revenue'):
+                    continue
+                component_key = component.get('type')
+                if component_key not in breakdown:
+                    component_key = 'other'
+                amount = safe_int(component.get('amount'))
+                breakdown[component_key]['total'] += amount
+                breakdown[component_key]['count'] += 1
+
+        return breakdown
+
+    def build_monthly_subscription_summary(users_subset, items_subset):
+        today = datetime.now().date()
+        current_month_key = today.strftime('%Y-%m')
+        monthly_item_counts = {}
+
+        for item in items_subset:
+            user_id = item.get('user_id')
+            if not user_id:
+                continue
+            purchase_date = normalize_item_date(item.get('purchase_date')) or today
+            if purchase_date.strftime('%Y-%m') != current_month_key:
+                continue
+            monthly_item_counts[user_id] = monthly_item_counts.get(user_id, 0) + 1
+
+        summary = {
+            'current_month_fee_revenue': 0,
+            'client_count': 0,
+        }
+        for user in users_subset:
+            if user.get('role') != 'user':
+                continue
+            summary['client_count'] += 1
+            summary['current_month_fee_revenue'] += get_monthly_fee(monthly_item_counts.get(user.get('id'), 0))
+
+        return summary
+
+    fee_settings = get_fee_settings()
+    users = []
+    items = []
+    user_roles = {}
+
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, username, display_name, role FROM users")
+            users = [dict(row) for row in cur.fetchall()]
+            cur.execute("""
+                SELECT id, user_id, product_name, purchase_price, wholesale_price, sale_price, shipping_cost, commission,
+                       sale_date, purchase_date, sales_destination, sale_type
+                FROM merchandise
+                ORDER BY COALESCE(sale_date, purchase_date, CURRENT_DATE) DESC, id DESC
+            """)
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT id, username, display_name, role FROM users")
+            users = [dict(row) for row in cur.fetchall()]
+            cur.execute("""
+                SELECT id, user_id, product_name, purchase_price, wholesale_price, sale_price, shipping_cost, commission,
+                       sale_date, purchase_date, sales_destination, sale_type
+                FROM merchandise
+                ORDER BY COALESCE(sale_date, purchase_date, date('now')) DESC, id DESC
+            """)
+            items = [dict(row) for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        user_roles = {user['id']: user.get('role') for user in users}
+    except Exception as e:
+        print(f"Admin analytics kaika sales error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    kaika_items = []
+    user_items = []
+    self_sales_total = 0
+    self_profit_total = 0
+    self_shipping_total = 0
+    self_commission_total = 0
+
+    for item in items:
+        scope = classify_scope(item, user_roles)
+        if scope == 'user':
+            user_items.append(item)
+            continue
+        kaika_items.append(item)
+        if not normalize_item_date(item.get('sale_date')):
+            continue
+        self_sales_total += to_int(item.get('sale_price'))
+        self_shipping_total += to_int(item.get('shipping_cost'))
+        self_commission_total += to_int(item.get('commission'))
+        self_profit_total += (
+            to_int(item.get('sale_price'))
+            - to_int(item.get('purchase_price'))
+            - to_int(item.get('shipping_cost'))
+            - to_int(item.get('commission'))
+        )
+
+    sale_breakdown = build_kaika_sale_type_breakdown(kaika_items)
+    service_breakdown = build_user_service_revenue_breakdown(user_items)
+    monthly_subscription_summary = build_monthly_subscription_summary(users, items)
+    service_total = sum(safe_int(row.get('total')) for row in service_breakdown.values())
+    system_fee_total = safe_int(monthly_subscription_summary.get('current_month_fee_revenue'))
+    total_revenue = self_sales_total + service_total + system_fee_total
+    total_profit = self_profit_total + service_total + system_fee_total
+
+    overview_cards = [
+        build_metric_payload(
+            'kaika-sales-total',
+            '開花売上合計',
+            total_revenue,
+            title='開花売上合計',
+            formula='開花売上合計 = 自社販売売上 + クライアント支援収益 + システム利用料',
+            lines=[
+                build_detail_line('開花自社販売売上', self_sales_total),
+                build_detail_line('開花サービス収益', service_total),
+                build_detail_line('システム利用料', system_fee_total),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-profit-total',
+            '開花利益合計',
+            total_profit,
+            value_class='profit-positive' if safe_int(total_profit) > 0 else 'profit-negative',
+            title='開花利益合計',
+            formula='開花利益合計 = 自社販売利益 + クライアント支援収益 + システム利用料',
+            lines=[
+                build_detail_line('開花自社販売利益', self_profit_total),
+                build_detail_line('開花サービス収益', service_total),
+                build_detail_line('システム利用料', system_fee_total),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-direct-sales-total',
+            '開花自社販売売上',
+            self_sales_total,
+            title='開花自社販売売上',
+            formula='開花自社販売売上 = 開花在庫として売却済みになっている商品の売上合計',
+            lines=[
+                build_detail_line('自社販売送料', self_shipping_total),
+                build_detail_line('自社販売手数料', self_commission_total),
+                build_detail_line('自社販売利益', self_profit_total),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-service-total',
+            '開花サービス収益',
+            service_total,
+            title='開花サービス収益',
+            formula='開花サービス収益 = 撮影梱包発送・業者販売・同時出品・オークション・開花手数料などの合計',
+            lines=[
+                build_detail_line(service_breakdown['photo_packing']['label'], service_breakdown['photo_packing']['total']),
+                build_detail_line(service_breakdown['wholesale']['label'], service_breakdown['wholesale']['total']),
+                build_detail_line(service_breakdown['multi_listing']['label'], service_breakdown['multi_listing']['total']),
+                build_detail_line(service_breakdown['auction']['label'], service_breakdown['auction']['total']),
+                build_detail_line(service_breakdown['kaika_fee']['label'], service_breakdown['kaika_fee']['total']),
+                build_detail_line(service_breakdown['service_adjustment']['label'], service_breakdown['service_adjustment']['total']),
+            ],
+            note='販売媒体側の手数料は開花収益に含めていません。',
+        ),
+        build_metric_payload(
+            'kaika-system-fee-total',
+            'システム利用料',
+            system_fee_total,
+            title='システム利用料',
+            formula='システム利用料 = 今月のクライアント登録件数から算出した月額利用料の合計',
+            lines=[
+                build_detail_line('対象クライアント数', monthly_subscription_summary.get('client_count'), 'count'),
+                build_detail_line('今月のシステム利用料', system_fee_total),
+            ],
+        ),
+    ]
+
+    revenue_stream_rows = [
+        {
+            'label': '開花自社販売',
+            'revenue': self_sales_total,
+            'profit': self_profit_total,
+            'description': '開花が直接仕入れて販売した商品の売上・利益です。',
+        },
+        {
+            'label': '開花サービス収益',
+            'revenue': service_total,
+            'profit': service_total,
+            'description': '撮影梱包発送、業者販売、同時出品、オークション、開花手数料などの収益です。',
+        },
+        {
+            'label': 'システム利用料',
+            'revenue': system_fee_total,
+            'profit': system_fee_total,
+            'description': '今月の月額利用料見込みです。',
+        },
+    ]
+
+    sale_breakdown_rows = [row for row in sale_breakdown.values() if row['count'] > 0 or row['sales'] > 0]
+    service_breakdown_rows = [row for row in service_breakdown.values() if row['total'] > 0]
+
+    return render_template(
+        'admin/analytics_kaika_sales.html',
+        overview_cards=overview_cards,
+        revenue_stream_rows=revenue_stream_rows,
+        sale_breakdown_rows=sale_breakdown_rows,
+        service_breakdown_rows=service_breakdown_rows,
+    )
+
 @app.route('/admin/analytics/kaika')
 @login_required
 @admin_required
@@ -7437,11 +8690,20 @@ def admin_analytics_kaika():
     """開花（管理者）商品の分析ページ（管理者/オーナーの商品）"""
     analytics_data = {}
     overall_stats = {}
-    service_fee_stats = {}
+    sold_detail_items = []
+    inventory_detail_items = []
     
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
+    period_preset = request.args.get('period_preset', '')
+    keyword = request.args.get('keyword', '').strip()
+    date_from, date_to, period_preset = normalize_date_period(
+        date_from,
+        date_to,
+        period_preset,
+        default_to_year=True
+    )
     
     try:
         conn = get_db()
@@ -7487,17 +8749,6 @@ def admin_analytics_kaika():
             cur.execute(query, base_params + date_params if (base_params or date_params) else None)
             overall_stats = dict(cur.fetchone() or {})
 
-            cur.execute(f"""
-                SELECT
-                    COUNT(*) as sold_count,
-                    COALESCE(SUM(m.commission), 0) as total_fee_revenue
-                FROM merchandise m
-                JOIN users u ON u.id = m.user_id
-                WHERE u.role = 'user'
-                  AND m.sale_date IS NOT NULL {date_condition}
-            """, date_params if date_params else None)
-            service_fee_stats = dict(cur.fetchone() or {})
-            
             # 月別売上・利益推移
             cur.execute(f"""
                 SELECT 
@@ -7568,6 +8819,17 @@ def admin_analytics_kaika():
                 WHERE {user_condition} AND sale_date IS NULL
             """, base_params if base_params else None)
             analytics_data['inventory'] = dict(cur.fetchone() or {})
+
+            cur.execute(f"""
+                SELECT
+                    id, user_id, product_name, brand_name, store_name, purchase_date, purchase_price,
+                    wholesale_price, sale_date, sale_price, shipping_cost, commission, sale_type,
+                    sales_destination, is_listed
+                FROM merchandise
+                WHERE {user_condition}
+                ORDER BY COALESCE(sale_date, purchase_date, CURRENT_DATE) DESC, id DESC
+            """, tuple(base_params))
+            detail_items_raw = [dict(row) for row in cur.fetchall()]
             
         else:
             import sqlite3
@@ -7613,17 +8875,6 @@ def admin_analytics_kaika():
             cur.execute(query, base_params + date_params if (base_params or date_params) else ())
             overall_stats = dict(cur.fetchone() or {})
 
-            cur.execute(f"""
-                SELECT
-                    COUNT(*) as sold_count,
-                    COALESCE(SUM(m.commission), 0) as total_fee_revenue
-                FROM merchandise m
-                JOIN users u ON u.id = m.user_id
-                WHERE u.role = 'user'
-                  AND m.sale_date IS NOT NULL {date_condition}
-            """, date_params if date_params else ())
-            service_fee_stats = dict(cur.fetchone() or {})
-            
             # 月別売上・利益推移
             cur.execute(f"""
                 SELECT 
@@ -7694,6 +8945,17 @@ def admin_analytics_kaika():
                 WHERE {user_condition} AND sale_date IS NULL
             """, base_params if base_params else ())
             analytics_data['inventory'] = dict(cur.fetchone() or {})
+
+            cur.execute(f"""
+                SELECT
+                    id, user_id, product_name, brand_name, store_name, purchase_date, purchase_price,
+                    wholesale_price, sale_date, sale_price, shipping_cost, commission, sale_type,
+                    sales_destination, is_listed
+                FROM merchandise
+                WHERE {user_condition}
+                ORDER BY COALESCE(sale_date, purchase_date, date('now')) DESC, id DESC
+            """, base_params if base_params else ())
+            detail_items_raw = [dict(row) for row in cur.fetchall()]
         
         cur.close()
         conn.close()
@@ -7702,16 +8964,172 @@ def admin_analytics_kaika():
         print(f"Admin analytics kaika error: {e}")
         import traceback
         traceback.print_exc()
+        detail_items_raw = []
     
     # デフォルト値を設定（エラー時も表示されるように）
     if not overall_stats:
         overall_stats = {'total_items': 0, 'total_purchase': 0, 'total_sales': 0, 'total_profit': 0}
-    if not service_fee_stats:
-        service_fee_stats = {'sold_count': 0, 'total_fee_revenue': 0}
+    period_start = coerce_to_date(date_from)
+    period_end = coerce_to_date(date_to)
+
+    def in_selected_sale_period(raw_value):
+        raw_date = coerce_to_date(raw_value)
+        if not raw_date:
+            return False
+        if period_start and raw_date < period_start:
+            return False
+        if period_end and raw_date > period_end:
+            return False
+        return True
+
+    def in_selected_purchase_period(raw_value):
+        raw_date = coerce_to_date(raw_value)
+        if not raw_date:
+            return False
+        if period_start and raw_date < period_start:
+            return False
+        if period_end and raw_date > period_end:
+            return False
+        return True
+
+    keyword_lower = keyword.lower()
+    registered_count = 0
+    total_purchase = 0
+    total_sales = 0
+    total_profit = 0
+    sold_count = 0
+    current_inventory_count = 0
+    current_inventory_value = 0
+
+    for raw_item in detail_items_raw:
+        item = dict(raw_item)
+        apply_inventory_display_metrics(item, scope='admin')
+        item['sale_date_obj'] = coerce_to_date(item.get('sale_date'))
+        item['purchase_date_obj'] = coerce_to_date(item.get('purchase_date'))
+        item['status_label'] = '売却済' if item['sale_date_obj'] else ('出品中' if item.get('is_listed') else '未出品')
+
+        keyword_target = ' '.join([
+            str(item.get('product_name') or ''),
+            str(item.get('brand_name') or ''),
+            str(item.get('store_name') or ''),
+            str(item.get('sales_destination_display') or ''),
+            str(item.get('sale_type_summary') or ''),
+        ]).lower()
+        keyword_match = not keyword_lower or keyword_lower in keyword_target
+
+        if in_selected_purchase_period(item.get('purchase_date_obj')):
+            registered_count += 1
+            total_purchase += int(item.get('display_purchase_price') or 0)
+
+        if item.get('sale_date_obj') and in_selected_sale_period(item.get('sale_date_obj')):
+            sold_count += 1
+            total_sales += int(item.get('display_sale_price') or 0)
+            total_profit += int(item.get('profit') or 0)
+            if keyword_match:
+                sold_detail_items.append(item)
+        elif not item.get('sale_date_obj'):
+            current_inventory_count += 1
+            current_inventory_value += int(item.get('display_purchase_price') or 0)
+            if keyword_match:
+                inventory_detail_items.append(item)
+
+    overall_stats = {
+        'total_items': registered_count,
+        'total_purchase': total_purchase,
+        'total_sales': total_sales,
+        'total_profit': total_profit,
+        'sold_count': sold_count,
+        'current_inventory_count': current_inventory_count,
+        'current_inventory_value': current_inventory_value,
+    }
+    analytics_data['inventory'] = {
+        'unsold_count': current_inventory_count,
+        'inventory_value': current_inventory_value,
+    }
+    analytics_data['overall_metric_cards'] = [
+        build_metric_payload(
+            'kaika-registered-count',
+            '対象期間登録数',
+            overall_stats['total_items'],
+            value_type='count',
+            title='対象期間登録数の内訳',
+            formula='対象期間登録数 = 表示期間内に仕入日が入っている開花商品数',
+            lines=[
+                build_detail_line('表示期間', build_date_period_label(date_from, date_to), 'text'),
+                build_detail_line('対象期間登録数', overall_stats['total_items'], 'count'),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-total-purchase',
+            '対象期間仕入額',
+            overall_stats['total_purchase'],
+            title='対象期間仕入額の内訳',
+            formula='対象期間仕入額 = 表示期間内に登録された開花商品の仕入額合計',
+            lines=[
+                build_detail_line('表示期間', build_date_period_label(date_from, date_to), 'text'),
+                build_detail_line('対象期間登録数', overall_stats['total_items'], 'count'),
+                build_detail_line('対象期間仕入額', overall_stats['total_purchase']),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-total-sales',
+            '対象期間売上',
+            overall_stats['total_sales'],
+            title='対象期間売上の内訳',
+            formula='対象期間売上 = 表示期間内に売却日が入っている開花商品の売上合計',
+            lines=[
+                build_detail_line('販売済み件数', overall_stats['sold_count'], 'count'),
+                build_detail_line('対象期間売上', overall_stats['total_sales']),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-total-profit',
+            '対象期間利益',
+            overall_stats['total_profit'],
+            value_class='profit-positive' if safe_int(overall_stats['total_profit']) > 0 else 'profit-negative',
+            title='対象期間利益の内訳',
+            formula='対象期間利益 = 売上 - 仕入額 - 送料 - 手数料',
+            lines=[
+                build_detail_line('対象期間売上', overall_stats['total_sales']),
+                build_detail_line('対象期間仕入額', overall_stats['total_purchase']),
+                build_detail_line('対象期間利益', overall_stats['total_profit']),
+            ],
+            note='詳細な商品単位の内訳は下の販売実績一覧で確認できます。',
+        ),
+        build_metric_payload(
+            'kaika-sold-count',
+            '対象期間販売済み',
+            overall_stats['sold_count'],
+            value_type='count',
+            title='対象期間販売済み件数の内訳',
+            formula='対象期間販売済み = 表示期間内に売却日が入っている商品数',
+            lines=[
+                build_detail_line('対象期間販売済み', overall_stats['sold_count'], 'count'),
+                build_detail_line('対象期間売上', overall_stats['total_sales']),
+            ],
+        ),
+        build_metric_payload(
+            'kaika-inventory',
+            '現在庫数 / 現在庫金額',
+            overall_stats['current_inventory_count'],
+            value_type='count',
+            subvalue=f"¥{safe_int(overall_stats['current_inventory_value']):,}",
+            title='現在庫の内訳',
+            formula='現在庫 = 売却日が入っていない開花商品の件数 / 現在庫金額 = その仕入額合計',
+            lines=[
+                build_detail_line('現在庫数', overall_stats['current_inventory_count'], 'count'),
+                build_detail_line('現在庫金額', overall_stats['current_inventory_value']),
+            ],
+        ),
+    ]
+    analytics_data['detail_keyword'] = keyword
+    analytics_data['period_preset'] = period_preset
+    analytics_data['period_label'] = build_date_period_label(date_from, date_to)
+    analytics_data['sold_detail_items'] = sold_detail_items
+    analytics_data['inventory_detail_items'] = inventory_detail_items
     
     return render_template('admin/analytics_kaika.html',
                          overall_stats=overall_stats,
-                         service_fee_stats=service_fee_stats,
                          date_from=date_from,
                          date_to=date_to,
                          **analytics_data)
@@ -13079,8 +14497,9 @@ def admin_user_products():
                     can_delete = diff.days < 1
             item['can_delete'] = can_delete
     
+    fee_settings = get_fee_settings()
     for item in items:
-        apply_inventory_display_metrics(item, scope='user')
+        apply_inventory_display_metrics(item, scope='user', fee_settings=fee_settings)
 
     return render_template('admin/user_products.html', 
                           items=items, 

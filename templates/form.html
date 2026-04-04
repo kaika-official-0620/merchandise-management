@@ -819,11 +819,12 @@ input:disabled, select:disabled, textarea:disabled {
     display: block;
 }
 
-.sale-type-option {
+.form-group .sale-type-option {
     position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    display: grid !important;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center !important;
+    column-gap: 10px !important;
     padding: 8px 12px;
     background: white;
     border-radius: 6px;
@@ -831,74 +832,60 @@ input:disabled, select:disabled, textarea:disabled {
     transition: all 0.2s;
     border: 1px solid transparent;
     margin: 0;
+    margin-bottom: 0 !important;
 }
 
-.sale-type-option:hover {
+.form-group .sale-type-option:hover {
     border-color: #3b82f6;
     background: #eff6ff;
 }
 
-.sale-type-control {
-    appearance: none;
-    -webkit-appearance: none;
-    position: absolute !important;
-    left: 0;
-    top: 0;
-    opacity: 0;
-    pointer-events: none;
-    width: 1px !important;
-    height: 1px !important;
-    max-width: 1px !important;
-    min-height: 1px;
-    margin: 0 !important;
-    min-width: 1px;
+.form-group .sale-type-option .sale-type-control {
     display: block !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
     border: 0;
-    cursor: pointer;
-}
-
-.sale-type-indicator {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 12px;
-    border: 2px solid #93c5fd;
-    border-radius: 999px;
-    background: #fff;
-    box-sizing: border-box;
-    display: inline-block;
-    align-self: center;
+    accent-color: #2563eb;
     justify-self: start;
-    margin: 0;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    align-self: center;
+    cursor: pointer;
+    appearance: auto;
+    -webkit-appearance: radio;
 }
 
-.sale-type-control:checked + .sale-type-indicator {
-    border-color: #2563eb;
-    background:
-        radial-gradient(circle at center, #2563eb 0 42%, transparent 46%),
-        #ffffff;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+.form-group .sale-type-option .sale-type-indicator {
+    display: none !important;
 }
 
-.sale-type-control:checked + .sale-type-indicator + .sale-type-label {
-    color: #1d4ed8;
-    font-weight: 600;
-}
-
-.sale-type-label {
+.form-group .sale-type-option .sale-type-label {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 4px 8px;
     min-width: 0;
+    align-self: center;
     font-size: 0.9rem;
     color: #374151;
-    line-height: 1.5;
+    line-height: 1.45;
+    margin: 0 !important;
+}
+
+.form-group .sale-type-option .sale-type-control:checked ~ .sale-type-label {
+    color: #1d4ed8;
+    font-weight: 600;
 }
 
 .sale-type-note {
@@ -909,22 +896,27 @@ input:disabled, select:disabled, textarea:disabled {
     font-weight: normal;
 }
 
-.sale-type-option.fixed-option {
+.form-group .sale-type-option.fixed-option {
     background: #ecfdf5;
     border: 1px solid #a7f3d0;
     cursor: default;
 }
 
-.sale-type-option.fixed-option:hover {
+.form-group .sale-type-option.fixed-option:hover {
     border-color: #a7f3d0;
     background: #ecfdf5;
 }
 
-.sale-type-option.fixed-option .sale-type-indicator {
-    border-color: #10b981;
-    background:
-        radial-gradient(circle at center, #10b981 0 42%, transparent 46%),
-        #ffffff;
+.form-group .sale-type-option.fixed-option .sale-type-indicator {
+    display: none !important;
+}
+
+.form-group .sale-type-option.fixed-option .sale-type-control {
+    accent-color: #10b981;
+}
+
+.sale-type-option.fixed-option .sale-type-control {
+    accent-color: #10b981;
 }
 
 .fixed-badge {
@@ -1098,7 +1090,7 @@ input:disabled, select:disabled, textarea:disabled {
 
 <script>
 (function() {
-const isKaikaScope = {{ 'true' if is_kaika_scope else 'false' }};
+const isKaikaScope = {{ (is_kaika_scope | default(false)) | tojson }};
 // 手数料の自動計算フラグ（手動変更されたらfalseに）
 let autoCalculateCommission = true;
 
@@ -2305,9 +2297,9 @@ function getActiveSaleTypeOverride() {
     return getSelectedUserSaleTypeOverride();
 }
 
-function getFixedKaikaSalesDestinationOverride(activeType) {
-    if (!isKaikaScope || activeType === 'normal') return '';
-    const options = salesDestinationPresets.kaika[activeType] || [];
+function getFixedSalesDestinationOverride(scopeKey, activeType) {
+    if (activeType === 'normal') return '';
+    const options = (salesDestinationPresets[scopeKey] && salesDestinationPresets[scopeKey][activeType]) || [];
     return options.length ? options[0] : '';
 }
 
@@ -2340,14 +2332,15 @@ function updateSalesDestinationOptionsOverride() {
     const options = salesDestinationPresets[scopeKey][activeType] || ['その他'];
     const currentValue = (hidden.value || '').trim();
     const allowOther = options.includes('その他');
-    const isKaikaFixed = isKaikaScope && activeType !== 'normal';
+    const isFixedDestination = activeType !== 'normal';
 
     if (group) {
-        group.style.display = isKaikaFixed ? 'none' : 'block';
+        group.style.display = 'block';
     }
+    select.disabled = isFixedDestination;
 
-    if (isKaikaFixed) {
-        const fixedValue = getFixedKaikaSalesDestinationOverride(activeType);
+    if (isFixedDestination) {
+        const fixedValue = getFixedSalesDestinationOverride(scopeKey, activeType);
         select.innerHTML = '';
         select.appendChild(new Option(fixedValue || '選択してください', fixedValue || ''));
         select.value = fixedValue;
@@ -2355,11 +2348,12 @@ function updateSalesDestinationOptionsOverride() {
         other.style.display = 'none';
         hidden.value = fixedValue;
         if (hint) {
-            hint.textContent = '';
+            hint.textContent = 'この販売タイプでは、販売先は自動で固定されます。';
         }
         return;
     }
 
+    select.disabled = false;
     select.innerHTML = '';
     select.appendChild(new Option('選択してください', ''));
     options.forEach((value) => select.appendChild(new Option(value, value)));
@@ -2485,9 +2479,6 @@ calculateCommission = function() {
     }
 
     hintEl.textContent = `手数料合計 ¥${totalFee.toLocaleString()}`;
-    if (hintEl) {
-        hintEl.textContent = `手数料合計 ¥${visibleTotal.toLocaleString()}`;
-    }
     if (shippingHintEl) shippingHintEl.textContent = '';
     renderCommissionBreakdownOverride(breakdownLines);
     calculateProfit();
@@ -2510,6 +2501,13 @@ function initializeSoldFieldsOverride() {
     calculateCommission();
     calculateProfit();
 }
+
+document.querySelectorAll('input[name="sale_type_choice"]').forEach((radio) => {
+    radio.addEventListener('change', function() {
+        autoCalculateCommission = true;
+        updateSaleTypeValue();
+    });
+});
 
 document.querySelectorAll('input[name="sale_type_choice_user"]').forEach((radio) => {
     radio.addEventListener('change', function() {

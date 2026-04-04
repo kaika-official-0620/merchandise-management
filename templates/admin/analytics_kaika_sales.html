@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}開花売上分析 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="kaika-sales-page">
+    <div class="page-header">
+        <h1>開花売上分析</h1>
+        <p class="page-description">開花に入る売上と利益を、自社販売と各サービス収益をまとめて確認できる画面です。各項目は詳細から内訳と計算の考え方も確認できます。</p>
+    </div>
+
+    <section class="kaika-sales-summary-panel">
+        <div class="kaika-sales-summary-panel__header">
+            <h2>売上サマリー</h2>
+            <p>全体売上管理と同じ見方で、重要な数字を一覧しやすくしています。</p>
+        </div>
+        <div class="kaika-sales-summary-panel__metrics">
+            {% for metric in overview_cards or [] %}
+            <div class="kaika-sales-summary-row">
+                <div class="kaika-sales-summary-row__main">
+                    <span class="kaika-sales-summary-row__label">{{ metric.label }}</span>
+                    <strong class="kaika-sales-summary-row__value {{ metric.value_class or '' }}">{{ metric.display_value }}</strong>
+                    {% if metric.subvalue %}
+                    <span class="kaika-sales-summary-row__sub">{{ metric.subvalue }}</span>
+                    {% endif %}
+                </div>
+                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('kaika-sales-{{ metric.id }}')">詳細</button>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% for metric in overview_cards or [] %}
+    <div class="analytics-detail-modal" id="kaika-sales-{{ metric.id }}">
+        <div class="analytics-detail-dialog">
+            <div class="analytics-detail-header">
+                <h3>{{ metric.title }}</h3>
+                <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('kaika-sales-{{ metric.id }}')">&times;</button>
+            </div>
+            <div class="analytics-detail-body">
+                {% if metric.formula %}
+                <div class="analytics-detail-formula">{{ metric.formula }}</div>
+                {% endif %}
+                <div class="analytics-detail-lines">
+                    {% for line in metric.lines or [] %}
+                    <div class="analytics-detail-line">
+                        <span class="analytics-detail-line-label">{{ line.label }}</span>
+                        <span class="analytics-detail-line-value">{{ line.display }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if metric.note %}
+                <div class="analytics-detail-note">{{ metric.note }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="admin-section">
+        <div class="section-header">
+            <div>
+                <h2>売上の構成</h2>
+                <p>開花に入ってくる売上を、自社販売とクライアント支援・システム利用料に分けて確認できます。</p>
+            </div>
+        </div>
+        <div class="admin-table-container">
+            <table class="admin-table kaika-sales-table">
+                <thead>
+                    <tr>
+                        <th class="label-col">項目</th>
+                        <th class="money-col">売上</th>
+                        <th class="money-col">利益</th>
+                        <th class="desc-col">説明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in revenue_stream_rows or [] %}
+                    <tr>
+                        <td class="label-col">{{ row.label }}</td>
+                        <td class="money-col">¥{{ "{:,}".format(row.revenue or 0) }}</td>
+                        <td class="money-col {% if row.profit and row.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(row.profit or 0) }}</td>
+                        <td class="desc-col">{{ row.description }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="empty-cell">表示できる売上データがありません</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="admin-grid-2">
+        <div class="admin-section">
+            <div class="section-header">
+                <div>
+                    <h2>開花自社販売の内訳</h2>
+                    <p>開花自身が仕入れ・販売した商品の売上と利益を、販売タイプごとに確認できます。</p>
+                </div>
+            </div>
+            <div class="admin-table-container">
+                <table class="admin-table kaika-sales-table">
+                    <thead>
+                        <tr>
+                            <th class="label-col">販売タイプ</th>
+                            <th class="count-col">件数</th>
+                            <th class="money-col">売上</th>
+                            <th class="money-col">利益</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in sale_breakdown_rows or [] %}
+                        <tr>
+                            <td class="label-col">{{ row.label }}</td>
+                            <td class="count-col">{{ row.count }}件</td>
+                            <td class="money-col">¥{{ "{:,}".format(row.sales or 0) }}</td>
+                            <td class="money-col {% if row.profit and row.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(row.profit or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="empty-cell">販売実績データがありません</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-header">
+                <div>
+                    <h2>クライアント支援収益の内訳</h2>
+                    <p>クライアント支援で開花に入った収益を、サービスごとに確認できます。</p>
+                </div>
+            </div>
+            <div class="admin-table-container">
+                <table class="admin-table kaika-sales-table">
+                    <thead>
+                        <tr>
+                            <th class="label-col">サービス項目</th>
+                            <th class="count-col">件数</th>
+                            <th class="money-col">収益</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in service_breakdown_rows or [] %}
+                        <tr>
+                            <td class="label-col">{{ row.label }}</td>
+                            <td class="count-col">{{ row.count }}件</td>
+                            <td class="money-col">¥{{ "{:,}".format(row.total or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="empty-cell">サービス収益データがありません</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.kaika-sales-page {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.kaika-sales-page .page-header {
+    margin-bottom: 0;
+}
+
+.kaika-sales-page .page-header h1 {
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+}
+
+.kaika-sales-page .page-description {
+    max-width: 84ch;
+    font-size: 0.96rem;
+    line-height: 1.78;
+    letter-spacing: 0.01em;
+}
+
+.kaika-sales-summary-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.25rem 1.35rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.kaika-sales-summary-panel__header h2 {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+}
+
+.kaika-sales-summary-panel__header p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    font-size: 0.93rem;
+    line-height: 1.72;
+    letter-spacing: 0.01em;
+}
+
+.kaika-sales-summary-panel__metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+
+.kaika-sales-summary-row {
+    display: grid;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    min-height: 100%;
+}
+
+.kaika-sales-summary-row__main {
+    display: grid;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kaika-sales-summary-row__label {
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.kaika-sales-summary-row__value {
+    color: #0f172a;
+    font-size: 1.08rem;
+    line-height: 1.45;
+}
+
+.kaika-sales-summary-row__sub {
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+}
+
+.kaika-sales-summary-row .analytics-detail-trigger {
+    margin-top: 0.1rem;
+    justify-self: flex-start;
+}
+
+.section-header h2 {
+    margin: 0;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+}
+
+.section-header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.72;
+    letter-spacing: 0.01em;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.kaika-sales-page .admin-section {
+    padding: 1.45rem 1.5rem;
+}
+
+.kaika-sales-table {
+    font-size: 0.96rem;
+}
+
+.kaika-sales-table th,
+.kaika-sales-table td {
+    padding: 0.9rem 1rem;
+    line-height: 1.65;
+    letter-spacing: 0.01em;
+    vertical-align: top;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.kaika-sales-table th {
+    font-size: 0.86rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.kaika-sales-table .label-col {
+    min-width: 180px;
+}
+
+.kaika-sales-table .count-col {
+    min-width: 110px;
+    white-space: nowrap;
+}
+
+.kaika-sales-table .money-col {
+    min-width: 140px;
+    white-space: nowrap;
+}
+
+.kaika-sales-table .desc-col {
+    min-width: 360px;
+    line-height: 1.72;
+}
+
+@media (max-width: 768px) {
+    .kaika-sales-summary-panel__metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .kaika-sales-table {
+        font-size: 0.86rem;
+    }
+
+    .kaika-sales-table th,
+    .kaika-sales-table td {
+        padding: 0.7rem 0.75rem;
+    }
+
+    .kaika-sales-table .desc-col {
+        min-width: 260px;
+    }
+}
+</style>
+{% endblock %}

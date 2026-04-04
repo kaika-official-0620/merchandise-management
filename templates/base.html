@@ -23,6 +23,8 @@
             background: #fff;
             color: #475569;
             font-size: 0.85rem;
+            line-height: 1.5;
+            letter-spacing: 0.02em;
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -31,6 +33,144 @@
             background: #f8fafc;
             border-color: #94a3b8;
             color: #0f172a;
+        }
+
+        .analytics-detail-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.6rem;
+            padding: 0.35rem 0.7rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .analytics-detail-trigger:hover {
+            border-color: #93c5fd;
+            color: #1d4ed8;
+            background: #eff6ff;
+        }
+
+        .analytics-detail-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 2000;
+        }
+
+        .analytics-detail-modal.is-open {
+            display: flex;
+        }
+
+        .analytics-detail-dialog {
+            width: min(720px, 100%);
+            max-height: min(85vh, 760px);
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+            border: 1px solid #dbeafe;
+        }
+
+        .analytics-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.1rem 1.2rem 0.9rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #0f172a;
+            line-height: 1.55;
+            letter-spacing: 0.03em;
+        }
+
+        .analytics-detail-close {
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .analytics-detail-close:hover {
+            color: #0f172a;
+        }
+
+        .analytics-detail-body {
+            padding: 1rem 1.2rem 1.2rem;
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .analytics-detail-formula {
+            padding: 0.85rem 0.95rem;
+            border-radius: 12px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
+        }
+
+        .analytics-detail-lines {
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .analytics-detail-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-line-label {
+            color: #475569;
+            font-size: 0.9rem;
+            line-height: 1.75;
+            letter-spacing: 0.02em;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .analytics-detail-line-value {
+            color: #0f172a;
+            font-size: 0.92rem;
+            font-weight: 700;
+            text-align: right;
+            line-height: 1.65;
+            flex: 0 0 auto;
+            padding-left: 0.5rem;
+        }
+
+        .analytics-detail-note {
+            padding: 0.75rem 0.85rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
         }
     </style>
     <!-- PWA / ホーム画面追加時の設定 -->
@@ -91,14 +231,14 @@
             {% if current_user.is_admin() %}
             <div class="sidebar-group-label">ホーム</div>
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika', 'user_analytics'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}active{% endif %}" onclick="toggleCategory(this)">
                     全体売上管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika', 'user_analytics'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}open{% endif %}">
                     <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">全体売上管理</a>
-                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理分析</a>
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー管理分析</a>
+                    <a href="{{ url_for('admin_analytics_kaika_sales') }}" class="{% if request.endpoint == 'admin_analytics_kaika_sales' %}active{% endif %}">開花売上分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー売上分析</a>
                 </div>
             </div>
             {% endif %}
@@ -337,7 +477,7 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint == 'admin_analytics_kaika' %}open{% endif %}">
                     {% if current_user.has_permission('analytics') %}
-                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理の分析</a>
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理分析</a>
                     {% else %}
                     <span class="sidebar-item-disabled">分析権限が付与されていません</span>
                     {% endif %}
@@ -417,7 +557,7 @@
             <button
                 type="button"
                 class="history-back-button"
-                onclick="try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && window.history.length > 1) { window.history.back(); } else { window.location.href='{{ history_back_fallback }}'; } } catch (error) { window.location.href='{{ history_back_fallback }}'; }">
+                onclick="try { if (window.history.length > 1) { window.history.back(); } else if (document.referrer) { window.location.href = document.referrer; } else { window.location.href='{{ history_back_fallback }}'; } } catch (error) { window.location.href='{{ history_back_fallback }}'; }">
                 ← 1つ前の画面に戻る
             </button>
         </div>
@@ -1563,6 +1703,28 @@
                 }
             }, true);
         })();
+
+        window.openAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            document.body.style.overflow = '';
+        };
+
+        document.addEventListener('click', function (event) {
+            const modal = event.target.closest('.analytics-detail-modal');
+            if (modal && event.target === modal) {
+                modal.classList.remove('is-open');
+                document.body.style.overflow = '';
+            }
+        });
     </script>
     {% block scripts %}{% endblock %}
 </body>
