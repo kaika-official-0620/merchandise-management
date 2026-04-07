@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}運営管理 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>運営管理</h1>
+    <a href="{{ url_for('admin_operator_add_user') }}" class="btn btn-primary">+ 管理者追加</a>
+</div>
+
+<div class="search-section">
+    <form method="GET" action="{{ url_for('admin_operator_users') }}" class="search-form">
+        <div class="search-input-group">
+            <input
+                type="text"
+                name="search"
+                value="{{ search_query or '' }}"
+                placeholder="管理者名・表示名・メールで検索"
+                class="search-input">
+            <button type="submit" class="btn btn-search">検索</button>
+            {% if search_query %}
+            <a href="{{ url_for('admin_operator_users') }}" class="btn btn-secondary">クリア</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="admin-section">
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ユーザー名</th>
+                    <th>表示名</th>
+                    <th>メール</th>
+                    <th>権限</th>
+                    <th>操作権限</th>
+                    <th>最終ログイン</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td><strong>{{ user.username }}</strong></td>
+                    <td>{{ user.display_name or '-' }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        {% if user.role == 'owner' %}
+                        <span class="role-badge owner">オーナー</span>
+                        {% else %}
+                        <span class="role-badge admin">管理者</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.permissions_summary or 'すべて' }}</td>
+                    <td>{{ (user.last_login|string)[:16] if user.last_login else '-' }}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="{{ url_for('admin_operator_edit_user', id=user.id) }}" class="btn btn-sm btn-edit">編集</a>
+                            {% if user.id != current_user.id %}
+                            <a href="{{ url_for('admin_delete_operator', id=user.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('この運営アカウントを削除しますか？')">削除</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="empty-cell">
+                        {% if search_query %}
+                        条件に一致する運営アカウントが見つかりませんでした
+                        {% else %}
+                        運営アカウントはまだ登録されていません
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.search-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.search-form {
+    width: 100%;
+    max-width: 760px;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 280px;
+}
+
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.role-badge.owner {
+    color: #7c2d12;
+    background: #ffedd5;
+}
+
+.role-badge.admin {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+</style>
+{% endblock %}

@@ -80,6 +80,13 @@
     color: #94a3b8;
     font-size: 0.85rem;
 }
+.brand-dropdown .dropdown-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.4;
+}
 .brand-auto-detected {
     background-color: #d1fae5 !important;
     transition: background-color 0.3s;
@@ -401,8 +408,12 @@ input:disabled, select:disabled, textarea:disabled {
             
             <div class="form-group">
                 <label for="product_name">商品名</label>
-                <input type="text" id="product_name" name="product_name"
-                       value="{{ item.product_name if item else '' }}" required>
+                <div class="brand-combobox">
+                    <input type="text" id="product_name" name="product_name"
+                           value="{{ item.product_name if item else '' }}" required autocomplete="off">
+                    <div class="brand-dropdown" id="product-suggestion-dropdown"></div>
+                </div>
+                <small class="form-help">ブランド名・検索名・名称候補から候補を表示します。候補がなくてもそのまま入力できます。</small>
             </div>
 
             <div class="form-group">
@@ -430,7 +441,21 @@ input:disabled, select:disabled, textarea:disabled {
                     <button type="button" class="combobox-toggle" id="brand-toggle" {% if basic_readonly %}disabled{% endif %}>▼</button>
                     <div class="brand-dropdown" id="brand-dropdown"></div>
                 </div>
+                <input type="hidden" id="master_brand_id" name="master_brand_id">
                 <input type="hidden" id="current_brand_name" value="{{ item.brand_name if item else '' }}">
+                <small class="form-help">ブランド名・検索名・キーワードから候補を表示します。</small>
+            </div>
+            <div class="form-group">
+                <label for="brand_category_name">ブランドカテゴリ</label>
+                <div class="brand-combobox">
+                    <input type="text" id="brand_category_name" name="brand_category_name"
+                           autocomplete="off" placeholder="カテゴリで候補を絞り込めます"
+                           {% if basic_readonly %}disabled{% endif %}>
+                    <button type="button" class="combobox-toggle" id="category-toggle" {% if basic_readonly %}disabled{% endif %}>▼</button>
+                    <div class="brand-dropdown" id="category-dropdown"></div>
+                </div>
+                <input type="hidden" id="master_category_id" name="master_category_id">
+                <small class="form-help">任意です。カテゴリでブランド候補と商品候補を絞り込めます。</small>
             </div>
             
             <div class="form-group">
@@ -603,8 +628,9 @@ input:disabled, select:disabled, textarea:disabled {
             <div class="form-group">
                 <label for="item_status">ステータス</label>
                 <select id="item_status" name="item_status" onchange="updateStatusFields()" {% if basic_readonly %}disabled{% endif %}>
-                    {% set current_status = 'sold' if item and item.sale_date else ('listed' if item and item.is_listed else 'unlisted') %}
+                    {% set current_status = 'sold' if item and item.sale_date else ('appraisal_pending' if item and item.appraisal_status == 'waiting' else ('listed' if item and item.is_listed else 'unlisted')) %}
                     <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
+                    <option value="appraisal_pending" {% if current_status == 'appraisal_pending' %}selected{% endif %}>査定待ち</option>
                     <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
                     <option value="sold" {% if current_status == 'sold' %}selected{% endif %}>売却済み</option>
                 </select>
@@ -1088,6 +1114,7 @@ input:disabled, select:disabled, textarea:disabled {
 
 </style>
 
+<script src="{{ url_for('static', filename='js/master_suggestions.js') }}?v=20260407-brand-master-search"></script>
 <script>
 (function() {
 const isKaikaScope = {{ (is_kaika_scope | default(false)) | tojson }};
@@ -1744,7 +1771,8 @@ function setupBrandAutoDetect() {
 // マスターデータをロードしてセレクトボックスを生成
 async function loadMasterData() {
     try {
-        const response = await fetch('/api/master-data?scope=user');
+        const scope = isKaikaScope ? 'admin' : 'user';
+        const response = await fetch(`/api/master-data?scope=${scope}`);
         const data = await response.json();
         
         // ブランド名コンボボックスのドロップダウンを生成
@@ -1776,9 +1804,6 @@ async function loadMasterData() {
         
         // ドロップダウンデータを保存
         window.brandCategoryData = { brandsByCategory, categoryMap };
-        
-        // 初回ドロップダウン構築
-        buildBrandDropdown('');
         
         // 商品状態セレクトボックスを生成
         const conditionSelect = document.getElementById('item_condition');
@@ -1832,6 +1857,14 @@ async function loadMasterData() {
         
         // 仕入先詳細の表示状態を更新
         toggleSupplierDetail();
+
+        if (window.MasterSuggestionHelper) {
+            window.MasterSuggestionHelper.init({
+                scope: scope,
+                data: data,
+                formSelector: '#item-form'
+            });
+        }
         
         // ブランド自動検出用のキーワードマップを更新
         window.masterBrandKeywords = {};
@@ -1850,12 +1883,6 @@ async function loadMasterData() {
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
-    
-    // ブランド名コンボボックスの初期化
-    setupBrandCombobox();
-    
-    // ブランド名自動判定の初期化
-    setupBrandAutoDetect();
     
     // ステータスフィールドの初期表示
     updateStatusFields();

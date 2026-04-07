@@ -1,79 +1,34 @@
 {% extends "base.html" %}
-{% block title %}販売代行サービス受信BOX - 株式会社 開花{% endblock %}
+{% block title %}{{ box_title }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <style>
 .sales-agency-container {
-    max-width: 1200px;
+    max-width: 1240px;
     margin: 0 auto;
-}
-
-.stats-cards {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: 1.25rem;
 }
 
-.stat-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    text-align: center;
-}
-
-.stat-card.pending {
-    border-left: 4px solid #f59e0b;
-}
-
-.stat-card.approved {
-    border-left: 4px solid #10b981;
-}
-
-.stat-card.rejected {
-    border-left: 4px solid #ef4444;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-}
-
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-}
-
-.stat-card.pending .stat-value {
-    color: #f59e0b;
-}
-
-.stat-card.approved .stat-value {
-    color: #10b981;
-}
-
-.stat-card.rejected .stat-value {
-    color: #ef4444;
-}
-
-.filter-tabs {
+.filter-tabs,
+.service-tabs {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
+    gap: 0.55rem;
 }
 
 .filter-tab {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.52rem 0.95rem;
+    border-radius: 999px;
     text-decoration: none;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: all 0.2s;
     background: #f1f5f9;
-    color: #64748b;
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 
 .filter-tab:hover {
@@ -81,8 +36,46 @@
 }
 
 .filter-tab.active {
-    background: #059669;
+    background: #0f172a;
     color: white;
+}
+
+.filter-tab.service-wholesale.active {
+    background: #0f766e;
+}
+
+.filter-tab.service-auction.active {
+    background: #7c3aed;
+}
+
+.filter-tab.service-simultaneous.active {
+    background: #c2410c;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.9rem;
+}
+
+.stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.stat-card-label {
+    color: #64748b;
+    font-size: 0.84rem;
+    margin-bottom: 0.45rem;
+}
+
+.stat-card-value {
+    color: #0f172a;
+    font-size: 1.8rem;
+    font-weight: 700;
 }
 
 .requests-list {
@@ -92,309 +85,345 @@
 }
 
 .request-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     overflow: hidden;
+    border-top: 4px solid #cbd5e1;
 }
 
-.request-card.pending {
-    border-left: 4px solid #f59e0b;
+.request-card.service-wholesale {
+    border-top-color: #0f766e;
 }
 
-.request-card.approved {
-    border-left: 4px solid #10b981;
+.request-card.service-auction {
+    border-top-color: #7c3aed;
 }
 
-.request-card.rejected {
-    border-left: 4px solid #ef4444;
+.request-card.service-simultaneous {
+    border-top-color: #c2410c;
 }
 
 .request-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.25rem;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
-    flex-wrap: wrap;
-    gap: 0.5rem;
 }
 
 .request-info {
     display: flex;
-    align-items: center;
-    gap: 1rem;
     flex-wrap: wrap;
+    gap: 0.65rem 0.85rem;
+    align-items: center;
 }
 
 .request-user {
-    font-weight: 600;
-    color: #1e293b;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
 }
 
-.request-service {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    background: #dbeafe;
-    color: #1d4ed8;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-.request-date {
-    font-size: 0.85rem;
+.request-date,
+.processed-info {
+    font-size: 0.84rem;
     color: #64748b;
 }
 
-.request-status {
-    display: inline-block;
-    padding: 0.35rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
+.service-badge,
+.status-badge,
+.mini-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.72rem;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
-.request-status.pending {
+.service-badge.wholesale {
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+.service-badge.auction {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.service-badge.simultaneous {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.status-badge.pending {
     background: #fef3c7;
     color: #b45309;
 }
 
-.request-status.approved {
-    background: #d1fae5;
-    color: #059669;
+.status-badge.approved {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
-.request-status.rejected {
+.status-badge.appraising {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.status-badge.completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.rejected {
     background: #fee2e2;
     color: #dc2626;
 }
 
 .request-body {
-    padding: 1.25rem;
+    padding: 1.2rem;
+    display: grid;
+    gap: 1rem;
 }
 
 .request-items {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 0.75rem;
-    margin-bottom: 1rem;
 }
 
 .request-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 12px;
     background: #f8fafc;
-    border-radius: 8px;
     border: 1px solid #e2e8f0;
 }
 
-.request-item img {
-    width: 40px;
-    height: 40px;
+.request-item img,
+.request-item .placeholder {
+    width: 46px;
+    height: 46px;
     object-fit: cover;
-    border-radius: 4px;
-}
-
-.request-item-info {
-    font-size: 0.85rem;
+    border-radius: 8px;
+    background: #e2e8f0;
 }
 
 .request-item-name {
-    font-weight: 500;
-    color: #1e293b;
-    max-width: 150px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.5;
 }
 
 .request-item-brand {
     color: #64748b;
-    font-size: 0.75rem;
-}
-
-.admin-note-display {
-    margin-top: 1rem;
-    padding: 0.75rem;
-    background: #f1f5f9;
-    border-radius: 8px;
-}
-
-.admin-note-display label {
     font-size: 0.8rem;
+}
+
+.request-item-status {
+    margin-top: 0.22rem;
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.request-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.mini-badge {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.request-note {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem;
+}
+
+.request-note-label {
     color: #64748b;
-    display: block;
+    font-size: 0.8rem;
     margin-bottom: 0.25rem;
 }
 
-.admin-note-display p {
+.request-note p {
     margin: 0;
-    color: #1e293b;
+    color: #0f172a;
+    line-height: 1.7;
 }
 
 .request-actions {
     display: flex;
-    gap: 0.75rem;
     flex-wrap: wrap;
-    padding-top: 1rem;
+    gap: 0.8rem;
+    align-items: flex-end;
+    padding-top: 0.95rem;
     border-top: 1px solid #e2e8f0;
-    margin-top: 1rem;
 }
 
 .admin-note-input {
-    flex: 1;
-    min-width: 200px;
+    flex: 1 1 320px;
 }
 
 .admin-note-input textarea {
     width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.9rem;
+    min-height: 74px;
     resize: vertical;
-    min-height: 60px;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    font-size: 0.92rem;
 }
 
-.admin-note-input textarea:focus {
-    outline: none;
-    border-color: #059669;
-}
-
-.action-buttons {
+.action-buttons,
+.request-doc-links {
     display: flex;
-    gap: 0.5rem;
-    align-items: flex-end;
+    gap: 0.55rem;
+    flex-wrap: wrap;
 }
 
-.btn {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    text-decoration: none;
+.btn-outline {
+    background: #fff;
+    border: 1px solid #93c5fd;
+    color: #2563eb;
+}
+
+.service-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
+.service-legend-item {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    transition: all 0.2s;
-    border: none;
-    font-size: 0.9rem;
+    padding: 0.42rem 0.8rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #475569;
+    font-size: 0.84rem;
 }
 
-.btn-approve {
-    background: #10b981;
-    color: white;
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
 }
 
-.btn-approve:hover {
-    background: #059669;
+.legend-dot.wholesale {
+    background: #0f766e;
 }
 
-.btn-reject {
-    background: #ef4444;
-    color: white;
+.legend-dot.auction {
+    background: #7c3aed;
 }
 
-.btn-reject:hover {
-    background: #dc2626;
+.legend-dot.simultaneous {
+    background: #c2410c;
 }
 
-.no-requests {
+.empty-state {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 2.4rem 1rem;
     text-align: center;
-    padding: 3rem;
-    background: white;
-    border-radius: 12px;
     color: #64748b;
-}
-
-.processed-info {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-top: 0.5rem;
+    background: #fff;
 }
 
 @media (max-width: 768px) {
-    .stats-cards {
-        grid-template-columns: 1fr;
-    }
-    
-    .request-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .request-info {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-    
+    .request-header,
     .request-actions {
         flex-direction: column;
+        align-items: stretch;
     }
-    
-    .admin-note-input {
-        width: 100%;
-    }
-    
-    .action-buttons {
-        width: 100%;
-    }
-    
-    .action-buttons .btn {
-        flex: 1;
+
+    .action-buttons .btn,
+    .request-doc-links .btn {
+        flex: 1 1 auto;
         justify-content: center;
     }
 }
 </style>
 
 <div class="page-header">
-    <h1>販売代行サービス受信BOX</h1>
+    <h1>{{ box_title }}</h1>
 </div>
 
 <div class="sales-agency-container">
-    <!-- 統計カード -->
-    <div class="stats-cards">
-        <div class="stat-card pending">
-            <div class="stat-label">審査中</div>
-            <div class="stat-value">{{ stats.pending }}</div>
+    <div class="service-tabs">
+        <a href="{{ url_for('admin_sales_agency_requests', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab {% if service_filter == 'all' %}active{% endif %}">すべての申請</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-wholesale {% if service_filter == 'wholesale' %}active{% endif %}">業者卸販売</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='auction', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-auction {% if service_filter == 'auction' %}active{% endif %}">業者オークション</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-simultaneous {% if service_filter == 'simultaneous' %}active{% endif %}">同時出品</a>
+    </div>
+
+    <div class="service-legend">
+        <span class="service-legend-item"><span class="legend-dot wholesale"></span>業者卸販売サービス</span>
+        <span class="service-legend-item"><span class="legend-dot auction"></span>業者オークション出品</span>
+        <span class="service-legend-item"><span class="legend-dot simultaneous"></span>同時出品サービス</span>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-card-label">認証中</div>
+            <div class="stat-card-value">{{ stats.pending }}</div>
         </div>
-        <div class="stat-card approved">
-            <div class="stat-label">承認済み</div>
-            <div class="stat-value">{{ stats.approved }}</div>
+        <div class="stat-card">
+            <div class="stat-card-label">認証済み</div>
+            <div class="stat-card-value">{{ stats.approved }}</div>
         </div>
-        <div class="stat-card rejected">
-            <div class="stat-label">却下</div>
-            <div class="stat-value">{{ stats.rejected }}</div>
+        <div class="stat-card">
+            <div class="stat-card-label">査定中</div>
+            <div class="stat-card-value">{{ stats.appraising }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">処理完了</div>
+            <div class="stat-card-value">{{ stats.completed }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">却下申請</div>
+            <div class="stat-card-value">{{ stats.rejected }}</div>
         </div>
     </div>
-    
-    <!-- フィルタータブ -->
+
     <div class="filter-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests') }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('admin_sales_agency_requests', status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">審査中</a>
-        <a href="{{ url_for('admin_sales_agency_requests', status='processed') }}" class="filter-tab {% if status_filter == 'processed' %}active{% endif %}">処理済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">承認済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">認証中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">査定中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed') }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
     </div>
-    
-    <!-- 申請リスト -->
+
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}
-        <div class="request-card {{ req.status }}" id="request-{{ req.id }}">
+        <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}">
             <div class="request-header">
                 <div class="request-info">
-                    <span class="request-user">{{ req.user_name or req.username }}</span>
-                    <span class="request-service">{{ service_types.get(req.service_type, req.service_type) }}</span>
-                    <span class="request-date">{{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
+                    <span class="request-user">{{ req.client_name }}</span>
+                    <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
+                    <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                 </div>
-                <span class="request-status {{ req.status }}">{{ statuses.get(req.status, req.status) }}</span>
+                <span class="status-badge {{ req.status }}">{{ req.status_label }}</span>
             </div>
+
             <div class="request-body">
                 <div class="request-items">
                     {% for item in req.merchandise_items %}
@@ -402,37 +431,75 @@
                         {% if item.photo_path %}
                         <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
                         {% else %}
-                        <div style="width: 40px; height: 40px; background: #e2e8f0; border-radius: 4px;"></div>
+                        <div class="placeholder"></div>
                         {% endif %}
-                        <div class="request-item-info">
+                        <div>
                             <div class="request-item-name">{{ item.product_name }}</div>
                             {% if item.brand_name %}
                             <div class="request-item-brand">{{ item.brand_name }}</div>
+                            {% endif %}
+                            {% if item.appraisal_status_label %}
+                            <div class="request-item-status">{{ item.appraisal_status_label }}</div>
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
                 </div>
-                
-                {% if req.status != 'pending' %}
-                <div class="processed-info">
-                    処理日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
-                    {% if req.processor_name %}| 処理者: {{ req.processor_name }}{% endif %}
+
+                <div class="request-meta">
+                    <span class="mini-badge">申請ID {{ req.id }}</span>
+                    <span class="mini-badge">商品 {{ req.merchandise_items|length }} 点</span>
+                    {% if req.service_type == 'wholesale' %}
+                    <span class="mini-badge">査定待ち {{ req.pending_appraisal_count }} 点</span>
+                    {% endif %}
                 </div>
+
                 {% if req.admin_note %}
-                <div class="admin-note-display">
-                    <label>備考</label>
+                <div class="request-note">
+                    <div class="request-note-label">備考</div>
                     <p>{{ req.admin_note }}</p>
                 </div>
                 {% endif %}
-                {% else %}
+
+                {% if req.status != 'pending' %}
+                <div class="processed-info">
+                    更新日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
+                    {% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}
+                </div>
+                {% endif %}
+
+                {% if req.request_can_create_documents or req.created_mitsumori_id or req.created_invoice_id %}
+                <div class="request-doc-links">
+                    {% if req.request_can_create_documents %}
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">見積依頼書を作成</a>
+                    {% endif %}
+                    {% if req.created_mitsumori_id %}
+                    <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}" class="btn btn-outline">見積依頼書を見る</a>
+                    {% endif %}
+                    {% if req.created_invoice_id %}
+                    <a href="{{ url_for('admin_kaitori_view', id=req.created_invoice_id) }}" class="btn btn-outline">買取明細書を見る</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if req.available_actions %}
                 <div class="request-actions">
                     <div class="admin-note-input">
-                        <textarea id="note-{{ req.id }}" placeholder="備考（任意）"></textarea>
+                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください"></textarea>
                     </div>
                     <div class="action-buttons">
-                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">承認</button>
-                        <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下</button>
+                        {% if 'approve' in req.available_actions %}
+                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">認証済みにする</button>
+                        {% endif %}
+                        {% if 'appraising' in req.available_actions %}
+                        <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">査定中にする</button>
+                        {% endif %}
+                        {% if 'complete' in req.available_actions %}
+                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'complete')">処理完了にする</button>
+                        {% endif %}
+                        {% if 'reject' in req.available_actions %}
+                        <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下申請</button>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -441,22 +508,26 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="no-requests">
-        <p>申請はありません</p>
-    </div>
+    <div class="empty-state">該当する申請はありません。</div>
     {% endif %}
 </div>
 
 <script>
 function processRequest(requestId, action) {
-    const noteEl = document.getElementById('note-' + requestId);
+    const noteEl = document.getElementById(`note-${requestId}`);
     const adminNote = noteEl ? noteEl.value : '';
-    const actionText = action === 'approve' ? '承認' : '却下';
-    
-    if (!confirm(`この申請を${actionText}しますか？`)) {
+    const actionLabels = {
+        approve: '認証済み',
+        appraising: '査定中',
+        complete: '処理完了',
+        reject: '却下申請'
+    };
+    const actionText = actionLabels[action] || action;
+
+    if (!confirm(`この申請を「${actionText}」へ変更しますか？`)) {
         return;
     }
-    
+
     fetch(`/admin/sales-agency-requests/${requestId}/process`, {
         method: 'POST',
         headers: {
@@ -470,11 +541,10 @@ function processRequest(requestId, action) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(`${actionText}しました`);
             location.reload();
-        } else {
-            alert('エラー: ' + (data.error || '処理に失敗しました'));
+            return;
         }
+        alert('エラー: ' + (data.error || '処理に失敗しました'));
     })
     .catch(error => {
         console.error('Error:', error);

@@ -1,321 +1,322 @@
 {% extends "base.html" %}
-{% block title %}全体売上管理 - 株式会社 開花{% endblock %}
+{% block title %}ホーム - 開花 管理画面{% endblock %}
 
 {% block content %}
+{% set shipping_count = get_pending_sale_request_count_by_type('shipping_request') %}
+{% set completion_count = get_pending_sale_request_count_by_type('completion_report') %}
+{% set wholesale_count = get_pending_sales_agency_count_by_service('wholesale') %}
+{% set auction_count = get_pending_sales_agency_count_by_service('auction') %}
+{% set simultaneous_count = get_pending_sales_agency_count_by_service('simultaneous') %}
+{% set disposal_count = get_pending_disposal_count() %}
+{% set long_term_count = get_long_term_item_count() %}
+{% set total_priority_count = shipping_count + completion_count + wholesale_count + auction_count + simultaneous_count + disposal_count + long_term_count %}
+
 <div class="page-header">
-    <h1>全体売上管理</h1>
-    <p class="page-description">開花管理とユーザー管理をまとめた会社全体の売上・利益・在庫状況を確認できます。</p>
+    <h1>ホーム</h1>
+    <p class="page-description">優先対応の通知と、よく使う管理画面へすぐ移動できるダッシュボードです。</p>
 </div>
 
-<section class="company-hero">
-    <div class="company-hero__main">
-        <span class="company-hero__eyebrow">会社全体サマリー</span>
-        <h2>{{ company_summary.label or '会社全体' }}</h2>
-        <p>{{ company_summary.description or '開花管理とユーザー管理をまとめた全体状況です。' }}</p>
+<section class="home-overview">
+    <div class="home-overview__main">
+        <span class="home-overview__eyebrow">ホーム</span>
+        <h2>通知と重要メニューをまとめて確認</h2>
+        <p>ホームでは優先対応と主要な導線を見やすく整理し、日々の確認をすぐ始められるようにしています。</p>
     </div>
-    <div class="company-hero__actions">
-        <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">開花管理を見る</a>
-        <a href="{{ url_for('admin_user_products') }}" class="btn btn-primary">ユーザー管理を見る</a>
+    <div class="home-overview__status">
+        <span class="home-overview__status-label">優先対応件数</span>
+        <strong class="home-overview__status-value">{{ total_priority_count }}件</strong>
+        <span class="home-overview__status-note">通知ボックスと長期保存商品の件数をまとめています。</span>
     </div>
 </section>
 
-<div class="company-metrics">
-    {% for metric in company_summary.metric_cards or [] %}
-    <article class="company-metric-card">
-        <span class="company-metric-card__label">{{ metric.label }}</span>
-        <strong class="company-metric-card__value {{ metric.value_class or '' }}">{{ metric.display_value }}</strong>
-        {% if metric.subvalue %}
-        <span class="company-metric-card__sub">{{ metric.subvalue }}</span>
-        {% endif %}
-        <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('home-{{ metric.id }}')">詳細</button>
-    </article>
-    {% endfor %}
-</div>
-
-<div class="home-link-grid">
-    <section class="home-link-panel">
-        <div class="home-link-panel__header">
-            <h2>開花売上分析</h2>
-            <p>開花の自社販売に加えて、代行仕入れ、クライアント支援手数料、システム利用料まで含めた全体収益を確認できます。</p>
+<section class="home-section">
+    <div class="home-section__header">
+        <div>
+            <span class="home-section__eyebrow">通知</span>
+            <h2>優先対応通知</h2>
         </div>
-        <div class="home-link-panel__metrics">
-            {% for metric in kaika_summary.panel_metrics or [] %}
-            <div class="home-panel-metric">
-                <span>{{ metric.label }} {{ metric.display_value }}</span>
-                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('home-{{ metric.id }}')">詳細</button>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="home-link-panel__links">
-            <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">商品一覧を見る</a>
-            <a href="{{ url_for('admin_analytics_kaika_sales') }}" class="btn btn-secondary">詳細分析を見る</a>
-        </div>
-    </section>
-    <section class="home-link-panel">
-        <div class="home-link-panel__header">
-            <h2>ユーザー売上分析</h2>
-            <p>クライアント全体の売上、利益、在庫状況をまとめて確認できます。</p>
-        </div>
-        <div class="home-link-panel__metrics">
-            {% for metric in user_summary.panel_metrics or [] %}
-            <div class="home-panel-metric">
-                <span>{{ metric.label }} {{ metric.display_value }}</span>
-                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('home-{{ metric.id }}')">詳細</button>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="home-link-panel__links">
-            <a href="{{ url_for('admin_user_products') }}" class="btn btn-secondary">商品一覧を見る</a>
-            <a href="{{ url_for('user_analytics') }}" class="btn btn-secondary">詳細分析を見る</a>
-        </div>
-    </section>
-</div>
-
-{% for metric in company_summary.metric_cards or [] %}
-<div class="analytics-detail-modal" id="home-{{ metric.id }}">
-    <div class="analytics-detail-dialog">
-        <div class="analytics-detail-header">
-            <h3>{{ metric.title }}</h3>
-            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('home-{{ metric.id }}')">×</button>
-        </div>
-        <div class="analytics-detail-body">
-            {% if metric.formula %}
-            <div class="analytics-detail-formula">{{ metric.formula }}</div>
-            {% endif %}
-            <div class="analytics-detail-lines">
-                {% for line in metric.lines or [] %}
-                <div class="analytics-detail-line">
-                    <span class="analytics-detail-line-label">{{ line.label }}</span>
-                    <span class="analytics-detail-line-value">{{ line.display }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            {% if metric.note %}
-            <div class="analytics-detail-note">{{ metric.note }}</div>
-            {% endif %}
-        </div>
+        <p>未対応件数があるものをすぐ開けるように、通知ボックスと長期保存商品をまとめています。</p>
     </div>
-</div>
-{% endfor %}
-
-{% for metric in kaika_summary.panel_metrics or [] %}
-<div class="analytics-detail-modal" id="home-{{ metric.id }}">
-    <div class="analytics-detail-dialog">
-        <div class="analytics-detail-header">
-            <h3>{{ metric.title }}</h3>
-            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('home-{{ metric.id }}')">×</button>
-        </div>
-        <div class="analytics-detail-body">
-            {% if metric.formula %}
-            <div class="analytics-detail-formula">{{ metric.formula }}</div>
-            {% endif %}
-            <div class="analytics-detail-lines">
-                {% for line in metric.lines or [] %}
-                <div class="analytics-detail-line">
-                    <span class="analytics-detail-line-label">{{ line.label }}</span>
-                    <span class="analytics-detail-line-value">{{ line.display }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            {% if metric.note %}
-            <div class="analytics-detail-note">{{ metric.note }}</div>
-            {% endif %}
-        </div>
+    <div class="priority-grid">
+        <a href="{{ url_for('admin_shipping_requests') }}" class="priority-card {% if shipping_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">発送BOX</span>
+            <strong class="priority-card__count">{{ shipping_count }}件</strong>
+            <span class="priority-card__note">{% if shipping_count > 0 %}発送依頼の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_completion_requests') }}" class="priority-card {% if completion_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">受取完了BOX</span>
+            <strong class="priority-card__count">{{ completion_count }}件</strong>
+            <span class="priority-card__note">{% if completion_count > 0 %}受取完了報告の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="priority-card {% if wholesale_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">業者卸販売BOX</span>
+            <strong class="priority-card__count">{{ wholesale_count }}件</strong>
+            <span class="priority-card__note">{% if wholesale_count > 0 %}卸販売申請の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="priority-card {% if auction_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">業者オークションBOX</span>
+            <strong class="priority-card__count">{{ auction_count }}件</strong>
+            <span class="priority-card__note">{% if auction_count > 0 %}オークション申請の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="priority-card {% if simultaneous_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">同時出品BOX</span>
+            <strong class="priority-card__count">{{ simultaneous_count }}件</strong>
+            <span class="priority-card__note">{% if simultaneous_count > 0 %}同時出品申請の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_disposal_requests') }}" class="priority-card {% if disposal_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">在庫処分申請</span>
+            <strong class="priority-card__count">{{ disposal_count }}件</strong>
+            <span class="priority-card__note">{% if disposal_count > 0 %}在庫処分申請の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
+        <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="priority-card {% if long_term_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+            <span class="priority-card__label">長期保存商品</span>
+            <strong class="priority-card__count">{{ long_term_count }}件</strong>
+            <span class="priority-card__note">{% if long_term_count > 0 %}長期保存商品の確認があります{% else %}現在はありません{% endif %}</span>
+        </a>
     </div>
-</div>
-{% endfor %}
+</section>
 
-{% for metric in user_summary.panel_metrics or [] %}
-<div class="analytics-detail-modal" id="home-{{ metric.id }}">
-    <div class="analytics-detail-dialog">
-        <div class="analytics-detail-header">
-            <h3>{{ metric.title }}</h3>
-            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('home-{{ metric.id }}')">×</button>
+<section class="home-section">
+    <div class="home-section__header">
+        <div>
+            <span class="home-section__eyebrow">重要メニュー</span>
+            <h2>よく使う管理画面へのショートカット</h2>
         </div>
-        <div class="analytics-detail-body">
-            {% if metric.formula %}
-            <div class="analytics-detail-formula">{{ metric.formula }}</div>
-            {% endif %}
-            <div class="analytics-detail-lines">
-                {% for line in metric.lines or [] %}
-                <div class="analytics-detail-line">
-                    <span class="analytics-detail-line-label">{{ line.label }}</span>
-                    <span class="analytics-detail-line-value">{{ line.display }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            {% if metric.note %}
-            <div class="analytics-detail-note">{{ metric.note }}</div>
-            {% endif %}
-        </div>
+        <p>商品管理や書類管理など、日常的によく使う画面へホームからすぐ移動できます。</p>
     </div>
-</div>
-{% endfor %}
+    <div class="shortcut-grid">
+        <a href="{{ url_for('admin_items') }}" class="shortcut-card">
+            <h3>開花商品一覧</h3>
+            <p>開花管理の商品一覧を確認します。</p>
+        </a>
+        <a href="{{ url_for('admin_user_products') }}" class="shortcut-card">
+            <h3>ユーザー商品一覧</h3>
+            <p>クライアントの商品一覧を確認します。</p>
+        </a>
+        <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="shortcut-card">
+            <h3>長期保存商品</h3>
+            <p>90日以上経過した商品を確認します。</p>
+        </a>
+        <a href="{{ url_for('admin_users') }}" class="shortcut-card">
+            <h3>クライアント一覧</h3>
+            <p>クライアント情報と利用状況を確認します。</p>
+        </a>
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="shortcut-card">
+            <h3>書類管理</h3>
+            <p>書類の到着状況や送付対象を確認します。</p>
+        </a>
+        <a href="{{ url_for('admin_documents_history') }}" class="shortcut-card">
+            <h3>書類履歴</h3>
+            <p>過去の書類交付履歴を確認します。</p>
+        </a>
+    </div>
+</section>
 
 <style>
-.company-hero {
+.home-overview {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 1rem;
-    padding: 1.35rem 1.5rem;
-    margin-bottom: 1.25rem;
-    background: linear-gradient(135deg, #eff6ff, #f8fafc);
-    border: 1px solid #dbeafe;
-    border-radius: 18px;
+    margin-bottom: 1.3rem;
 }
 
-.company-hero__eyebrow {
+.home-overview__main,
+.home-overview__status {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.2rem 1.3rem;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.home-overview__main {
+    flex: 1 1 auto;
+    background: linear-gradient(135deg, #eff6ff, #ffffff);
+    border-color: #bfdbfe;
+}
+
+.home-overview__status {
+    width: min(280px, 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: linear-gradient(135deg, #fff7ed, #ffffff);
+    border-color: #fdba74;
+}
+
+.home-overview__eyebrow,
+.home-section__eyebrow {
     display: inline-block;
-    margin-bottom: 0.35rem;
-    font-size: 0.75rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.76rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     color: #2563eb;
 }
 
-.company-hero h2 {
+.home-overview__main h2,
+.home-section__header h2 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.24rem;
     color: #0f172a;
     line-height: 1.45;
-    letter-spacing: 0.035em;
 }
 
-.company-hero p {
+.home-overview__main p,
+.home-section__header p {
     margin: 0.45rem 0 0;
     color: #475569;
-    line-height: 1.85;
-    letter-spacing: 0.02em;
+    line-height: 1.82;
 }
 
-.company-hero__actions {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-.company-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-}
-
-.company-metric-card {
-    padding: 1rem 1.1rem;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
-}
-
-.company-metric-card__label {
-    display: block;
-    margin-bottom: 0.45rem;
-    font-size: 0.84rem;
-    color: #64748b;
-    line-height: 1.65;
+.home-overview__status-label {
+    font-size: 0.82rem;
+    color: #9a3412;
     letter-spacing: 0.04em;
 }
 
-.company-metric-card__value {
+.home-overview__status-value {
     display: block;
-    color: #0f172a;
-    font-size: 1.35rem;
-    line-height: 1.4;
+    margin-top: 0.35rem;
+    font-size: 2rem;
+    color: #7c2d12;
+    line-height: 1.2;
 }
 
-.company-metric-card__sub {
-    display: block;
+.home-overview__status-note {
     margin-top: 0.4rem;
+    color: #9a3412;
     font-size: 0.82rem;
-    color: #64748b;
     line-height: 1.7;
 }
 
-.home-link-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-}
-
-.home-link-panel {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
+.home-section {
+    margin-bottom: 1.3rem;
     padding: 1.2rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
-.home-link-panel__header h2 {
-    margin: 0;
-    font-size: 1.1rem;
-    color: #0f172a;
-    line-height: 1.5;
-    letter-spacing: 0.03em;
-}
-
-.home-link-panel__header p {
-    margin: 0.45rem 0 0;
-    color: #64748b;
-    line-height: 1.82;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-    letter-spacing: 0.02em;
-}
-
-.home-link-panel__metrics {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    margin-top: 0.9rem;
-    color: #334155;
-    font-size: 0.9rem;
-}
-
-.home-panel-metric {
+.home-section__header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 0.75rem;
-    padding: 0.15rem 0;
+    gap: 1rem;
+    margin-bottom: 1rem;
 }
 
-.home-panel-metric span {
-    flex: 1 1 auto;
-    min-width: 0;
-    line-height: 1.8;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-    letter-spacing: 0.02em;
-}
-
-.home-panel-metric .analytics-detail-trigger {
+.home-section__header p {
+    max-width: 36rem;
     margin-top: 0;
-    flex-shrink: 0;
 }
 
-.home-link-panel__links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 1rem;
+.priority-grid,
+.shortcut-grid {
+    display: grid;
+    gap: 0.95rem;
 }
 
-@media (max-width: 960px) {
-    .company-metrics,
-    .home-link-grid {
-        grid-template-columns: 1fr;
+.priority-card:hover,
+.shortcut-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.shortcut-card h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #0f172a;
+    line-height: 1.45;
+}
+
+.shortcut-card p {
+    margin: 0.5rem 0 0;
+    color: #475569;
+    line-height: 1.78;
+}
+
+.priority-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.priority-card {
+    display: block;
+    padding: 1rem;
+    border-radius: 16px;
+    text-decoration: none;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+}
+
+.priority-card--active {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #fff7ed, #ffffff);
+}
+
+.priority-card--idle {
+    border-color: #e2e8f0;
+    background: linear-gradient(135deg, #f8fafc, #ffffff);
+}
+
+.priority-card__label {
+    display: block;
+    color: #334155;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.priority-card__count {
+    display: block;
+    margin-top: 0.35rem;
+    color: #0f172a;
+    font-size: 1.5rem;
+    line-height: 1.2;
+}
+
+.priority-card__note {
+    display: block;
+    margin-top: 0.45rem;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.shortcut-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.shortcut-card {
+    display: block;
+    padding: 1rem 1.05rem;
+    border-radius: 16px;
+    text-decoration: none;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+}
+
+@media (max-width: 1100px) {
+    .priority-grid,
+    .shortcut-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+}
 
-    .company-hero {
+@media (max-width: 860px) {
+    .home-overview,
+    .home-section__header {
         flex-direction: column;
     }
 
-    .company-hero__actions {
-        justify-content: flex-start;
+    .home-overview__status {
+        width: 100%;
+    }
+
+    .priority-grid,
+    .shortcut-grid {
+        grid-template-columns: 1fr;
     }
 }
 </style>

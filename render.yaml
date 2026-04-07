@@ -5,7 +5,7 @@ services:
     plan: standard  # Standardプラン
     buildCommand: pip install -r requirements.txt
     # --preloadを削除（環境変数の読み込み問題を回避）
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 300 --limit-request-body 524288000
+    startCommand: gunicorn render_app:app --bind 0.0.0.0:$PORT --timeout 300 --limit-request-body 524288000
     
     # 永続ディスク設定（画像保存用）
     disk:

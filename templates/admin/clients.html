@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}クライアント一覧 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>クライアント一覧</h1>
+    <a href="{{ url_for('admin_add_user') }}" class="btn btn-primary">+ クライアント追加</a>
+</div>
+
+<div class="search-section">
+    <form method="GET" action="{{ url_for('admin_users') }}" class="search-form">
+        <div class="search-input-group">
+            <input
+                type="text"
+                name="search"
+                value="{{ search_query or '' }}"
+                placeholder="クライアント名・表示名・メールで検索"
+                class="search-input">
+            <button type="submit" class="btn btn-search">検索</button>
+            {% if search_query %}
+            <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">クリア</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="admin-section">
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ユーザー名</th>
+                    <th>表示名</th>
+                    <th>メール</th>
+                    <th>当月商品数</th>
+                    <th>月額利用料</th>
+                    <th>開花手数料</th>
+                    <th>代行予算</th>
+                    <th>月額免除</th>
+                    <th>最終ログイン</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td><strong>{{ user.username }}</strong></td>
+                    <td>{{ user.display_name or '-' }}</td>
+                    <td>{{ user.email }}</td>
+                    <td class="text-center">{{ user.monthly_item_count }}点</td>
+                    <td class="text-center">¥{{ "{:,}".format(user.monthly_fee|int) }}</td>
+                    <td class="text-center">¥{{ "{:,}".format(user.kaika_fee|int) }}</td>
+                    <td class="text-center">¥{{ "{:,}".format(user.proxy_service_budget|int) }}</td>
+                    <td class="text-center">
+                        {% if user.tuition_exempt %}
+                        <span class="status-badge success">免除</span>
+                        {% else %}
+                        <span class="status-badge neutral">通常</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ (user.last_login|string)[:16] if user.last_login else '-' }}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="{{ url_for('admin_edit_user', id=user.id) }}" class="btn btn-sm btn-edit">編集</a>
+                            <a href="{{ url_for('admin_user_items', id=user.id) }}" class="btn btn-sm">商品</a>
+                            <a href="{{ url_for('admin_delete_client', id=user.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('このクライアントを削除しますか？')">削除</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="11" class="empty-cell">
+                        {% if search_query %}
+                        条件に一致するクライアントが見つかりませんでした
+                        {% else %}
+                        クライアントはまだ登録されていません
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.search-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.search-form {
+    width: 100%;
+    max-width: 760px;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 280px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.status-badge.success {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.status-badge.neutral {
+    color: #475569;
+    background: #e2e8f0;
+}
+</style>
+{% endblock %}

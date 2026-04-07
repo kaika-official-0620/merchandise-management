@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% block title %}ユーザーの商品一覧 - 株式会社 開花{% endblock %}
+{% block title %}{% if request.args.get('inventory_view') == 'long_term' %}長期保存商品{% else %}ユーザーの商品一覧{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set is_long_term_view = request.args.get('inventory_view') == 'long_term' %}
 <style>
     /* 検索ボタン */
     .search-toggle-container {
@@ -538,6 +539,11 @@
     .status-badge.listed {
         background: #dbeafe;
         color: #1e40af;
+    }
+
+    .status-badge.pending-sale {
+        background: #fef3c7;
+        color: #b45309;
     }
 
     .status-badge.unlisted {
@@ -1114,7 +1120,15 @@
 </style>
 
 <div class="page-header">
-    <h1>ユーザーの商品一覧</h1>
+    <div>
+        <h1>{{ '長期保存商品' if is_long_term_view else 'ユーザーの商品一覧' }}</h1>
+        {% if is_long_term_view %}
+        <p style="margin: 0.35rem 0 0; color: #64748b; font-size: 0.92rem; line-height: 1.7;">仕入日から90日以上経過し、まだ販売完了していない商品だけを表示しています。</p>
+        {% endif %}
+    </div>
+    {% if is_long_term_view %}
+    <a href="{{ url_for('admin_user_products') }}" class="btn">商品一覧に戻る</a>
+    {% endif %}
 </div>
 
 <!-- 検索ボタン＆アクションボタン -->
@@ -1185,6 +1199,7 @@
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
                     <option value="sold">売却済</option>
+                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="unlisted">未出品</option>
                 </select>
@@ -1262,7 +1277,7 @@
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1331,6 +1346,8 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
+                        {% elif item.appraisal_status == 'waiting' %}
+                        <span class="status-badge pending-sale">査定待ち</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1372,7 +1389,21 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}">
+        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}"
+            data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}"
+            data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}"
+            data-condition="{{ item.item_condition or '' }}"
+            data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
+            data-date="{{ item.purchase_date or '' }}"
+            data-purchase-price="{{ item.display_purchase_price or 0 }}"
+            data-sale-price="{{ item.display_sale_price or 0 }}"
+            data-profit="{{ item.profit or 0 }}"
+            data-sale-type="{{ item.sale_type or '' }}"
+            data-sale-date="{{ item.sale_date or '' }}"
+            data-sales-destination="{{ item.sales_destination_display or '' }}"
+            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
             <div
                 class="user-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
                 <div class="user-card-photo">
@@ -1401,6 +1432,8 @@
                 <div class="user-card-status">
                     {% if item.sale_date %}
                     <span class="status-badge sold">売却済</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="status-badge pending-sale">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -1611,6 +1644,7 @@
         const queryDestination = (query.get('destination') || '').toLowerCase();
         const queryDateFrom = query.get('date_from') || '';
         const queryDateTo = query.get('date_to') || '';
+        const queryInventoryView = (query.get('inventory_view') || '').toLowerCase();
 
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
         const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
@@ -1628,24 +1662,35 @@
             return true;
         }
 
-        const rows = document.querySelectorAll('#itemsTable tbody tr');
-        rows.forEach(row => {
-            if (!row.dataset.id) return;
+        function formatDateKey(dateValue) {
+            const date = new Date(dateValue);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
 
-            const id = row.dataset.id;
-            const name = (row.dataset.name || '').toLowerCase();
-            const brand = (row.dataset.brand || '').toLowerCase();
-            const model = (row.dataset.model || '').toLowerCase();
-            const owner = (row.dataset.owner || '').toLowerCase();
-            const condition = row.dataset.condition || '';
-            const status = row.dataset.status || '';
-            const saleType = (row.dataset.saleType || '').toLowerCase();
+        const longTermCutoffDate = new Date();
+        longTermCutoffDate.setHours(0, 0, 0, 0);
+        longTermCutoffDate.setDate(longTermCutoffDate.getDate() - 90);
+        const longTermCutoffKey = formatDateKey(longTermCutoffDate);
+
+        function shouldShowRecord(record) {
+            const id = record.dataset.id || '';
+            const name = (record.dataset.name || '').toLowerCase();
+            const brand = (record.dataset.brand || '').toLowerCase();
+            const model = (record.dataset.model || '').toLowerCase();
+            const owner = (record.dataset.owner || '').toLowerCase();
+            const condition = record.dataset.condition || '';
+            const status = record.dataset.status || '';
+            const saleType = (record.dataset.saleType || '').toLowerCase();
             const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
-            const saleDate = row.dataset.saleDate || '';
-            const salesDestination = (row.dataset.salesDestination || '').toLowerCase();
-            const purchasePrice = row.dataset.purchasePrice || '0';
-            const salePrice = row.dataset.salePrice || '0';
-            const profit = row.dataset.profit || '0';
+            const saleDate = record.dataset.saleDate || '';
+            const purchaseDate = (record.dataset.date || '').slice(0, 10);
+            const salesDestination = (record.dataset.salesDestination || '').toLowerCase();
+            const purchasePrice = record.dataset.purchasePrice || '0';
+            const salePrice = record.dataset.salePrice || '0';
+            const profit = record.dataset.profit || '0';
 
             let show = true;
 
@@ -1667,17 +1712,36 @@
             if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
             if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
             if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
+            if (queryInventoryView == 'long_term' && (!purchaseDate || status === 'sold' || purchaseDate > longTermCutoffKey)) show = false;
 
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
             if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
             if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) show = false;
 
+            return show;
+        }
+
+        const rows = document.querySelectorAll('#itemsTable tbody tr[data-id]');
+        rows.forEach(row => {
+            const show = shouldShowRecord(row);
             row.style.display = show ? '' : 'none';
             if (show) visibleCount++;
         });
 
+        const cards = document.querySelectorAll('#mobileCards .user-item-card[data-id]');
+        cards.forEach(card => {
+            const show = shouldShowRecord(card);
+            card.style.display = show ? '' : 'none';
+        });
+
         const countEl = document.getElementById('filtered-count');
         if (countEl) countEl.textContent = visibleCount + '件表示';
+
+        const totalCountEl = document.querySelector('.total-count');
+        if (totalCountEl) totalCountEl.textContent = visibleCount;
+
+        const currentIndexEl = document.querySelector('.current-index');
+        if (currentIndexEl) currentIndexEl.textContent = visibleCount > 0 ? '1' : '0';
     }
 
     function openTransferModal(itemId, itemName) {
@@ -1985,7 +2049,7 @@
             const brandInput = document.getElementById('tab-filter-brand');
             if (brandInput) brandInput.value = queryBrand;
         }
-        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to')) {
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to') || query.get('inventory_view')) {
             filterTable();
             updateFilterCount();
         }

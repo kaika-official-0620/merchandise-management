@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% block title %}LINE連携 - 管理画面{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>LINE公式アカウント連携</h1>
+        <p class="page-desc">複数の公式LINEアカウントを管理し、配信や定期送信に使い分けできます。</p>
+    </div>
+    <a href="{{ url_for('admin_line_account_new') }}" class="btn btn-primary">+ アカウント追加</a>
+</div>
+
+<div class="line-summary-grid">
+    <div class="summary-card">
+        <span class="summary-label">登録アカウント</span>
+        <span class="summary-value">{{ accounts|length }}</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">有効アカウント</span>
+        <span class="summary-value">{{ active_accounts_count }}</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">LINE連携ユーザー</span>
+        <span class="summary-value">{{ linked_users }}</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">定期送信</span>
+        <span class="summary-value">{{ scheduled_messages|length }}</span>
+    </div>
+</div>
+
+<div class="line-admin-grid">
+    <div class="line-panel">
+        <div class="panel-header">
+            <h2>公式アカウント一覧</h2>
+        </div>
+
+        {% if accounts %}
+        <div class="account-list">
+            {% for account in accounts %}
+            <div class="account-card {% if account.is_default %}is-default{% endif %}">
+                <div class="account-top">
+                    <div>
+                        <div class="account-title">
+                            {{ account.account_name }}
+                            {% if account.is_default %}
+                            <span class="badge default">既定</span>
+                            {% endif %}
+                            {% if account.is_enabled %}
+                            <span class="badge enabled">有効</span>
+                            {% else %}
+                            <span class="badge disabled">停止中</span>
+                            {% endif %}
+                        </div>
+                        <div class="account-meta">ID: {{ account.id }}</div>
+                    </div>
+                    <div class="account-actions">
+                        <a href="{{ url_for('admin_line_account_edit', account_id=account.id) }}" class="btn btn-secondary btn-sm">編集</a>
+                    </div>
+                </div>
+
+                <label class="webhook-label">Webhook URL</label>
+                <div class="webhook-row">
+                    <input type="text" class="form-control" readonly value="{{ request.host_url }}line/webhook/{{ account.id }}" id="webhook-{{ account.id }}">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyWebhook('webhook-{{ account.id }}')">コピー</button>
+                </div>
+
+                <div class="account-bottom">
+                    <form method="POST" action="{{ url_for('admin_line_account_set_default', account_id=account.id) }}">
+                        <button type="submit" class="btn btn-outline btn-sm" {% if account.is_default %}disabled{% endif %}>既定にする</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_line_account_delete', account_id=account.id) }}" onsubmit="return confirm('このLINEアカウントを削除しますか？')">
+                        <button type="submit" class="btn btn-danger btn-sm">削除</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">LINEアカウントはまだ登録されていません。</div>
+        {% endif %}
+    </div>
+
+    <div class="line-panel">
+        <div class="panel-header">
+            <h2>一斉送信</h2>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_line_broadcast_v2') }}">
+            <div class="form-group">
+                <label>送信アカウント</label>
+                <select name="line_account_id" class="form-control" {% if not accounts %}disabled{% endif %}>
+                    {% for account in accounts %}
+                    {% if account.is_enabled %}
+                    <option value="{{ account.id }}" {% if account.is_default %}selected{% endif %}>{{ account.account_name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>メッセージ</label>
+                <textarea name="message" class="form-control" rows="5" placeholder="送信する内容を入力してください" {% if not active_accounts_count %}disabled{% endif %} required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" {% if not active_accounts_count %}disabled{% endif %}>送信する</button>
+            {% if not active_accounts_count %}
+            <p class="form-hint warning">有効なLINEアカウントを登録してください。</p>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="line-panel full-width">
+        <div class="panel-header">
+            <h2>定期送信メッセージ</h2>
+            <a href="{{ url_for('admin_line_scheduled_v2') }}" class="btn btn-primary btn-sm">+ 新規作成</a>
+        </div>
+
+        {% if scheduled_messages %}
+        <div class="scheduled-list">
+            {% for msg in scheduled_messages %}
+            <div class="scheduled-item">
+                <div class="scheduled-main">
+                    <div class="scheduled-title">
+                        {{ msg.title }}
+                        {% if msg.account_name %}
+                        <span class="badge account">{{ msg.account_name }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="scheduled-meta">
+                        {% if msg.schedule_type == 'daily' %}
+                        毎日 {{ msg.schedule_time }}
+                        {% elif msg.schedule_type == 'weekly' %}
+                        毎週 {{ ['月', '火', '水', '木', '金', '土', '日'][msg.schedule_day - 1] if msg.schedule_day else '' }} {{ msg.schedule_time }}
+                        {% else %}
+                        毎月 {{ msg.schedule_day }}日 {{ msg.schedule_time }}
+                        {% endif %}
+                    </div>
+                    <div class="scheduled-preview">{{ msg.message_content[:60] }}{% if msg.message_content|length > 60 %}...{% endif %}</div>
+                </div>
+                <div class="scheduled-actions">
+                    <label class="toggle-label">
+                        <input type="checkbox" {% if msg.is_enabled %}checked{% endif %} onchange="toggleScheduled({{ msg.id }})">
+                        <span>有効</span>
+                    </label>
+                    <a href="{{ url_for('admin_line_scheduled_edit_v2', message_id=msg.id) }}" class="btn btn-secondary btn-sm">編集</a>
+                    {% if not msg.report_type %}
+                    <form method="POST" action="{{ url_for('admin_line_scheduled_delete_v2', message_id=msg.id) }}" onsubmit="return confirm('この定期送信を削除しますか？')">
+                        <button type="submit" class="btn btn-danger btn-sm">削除</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-message">定期送信はまだありません。</div>
+        {% endif %}
+    </div>
+
+    <div class="line-panel full-width">
+        <div class="panel-header">
+            <h2>送信ログ</h2>
+        </div>
+
+        {% if logs %}
+        <div class="logs-table-wrapper">
+            <table class="logs-table">
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>種別</th>
+                        <th>送信アカウント</th>
+                        <th>内容</th>
+                        <th>送信者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.sent_at.strftime('%Y/%m/%d %H:%M') if log.sent_at else '-' }}</td>
+                        <td>{{ log.message_type }}</td>
+                        <td>{{ log.account_name or '-' }}</td>
+                        <td>{{ log.message_content[:50] }}{% if log.message_content|length > 50 %}...{% endif %}</td>
+                        <td>{{ log.sent_by_name or 'システム' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-message">送信ログはまだありません。</div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.4rem 0;
+}
+
+.page-desc {
+    margin: 0;
+    color: #64748b;
+}
+
+.line-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.summary-card,
+.line-panel {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.summary-card {
+    padding: 1rem 1.1rem;
+}
+
+.summary-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
+}
+
+.summary-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.line-admin-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 1.5rem;
+}
+
+.line-panel {
+    padding: 1.3rem;
+}
+
+.line-panel.full-width {
+    grid-column: 1 / -1;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.panel-header h2 {
+    margin: 0;
+    font-size: 1.08rem;
+}
+
+.account-list,
+.scheduled-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.account-card,
+.scheduled-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    background: #f8fafc;
+}
+
+.account-card.is-default {
+    border-color: #93c5fd;
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.account-top,
+.scheduled-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.account-title,
+.scheduled-title {
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.account-meta,
+.scheduled-meta,
+.scheduled-preview,
+.form-hint {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.scheduled-preview {
+    margin-top: 0.35rem;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.badge.default {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.badge.enabled {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.badge.disabled {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.badge.account {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.account-bottom,
+.scheduled-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 0.9rem;
+}
+
+.webhook-label {
+    display: block;
+    margin: 0.85rem 0 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.webhook-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.45rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.form-hint.warning {
+    color: #b91c1c;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.btn-sm {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #64748b;
+    color: #fff;
+}
+
+.btn-outline {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: #fff;
+}
+
+.toggle-label {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    color: #475569;
+    font-size: 0.85rem;
+}
+
+.logs-table-wrapper {
+    overflow-x: auto;
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.logs-table th,
+.logs-table td {
+    border: 1px solid #e2e8f0;
+    padding: 0.7rem;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.logs-table th {
+    background: #f8fafc;
+}
+
+.empty-message {
+    padding: 1.2rem;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #64748b;
+    text-align: center;
+}
+
+@media (max-width: 900px) {
+    .line-admin-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .page-header {
+        flex-direction: column;
+    }
+
+    .account-top,
+    .scheduled-item,
+    .webhook-row {
+        flex-direction: column;
+    }
+}
+</style>
+
+<script>
+function copyWebhook(inputId) {
+    const input = document.getElementById(inputId);
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    navigator.clipboard.writeText(input.value);
+}
+
+function toggleScheduled(messageId) {
+    fetch(`/admin/line-v2/scheduled/${messageId}/toggle`, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    }).then(() => window.location.reload());
+}
+</script>
+{% endblock %}

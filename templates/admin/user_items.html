@@ -286,6 +286,11 @@
         color: #92400e;
     }
 
+    .badge-appraisal {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
     .user-items-description {
         margin: 0.35rem 0 0;
         color: #64748b;
@@ -665,6 +670,8 @@
                 <td>
                     {% if item.sale_date %}
                     <span class="badge badge-sold">売却済</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="badge badge-appraisal">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="badge badge-listed">出品中</span>
                     {% else %}
@@ -709,6 +716,8 @@
             <div class="card-status">
                 {% if item.sale_date %}
                 <span class="badge badge-sold">売却済</span>
+                {% elif item.appraisal_status == 'waiting' %}
+                <span class="badge badge-appraisal">査定待ち</span>
                 {% elif item.is_listed %}
                 <span class="badge badge-listed">出品中</span>
                 {% else %}

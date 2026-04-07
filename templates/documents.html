@@ -11,6 +11,7 @@
 <div class="doc-tabs">
     <button class="doc-tab active" data-tab="kaitori">買取明細書</button>
     <button class="doc-tab" data-tab="mitsumori">見積依頼書</button>
+    <button class="doc-tab" data-tab="shikiri">精算書</button>
     <button class="doc-tab" data-tab="keisan">計算書</button>
 </div>
 
@@ -134,13 +135,54 @@
     {% endif %}
 </div>
 
+<!-- 精算書タブ -->
+<div class="tab-content" id="tab-shikiri">
+    <div class="tab-header">
+        <h2>精算書</h2>
+        <p class="tab-note">代行仕入れの購入分は、管理側で確認後に送信されます。</p>
+    </div>
+    {% if shikiriosho_list %}
+    <div class="doc-cards">
+        {% for doc in shikiriosho_list %}
+        <div class="doc-card settlement-card status-{{ doc.status }}">
+            <div class="card-header">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-sent">送信済</span>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="label">発行日</span>
+                    <span class="value">{{ doc.issue_date }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">送信者</span>
+                    <span class="value">{{ doc.sender_display_name or '株式会社 開花' }}</span>
+                </div>
+                <div class="info-row total">
+                    <span class="label">税込合計</span>
+                    <span class="value">¥{{ "{:,}".format(doc.total_amount or 0) }}</span>
+                </div>
+            </div>
+            <div class="card-actions">
+                <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-info">詳細</a>
+                <a href="{{ url_for('user_shikiriosho_download', id=doc.id) }}" class="btn btn-secondary btn-sm">CSV</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🧾</div>
+        <p>受信した精算書がありません</p>
+    </div>
+    {% endif %}
+</div>
+
 <!-- 計算書タブ -->
 <div class="tab-content" id="tab-keisan">
     <div class="tab-header">
         <h2>計算書</h2>
-        {% if current_user.is_admin() %}
-        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
-        {% endif %}
+        <p class="tab-note">月額システム利用料と撮影梱包発送代行手数料は、毎月自動作成されます。</p>
     </div>
     {% if user_keisan_list %}
     <div class="doc-cards">
@@ -150,6 +192,7 @@
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ doc.status }}">
                     {% if doc.status == 'draft' %}下書き
+                    {% elif doc.status == 'submitted' %}送信済
                     {% elif doc.status == 'completed' %}完了
                     {% endif %}
                 </span>
@@ -174,7 +217,7 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-info">詳細</a>
-                {% if doc.status == 'draft' %}
+                {% if doc.status == 'draft' and not doc.is_admin_created %}
                     <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
                 <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary btn-sm">PDF</a>
@@ -457,6 +500,12 @@
         gap: 12px;
         align-items: flex-start;
     }
+}
+
+.tab-note {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
 }
 </style>
 

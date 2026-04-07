@@ -671,6 +671,7 @@ body.sidebar-open {
    =================== */
 .container {
     max-width: 1400px;
+    width: 100%;
     margin: 0 auto;
     padding: 1.5rem;
 }
@@ -1501,12 +1502,28 @@ body.sidebar-open {
 
 .admin-grid-2 {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
+}
+
+.admin-grid-2 > * {
+    min-width: 0;
 }
 
 .admin-table-container {
     overflow-x: auto;
+}
+
+.admin-table-container,
+.client-table-wrap,
+.cashflow-table-container,
+.recent-sales-table-wrap,
+.report-table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
 }
 
 .admin-table {
@@ -1539,20 +1556,33 @@ body.sidebar-open {
 }
 
 .table-thumbnail {
-    width: 40px;
-    height: 40px;
+    width: 64px;
+    height: 64px;
     object-fit: cover;
     border-radius: var(--radius-sm);
 }
 
 .no-thumb {
     display: inline-block;
-    width: 40px;
-    height: 40px;
-    line-height: 40px;
+    width: 64px;
+    height: 64px;
+    line-height: 64px;
     text-align: center;
     background: var(--bg-main);
     border-radius: var(--radius-sm);
+}
+
+@media (max-width: 768px) {
+    .table-thumbnail {
+        width: 40px;
+        height: 40px;
+    }
+
+    .no-thumb {
+        width: 40px;
+        height: 40px;
+        line-height: 40px;
+    }
 }
 
 .action-buttons {
@@ -2309,6 +2339,7 @@ li,
 
 .admin-section {
     padding: 1.6rem;
+    min-width: 0;
 }
 
 .admin-table-container,

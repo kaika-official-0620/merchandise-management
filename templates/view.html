@@ -596,6 +596,8 @@
                 <dd>
                     {% if item.sale_date %}
                     <span class="badge badge-sold">売却済み</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="badge badge-pending">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="badge badge-listed">出品中</span>
                     {% else %}

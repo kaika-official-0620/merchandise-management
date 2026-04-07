@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}オークション計算書詳細 - 株式会社 開花{% endblock %}
+{% block title %}計算書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <style>
@@ -44,8 +44,10 @@
         <a href="{{ url_for('admin_auction_keisan_list') }}" class="btn btn-secondary">一覧へ戻る</a>
         {% if keisan.status == 'draft' %}
         <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+        {% elif keisan.status == 'completed' %}
+        <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-secondary">再確認</a>
         <form action="{{ url_for('admin_auction_keisan_submit', id=keisan.id) }}" method="POST" style="display:inline;">
-            <button type="submit" class="btn btn-success" onclick="return confirm('この計算書をクライアントへ送信しますか？')">送信</button>
+            <button type="submit" class="btn btn-success" onclick="return confirm('この完成書類をクライアントへ送信しますか？')">個別送信</button>
         </form>
         {% endif %}
         <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
@@ -54,13 +56,13 @@
     <div class="document-card">
         <div class="document-header">
             <div class="document-title">
-                <h1>オークション計算書</h1>
+                <h1>計算書</h1>
                 {% if keisan.status == 'submitted' %}
                 <span class="status-chip status-submitted">送信済み</span>
                 {% elif keisan.status == 'completed' %}
-                <span class="status-chip status-completed">完了</span>
+                <span class="status-chip status-completed">送信待機</span>
                 {% else %}
-                <span class="status-chip status-draft">下書き</span>
+                <span class="status-chip status-draft">下書き確認中</span>
                 {% endif %}
             </div>
             <div class="doc-no">{{ keisan.document_no }}</div>

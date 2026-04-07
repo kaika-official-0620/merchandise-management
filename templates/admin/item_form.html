@@ -81,6 +81,13 @@
     color: #94a3b8;
     font-size: 0.85rem;
 }
+.brand-dropdown .dropdown-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.4;
+}
 .brand-auto-detected {
     background-color: #d1fae5 !important;
     transition: background-color 0.3s;
@@ -175,7 +182,11 @@
             
             <div class="form-group">
                 <label for="product_name">商品名</label>
-                <input type="text" id="product_name" name="product_name" required>
+                <div class="brand-combobox">
+                    <input type="text" id="product_name" name="product_name" required autocomplete="off">
+                    <div class="brand-dropdown" id="product-suggestion-dropdown"></div>
+                </div>
+                <small class="form-help">ブランド名・検索名・名称候補から候補を表示します。候補がなくてもそのまま入力できます。</small>
             </div>
 
             <div class="form-group">
@@ -197,6 +208,19 @@
                     <button type="button" class="combobox-toggle" id="brand-toggle">▼</button>
                     <div class="brand-dropdown" id="brand-dropdown"></div>
                 </div>
+                <input type="hidden" id="master_brand_id" name="master_brand_id">
+                <small class="form-help">ブランド名・検索名・キーワードから候補を表示します。</small>
+            </div>
+            <div class="form-group">
+                <label for="brand_category_name">ブランドカテゴリ</label>
+                <div class="brand-combobox">
+                    <input type="text" id="brand_category_name" name="brand_category_name"
+                           autocomplete="off" placeholder="カテゴリで候補を絞り込めます">
+                    <button type="button" class="combobox-toggle" id="category-toggle">▼</button>
+                    <div class="brand-dropdown" id="category-dropdown"></div>
+                </div>
+                <input type="hidden" id="master_category_id" name="master_category_id">
+                <small class="form-help">任意です。カテゴリでブランド候補と商品候補を絞り込めます。</small>
             </div>
             
             <div class="form-group">
@@ -290,6 +314,7 @@
                 <label for="item_status">ステータス</label>
                 <select id="item_status" name="item_status" onchange="updateStatusFields()">
                     <option value="unlisted">未出品</option>
+                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="sold">売却済み</option>
                 </select>
@@ -737,6 +762,7 @@
 }
 </style>
 
+<script src="{{ url_for('static', filename='js/master_suggestions.js') }}?v=20260407-brand-master-search"></script>
 <script>
 (function() {
 const isKaikaScope = {{ (mode != 'user') | tojson }};
@@ -1190,9 +1216,6 @@ async function loadMasterData() {
         // ドロップダウンデータを保存
         window.brandCategoryData = { brandsByCategory, categoryMap };
         
-        // 初回ドロップダウン構築
-        buildBrandDropdown('');
-        
         // 商品状態セレクトボックスを生成
         const conditionSelect = document.getElementById('item_condition');
         conditionSelect.innerHTML = '<option value="">選択してください</option>';
@@ -1232,6 +1255,14 @@ async function loadMasterData() {
         
         // 仕入先詳細の表示状態を更新
         toggleSupplierDetail();
+
+        if (window.MasterSuggestionHelper) {
+            window.MasterSuggestionHelper.init({
+                scope: scope,
+                data: data,
+                formSelector: '#item-form'
+            });
+        }
         
     } catch (error) {
         console.error('マスターデータの読み込みに失敗しました:', error);
@@ -1416,12 +1447,6 @@ function setupBrandAutoDetect() {
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
-    
-    // ブランド名コンボボックスの初期化
-    setupBrandCombobox();
-    
-    // ブランド名自動判定の初期化
-    setupBrandAutoDetect();
     
     updateStatusFields();
     toggleSupplierDetail();

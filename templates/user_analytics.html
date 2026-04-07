@@ -17,6 +17,7 @@
     border-radius: 14px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
     padding: 1.2rem 1.25rem;
+    min-width: 0;
 }
 
 .client-analysis-header h1 {
@@ -153,6 +154,10 @@
 
 .client-table-wrap {
     overflow-x: auto;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
 }
 
 .client-analysis-table {
@@ -292,7 +297,7 @@
             </div>
         </div>
         {% if analytics.client_summaries %}
-        <div class="client-table-wrap">
+        <div class="client-table-wrap js-edge-hover-scroll">
             <table class="client-analysis-table">
                 <thead>
                     <tr>
@@ -576,7 +581,7 @@
 {% if analytics.client_summaries %}
 <div class="analytics-section">
     <h2>クライアント別サマリー</h2>
-    <div class="admin-table-container">
+    <div class="admin-table-container js-edge-hover-scroll">
         <table class="client-summary-table">
             <thead>
                 <tr>
@@ -782,7 +787,7 @@
 <div class="cashflow-section">
     <h2>キャッシュフロー表</h2>
     {% if analytics.cashflow %}
-    <div class="cashflow-table-container">
+    <div class="cashflow-table-container js-edge-hover-scroll">
         <table class="cashflow-table">
             <thead>
                 <tr>
@@ -1247,7 +1252,7 @@
 
 .analytics-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
 }
 
@@ -1256,6 +1261,7 @@
     border-radius: 8px;
     padding: 1.5rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    min-width: 0;
 }
 
 .analytics-section.full-width {

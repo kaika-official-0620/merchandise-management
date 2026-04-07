@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ '運営管理編集' if user else '運営管理追加' }} - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ '運営管理編集' if user else '運営管理追加' }}</h1>
+    <a href="{{ url_for('admin_operator_users') }}" class="btn btn-secondary">一覧へ戻る</a>
+</div>
+
+<div class="form-container">
+    <form method="POST" class="user-form">
+        <div class="form-section">
+            <h2>基本情報</h2>
+
+            {% if not user %}
+            <div class="form-group">
+                <label for="username">ユーザー名 *</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label>ユーザー名</label>
+                <div class="form-static">{{ user.username }}</div>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="display_name">表示名</label>
+                <input type="text" id="display_name" name="display_name" value="{{ user.display_name if user else '' }}">
+            </div>
+
+            <div class="form-group">
+                <label for="email">メールアドレス *</label>
+                <input type="email" id="email" name="email" required value="{{ user.email if user else '' }}">
+            </div>
+
+            <div class="form-group">
+                <label for="role">権限 *</label>
+                <select id="role" name="role" onchange="togglePermissionSection()" {% if user and user.id == current_user.id %}disabled{% endif %}>
+                    <option value="admin" {% if not user or user.role == 'admin' %}selected{% endif %}>管理者</option>
+                    {% if current_user.is_owner() %}
+                    <option value="owner" {% if user and user.role == 'owner' %}selected{% endif %}>オーナー</option>
+                    {% endif %}
+                </select>
+                {% if user and user.id == current_user.id %}
+                <input type="hidden" name="role" value="{{ user.role }}">
+                <small>自分自身の権限はここでは変更できません</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-section" id="permissions-section">
+            <h2>管理者権限</h2>
+            <div class="permissions-grid">
+                {% for key, label in permission_options.items() %}
+                <label class="checkbox-label">
+                    <input type="checkbox" name="admin_permissions" value="{{ key }}"
+                           {% if user and user.role == 'admin' and ((user.admin_permissions_list and key in user.admin_permissions_list) or (not user.admin_permissions_list)) %}checked{% endif %}>
+                    <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <small>オーナーは全権限を持つため、この設定は管理者のときだけ利用します。</small>
+        </div>
+
+        <div class="form-section">
+            <h2>パスワード</h2>
+            {% if not user %}
+            <div class="form-group">
+                <label for="password">パスワード *</label>
+                <input type="password" id="password" name="password" required minlength="6">
+                <small>6文字以上で設定してください</small>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label for="new_password">新しいパスワード</label>
+                <input type="password" id="new_password" name="new_password" minlength="6">
+                <small>変更する場合だけ入力してください</small>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('admin_operator_users') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" class="btn btn-primary">{{ '更新する' if user else '追加する' }}</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    border-radius: 8px;
+}
+</style>
+
+<script>
+function togglePermissionSection() {
+    const roleField = document.getElementById('role');
+    const section = document.getElementById('permissions-section');
+    section.style.display = roleField && roleField.value === 'admin' ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', togglePermissionSection);
+</script>
+{% endblock %}

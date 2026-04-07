@@ -1,0 +1,212 @@
+{% set admin_notification_count = get_pending_sale_request_count() + get_pending_disposal_count() %}
+{% set home_endpoints = [
+    'admin_dashboard',
+    'admin_company_sales_analytics',
+    'admin_analytics_kaika',
+    'admin_analytics_kaika_sales',
+    'user_analytics'
+] %}
+{% set kaika_endpoints = [
+    'admin_documents_dashboard',
+    'admin_documents_history',
+    'admin_shikiriosho_add',
+    'admin_shikiriosho_list',
+    'admin_shikiriosho_view',
+    'admin_shikiriosho_edit',
+    'admin_kaitori_add',
+    'admin_kaitori_list',
+    'admin_kaitori_view',
+    'admin_kaitori_edit',
+    'admin_mitsumori_add',
+    'admin_mitsumori_list',
+    'admin_mitsumori_view',
+    'admin_mitsumori_edit',
+    'admin_kaitori_shoudaku_list',
+    'admin_kaitori_shoudaku_add',
+    'admin_kaitori_shoudaku_view',
+    'admin_user_mitsumori_view',
+    'admin_items',
+    'admin_add_item',
+    'admin_operator_users',
+    'admin_operator_add_user',
+    'admin_operator_edit_user',
+    'admin_inquiries',
+    'admin_inquiry_view',
+    'admin_inquiry_reply'
+] %}
+{% set user_management_endpoints = [
+    'admin_user_products',
+    'admin_shipping_requests',
+    'admin_completion_requests',
+    'admin_disposal_requests',
+    'admin_sales_agency_requests',
+    'admin_users',
+    'admin_add_user',
+    'admin_edit_user',
+    'admin_proxy_service',
+    'admin_proxy_service_history',
+    'admin_auction_keisan_list',
+    'admin_auction_keisan_view',
+    'admin_auction_keisan_edit',
+    'reports',
+    'report_monthly',
+    'report_inventory',
+    'report_annual'
+] %}
+{% set settings_endpoints = [
+    'admin_master_settings',
+    'user_master_settings',
+    'admin_announcements',
+    'admin_stripe_dashboard',
+    'admin_backup'
+] %}
+<div class="sidebar-category">
+    <button type="button" class="sidebar-category-toggle {% if request.path in ['/admin', '/admin/home'] or request.endpoint in home_endpoints %}active{% endif %}" onclick="toggleCategory(this)">
+        ホーム
+        <span class="category-arrow">▼</span>
+    </button>
+    <div class="sidebar-category-items {% if request.path in ['/admin', '/admin/home'] or request.endpoint in home_endpoints %}open{% endif %}">
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">ホーム</div>
+            <a href="{{ url_for('admin_dashboard') }}" class="{% if request.path in ['/admin', '/admin/home'] or request.endpoint == 'admin_dashboard' %}active{% endif %}">ホーム</a>
+            {% if current_user.has_permission('analytics') %}
+            <a href="{{ url_for('admin_company_sales_analytics') }}" class="{% if request.endpoint == 'admin_company_sales_analytics' %}active{% endif %}">会社全体売上分析</a>
+            <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint in ['admin_analytics_kaika', 'admin_analytics_kaika_sales'] %}active{% endif %}">開花売上分析</a>
+            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント売上分析</a>
+            {% else %}
+            <span class="sidebar-item-disabled">分析の権限がありません</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="sidebar-category">
+    <button class="sidebar-category-toggle {% if request.endpoint in kaika_endpoints %}active{% endif %}" onclick="toggleCategory(this)">
+        開花管理
+        <span class="category-arrow">▼</span>
+    </button>
+    <div class="sidebar-category-items {% if request.endpoint in kaika_endpoints %}open{% endif %}">
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">書類</div>
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint == 'admin_documents_dashboard' %}active{% endif %}">書類管理</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint == 'admin_documents_history' %}active{% endif %}">書類履歴</a>
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">開花管理</div>
+            <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint in ['admin_items', 'admin_add_item'] %}active{% endif %}">開花商品一覧</a>
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">運営管理</div>
+            {% if current_user.has_permission('users') %}
+            <a href="{{ url_for('admin_operator_users') }}" class="{% if request.endpoint in ['admin_operator_users', 'admin_operator_add_user', 'admin_operator_edit_user'] %}active{% endif %}">運営管理</a>
+            {% else %}
+            <span class="sidebar-item-disabled">運営管理の権限がありません</span>
+            {% endif %}
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">お問い合わせ</div>
+            <a href="{{ url_for('admin_inquiries') }}" class="{% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}">
+                <span class="menu-label">お問い合わせ</span>
+                {% if get_unread_inquiry_count() > 0 %}
+                <span class="menu-badge-inline">{{ get_unread_inquiry_count() }}</span>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="sidebar-category">
+    <button class="sidebar-category-toggle {% if request.endpoint in user_management_endpoints %}active{% endif %}" onclick="toggleCategory(this)">
+        ユーザー管理
+        <span class="category-arrow">▼</span>
+    </button>
+    <div class="sidebar-category-items {% if request.endpoint in user_management_endpoints %}open{% endif %}">
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">商品管理</div>
+            <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') != 'long_term' %}active{% endif %}">商品一覧</a>
+            <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') == 'long_term' %}active{% endif %}">長期保存商品</a>
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">通知ボックス</div>
+            <a href="{{ url_for('admin_shipping_requests') }}" class="{% if request.endpoint == 'admin_shipping_requests' %}active{% endif %}">
+                <span class="menu-label">発送BOX</span>
+                {% if get_pending_sale_request_count_by_type('shipping_request') > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('shipping_request') }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_completion_requests') }}" class="{% if request.endpoint == 'admin_completion_requests' %}active{% endif %}">
+                <span class="menu-label">受取完了BOX</span>
+                {% if get_pending_sale_request_count_by_type('completion_report') > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('completion_report') }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale' %}active{% endif %}">
+                <span class="menu-label">業者卸販売BOX</span>
+                {% if get_pending_sales_agency_count_by_service('wholesale') > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('wholesale') }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction' %}active{% endif %}">
+                <span class="menu-label">業者オークションBOX</span>
+                {% if get_pending_sales_agency_count_by_service('auction') > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('auction') }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous' %}active{% endif %}">
+                <span class="menu-label">同時出品BOX</span>
+                {% if get_pending_sales_agency_count_by_service('simultaneous') > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('simultaneous') }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
+                <span class="menu-label">在庫処分申請</span>
+                {% if get_pending_disposal_count() > 0 %}
+                <span class="menu-badge-inline">{{ get_pending_disposal_count() }}</span>
+                {% endif %}
+            </a>
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">ユーザー一覧</div>
+            {% if current_user.has_permission('users') %}
+            <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}">クライアント一覧</a>
+            {% else %}
+            <span class="sidebar-item-disabled">ユーザー管理の権限がありません</span>
+            {% endif %}
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">サービス</div>
+            {% if current_user.can_manage_proxy_service() %}
+            <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
+            <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">オークション計算書</a>
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行サービス履歴</a>
+            {% else %}
+            <span class="sidebar-item-disabled">サービス管理の権限がありません</span>
+            {% endif %}
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">レポート</div>
+            <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
+        </div>
+    </div>
+</div>
+
+<div class="sidebar-category">
+    <button class="sidebar-category-toggle {% if request.endpoint in settings_endpoints or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
+        設定
+        <span class="category-arrow">▼</span>
+    </button>
+    <div class="sidebar-category-items {% if request.endpoint in settings_endpoints or 'line' in request.endpoint %}open{% endif %}">
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">共通設定</div>
+            <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint in ['admin_master_settings', 'user_master_settings'] %}active{% endif %}">マスター設定</a>
+            <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">お知らせ</a>
+            {% if current_user.is_owner() %}
+            <a href="{{ url_for('admin_line_dashboard_v2') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
+            {% endif %}
+            <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
+            {% if current_user.has_permission('backup') %}
+            <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+            {% endif %}
+        </div>
+    </div>
+</div>

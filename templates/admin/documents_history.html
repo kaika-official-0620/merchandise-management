@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block title %}書類履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.history-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.history-header p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+.filter-card,
+.results-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.35rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.9rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form-group label {
+    color: #475569;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.72rem 0.78rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 0.92rem;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.results-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.results-meta p {
+    margin: 0;
+    color: #64748b;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+    padding: 0.82rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.history-table th {
+    text-align: left;
+    font-size: 0.84rem;
+    color: #475569;
+    background: #f8fafc;
+}
+
+.history-table tr:last-child td {
+    border-bottom: none;
+}
+
+.service-name {
+    color: #64748b;
+    font-size: 0.82rem;
+    margin-top: 0.28rem;
+}
+
+.status-badge,
+.direction-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.status-badge.draft {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-badge.completed,
+.status-badge.approved {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-badge.sent,
+.status-badge.submitted {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.direction-badge.incoming {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.direction-badge.outgoing {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.direction-badge.vendor {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.empty-state {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 2rem 1rem;
+    text-align: center;
+    color: #64748b;
+    background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+    .filter-card,
+    .results-card {
+        padding: 1rem;
+    }
+
+    .history-table {
+        min-width: 1040px;
+    }
+}
+</style>
+
+<div class="history-page">
+    <div class="history-header">
+        <div>
+            <h1>書類履歴</h1>
+            <p>クライアント、日付、書類種別、サービス種別で絞り込んで、過去の書類履歴を確認できます。</p>
+        </div>
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+    </div>
+
+    <div class="filter-card">
+        <form method="GET">
+            <div class="filter-grid">
+                <div class="form-group">
+                    <label for="doc_type">書類種別</label>
+                    <select id="doc_type" name="doc_type" class="form-control">
+                        <option value="all">すべて</option>
+                        {% for value, label in document_type_options %}
+                        <option value="{{ value }}" {% if filters.doc_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="client">クライアント</label>
+                    <input id="client" name="client" value="{{ filters.client }}" class="form-control" list="client-list" placeholder="クライアント名">
+                    <datalist id="client-list">
+                        {% for client in client_options %}
+                        <option value="{{ client }}"></option>
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="form-group">
+                    <label for="status">状態</label>
+                    <select id="status" name="status" class="form-control">
+                        <option value="all">すべて</option>
+                        {% for value, label in status_options %}
+                        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="direction">届き先</label>
+                    <select id="direction" name="direction" class="form-control">
+                        <option value="all">すべて</option>
+                        <option value="incoming" {% if filters.direction == 'incoming' %}selected{% endif %}>クライアント→開花</option>
+                        <option value="outgoing" {% if filters.direction == 'outgoing' %}selected{% endif %}>開花→クライアント</option>
+                        <option value="vendor" {% if filters.direction == 'vendor' %}selected{% endif %}>開花→業者</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="service_type">サービス種別</label>
+                    <select id="service_type" name="service_type" class="form-control">
+                        <option value="all">すべて</option>
+                        {% for key, label in service_types.items() %}
+                        <option value="{{ key }}" {% if filters.service_type == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="date_from">開始日</label>
+                    <input type="date" id="date_from" name="date_from" value="{{ filters.date_from }}" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="date_to">終了日</label>
+                    <input type="date" id="date_to" name="date_to" value="{{ filters.date_to }}" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="keyword">キーワード</label>
+                    <input id="keyword" name="keyword" value="{{ filters.keyword }}" class="form-control" placeholder="書類No / 件名 / 備考">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="btn btn-primary">検索する</button>
+                <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary">条件をクリア</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="results-card">
+        <div class="results-meta">
+            <h2>検索結果</h2>
+            <p>{{ history_rows|length }} 件</p>
+        </div>
+
+        {% if history_rows %}
+        <div class="table-scroll">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>書類種別</th>
+                        <th>書類No.</th>
+                        <th>クライアント</th>
+                        <th>届き先</th>
+                        <th>サービス</th>
+                        <th>発行日</th>
+                        <th>金額</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in history_rows %}
+                    <tr>
+                        <td>{{ row.document_type }}</td>
+                        <td>{{ row.document_no }}</td>
+                        <td>{{ row.client_name }}</td>
+                        <td><span class="direction-badge {{ row.direction_key }}">{{ row.direction_label }}</span></td>
+                        <td>
+                            {% if row.service_name %}
+                            <div>{{ row.service_name }}</div>
+                            {% else %}
+                            <span class="service-name">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.issue_date or '-' }}</td>
+                        <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td>
+                        <td><span class="status-badge {{ row.status }}">{{ row.status_label }}</span></td>
+                        <td><a href="{{ url_for(row.detail_endpoint, id=row.id) }}" class="btn btn-info btn-sm">詳細</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">条件に一致する書類履歴はありません。</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

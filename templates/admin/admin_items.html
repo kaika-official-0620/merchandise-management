@@ -355,21 +355,22 @@
 
     /* サムネイル */
     .table-thumb {
-        width: 50px;
-        height: 50px;
+        width: 68px;
+        height: 68px;
         object-fit: cover;
         border-radius: 6px;
         cursor: pointer;
-        transition: transform 0.2s;
+        transition: transform 0.2s, box-shadow 0.2s;
     }
 
     .table-thumb:hover {
         transform: scale(1.1);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
     }
 
     .no-thumb {
-        width: 50px;
-        height: 50px;
+        width: 68px;
+        height: 68px;
         background: #f1f5f9;
         border-radius: 6px;
         display: flex;
@@ -472,28 +473,40 @@
     }
 
     .lightbox-gallery-close {
-        position: absolute;
-        top: 15px;
-        right: 20px;
-        background: none;
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        background: rgba(255, 255, 255, 0.2);
         border: none;
         color: white;
-        font-size: 2.5rem;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        font-size: 1.35rem;
         cursor: pointer;
-        z-index: 10001;
+        z-index: 10002;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
     }
 
     .lightbox-gallery-nav {
-        position: absolute;
+        position: fixed;
         top: 50%;
         transform: translateY(-50%);
         background: rgba(255, 255, 255, 0.2);
         border: none;
         color: white;
-        font-size: 2rem;
-        padding: 20px 15px;
+        width: 48px;
+        height: 48px;
+        font-size: 1.35rem;
         cursor: pointer;
-        z-index: 10001;
+        z-index: 10002;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
         transition: background 0.2s;
     }
 
@@ -502,11 +515,11 @@
     }
 
     .lightbox-gallery-prev {
-        left: 10px;
+        left: 18px;
     }
 
     .lightbox-gallery-next {
-        right: 10px;
+        right: 18px;
     }
 
     .lightbox-gallery-counter {
@@ -539,6 +552,11 @@
     .status-badge.listed {
         background: #dbeafe;
         color: #1e40af;
+    }
+
+    .status-badge.pending-sale {
+        background: #fef3c7;
+        color: #b45309;
     }
 
     .status-badge.unlisted {
@@ -714,6 +732,12 @@
     }
 
     @media (max-width: 768px) {
+        .table-thumb,
+        .no-thumb {
+            width: 50px;
+            height: 50px;
+        }
+
         .search-action-bar {
             flex-direction: row;
             gap: 0.5rem;
@@ -1185,6 +1209,7 @@
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
                     <option value="sold">売却済</option>
+                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="unlisted">未出品</option>
                 </select>
@@ -1263,7 +1288,7 @@
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1331,6 +1356,8 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
+                        {% elif item.appraisal_status == 'waiting' %}
+                        <span class="status-badge pending-sale">査定待ち</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1401,6 +1428,8 @@
                 <div class="admin-card-status">
                     {% if item.sale_date %}
                     <span class="status-badge sold">売却済</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="status-badge pending-sale">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
