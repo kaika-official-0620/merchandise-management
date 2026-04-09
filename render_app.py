@@ -79,13 +79,51 @@ except Exception as patch_exc:
 
 app = module.app
 
-# Keep the production menu usable even if the preview-only route patch is skipped.
-# We fall back to the existing analytics endpoint so url_for('admin_company_sales_analytics')
-# continues to resolve on Render.
-if "admin_company_sales_analytics" not in app.view_functions and "admin_analytics" in app.view_functions:
+def add_endpoint_fallback(endpoint: str, rule: str, target_endpoint: str, methods):
+    if endpoint in app.view_functions or target_endpoint not in app.view_functions:
+        return
     app.add_url_rule(
-        "/admin/analytics/company",
-        endpoint="admin_company_sales_analytics",
-        view_func=app.view_functions["admin_analytics"],
-        methods=["GET", "POST"],
+        rule,
+        endpoint=endpoint,
+        view_func=app.view_functions[target_endpoint],
+        methods=methods,
     )
+
+
+# Keep the production menu usable even if preview/runtime-only endpoints are absent on Render.
+add_endpoint_fallback(
+    "admin_company_sales_analytics",
+    "/admin/analytics/company",
+    "admin_analytics",
+    ["GET", "POST"],
+)
+add_endpoint_fallback(
+    "admin_documents_history",
+    "/admin/documents/history",
+    "admin_documents_dashboard",
+    ["GET"],
+)
+add_endpoint_fallback(
+    "admin_operator_users",
+    "/admin/operators",
+    "admin_users",
+    ["GET"],
+)
+add_endpoint_fallback(
+    "admin_operator_add_user",
+    "/admin/operators/add",
+    "admin_add_user",
+    ["GET", "POST"],
+)
+add_endpoint_fallback(
+    "admin_operator_edit_user",
+    "/admin/operators/<int:id>/edit",
+    "admin_edit_user",
+    ["GET", "POST"],
+)
+add_endpoint_fallback(
+    "admin_line_dashboard_v2",
+    "/admin/line-v2",
+    "admin_line_dashboard",
+    ["GET"],
+)
