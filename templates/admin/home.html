@@ -2,13 +2,13 @@
 {% block title %}ホーム - 開花 管理画面{% endblock %}
 
 {% block content %}
-{% set shipping_count = get_pending_sale_request_count_by_type('shipping_request') %}
-{% set completion_count = get_pending_sale_request_count_by_type('completion_report') %}
-{% set wholesale_count = get_pending_sales_agency_count_by_service('wholesale') %}
-{% set auction_count = get_pending_sales_agency_count_by_service('auction') %}
-{% set simultaneous_count = get_pending_sales_agency_count_by_service('simultaneous') %}
-{% set disposal_count = get_pending_disposal_count() %}
-{% set long_term_count = get_long_term_item_count() %}
+{% set shipping_count = get_pending_sale_request_count_by_type('shipping_request') if get_pending_sale_request_count_by_type is defined else 0 %}
+{% set completion_count = get_pending_sale_request_count_by_type('completion_report') if get_pending_sale_request_count_by_type is defined else 0 %}
+{% set wholesale_count = get_pending_sales_agency_count_by_service('wholesale') if get_pending_sales_agency_count_by_service is defined else 0 %}
+{% set auction_count = get_pending_sales_agency_count_by_service('auction') if get_pending_sales_agency_count_by_service is defined else 0 %}
+{% set simultaneous_count = get_pending_sales_agency_count_by_service('simultaneous') if get_pending_sales_agency_count_by_service is defined else 0 %}
+{% set disposal_count = get_pending_disposal_count() if get_pending_disposal_count is defined else 0 %}
+{% set long_term_count = get_long_term_item_count() if get_long_term_item_count is defined else 0 %}
 {% set total_priority_count = shipping_count + completion_count + wholesale_count + auction_count + simultaneous_count + disposal_count + long_term_count %}
 
 <div class="page-header">
