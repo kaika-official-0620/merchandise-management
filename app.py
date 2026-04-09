@@ -58,6 +58,12 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
+app.config['REMEMBER_COOKIE_NAME'] = 'kaika_remember_token'
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=int(os.environ.get('REMEMBER_LOGIN_DAYS', '14')))
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = bool(os.environ.get('RENDER'))
+app.config['REMEMBER_COOKIE_REFRESH_EACH_REQUEST'] = False
 
 # グローバルエラーハンドラー（エラーをブラウザに詳細表示）
 @app.errorhandler(500)
@@ -3255,9 +3261,14 @@ def login():
             return redirect(url_for('admin_dashboard'))
         return redirect(url_for('index'))
     
+    remembered_username = ''
+    remember_me = False
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        remember_me = request.form.get('remember_me') == 'on'
+        remembered_username = username or ''
         
         print(f"[DEBUG] ログイン試行: username={username}")
         
@@ -3312,7 +3323,7 @@ def login():
                             cur.close()
                             conn.close()
                             flash('月謝の未納が3ヶ月を超えているため、ログインできません。管理者にお問い合わせください。', 'error')
-                            return render_template('login.html')
+                            return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
             
             # ログイン日時更新
             if DATABASE_URL:
@@ -3325,7 +3336,11 @@ def login():
             
             user_obj = User(user['id'], user['username'], user['email'], 
                           user['role'], user['display_name'])
-            login_user(user_obj)
+            login_user(
+                user_obj,
+                remember=remember_me,
+                duration=app.config['REMEMBER_COOKIE_DURATION']
+            )
             
             flash(f'ようこそ、{user_obj.display_name}さん！', 'success')
             
@@ -3344,7 +3359,7 @@ def login():
         cur.close()
         conn.close()
     
-    return render_template('login.html')
+    return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
