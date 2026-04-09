@@ -127,3 +127,58 @@ add_endpoint_fallback(
     "admin_line_dashboard",
     ["GET"],
 )
+
+
+def ensure_template_helper(name: str, func):
+    setattr(module, name, func)
+    app.jinja_env.globals[name] = func
+
+
+if not hasattr(module, "get_pending_sales_agency_count_by_service"):
+    def get_pending_sales_agency_count_by_service(service_type: str):
+        try:
+            current_user = getattr(module, "current_user", None)
+            if current_user is not None:
+                if not getattr(current_user, "is_authenticated", False):
+                    return 0
+                is_admin = getattr(current_user, "is_admin", None)
+                if callable(is_admin) and not is_admin():
+                    return 0
+
+            conn = module.get_db()
+            cur = conn.cursor()
+            if getattr(module, "DATABASE_URL", None):
+                cur.execute(
+                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = %s AND service_type = %s",
+                    ("pending", service_type),
+                )
+            else:
+                cur.execute(
+                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = ? AND service_type = ?",
+                    ("pending", service_type),
+                )
+            count = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+            return count
+        except Exception as exc:
+            print(f"get_pending_sales_agency_count_by_service error: {exc}", flush=True)
+            return 0
+
+ensure_template_helper(
+    "get_pending_sales_agency_count_by_service",
+    getattr(module, "get_pending_sales_agency_count_by_service"),
+)
+
+
+for helper_name in [
+    "get_pending_sale_request_count",
+    "get_pending_sale_request_count_by_type",
+    "get_pending_sales_agency_count",
+    "get_pending_disposal_count",
+    "get_long_term_item_count",
+    "get_unread_inquiry_count",
+]:
+    helper = getattr(module, helper_name, None)
+    if callable(helper):
+        ensure_template_helper(helper_name, helper)
