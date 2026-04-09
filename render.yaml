@@ -17,7 +17,7 @@ services:
     # render.yamlのenvVarsは、Blueprint経由でデプロイした場合のみ有効です
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.11.9
       # DATABASE_URL, SECRET_KEY等はRenderダッシュボードで直接設定してください
 
 # Blueprint経由でデプロイする場合のデータベース設定
