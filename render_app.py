@@ -42,15 +42,6 @@ def load_runtime_module():
             print("[INFO] loaded render runtime from pyc (preferred on Render)", flush=True)
         return module, "pyc"
 
-    # Prefer the verified pyc runtime on Render. The repository source app.py can lag behind
-    # the preview/runtime patch set, while the committed pyc contains the working runtime we
-    # already validated.
-    if os.getenv("RENDER", "").lower() == "true" and PYC_PATH.exists():
-        try:
-            return load_pyc_runtime()
-        except Exception as pyc_exc:
-            print(f"[WARN] preferred pyc runtime failed, falling back to source import: {pyc_exc}", flush=True)
-
     source_error = None
     try:
         import app as source_module
