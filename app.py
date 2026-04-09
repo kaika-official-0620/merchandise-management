@@ -24273,7 +24273,7 @@ SALES_AGENCY_STATUS = {
     'rejected': '却下'
 }
 
-def get_pending_sales_agency_count():
+def get_pending_sales_agency_count(service_type=None):
     """管理者向け：未処理の販売代行申請件数を取得"""
     try:
         if not current_user.is_authenticated or not current_user.is_admin():
@@ -24282,10 +24282,22 @@ def get_pending_sales_agency_count():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
+            if service_type:
+                cur.execute(
+                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending' AND service_type = %s",
+                    (service_type,)
+                )
+            else:
+                cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
         else:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
+            if service_type:
+                cur.execute(
+                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending' AND service_type = ?",
+                    (service_type,)
+                )
+            else:
+                cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
         count = cur.fetchone()[0]
         cur.close()
         conn.close()
@@ -24294,9 +24306,20 @@ def get_pending_sales_agency_count():
         print(f"get_pending_sales_agency_count error: {e}")
         return 0
 
+def get_pending_sales_agency_count_by_service(service_type):
+    return get_pending_sales_agency_count(service_type=service_type)
+
+
 @app.context_processor
 def inject_sales_agency_count():
-    return dict(get_pending_sales_agency_count=get_pending_sales_agency_count)
+    return dict(
+        get_pending_sales_agency_count=get_pending_sales_agency_count,
+        get_pending_sales_agency_count_by_service=get_pending_sales_agency_count_by_service
+    )
+
+
+app.jinja_env.globals['get_pending_sales_agency_count'] = get_pending_sales_agency_count
+app.jinja_env.globals['get_pending_sales_agency_count_by_service'] = get_pending_sales_agency_count_by_service
 
 @app.route('/sales-agency/apply', methods=['POST'])
 @login_required
@@ -24792,6 +24815,55 @@ def download_all_images(id):
         as_attachment=True,
         download_name=f"{safe_name}_images.zip"
     )
+
+
+def add_source_endpoint_fallback(endpoint, rule, target_endpoint, methods):
+    if endpoint in app.view_functions or target_endpoint not in app.view_functions:
+        return
+    app.add_url_rule(
+        rule,
+        endpoint=endpoint,
+        view_func=app.view_functions[target_endpoint],
+        methods=methods,
+    )
+
+
+add_source_endpoint_fallback(
+    'admin_company_sales_analytics',
+    '/admin/analytics/company',
+    'admin_analytics',
+    ['GET', 'POST'],
+)
+add_source_endpoint_fallback(
+    'admin_documents_history',
+    '/admin/documents/history',
+    'admin_documents_dashboard',
+    ['GET'],
+)
+add_source_endpoint_fallback(
+    'admin_operator_users',
+    '/admin/operators',
+    'admin_users',
+    ['GET'],
+)
+add_source_endpoint_fallback(
+    'admin_operator_add_user',
+    '/admin/operators/add',
+    'admin_add_user',
+    ['GET', 'POST'],
+)
+add_source_endpoint_fallback(
+    'admin_operator_edit_user',
+    '/admin/operators/<int:id>/edit',
+    'admin_edit_user',
+    ['GET', 'POST'],
+)
+add_source_endpoint_fallback(
+    'admin_line_dashboard_v2',
+    '/admin/line-v2',
+    'admin_line_dashboard',
+    ['GET'],
+)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
