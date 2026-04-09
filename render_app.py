@@ -72,3 +72,14 @@ except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
 
 app = module.app
+
+# Keep the production menu usable even if the preview-only route patch is skipped.
+# We fall back to the existing analytics endpoint so url_for('admin_company_sales_analytics')
+# continues to resolve on Render.
+if "admin_company_sales_analytics" not in app.view_functions and "admin_analytics" in app.view_functions:
+    app.add_url_rule(
+        "/admin/analytics/company",
+        endpoint="admin_company_sales_analytics",
+        view_func=app.view_functions["admin_analytics"],
+        methods=["GET", "POST"],
+    )
