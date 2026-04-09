@@ -18,6 +18,39 @@ os.chdir(REPO_DIR)
 
 
 def load_runtime_module():
+    def load_pyc_runtime(source_error=None):
+        if not PYC_PATH.exists():
+            raise RuntimeError(f"render runtime fallback not found: {PYC_PATH}") from source_error
+
+        loader = importlib.machinery.SourcelessFileLoader("app_render_runtime", str(PYC_PATH))
+        spec = importlib.util.spec_from_loader("app_render_runtime", loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+
+        # When loading from pyc, point Flask back at the repository assets.
+        module.app.root_path = str(REPO_DIR)
+        module.app.template_folder = str(REPO_DIR / "templates")
+        module.app.static_folder = str(REPO_DIR / "static")
+        if module.app.jinja_loader:
+            module.app.jinja_loader.searchpath = [str(REPO_DIR / "templates")]
+        module.UPLOAD_FOLDER = str(REPO_DIR / "static" / "uploads")
+        module.app.config["UPLOAD_FOLDER"] = module.UPLOAD_FOLDER
+
+        if source_error is not None:
+            print(f"[INFO] loaded render runtime from pyc fallback: {source_error}", flush=True)
+        else:
+            print("[INFO] loaded render runtime from pyc (preferred on Render)", flush=True)
+        return module, "pyc"
+
+    # Prefer the verified pyc runtime on Render. The repository source app.py can lag behind
+    # the preview/runtime patch set, while the committed pyc contains the working runtime we
+    # already validated.
+    if os.getenv("RENDER", "").lower() == "true" and PYC_PATH.exists():
+        try:
+            return load_pyc_runtime()
+        except Exception as pyc_exc:
+            print(f"[WARN] preferred pyc runtime failed, falling back to source import: {pyc_exc}", flush=True)
+
     source_error = None
     try:
         import app as source_module
@@ -26,25 +59,7 @@ def load_runtime_module():
     except Exception as exc:
         source_error = exc
 
-    if not PYC_PATH.exists():
-        raise RuntimeError(f"render runtime fallback not found: {PYC_PATH}") from source_error
-
-    loader = importlib.machinery.SourcelessFileLoader("app_render_runtime", str(PYC_PATH))
-    spec = importlib.util.spec_from_loader("app_render_runtime", loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-
-    # When loading from pyc, point Flask back at the repository assets.
-    module.app.root_path = str(REPO_DIR)
-    module.app.template_folder = str(REPO_DIR / "templates")
-    module.app.static_folder = str(REPO_DIR / "static")
-    if module.app.jinja_loader:
-        module.app.jinja_loader.searchpath = [str(REPO_DIR / "templates")]
-    module.UPLOAD_FOLDER = str(REPO_DIR / "static" / "uploads")
-    module.app.config["UPLOAD_FOLDER"] = module.UPLOAD_FOLDER
-
-    print(f"[INFO] loaded render runtime from pyc fallback: {source_error}", flush=True)
-    return module, "pyc"
+    return load_pyc_runtime(source_error)
 
 
 module, RUNTIME_SOURCE = load_runtime_module()
