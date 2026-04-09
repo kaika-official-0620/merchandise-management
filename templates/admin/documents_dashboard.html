@@ -9,7 +9,7 @@
     '計算書': 0
 } %}
 {% set ongoing_request_rows = ongoing_request_rows if ongoing_request_rows is defined else [] %}
-{% set recent_incoming_documents = recent_incoming_documents if recent_incoming_documents is defined else pending_invoices|default([]) %}
+{% set recent_incoming_documents = recent_incoming_documents if recent_incoming_documents is defined else [] %}
 <style>
 .documents-page {
     display: grid;
