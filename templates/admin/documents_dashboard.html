@@ -2,6 +2,14 @@
 {% block title %}書類管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set document_counts = document_counts if document_counts is defined else {
+    '精算書': seisan_count|default(0),
+    '見積依頼書': mitsumori_count|default(0),
+    '買取明細書': kaitori_count|default(0),
+    '計算書': 0
+} %}
+{% set ongoing_request_rows = ongoing_request_rows if ongoing_request_rows is defined else [] %}
+{% set recent_incoming_documents = recent_incoming_documents if recent_incoming_documents is defined else pending_invoices|default([]) %}
 <style>
 .documents-page {
     display: grid;
