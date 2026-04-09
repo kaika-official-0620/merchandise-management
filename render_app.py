@@ -182,3 +182,21 @@ for helper_name in [
     helper = getattr(module, helper_name, None)
     if callable(helper):
         ensure_template_helper(helper_name, helper)
+
+
+@app.context_processor
+def inject_render_sidebar_helpers():
+    helper_names = [
+        "get_pending_sale_request_count",
+        "get_pending_sale_request_count_by_type",
+        "get_pending_sales_agency_count",
+        "get_pending_sales_agency_count_by_service",
+        "get_pending_disposal_count",
+        "get_long_term_item_count",
+        "get_unread_inquiry_count",
+    ]
+    return {
+        name: getattr(module, name)
+        for name in helper_names
+        if callable(getattr(module, name, None))
+    }
