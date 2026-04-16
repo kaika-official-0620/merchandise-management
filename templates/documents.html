@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h1>書類一覧</h1>
-    <p class="page-subtitle">クライアントが作成した依頼書と、開花側から届いた書類をまとめて確認できます。</p>
+    <p class="page-subtitle">ご自身が開花へ送った依頼書と、開花側で確認完了後に届く書類をまとめて確認できます。</p>
 </div>
 
 <div class="doc-tabs">
@@ -20,7 +20,7 @@
     <div class="tab-header">
         <div>
             <h2>買取明細書</h2>
-            <p class="tab-note">開花側で発行した買取明細書がこちらに届きます。</p>
+            <p class="tab-note">業者からの回答を開花側で確認したあとに、最終確定した買取明細書がこちらへ届きます。</p>
         </div>
         {% if current_user.is_admin() %}
         <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -57,7 +57,7 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
-                {% if inv.status == 'draft' %}
+                {% if current_user.is_admin() and inv.status == 'draft' %}
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送付しますか？')">送付</a>
                 {% else %}
@@ -79,7 +79,7 @@
     <div class="tab-header">
         <div>
             <h2>見積り依頼書</h2>
-            <p class="tab-note">クライアント側で作成した見積り依頼書が保存され、管理画面にも反映されます。</p>
+            <p class="tab-note">ここで作成した見積り依頼書は開花側へ送られ、案件の受付情報として管理画面にも反映されます。</p>
         </div>
         {% if current_user.is_admin() %}
         <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -250,25 +250,32 @@
             <div class="flow-step-number">1</div>
             <div class="flow-step-body">
                 <h3>クライアントが依頼書を作成したとき</h3>
-                <p>見積り依頼書と買取依頼書は、この画面に保存されると同時に、管理画面の「書類管理」と「書類履歴」にも自動で反映されます。管理側はその内容を確認して次の処理へ進めます。</p>
+                <p>見積り依頼書や買取依頼書は、この画面に保存されると同時に、管理画面の「書類管理」と「書類履歴」に反映されます。ここではまだ最終的な買取金額は確定していません。</p>
             </div>
         </div>
         <div class="flow-step">
             <div class="flow-step-number">2</div>
             <div class="flow-step-body">
-                <h3>開花側で書類を発行したとき</h3>
-                <p>開花側で作成した買取明細書、仕切書、計算書は、発行後にこの書類一覧へ順次反映されます。届いた書類は各タブから内容確認とダウンロードができます。</p>
+                <h3>開花側が業者へ確認するとき</h3>
+                <p>開花側は受け取った依頼内容をもとに、まず業者向け見積依頼書を作成します。その後、業者からの回答書類を受け取ってから、ユーザー向けの最終書類を準備します。</p>
             </div>
         </div>
         <div class="flow-step">
             <div class="flow-step-number">3</div>
             <div class="flow-step-body">
-                <h3>販売代行の進行状況</h3>
-                <p>同時出品、業者卸販売、業者オークションの申請は、管理画面で状態が更新されるとクライアント側の申請履歴にも連動します。認証済み、査定中、検品中、処理完了、却下申請の流れで確認できます。</p>
+                <h3>最終的にユーザーへ届く書類</h3>
+                <p>業者からの回答確認後に、開花側で確定した買取明細書、仕切書、計算書がこの画面へ順次反映されます。届いた書類は各タブから内容確認とダウンロードができます。</p>
             </div>
         </div>
         <div class="flow-step">
             <div class="flow-step-number">4</div>
+            <div class="flow-step-body">
+                <h3>販売代行の進行状況</h3>
+                <p>同時出品、業者卸販売、業者オークションの申請は、管理画面で状態が更新されるとクライアント側の申請履歴にも連動します。認証済み、査定中、検品中、査定済み、却下申請の流れで確認できます。</p>
+            </div>
+        </div>
+        <div class="flow-step">
+            <div class="flow-step-number">5</div>
             <div class="flow-step-body">
                 <h3>クライアント側でやること</h3>
                 <p>基本はこの画面と申請履歴を確認していただければ大丈夫です。追加対応が必要なときだけ、管理側の備考やお知らせに沿って次の手続きを進めてください。</p>

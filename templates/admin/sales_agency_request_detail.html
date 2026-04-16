@@ -340,6 +340,20 @@
                     </div>
                 </div>
 
+                {% if req.document_flow_steps %}
+                <div>
+                    <div class="section-title" style="margin-bottom: 0.7rem;">書類の進行状況</div>
+                    <div class="timeline">
+                        {% for step in req.document_flow_steps %}
+                        <div class="timeline-step {% if step.state == 'current' %}is-current{% elif step.state == 'done' %}is-done{% endif %}">
+                            {{ step.label }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="muted-text" style="margin-top: 0.55rem;">現在は「{{ req.document_flow_label }}」の段階です。書類はこの順番で進めると、クライアント側への反映ミスを防げます。</div>
+                </div>
+                {% endif %}
+
                 {% if req.admin_note %}
                 <div>
                     <div class="section-title" style="margin-bottom: 0.45rem;">管理メモ</div>
@@ -382,18 +396,28 @@
                     <textarea id="admin-note-input" placeholder="必要に応じてメモを入力してください">{{ req.admin_note or '' }}</textarea>
                 </div>
 
-                {% if req.request_can_create_documents or req.created_mitsumori_id or req.created_invoice_id %}
+                {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id %}
                 <div class="document-links">
-                    {% if req.request_can_create_documents %}
-                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">見積依頼書を作成</a>
+                    {% if req.request_can_create_vendor_estimate %}
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">業者向け見積依頼書を作成</a>
                     {% endif %}
-                    {% if req.created_mitsumori_id %}
-                    <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}" class="btn btn-secondary">見積依頼書を見る</a>
+                    {% if req.vendor_mitsumori_id %}
+                    <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-secondary">業者向け見積依頼書を見る</a>
                     {% endif %}
-                    {% if req.created_invoice_id %}
-                    <a href="{{ url_for('admin_kaitori_view', id=req.created_invoice_id) }}" class="btn btn-secondary">買取明細書を見る</a>
+                    {% if req.request_can_register_vendor_kaitori %}
+                    <a href="{{ url_for('admin_kaitori_shoudaku_add', request_id=req.id) }}" class="btn btn-secondary">業者買取明細書を登録</a>
+                    {% endif %}
+                    {% if req.vendor_kaitori_shoudaku_id %}
+                    <a href="{{ url_for('admin_kaitori_shoudaku_view', id=req.vendor_kaitori_shoudaku_id) }}" class="btn btn-secondary">業者買取明細書を見る</a>
+                    {% endif %}
+                    {% if req.request_can_create_client_invoice %}
+                    <a href="{{ url_for('admin_kaitori_add', request_id=req.id) }}" class="btn btn-secondary">ユーザー向け買取明細書を作成</a>
+                    {% endif %}
+                    {% if req.client_invoice_id %}
+                    <a href="{{ url_for('admin_kaitori_view', id=req.client_invoice_id) }}" class="btn btn-secondary">ユーザー向け買取明細書を見る</a>
                     {% endif %}
                 </div>
+                <div class="muted-text" style="margin-top: 0.6rem;">書類は「ユーザー依頼受領 → 業者向け見積依頼書 → 業者買取明細書 → ユーザー向け買取明細書」の順で扱います。</div>
                 {% endif %}
 
                 {% if req.available_actions %}

@@ -11,6 +11,17 @@
 </div>
 
 <form method="POST" class="document-form">
+    {% if source_request is defined and source_request %}
+    <input type="hidden" name="request_id" value="{{ source_request.id }}">
+    <div class="form-section">
+        <h2>案件情報</h2>
+        <div class="info-box">
+            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+            <p><strong>この書類の役割:</strong> 業者から開花へ返ってきた買取明細書を登録するための画面です。ここで登録したあとに、ユーザー向け買取明細書を作成します。</p>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="form-section">
         <h2>取引先情報</h2>
         <div class="form-grid">

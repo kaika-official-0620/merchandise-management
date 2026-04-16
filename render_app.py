@@ -60,6 +60,15 @@ for initializer_name in ("init_db", "migrate_add_scope_column"):
     if callable(initializer):
         initializer()
 
+apply_sales_agency_document_patch = None
+try:
+    from sales_agency_document_runtime_patch import apply as apply_sales_agency_document_patch
+    from sales_agency_document_runtime_patch import prepare as prepare_sales_agency_document_patch
+
+    prepare_sales_agency_document_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] sales agency document prepare skipped: {patch_exc}", flush=True)
+
 ensure_curated_master_catalog = getattr(module, "ensure_curated_master_catalog", None)
 get_db = getattr(module, "get_db", None)
 if callable(ensure_curated_master_catalog) and callable(get_db):
@@ -76,6 +85,12 @@ try:
     apply_runtime_patches(module)
 except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
+
+if callable(apply_sales_agency_document_patch):
+    try:
+        apply_sales_agency_document_patch(module)
+    except Exception as patch_exc:
+        print(f"[WARN] sales agency document patch skipped: {patch_exc}", flush=True)
 
 app = module.app
 

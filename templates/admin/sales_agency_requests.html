@@ -655,16 +655,26 @@
                     {% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}
                 </div>
 
-                {% if req.request_can_create_documents or req.created_mitsumori_id or req.created_invoice_id %}
+                {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id %}
                 <div class="request-doc-links">
-                    {% if req.request_can_create_documents %}
-                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">見積依頼書を作成</a>
+                    <span class="meta-sub">書類進行: {{ req.document_flow_label }}</span>
+                    {% if req.request_can_create_vendor_estimate %}
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">業者向け見積依頼書</a>
                     {% endif %}
-                    {% if req.created_mitsumori_id %}
-                    <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}" class="btn btn-outline">見積依頼書を見る</a>
+                    {% if req.vendor_mitsumori_id %}
+                    <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-outline">業者見積を見る</a>
                     {% endif %}
-                    {% if req.created_invoice_id %}
-                    <a href="{{ url_for('admin_kaitori_view', id=req.created_invoice_id) }}" class="btn btn-outline">買取明細書を見る</a>
+                    {% if req.request_can_register_vendor_kaitori %}
+                    <a href="{{ url_for('admin_kaitori_shoudaku_add', request_id=req.id) }}" class="btn btn-outline">業者買取明細書</a>
+                    {% endif %}
+                    {% if req.vendor_kaitori_shoudaku_id %}
+                    <a href="{{ url_for('admin_kaitori_shoudaku_view', id=req.vendor_kaitori_shoudaku_id) }}" class="btn btn-outline">業者明細を見る</a>
+                    {% endif %}
+                    {% if req.request_can_create_client_invoice %}
+                    <a href="{{ url_for('admin_kaitori_add', request_id=req.id) }}" class="btn btn-outline">ユーザー向け買取明細書</a>
+                    {% endif %}
+                    {% if req.client_invoice_id %}
+                    <a href="{{ url_for('admin_kaitori_view', id=req.client_invoice_id) }}" class="btn btn-outline">ユーザー明細を見る</a>
                     {% endif %}
                 </div>
                 {% endif %}

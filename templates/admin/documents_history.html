@@ -296,7 +296,14 @@
                         <td>{{ row.issue_date or '-' }}</td>
                         <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td>
                         <td><span class="status-badge {{ row.status }}">{{ row.status_label }}</span></td>
-                        <td><a href="{{ url_for(row.detail_endpoint, id=row.id) }}" class="btn btn-info btn-sm">詳細</a></td>
+                        <td>
+                            <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                                <a href="{{ url_for(row.detail_endpoint, id=row.id) }}" class="btn btn-info btn-sm">詳細</a>
+                                {% if row.request_id %}
+                                <a href="{{ url_for('admin_sales_agency_request_detail', id=row.request_id) }}" class="btn btn-secondary btn-sm">案件詳細</a>
+                                {% endif %}
+                            </div>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
