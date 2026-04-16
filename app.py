@@ -26410,6 +26410,8 @@ def admin_documents_dashboard_v2():
             document_counts[row['document_type']] += 1
 
     recent_incoming_documents = [row for row in history_rows if row.get('direction_key') == 'incoming'][:10]
+    recent_outgoing_documents = [row for row in history_rows if row.get('direction_key') == 'outgoing'][:10]
+    recent_vendor_documents = [row for row in history_rows if row.get('direction_key') == 'vendor'][:10]
 
     ongoing_request_rows = []
     conn, cur = sales_agency_open_cursor()
@@ -26438,6 +26440,8 @@ def admin_documents_dashboard_v2():
         'admin/documents_dashboard.html',
         document_counts=document_counts,
         recent_incoming_documents=recent_incoming_documents,
+        recent_outgoing_documents=recent_outgoing_documents,
+        recent_vendor_documents=recent_vendor_documents,
         ongoing_request_rows=ongoing_request_rows,
     )
 
