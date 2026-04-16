@@ -251,13 +251,13 @@
             {% if current_user.is_admin() %}
             <!-- 管理者用：書類 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_documents_dashboard', 'admin_documents_history', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_documents_dashboard', 'admin_documents_history', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view', 'admin_user_kaitori_shoudaku_view'] %}active{% endif %}" onclick="toggleCategory(this)">
                     書類
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_documents_dashboard', 'admin_documents_history', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_documents_dashboard', 'admin_documents_history', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view', 'admin_user_kaitori_shoudaku_view'] %}open{% endif %}">
                     <div class="sidebar-subcategory">
-                        <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint in ['admin_documents_dashboard', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view'] %}active{% endif %}">書類管理</a>
+                        <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint in ['admin_documents_dashboard', 'admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_user_mitsumori_view', 'admin_user_kaitori_shoudaku_view'] %}active{% endif %}">書類管理</a>
                         <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint == 'admin_documents_history' %}active{% endif %}">書類履歴</a>
                     </div>
                 </div>
@@ -318,14 +318,14 @@
             {% if current_user.is_admin() %}
             {% set admin_notification_count = get_pending_sale_request_count() + get_pending_disposal_count() %}
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}active{% endif %}" onclick="toggleCategory(this)">
                     <span class="menu-label">通知ボックス</span>
                     {% if admin_notification_count > 0 %}
                     <span class="menu-badge">{{ admin_notification_count }}</span>
                     {% endif %}
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}open{% endif %}">
                     <a href="{{ url_for('admin_shipping_requests') }}" class="{% if request.endpoint == 'admin_shipping_requests' %}active{% endif %}">
                         <span class="menu-label">発送BOX</span>
                         {% if get_pending_sale_request_count_by_type('shipping_request') > 0 %}
@@ -338,19 +338,19 @@
                         <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('completion_report') }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale' %}active{% endif %}">
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'wholesale') %}active{% endif %}">
                         <span class="menu-label">業者卸販売BOX</span>
                         {% if get_pending_sales_agency_count_by_service('wholesale') > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('wholesale') }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction' %}active{% endif %}">
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'auction') %}active{% endif %}">
                         <span class="menu-label">業者オークションBOX</span>
                         {% if get_pending_sales_agency_count_by_service('auction') > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('auction') }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous' %}active{% endif %}">
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'simultaneous') %}active{% endif %}">
                         <span class="menu-label">同時出品BOX</span>
                         {% if get_pending_sales_agency_count_by_service('simultaneous') > 0 %}
                         <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('simultaneous') }}</span>

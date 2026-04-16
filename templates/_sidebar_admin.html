@@ -34,6 +34,7 @@
     'admin_kaitori_shoudaku_add',
     'admin_kaitori_shoudaku_view',
     'admin_user_mitsumori_view',
+    'admin_user_kaitori_shoudaku_view',
     'admin_items',
     'admin_add_item',
     'admin_operator_users',
@@ -43,12 +44,33 @@
     'admin_inquiry_view',
     'admin_inquiry_reply'
 ] %}
+{% set document_dashboard_endpoints = [
+    'admin_documents_dashboard',
+    'admin_shikiriosho_add',
+    'admin_shikiriosho_list',
+    'admin_shikiriosho_view',
+    'admin_shikiriosho_edit',
+    'admin_kaitori_add',
+    'admin_kaitori_list',
+    'admin_kaitori_view',
+    'admin_kaitori_edit',
+    'admin_mitsumori_add',
+    'admin_mitsumori_list',
+    'admin_mitsumori_view',
+    'admin_mitsumori_edit',
+    'admin_kaitori_shoudaku_list',
+    'admin_kaitori_shoudaku_add',
+    'admin_kaitori_shoudaku_view',
+    'admin_user_mitsumori_view',
+    'admin_user_kaitori_shoudaku_view'
+] %}
 {% set user_management_endpoints = [
     'admin_user_products',
     'admin_shipping_requests',
     'admin_completion_requests',
     'admin_disposal_requests',
     'admin_sales_agency_requests',
+    'admin_sales_agency_request_detail',
     'admin_users',
     'admin_add_user',
     'admin_edit_user',
@@ -97,7 +119,7 @@
     <div class="sidebar-category-items {% if request.endpoint in kaika_endpoints %}open{% endif %}">
         <div class="sidebar-subcategory">
             <div class="subcategory-label">書類</div>
-            <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint == 'admin_documents_dashboard' %}active{% endif %}">書類管理</a>
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint in document_dashboard_endpoints %}active{% endif %}">書類管理</a>
             <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint == 'admin_documents_history' %}active{% endif %}">書類履歴</a>
         </div>
         <div class="sidebar-subcategory">
@@ -149,19 +171,19 @@
                 <span class="menu-badge-inline">{{ completion_report_count }}</span>
                 {% endif %}
             </a>
-            <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale' %}active{% endif %}">
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'wholesale') %}active{% endif %}">
                 <span class="menu-label">業者卸販売BOX</span>
                 {% if wholesale_sales_agency_count > 0 %}
                 <span class="menu-badge-inline">{{ wholesale_sales_agency_count }}</span>
                 {% endif %}
             </a>
-            <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction' %}active{% endif %}">
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'auction') %}active{% endif %}">
                 <span class="menu-label">業者オークションBOX</span>
                 {% if auction_sales_agency_count > 0 %}
                 <span class="menu-badge-inline">{{ auction_sales_agency_count }}</span>
                 {% endif %}
             </a>
-            <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous' %}active{% endif %}">
+            <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'simultaneous') %}active{% endif %}">
                 <span class="menu-label">同時出品BOX</span>
                 {% if simultaneous_sales_agency_count > 0 %}
                 <span class="menu-badge-inline">{{ simultaneous_sales_agency_count }}</span>

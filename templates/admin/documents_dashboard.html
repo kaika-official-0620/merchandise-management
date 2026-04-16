@@ -2,14 +2,10 @@
 {% block title %}書類管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
-{% set document_counts = document_counts if document_counts is defined else {
-    '精算書': seisan_count|default(0),
-    '見積依頼書': mitsumori_count|default(0),
-    '買取明細書': kaitori_count|default(0),
-    '計算書': 0
-} %}
+{% set count_values = document_counts.values()|list if document_counts is defined else [0, 0, 0, 0] %}
 {% set ongoing_request_rows = ongoing_request_rows if ongoing_request_rows is defined else [] %}
 {% set recent_incoming_documents = recent_incoming_documents if recent_incoming_documents is defined else [] %}
+
 <style>
 .documents-page {
     display: grid;
@@ -42,12 +38,16 @@
     gap: 1rem;
 }
 
-.summary-card {
+.summary-card,
+.section-card {
     background: #fff;
     border: 1px solid #e2e8f0;
-    border-radius: 16px;
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.summary-card {
     padding: 1.2rem 1.1rem;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .summary-card-label {
@@ -63,11 +63,7 @@
 }
 
 .section-card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
     padding: 1.35rem;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
 .section-card h2 {
@@ -81,6 +77,32 @@
     color: #64748b;
     font-size: 0.9rem;
     line-height: 1.7;
+}
+
+.flow-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.flow-item {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+}
+
+.flow-item strong {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: #0f172a;
+}
+
+.flow-item p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.8;
+    font-size: 0.9rem;
 }
 
 .request-table,
@@ -153,6 +175,11 @@
     color: #6d28d9;
 }
 
+.status-badge.inspecting {
+    background: #fce7f3;
+    color: #be185d;
+}
+
 .status-badge.completed {
     background: #d1fae5;
     color: #047857;
@@ -207,6 +234,10 @@
     background: #f8fafc;
 }
 
+.table-scroll {
+    overflow-x: auto;
+}
+
 @media (max-width: 768px) {
     .section-card {
         padding: 1rem;
@@ -216,10 +247,6 @@
     .history-table {
         min-width: 860px;
     }
-
-    .table-scroll {
-        overflow-x: auto;
-    }
 }
 </style>
 
@@ -227,7 +254,7 @@
     <div class="documents-header">
         <div>
             <h1>書類管理</h1>
-            <p>現在動いている書類と、クライアントから届いた書類をまとめて確認できます。</p>
+            <p>現在動いている書類と、クライアントから届いた依頼書をまとめて確認できます。反映の流れと担当側の操作もこの画面で確認できます。</p>
         </div>
         <div class="documents-actions">
             <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary">書類履歴を見る</a>
@@ -237,26 +264,49 @@
 
     <div class="summary-grid">
         <div class="summary-card">
-            <div class="summary-card-label">精算書</div>
-            <div class="summary-card-value">{{ document_counts['精算書'] }}</div>
+            <div class="summary-card-label">仕切書</div>
+            <div class="summary-card-value">{{ count_values[0] if count_values|length > 0 else 0 }}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-card-label">見積依頼書</div>
-            <div class="summary-card-value">{{ document_counts['見積依頼書'] }}</div>
+            <div class="summary-card-label">見積り依頼書</div>
+            <div class="summary-card-value">{{ count_values[1] if count_values|length > 1 else 0 }}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-card-label">買取明細書</div>
-            <div class="summary-card-value">{{ document_counts['買取明細書'] }}</div>
+            <div class="summary-card-label">買取依頼書</div>
+            <div class="summary-card-value">{{ count_values[2] if count_values|length > 2 else 0 }}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-card-label">計算書</div>
-            <div class="summary-card-value">{{ document_counts['計算書'] }}</div>
+            <div class="summary-card-label">オークション計算書</div>
+            <div class="summary-card-value">{{ count_values[3] if count_values|length > 3 else 0 }}</div>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h2>反映の流れ</h2>
+        <p class="section-note">管理画面とクライアント画面でデータがどのように連動するかを、実務の順番に沿ってまとめています。</p>
+        <div class="flow-grid">
+            <div class="flow-item">
+                <strong>1. クライアントが依頼書を作成</strong>
+                <p>見積り依頼書と買取依頼書は、クライアント側で保存された時点でこの書類管理と書類履歴に反映されます。担当者はここから内容確認に入れます。</p>
+            </div>
+            <div class="flow-item">
+                <strong>2. 販売代行BOXで状態を更新</strong>
+                <p>業者卸販売、業者オークション、同時出品の進行状況を更新すると、クライアント側の申請履歴にも同じ状態が反映されます。必要に応じて見積り依頼書の作成に進みます。</p>
+            </div>
+            <div class="flow-item">
+                <strong>3. 開花側で書類を発行</strong>
+                <p>買取明細書、仕切書、計算書を発行すると、クライアント側の書類一覧に反映されます。クライアント側ではタブごとに受け取った書類を確認できます。</p>
+            </div>
+            <div class="flow-item">
+                <strong>4. 担当者がやること</strong>
+                <p>基本はこの画面で受信書類と進行中申請を確認し、必要な書類作成や状態更新だけ進めれば大丈夫です。クライアントへ追加依頼が必要なときは備考やお知らせで連絡します。</p>
+            </div>
         </div>
     </div>
 
     <div class="section-card">
         <h2>進行中の販売代行書類</h2>
-        <p class="section-note">認証中・認証済み・査定中の依頼を一覧で確認できます。卸販売はここから見積依頼書と買取明細書の作成に進めます。</p>
+        <p class="section-note">認証中、査定中、検品中の申請を一覧で確認できます。業者卸販売はここから見積り依頼書と買取明細書の作成へ進められます。</p>
         {% if ongoing_request_rows %}
         <div class="table-scroll">
             <table class="request-table">
@@ -264,19 +314,17 @@
                     <tr>
                         <th>サービス</th>
                         <th>クライアント</th>
-                        <th>状態</th>
+                        <th>状況</th>
                         <th>申請日</th>
-                        <th>商品</th>
-                        <th>書類</th>
+                        <th>対象商品</th>
+                        <th>関連書類</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for req in ongoing_request_rows %}
                     <tr>
-                        <td>
-                            <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
-                        </td>
+                        <td><span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span></td>
                         <td>
                             <div class="meta-stack">
                                 <strong>{{ req.client_name }}</strong>
@@ -294,7 +342,7 @@
                         <td>
                             <div class="meta-stack">
                                 {% if req.created_mitsumori_id %}
-                                <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}">見積依頼書</a>
+                                <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}">見積り依頼書</a>
                                 {% endif %}
                                 {% if req.created_invoice_id %}
                                 <a href="{{ url_for('admin_kaitori_view', id=req.created_invoice_id) }}">買取明細書</a>
@@ -308,7 +356,7 @@
                             <div class="inline-actions">
                                 <a href="{{ url_for('admin_sales_agency_requests', service_type=req.service_type) }}" class="btn btn-secondary btn-sm">BOXを開く</a>
                                 {% if req.request_can_create_documents %}
-                                <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-primary btn-sm">見積依頼書を作成</a>
+                                <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-primary btn-sm">見積り依頼書を作成</a>
                                 {% endif %}
                             </div>
                         </td>
@@ -323,19 +371,19 @@
     </div>
 
     <div class="section-card">
-        <h2>最近届いた書類</h2>
-        <p class="section-note">クライアントから開花側へ届いた書類を新しい順で表示しています。</p>
+        <h2>最新の受信書類</h2>
+        <p class="section-note">クライアントから届いた書類を新しい順に表示しています。内容確認後は各詳細画面から次の処理へ進めてください。</p>
         {% if recent_incoming_documents %}
         <div class="table-scroll">
             <table class="history-table">
                 <thead>
                     <tr>
-                        <th>種別</th>
+                        <th>種類</th>
                         <th>書類No.</th>
                         <th>クライアント</th>
-                        <th>届き先</th>
+                        <th>向き</th>
                         <th>発行日</th>
-                        <th>状態</th>
+                        <th>状況</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -357,7 +405,7 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">最近届いた書類はありません。</div>
+        <div class="empty-state">最新の受信書類はありません。</div>
         {% endif %}
     </div>
 </div>

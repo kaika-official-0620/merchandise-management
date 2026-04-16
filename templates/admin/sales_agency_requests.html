@@ -176,6 +176,11 @@
     color: #6d28d9;
 }
 
+.status-badge.inspecting {
+    background: #fce7f3;
+    color: #be185d;
+}
+
 .status-badge.completed {
     background: #d1fae5;
     color: #047857;
@@ -190,6 +195,27 @@
     padding: 1.2rem;
     display: grid;
     gap: 1rem;
+}
+
+.request-open-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.48rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.request-open-link:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
 }
 
 .request-items {
@@ -265,6 +291,86 @@
     line-height: 1.7;
 }
 
+.request-status-panel {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.request-status-panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+
+.request-status-panel-title {
+    color: #0f172a;
+    font-size: 0.96rem;
+    font-weight: 800;
+}
+
+.request-status-panel-subtitle {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.client-status-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.request-progress {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.progress-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.48rem 0.72rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.progress-step.is-done {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.progress-step.is-current {
+    border-color: #93c5fd;
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.progress-step.is-rejected {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+}
+
 .request-actions {
     display: flex;
     flex-wrap: wrap;
@@ -272,6 +378,23 @@
     align-items: flex-end;
     padding-top: 0.95rem;
     border-top: 1px solid #e2e8f0;
+}
+
+.request-actions-header {
+    width: 100%;
+    display: grid;
+    gap: 0.25rem;
+}
+
+.request-actions-title {
+    color: #0f172a;
+    font-size: 0.96rem;
+    font-weight: 800;
+}
+
+.request-actions-subtitle {
+    color: #64748b;
+    font-size: 0.82rem;
 }
 
 .admin-note-input {
@@ -293,6 +416,31 @@
     display: flex;
     gap: 0.55rem;
     flex-wrap: wrap;
+}
+
+.request-feedback {
+    width: 100%;
+    display: none;
+    padding: 0.78rem 0.9rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.request-feedback.is-visible {
+    display: block;
+}
+
+.request-feedback.is-success {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #bbf7d0;
+}
+
+.request-feedback.is-error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
 }
 
 .btn-outline {
@@ -381,7 +529,7 @@
 
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-card-label">認証中</div>
+            <div class="stat-card-label">承認待ち</div>
             <div class="stat-card-value">{{ stats.pending }}</div>
         </div>
         <div class="stat-card">
@@ -391,6 +539,10 @@
         <div class="stat-card">
             <div class="stat-card-label">査定中</div>
             <div class="stat-card-value">{{ stats.appraising }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">検品中</div>
+            <div class="stat-card-value">{{ stats.inspecting }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-card-label">処理完了</div>
@@ -404,9 +556,10 @@
 
     <div class="filter-tabs">
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">認証中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">査定中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting') }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed') }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
     </div>
@@ -415,13 +568,16 @@
     <div class="requests-list">
         {% for req in requests %}
         <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}">
-            <div class="request-header">
+                <div class="request-header">
                 <div class="request-info">
                     <span class="request-user">{{ req.client_name }}</span>
                     <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
                     <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                 </div>
-                <span class="status-badge {{ req.status }}">{{ req.status_label }}</span>
+                <div style="display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; justify-content: flex-end;">
+                    <span class="status-badge {{ req.status }}" id="status-badge-{{ req.id }}">{{ req.status_label }}</span>
+                    <a href="{{ req.detail_url }}" class="request-open-link">申請詳細を開く</a>
+                </div>
             </div>
 
             <div class="request-body">
@@ -454,19 +610,50 @@
                     {% endif %}
                 </div>
 
-                {% if req.admin_note %}
-                <div class="request-note">
-                    <div class="request-note-label">備考</div>
-                    <p>{{ req.admin_note }}</p>
+                <div class="request-status-panel">
+                    <div class="request-status-panel-header">
+                        <div>
+                            <div class="request-status-panel-title">クライアントへ反映する現在の状況</div>
+                            <div class="request-status-panel-subtitle">この画面で進行状況を更新すると、クライアント側の申請状態も切り替わります。</div>
+                        </div>
+                        <div class="client-status-preview" id="client-status-{{ req.id }}">{{ req.client_status_label }}</div>
+                    </div>
+                    {% set timeline_statuses = [
+                        ('pending', '承認待ち'),
+                        ('approved', '認証済み'),
+                        ('appraising', '査定中'),
+                        ('inspecting', '検品中'),
+                        ('completed', '処理完了')
+                    ] %}
+                    {% set current_index = {'pending': 0, 'approved': 1, 'appraising': 2, 'inspecting': 3, 'completed': 4, 'rejected': -1}.get(req.status, -1) %}
+                    <div class="request-progress" id="progress-{{ req.id }}" data-status="{{ req.status }}">
+                        {% for timeline_key, timeline_label in timeline_statuses %}
+                        {% set timeline_index = loop.index0 %}
+                        <div
+                            class="progress-step {% if req.status == timeline_key %}is-current{% elif current_index > timeline_index %}is-done{% endif %}"
+                            data-step="{{ timeline_key }}"
+                        >
+                            {{ timeline_label }}
+                        </div>
+                        {% endfor %}
+                        <div
+                            class="progress-step {% if req.status == 'rejected' %}is-current is-rejected{% endif %}"
+                            data-step="rejected"
+                        >
+                            却下申請
+                        </div>
+                    </div>
                 </div>
-                {% endif %}
 
-                {% if req.status != 'pending' %}
-                <div class="processed-info">
+                <div class="request-note" id="note-display-{{ req.id }}" {% if not req.admin_note %}style="display: none;"{% endif %}>
+                    <div class="request-note-label">備考</div>
+                    <p id="note-display-text-{{ req.id }}">{{ req.admin_note }}</p>
+                </div>
+
+                <div class="processed-info" id="processed-info-{{ req.id }}" {% if req.status == 'pending' and not req.processed_at %}style="display: none;"{% endif %}>
                     更新日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
                     {% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}
                 </div>
-                {% endif %}
 
                 {% if req.request_can_create_documents or req.created_mitsumori_id or req.created_invoice_id %}
                 <div class="request-doc-links">
@@ -482,27 +669,37 @@
                 </div>
                 {% endif %}
 
-                {% if req.available_actions %}
                 <div class="request-actions">
+                    <div class="request-actions-header">
+                        <div class="request-actions-title">申請の進行状況をこの画面で更新</div>
+                        <div class="request-actions-subtitle">受け取った申請を確認しながら、そのままクライアントへ現在の状況を共有できます。</div>
+                    </div>
                     <div class="admin-note-input">
-                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください"></textarea>
+                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください">{{ req.admin_note or '' }}</textarea>
                     </div>
-                    <div class="action-buttons">
-                        {% if 'approve' in req.available_actions %}
-                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">認証済みにする</button>
-                        {% endif %}
-                        {% if 'appraising' in req.available_actions %}
-                        <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">査定中にする</button>
-                        {% endif %}
-                        {% if 'complete' in req.available_actions %}
-                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'complete')">処理完了にする</button>
-                        {% endif %}
-                        {% if 'reject' in req.available_actions %}
-                        <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下申請</button>
+                    <div class="action-buttons" id="action-buttons-{{ req.id }}">
+                        {% if req.available_actions %}
+                            {% if 'approve' in req.available_actions %}
+                            <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">認証済みにする</button>
+                            {% endif %}
+                            {% if 'appraising' in req.available_actions %}
+                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">査定中にする</button>
+                            {% endif %}
+                            {% if 'inspect' in req.available_actions %}
+                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'inspect')">検品中にする</button>
+                            {% endif %}
+                            {% if 'complete' in req.available_actions %}
+                            <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'complete')">処理完了にする</button>
+                            {% endif %}
+                            {% if 'reject' in req.available_actions %}
+                            <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下申請</button>
+                            {% endif %}
+                        {% else %}
+                        <span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>
                         {% endif %}
                     </div>
+                    <div class="request-feedback" id="feedback-{{ req.id }}"></div>
                 </div>
-                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -513,20 +710,109 @@
 </div>
 
 <script>
+const salesAgencyActionLabels = {
+    approve: '認証済み',
+    appraising: '査定中',
+    inspect: '検品中',
+    complete: '処理完了',
+    reject: '却下申請'
+};
+
+const salesAgencyActionButtons = {
+    approve: { label: '認証済みにする', className: 'btn btn-approve' },
+    appraising: { label: '査定中にする', className: 'btn btn-primary' },
+    inspect: { label: '検品中にする', className: 'btn btn-primary' },
+    complete: { label: '処理完了にする', className: 'btn btn-approve' },
+    reject: { label: '却下申請', className: 'btn btn-reject' }
+};
+
+const progressStatusOrder = ['pending', 'approved', 'appraising', 'inspecting', 'completed'];
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function setFeedback(requestId, message, kind) {
+    const feedbackEl = document.getElementById(`feedback-${requestId}`);
+    if (!feedbackEl) {
+        return;
+    }
+
+    feedbackEl.textContent = message || '';
+    feedbackEl.className = 'request-feedback';
+    if (message) {
+        feedbackEl.classList.add('is-visible');
+        feedbackEl.classList.add(kind === 'error' ? 'is-error' : 'is-success');
+    }
+}
+
+function renderActionButtons(requestId, availableActions) {
+    const actionButtonsEl = document.getElementById(`action-buttons-${requestId}`);
+    if (!actionButtonsEl) {
+        return;
+    }
+
+    if (!availableActions || !availableActions.length) {
+        actionButtonsEl.innerHTML = '<span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>';
+        return;
+    }
+
+    actionButtonsEl.innerHTML = availableActions.map((action) => {
+        const button = salesAgencyActionButtons[action];
+        if (!button) {
+            return '';
+        }
+        return `<button type="button" class="${button.className}" onclick="processRequest(${requestId}, '${action}')">${button.label}</button>`;
+    }).join('');
+}
+
+function updateProgress(requestId, status) {
+    const progressEl = document.getElementById(`progress-${requestId}`);
+    if (!progressEl) {
+        return;
+    }
+
+    const currentIndex = progressStatusOrder.indexOf(status);
+    progressEl.dataset.status = status;
+
+    progressEl.querySelectorAll('.progress-step').forEach((stepEl) => {
+        const stepKey = stepEl.dataset.step;
+        stepEl.classList.remove('is-current', 'is-done', 'is-rejected');
+
+        if (status === 'rejected') {
+            if (stepKey === 'rejected') {
+                stepEl.classList.add('is-current', 'is-rejected');
+            }
+            return;
+        }
+
+        const stepIndex = progressStatusOrder.indexOf(stepKey);
+        if (stepIndex === -1) {
+            return;
+        }
+        if (stepKey === status) {
+            stepEl.classList.add('is-current');
+        } else if (currentIndex > stepIndex) {
+            stepEl.classList.add('is-done');
+        }
+    });
+}
+
 function processRequest(requestId, action) {
     const noteEl = document.getElementById(`note-${requestId}`);
     const adminNote = noteEl ? noteEl.value : '';
-    const actionLabels = {
-        approve: '認証済み',
-        appraising: '査定中',
-        complete: '処理完了',
-        reject: '却下申請'
-    };
-    const actionText = actionLabels[action] || action;
+    const actionText = salesAgencyActionLabels[action] || action;
 
     if (!confirm(`この申請を「${actionText}」へ変更しますか？`)) {
         return;
     }
+
+    setFeedback(requestId, '状態を更新しています…', 'success');
 
     fetch(`/admin/sales-agency-requests/${requestId}/process`, {
         method: 'POST',
@@ -541,14 +827,43 @@ function processRequest(requestId, action) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            location.reload();
+            const statusBadgeEl = document.getElementById(`status-badge-${requestId}`);
+            const clientStatusEl = document.getElementById(`client-status-${requestId}`);
+            const processedInfoEl = document.getElementById(`processed-info-${requestId}`);
+            const noteDisplayEl = document.getElementById(`note-display-${requestId}`);
+            const noteDisplayTextEl = document.getElementById(`note-display-text-${requestId}`);
+
+            if (statusBadgeEl) {
+                statusBadgeEl.className = `status-badge ${data.status}`;
+                statusBadgeEl.textContent = data.status_label || actionText;
+            }
+            if (clientStatusEl) {
+                clientStatusEl.textContent = data.client_status_label || data.status_label || actionText;
+            }
+            if (processedInfoEl) {
+                processedInfoEl.style.display = '';
+                processedInfoEl.textContent = `更新日時: ${data.processed_at || '反映済み'}`;
+            }
+            if (noteDisplayEl && noteDisplayTextEl) {
+                if (adminNote) {
+                    noteDisplayEl.style.display = '';
+                    noteDisplayTextEl.textContent = adminNote;
+                } else {
+                    noteDisplayEl.style.display = 'none';
+                    noteDisplayTextEl.textContent = '';
+                }
+            }
+
+            updateProgress(requestId, data.status);
+            renderActionButtons(requestId, data.available_actions || []);
+            setFeedback(requestId, `「${data.client_status_label || actionText}」へ更新しました。クライアント側にも反映されます。`, 'success');
             return;
         }
-        alert('エラー: ' + (data.error || '処理に失敗しました'));
+        setFeedback(requestId, data.error || '処理に失敗しました', 'error');
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('エラーが発生しました');
+        setFeedback(requestId, '通信エラーが発生しました', 'error');
     });
 }
 </script>

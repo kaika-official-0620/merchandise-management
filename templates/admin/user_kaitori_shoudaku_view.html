@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}買取依頼書詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-actions">
+    <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+    <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary">書類履歴へ戻る</a>
+</div>
+
+<div class="document-view">
+    <div class="document-header">
+        <div>
+            <div class="document-type">クライアントから届いた書類</div>
+            <h1>買取依頼書</h1>
+            <p class="document-no">{{ kaitori.document_no or '-' }}</p>
+        </div>
+        <div class="status-wrap">
+            <span class="status-badge status-{{ kaitori.status or 'draft' }}">
+                {% if kaitori.status == 'approved' %}承認済み
+                {% elif kaitori.status == 'completed' %}完了
+                {% elif kaitori.status in ['sent', 'submitted'] %}送信済み
+                {% else %}下書き{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="info-grid">
+        <section class="info-card">
+            <h2>クライアント情報</h2>
+            <dl>
+                <div>
+                    <dt>クライアント名</dt>
+                    <dd>{{ kaitori.user_name or kaitori.username or '-' }}</dd>
+                </div>
+                <div>
+                    <dt>ユーザーID</dt>
+                    <dd>{{ kaitori.user_id }}</dd>
+                </div>
+                <div>
+                    <dt>発行日</dt>
+                    <dd>{{ kaitori.issue_date or '-' }}</dd>
+                </div>
+                <div>
+                    <dt>更新日時</dt>
+                    <dd>{{ kaitori.updated_at or kaitori.created_at or '-' }}</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="info-card">
+            <h2>支払・送付情報</h2>
+            <dl>
+                <div>
+                    <dt>宛名</dt>
+                    <dd>{{ kaitori.customer_name or '-' }}</dd>
+                </div>
+                <div>
+                    <dt>住所</dt>
+                    <dd>{{ kaitori.customer_address or '-' }}</dd>
+                </div>
+                <div>
+                    <dt>電話番号</dt>
+                    <dd>{{ kaitori.customer_phone or '-' }}</dd>
+                </div>
+                <div>
+                    <dt>支払方法</dt>
+                    <dd>{{ kaitori.payment_method or '-' }}</dd>
+                </div>
+            </dl>
+        </section>
+    </div>
+
+    <section class="table-card">
+        <div class="section-head">
+            <h2>商品明細</h2>
+            <div class="total-amount">合計: ¥{{ "{:,}".format(kaitori.total_amount or 0) }}</div>
+        </div>
+        <div class="table-scroll">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>商品名</th>
+                        <th>ブランド</th>
+                        <th>状態</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.item_no }}</td>
+                        <td>{{ item.product_name }}</td>
+                        <td>{{ item.brand_name or '-' }}</td>
+                        <td>{{ item.condition or '-' }}</td>
+                        <td>{{ item.quantity or 0 }}</td>
+                        <td>¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                        <td>¥{{ "{:,}".format(item.amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="empty-row">明細はまだ登録されていません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    {% if kaitori.notes %}
+    <section class="notes-card">
+        <h2>備考</h2>
+        <div class="notes-body">{{ kaitori.notes }}</div>
+    </section>
+    {% endif %}
+</div>
+
+<style>
+.document-view {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.document-header,
+.info-card,
+.table-card,
+.notes-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.35rem;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.document-type {
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+}
+
+.document-header h1 {
+    margin: 0;
+    color: #0f172a;
+}
+
+.document-no {
+    margin: 0.45rem 0 0;
+    color: #2563eb;
+    font-family: Consolas, monospace;
+    font-weight: 700;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.36rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.status-draft { background: #fef3c7; color: #92400e; }
+.status-sent,
+.status-submitted { background: #dbeafe; color: #1d4ed8; }
+.status-approved { background: #dcfce7; color: #166534; }
+.status-completed { background: #d1fae5; color: #047857; }
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.info-card h2,
+.table-card h2,
+.notes-card h2 {
+    margin: 0 0 1rem;
+    font-size: 1.02rem;
+    color: #0f172a;
+}
+
+.info-card dl {
+    margin: 0;
+    display: grid;
+    gap: 0.8rem;
+}
+
+.info-card dl div {
+    display: grid;
+    gap: 0.24rem;
+}
+
+.info-card dt {
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.info-card dd {
+    margin: 0;
+    color: #0f172a;
+    line-height: 1.7;
+}
+
+.section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.total-amount {
+    color: #047857;
+    font-weight: 800;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 780px;
+}
+
+.items-table th,
+.items-table td {
+    padding: 0.8rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.items-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.84rem;
+}
+
+.empty-row {
+    text-align: center;
+    color: #64748b;
+    padding: 2rem 1rem;
+}
+
+.notes-body {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    color: #334155;
+}
+
+@media (max-width: 768px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}

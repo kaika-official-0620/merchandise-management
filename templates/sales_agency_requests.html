@@ -10,12 +10,61 @@
     gap: 1rem;
 }
 
+.guide-card,
 .request-card {
     background: #fff;
     border-radius: 18px;
     border: 1px solid #e2e8f0;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     overflow: hidden;
+}
+
+.guide-card {
+    padding: 1.2rem 1.25rem;
+}
+
+.guide-card h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+    color: #0f172a;
+}
+
+.guide-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+.guide-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.guide-item {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 0.85rem;
+    align-items: start;
+}
+
+.guide-item-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.guide-item strong {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: #0f172a;
 }
 
 .request-header {
@@ -66,6 +115,11 @@
     color: #6d28d9;
 }
 
+.status-badge.inspecting {
+    background: #fce7f3;
+    color: #be185d;
+}
+
 .status-badge.completed {
     background: #d1fae5;
     color: #047857;
@@ -111,6 +165,7 @@
     border-radius: 8px;
     object-fit: cover;
     background: #e2e8f0;
+    flex-shrink: 0;
 }
 
 .request-item-name {
@@ -170,6 +225,10 @@
         flex-direction: column;
         align-items: flex-start;
     }
+
+    .guide-item {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 
@@ -180,6 +239,34 @@
 <div class="history-container">
     <a href="{{ url_for('index') }}" class="back-link">← 商品一覧に戻る</a>
 
+    <div class="guide-card">
+        <h2>進行状況の見方</h2>
+        <p>管理画面で更新された状態は、この申請履歴にも自動で反映されます。現在どこまで進んでいるかと、クライアント側で確認していただきたい点をまとめています。</p>
+        <div class="guide-list">
+            <div class="guide-item">
+                <div class="guide-item-number">1</div>
+                <div>
+                    <strong>承認待ち</strong>
+                    申請受付直後の状態です。管理側で確認後に次の工程へ進みます。
+                </div>
+            </div>
+            <div class="guide-item">
+                <div class="guide-item-number">2</div>
+                <div>
+                    <strong>認証済み・査定中・検品中</strong>
+                    管理画面で状態が切り替わるたびに、この画面にも反映されます。必要な連絡がある場合は備考欄に表示されます。
+                </div>
+            </div>
+            <div class="guide-item">
+                <div class="guide-item-number">3</div>
+                <div>
+                    <strong>処理完了・却下申請</strong>
+                    最終状態まで進むと結果が反映されます。追加対応が必要な場合だけ、お知らせや備考に沿って進めてください。
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% if requests %}
     {% for req in requests %}
     <div class="request-card">
@@ -187,7 +274,7 @@
             <div class="request-info">
                 <span class="service-badge">{{ service_types.get(req.service_type, req.service_type) }}</span>
                 <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
-                <span class="request-date">商品 {{ req.request_items|length }} 点</span>
+                <span class="request-date">対象 {{ req.request_items|length }} 点</span>
             </div>
             <span class="status-badge {{ req.status }}">{{ statuses.get(req.status, req.status) }}</span>
         </div>
@@ -212,13 +299,13 @@
 
             {% if req.status != 'pending' %}
             <div class="processed-info">
-                更新日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
+                更新日 {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
             </div>
             {% endif %}
 
             {% if req.admin_note %}
             <div class="admin-note">
-                <label>開花からの連絡</label>
+                <label>管理側からの連絡</label>
                 <p>{{ req.admin_note }}</p>
             </div>
             {% endif %}
@@ -227,8 +314,8 @@
     {% endfor %}
     {% else %}
     <div class="empty-state">
-        <p>申請履歴はありません。</p>
-        <p style="margin-top: 0.5rem; font-size: 0.9rem;">商品一覧から販売代行申請を行うと、ここで状態を確認できます。</p>
+        <p>申請履歴はまだありません。</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">商品一覧から販売代行申請を行うと、ここで進行状況を確認できます。</p>
     </div>
     {% endif %}
 </div>

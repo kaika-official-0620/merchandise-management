@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import time
 import calendar
+import traceback
 from decimal import Decimal
 from datetime import datetime, timedelta, date
 from urllib.parse import urlparse
@@ -3139,7 +3140,182 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
 
     return item
 
-def get_active_announcements():
+def parse_announcement_recipient_ids(value):
+    if not value:
+        return []
+    if isinstance(value, list):
+        raw_ids = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            raw_ids = parsed if isinstance(parsed, list) else [parsed]
+        except Exception:
+            raw_ids = [part.strip() for part in text.split(',')]
+
+    recipient_ids = []
+    seen = set()
+    for raw_id in raw_ids:
+        try:
+            user_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        recipient_ids.append(user_id)
+    return recipient_ids
+
+
+def serialize_announcement_recipient_ids(user_ids):
+    cleaned_ids = []
+    seen = set()
+    for raw_id in user_ids or []:
+        try:
+            user_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        cleaned_ids.append(user_id)
+    return json.dumps(cleaned_ids, ensure_ascii=False)
+
+
+def get_announcement_recipient_scope(record):
+    scope = (record.get('recipient_scope') or 'all').strip()
+    return scope if scope in {'all', 'selected'} else 'all'
+
+
+def announcement_is_visible_to_user(record, user=None):
+    scope = get_announcement_recipient_scope(record)
+    if scope != 'selected':
+        return True
+
+    target_user = user
+    if target_user is None and has_request_context() and getattr(current_user, 'is_authenticated', False):
+        target_user = current_user
+
+    if not target_user:
+        return False
+
+    if getattr(target_user, 'is_admin', lambda: False)() or getattr(target_user, 'is_owner', lambda: False)():
+        return True
+
+    recipient_ids = parse_announcement_recipient_ids(record.get('recipient_user_ids'))
+    return int(getattr(target_user, 'id', 0) or 0) in recipient_ids
+
+
+def get_announcement_recipient_summary(record):
+    scope = get_announcement_recipient_scope(record)
+    recipient_ids = parse_announcement_recipient_ids(record.get('recipient_user_ids'))
+    if scope == 'selected':
+        return f'選択ユーザー {len(recipient_ids)}名'
+    return '全クライアント'
+
+
+def fetch_announcement_target_users(recipient_scope='all', recipient_user_ids=None):
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+    try:
+        if recipient_scope == 'selected':
+            target_ids = parse_announcement_recipient_ids(recipient_user_ids)
+            if not target_ids:
+                return []
+            placeholders = ','.join(['%s'] * len(target_ids)) if DATABASE_URL else ','.join(['?'] * len(target_ids))
+            cur.execute(
+                f"""
+                SELECT id, display_name, username, line_user_id
+                FROM users
+                WHERE role NOT IN ('admin', 'owner')
+                  AND id IN ({placeholders})
+                ORDER BY COALESCE(display_name, username), id
+                """,
+                tuple(target_ids),
+            )
+        else:
+            cur.execute("""
+                SELECT id, display_name, username, line_user_id
+                FROM users
+                WHERE role NOT IN ('admin', 'owner')
+                ORDER BY COALESCE(display_name, username), id
+            """)
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+
+def fetch_announcement_recipient_users():
+    return fetch_announcement_target_users('all')
+
+
+def ensure_announcement_targeting_schema():
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS recipient_scope VARCHAR(20) DEFAULT 'all'")
+            cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS recipient_user_ids TEXT")
+            cur.execute("UPDATE announcements SET recipient_scope = 'all' WHERE recipient_scope IS NULL OR recipient_scope = ''")
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(announcements)")
+            existing_columns = {row['name'] for row in cur.fetchall()}
+            if 'recipient_scope' not in existing_columns:
+                cur.execute("ALTER TABLE announcements ADD COLUMN recipient_scope TEXT DEFAULT 'all'")
+            if 'recipient_user_ids' not in existing_columns:
+                cur.execute("ALTER TABLE announcements ADD COLUMN recipient_user_ids TEXT")
+            cur.execute("UPDATE announcements SET recipient_scope = 'all' WHERE recipient_scope IS NULL OR recipient_scope = ''")
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def ensure_sales_agency_document_schema():
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS created_mitsumori_id INTEGER")
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS created_invoice_id INTEGER")
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS documents_created_at TIMESTAMP")
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS appraisal_status VARCHAR(20) DEFAULT 'none'")
+            cur.execute("UPDATE merchandise SET appraisal_status = 'none' WHERE appraisal_status IS NULL OR appraisal_status = ''")
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            cur.execute("PRAGMA table_info(sales_agency_requests)")
+            request_columns = {row['name'] for row in cur.fetchall()}
+            if 'created_mitsumori_id' not in request_columns:
+                cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN created_mitsumori_id INTEGER")
+            if 'created_invoice_id' not in request_columns:
+                cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN created_invoice_id INTEGER")
+            if 'documents_created_at' not in request_columns:
+                cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN documents_created_at TIMESTAMP")
+
+            cur.execute("PRAGMA table_info(merchandise)")
+            merchandise_columns = {row['name'] for row in cur.fetchall()}
+            if 'appraisal_status' not in merchandise_columns:
+                cur.execute("ALTER TABLE merchandise ADD COLUMN appraisal_status TEXT DEFAULT 'none'")
+            cur.execute("UPDATE merchandise SET appraisal_status = 'none' WHERE appraisal_status IS NULL OR appraisal_status = ''")
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_active_announcements(user=None):
     """アクティブなお知らせを取得"""
     conn = get_db()
     now = datetime.now()
@@ -3152,9 +3328,10 @@ def get_active_announcements():
             AND (publish_at IS NULL OR publish_at <= %s)
             AND (expire_at IS NULL OR expire_at > %s)
             ORDER BY created_at DESC
-            LIMIT 5
+            LIMIT 20
         """, (now, now))
     else:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
             SELECT * FROM announcements 
@@ -3162,17 +3339,26 @@ def get_active_announcements():
             AND (publish_at IS NULL OR publish_at <= ?)
             AND (expire_at IS NULL OR expire_at > ?)
             ORDER BY created_at DESC
-            LIMIT 5
+            LIMIT 20
         """, (now.strftime('%Y-%m-%d %H:%M:%S'), now.strftime('%Y-%m-%d %H:%M:%S')))
     
-    announcements = cur.fetchall()
+    announcements = []
+    for row in cur.fetchall():
+        announcement = dict(row)
+        announcement['recipient_scope'] = get_announcement_recipient_scope(announcement)
+        announcement['recipient_user_ids_list'] = parse_announcement_recipient_ids(announcement.get('recipient_user_ids'))
+        announcement['recipient_summary'] = get_announcement_recipient_summary(announcement)
+        if announcement_is_visible_to_user(announcement, user=user):
+            announcements.append(announcement)
     cur.close()
     conn.close()
-    return [dict(a) for a in announcements]
+    return announcements[:5]
 
 # データベース初期化
 init_db()
 ensure_proxy_publish_permission_seeded()
+ensure_announcement_targeting_schema()
+ensure_sales_agency_document_schema()
 
 # デバッグ: どのDBを使用しているか表示
 if DATABASE_URL:
@@ -3806,7 +3992,7 @@ def index():
         processed_items.append(item_dict)
     
     # アクティブなお知らせを取得
-    announcements = get_active_announcements()
+    announcements = get_active_announcements(current_user)
     
     # 代行仕入れサービスの利用可能残高を取得
     proxy_service_info = {
@@ -3829,6 +4015,7 @@ def index():
 def reports():
     """レポートページ"""
     from datetime import datetime
+    ensure_line_multi_account_schema()
     
     conn = get_db()
     current_year = datetime.now().year
@@ -5545,8 +5732,8 @@ def add_item():
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
-                    sales_destination, commission, is_shipped, notes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    sales_destination, commission, is_shipped, notes, scope)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -5577,7 +5764,8 @@ def add_item():
                 resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination')),
                 commission_value,
                 'is_shipped' in request.form,
-                request.form.get('notes')
+                request.form.get('notes'),
+                'admin'
             ))
         else:
             cur = conn.cursor()
@@ -5586,8 +5774,8 @@ def add_item():
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
-                    sales_destination, commission, is_shipped, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    sales_destination, commission, is_shipped, notes, scope)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -5618,7 +5806,8 @@ def add_item():
                 resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination')),
                 commission_value,
                 1 if 'is_shipped' in request.form else 0,
-                request.form.get('notes')
+                request.form.get('notes'),
+                'admin'
             ))
         
         conn.commit()
@@ -14172,7 +14361,7 @@ def admin_items():
                 cur.execute("""
                     SELECT * FROM merchandise 
                     WHERE sale_date IS NOT NULL
-                      AND COALESCE(scope, 'admin') = 'admin'
+                      AND COALESCE(NULLIF(scope, ''), 'admin') = 'admin'
                       AND TO_CHAR(sale_date, 'YYYY-MM') = %s
                     ORDER BY sale_date DESC
                 """, [sale_month])
@@ -14186,11 +14375,10 @@ def admin_items():
                 if admin_user_ids:
                     placeholders = ','.join(['%s'] * len(admin_user_ids))
                     cur.execute(
-                        f"SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND (user_id IN ({placeholders}) OR user_id IS NULL) ORDER BY created_at DESC",
-                        admin_user_ids
+                        "SELECT * FROM merchandise WHERE COALESCE(NULLIF(scope, ''), 'admin') = 'admin' ORDER BY created_at DESC"
                     )
                 else:
-                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND user_id IS NULL ORDER BY created_at DESC")
+                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(NULLIF(scope, ''), 'admin') = 'admin' ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             # 転送先ユーザー一覧（全ユーザー）
@@ -14225,7 +14413,7 @@ def admin_items():
                     except:
                         pass
                 
-                if is_kaika_inventory_item(item_dict):
+                if item_dict.get('scope') == 'admin' or ((item_dict.get('scope') is None or item_dict.get('scope') == '') and is_kaika_inventory_item(item_dict)):
                     items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
@@ -14235,7 +14423,7 @@ def admin_items():
                 cur.execute("""
                     SELECT * FROM merchandise 
                     WHERE sale_date IS NOT NULL
-                      AND COALESCE(scope, 'admin') = 'admin'
+                      AND COALESCE(NULLIF(scope, ''), 'admin') = 'admin'
                       AND strftime('%%Y-%%m', sale_date) = ?
                     ORDER BY sale_date DESC
                 """, [sale_month])
@@ -14249,11 +14437,10 @@ def admin_items():
                 if admin_user_ids:
                     placeholders = ','.join(['?'] * len(admin_user_ids))
                     cur.execute(
-                        f"SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND (user_id IN ({placeholders}) OR user_id IS NULL) ORDER BY created_at DESC",
-                        admin_user_ids
+                        "SELECT * FROM merchandise WHERE COALESCE(NULLIF(scope, ''), 'admin') = 'admin' ORDER BY created_at DESC"
                     )
                 else:
-                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(scope, 'admin') = 'admin' AND user_id IS NULL ORDER BY created_at DESC")
+                    cur.execute("SELECT * FROM merchandise WHERE COALESCE(NULLIF(scope, ''), 'admin') = 'admin' ORDER BY created_at DESC")
             items_raw = cur.fetchall()
             
             cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
@@ -14287,7 +14474,7 @@ def admin_items():
                     except:
                         pass
                 
-                if is_kaika_inventory_item(item_dict):
+                if item_dict.get('scope') == 'admin' or ((item_dict.get('scope') is None or item_dict.get('scope') == '') and is_kaika_inventory_item(item_dict)):
                     items.append(item_dict)
         
         cur.close()
@@ -14622,6 +14809,7 @@ def admin_add_item():
             )
         else:
             commission_value = parse_money_value(request.form.get('commission'), 0)
+        target_scope = 'user' if form_mode == 'user' else 'admin'
         
         try:
             cur.execute(f'''
@@ -14631,8 +14819,8 @@ def admin_add_item():
                     id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping,
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price,
-                    shipping_cost, sales_destination, commission, is_shipped, notes
-                ) VALUES ({', '.join([placeholder] * 30)})
+                    shipping_cost, sales_destination, commission, is_shipped, notes, scope
+                ) VALUES ({', '.join([placeholder] * 31)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
@@ -14663,7 +14851,8 @@ def admin_add_item():
                 request.form.get('sales_destination'),
                 commission_value,
                 'is_shipped' in request.form,
-                request.form.get('notes')
+                request.form.get('notes'),
+                target_scope
             ))
             conn.commit()
             
@@ -14955,6 +15144,50 @@ def admin_transfer_items_bulk():
 # お知らせ管理ルート（管理者用）
 # ===================
 
+def build_announcement_form_state(announcement=None):
+    state = dict(announcement) if announcement else {}
+    if request.method == 'POST':
+        state.update({
+            'title': request.form.get('title', '').strip(),
+            'content': request.form.get('content', '').strip(),
+            'announcement_type': request.form.get('announcement_type', 'info'),
+            'publish_at': request.form.get('publish_at') or None,
+            'expire_at': request.form.get('expire_at') or None,
+            'recipient_scope': request.form.get('recipient_scope', 'all'),
+            'recipient_user_ids': serialize_announcement_recipient_ids(request.form.getlist('recipient_user_ids')),
+            'is_active': 'is_active' in request.form,
+            'line_notify_now': 'line_notify_now' in request.form,
+        })
+    state['recipient_scope'] = get_announcement_recipient_scope(state)
+    state['recipient_user_ids_list'] = parse_announcement_recipient_ids(state.get('recipient_user_ids'))
+    state['recipient_summary'] = get_announcement_recipient_summary(state)
+    return state
+
+
+def render_announcement_form(announcement=None):
+    state = build_announcement_form_state(announcement)
+    return render_template(
+        'admin/announcement_form.html',
+        announcement=state,
+        recipient_users=fetch_announcement_recipient_users(),
+        selected_recipient_ids=state.get('recipient_user_ids_list', []),
+    )
+
+
+def notify_announcement_recipients(title, content, recipient_scope='all', recipient_user_ids=None):
+    targets = fetch_announcement_target_users(recipient_scope, recipient_user_ids)
+    sent_count = 0
+    message = f"【お知らせ】\n{title}\n\n{content}"
+    for user in targets:
+        line_user_id = user.get('line_user_id')
+        if not line_user_id:
+            continue
+        result = send_line_push(line_user_id, message)
+        if result.get('success'):
+            sent_count += 1
+    return sent_count
+
+
 @app.route('/admin/announcements')
 @login_required
 @permission_required('announcements')
@@ -14981,8 +15214,16 @@ def admin_announcements():
     announcements = cur.fetchall()
     cur.close()
     conn.close()
+
+    announcement_rows = []
+    for row in announcements:
+        announcement = dict(row)
+        announcement['recipient_scope'] = get_announcement_recipient_scope(announcement)
+        announcement['recipient_user_ids_list'] = parse_announcement_recipient_ids(announcement.get('recipient_user_ids'))
+        announcement['recipient_summary'] = get_announcement_recipient_summary(announcement)
+        announcement_rows.append(announcement)
     
-    return render_template('admin/announcements.html', announcements=[dict(a) for a in announcements])
+    return render_template('admin/announcements.html', announcements=announcement_rows)
 
 @app.route('/admin/announcements/add', methods=['GET', 'POST'])
 @login_required
@@ -15525,6 +15766,15 @@ def documents():
             SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = %s
+            ORDER BY s.issue_date DESC, s.id DESC
+        """, (current_user.id,))
+        shikiriosho_list = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
         
@@ -15545,6 +15795,15 @@ def documents():
             SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT s.*, u.display_name as sender_display_name
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.sender_id = u.id
+            WHERE s.recipient_id = ?
+            ORDER BY s.issue_date DESC, s.id DESC
+        """, (current_user.id,))
+        shikiriosho_list = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -15552,7 +15811,8 @@ def documents():
     return render_template('documents.html',
                           invoices=invoices,
                           user_mitsumori_list=user_mitsumori_list,
-                          user_keisan_list=user_keisan_list)
+                          user_keisan_list=user_keisan_list,
+                          shikiriosho_list=shikiriosho_list)
 
 @app.route('/service-document/create', methods=['POST'])
 @login_required
@@ -18770,7 +19030,7 @@ def generate_monthly_fee_report():
     
     return report
 
-def send_line_broadcast(message):
+def send_line_broadcast_legacy(message):
     """LINE一斉送信"""
     conn = get_db()
     if DATABASE_URL:
@@ -18810,7 +19070,7 @@ def send_line_broadcast(message):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-def send_line_push(user_id, message):
+def send_line_push_legacy(user_id, message):
     """LINE個別送信"""
     conn = get_db()
     if DATABASE_URL:
@@ -18848,6 +19108,316 @@ def send_line_push(user_id, message):
             return {'success': True}
         else:
             return {'success': False, 'error': response.text}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+LINE_MULTI_ACCOUNT_SCHEMA_READY = False
+
+
+def ensure_line_multi_account_schema():
+    global LINE_MULTI_ACCOUNT_SCHEMA_READY
+    if LINE_MULTI_ACCOUNT_SCHEMA_READY:
+        return
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS line_accounts (
+                    id SERIAL PRIMARY KEY,
+                    account_name VARCHAR(100) NOT NULL,
+                    channel_access_token TEXT,
+                    channel_secret TEXT,
+                    is_enabled BOOLEAN DEFAULT FALSE,
+                    is_default BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                '''
+            )
+            try:
+                cur.execute("ALTER TABLE line_scheduled_messages ADD COLUMN IF NOT EXISTS line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE line_message_logs ADD COLUMN IF NOT EXISTS line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+
+            cur.execute("SELECT COUNT(*) FROM line_accounts")
+            if cur.fetchone()[0] == 0:
+                cur.execute("SELECT channel_access_token, channel_secret, is_enabled FROM line_settings ORDER BY id LIMIT 1")
+                settings_row = cur.fetchone()
+                if settings_row:
+                    cur.execute(
+                        """
+                        INSERT INTO line_accounts (account_name, channel_access_token, channel_secret, is_enabled, is_default)
+                        VALUES (%s, %s, %s, %s, TRUE)
+                        """,
+                        ('デフォルトLINEアカウント', settings_row[0], settings_row[1], settings_row[2]),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO line_accounts (account_name, is_enabled, is_default)
+                        VALUES (%s, %s, TRUE)
+                        """,
+                        ('デフォルトLINEアカウント', False),
+                    )
+
+            cur.execute("SELECT COUNT(*) FROM line_accounts WHERE is_default = TRUE")
+            if cur.fetchone()[0] == 0:
+                cur.execute(
+                    """
+                    UPDATE line_accounts
+                    SET is_default = TRUE
+                    WHERE id = (SELECT id FROM line_accounts ORDER BY id LIMIT 1)
+                    """
+                )
+
+            cur.execute("SELECT id FROM line_accounts WHERE is_default = TRUE ORDER BY id LIMIT 1")
+            default_row = cur.fetchone()
+            if default_row:
+                default_account_id = default_row[0]
+                cur.execute("UPDATE line_scheduled_messages SET line_account_id = %s WHERE line_account_id IS NULL", (default_account_id,))
+                cur.execute("UPDATE line_message_logs SET line_account_id = %s WHERE line_account_id IS NULL", (default_account_id,))
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET line_account_id = %s
+                    WHERE line_user_id IS NOT NULL AND line_account_id IS NULL
+                    """,
+                    (default_account_id,),
+                )
+        else:
+            cur.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS line_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_name TEXT NOT NULL,
+                    channel_access_token TEXT,
+                    channel_secret TEXT,
+                    is_enabled INTEGER DEFAULT 0,
+                    is_default INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                '''
+            )
+            try:
+                cur.execute("ALTER TABLE line_scheduled_messages ADD COLUMN line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE line_message_logs ADD COLUMN line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN line_account_id INTEGER REFERENCES line_accounts(id)")
+            except Exception:
+                pass
+
+            cur.execute("SELECT COUNT(*) FROM line_accounts")
+            if cur.fetchone()[0] == 0:
+                cur.execute("SELECT channel_access_token, channel_secret, is_enabled FROM line_settings ORDER BY id LIMIT 1")
+                settings_row = cur.fetchone()
+                if settings_row:
+                    cur.execute(
+                        """
+                        INSERT INTO line_accounts (account_name, channel_access_token, channel_secret, is_enabled, is_default)
+                        VALUES (?, ?, ?, ?, 1)
+                        """,
+                        ('デフォルトLINEアカウント', settings_row[0], settings_row[1], settings_row[2]),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO line_accounts (account_name, is_enabled, is_default)
+                        VALUES (?, ?, 1)
+                        """,
+                        ('デフォルトLINEアカウント', 0),
+                    )
+
+            cur.execute("SELECT COUNT(*) FROM line_accounts WHERE is_default = 1")
+            if cur.fetchone()[0] == 0:
+                cur.execute(
+                    """
+                    UPDATE line_accounts
+                    SET is_default = 1
+                    WHERE id = (SELECT id FROM line_accounts ORDER BY id LIMIT 1)
+                    """
+                )
+
+            cur.execute("SELECT id FROM line_accounts WHERE is_default = 1 ORDER BY id LIMIT 1")
+            default_row = cur.fetchone()
+            if default_row:
+                default_account_id = default_row[0]
+                cur.execute("UPDATE line_scheduled_messages SET line_account_id = ? WHERE line_account_id IS NULL", (default_account_id,))
+                cur.execute("UPDATE line_message_logs SET line_account_id = ? WHERE line_account_id IS NULL", (default_account_id,))
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET line_account_id = ?
+                    WHERE line_user_id IS NOT NULL AND line_account_id IS NULL
+                    """,
+                    (default_account_id,),
+                )
+
+        conn.commit()
+        LINE_MULTI_ACCOUNT_SCHEMA_READY = True
+    finally:
+        cur.close()
+        conn.close()
+
+
+def fetch_line_account(line_account_id=None, require_enabled=False):
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if line_account_id is not None:
+                cur.execute("SELECT * FROM line_accounts WHERE id = %s", (line_account_id,))
+            else:
+                cur.execute("SELECT * FROM line_accounts ORDER BY is_default DESC, id ASC LIMIT 1")
+            account = cur.fetchone()
+            account = dict(account) if account else None
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            if line_account_id is not None:
+                cur.execute("SELECT * FROM line_accounts WHERE id = ?", (line_account_id,))
+            else:
+                cur.execute("SELECT * FROM line_accounts ORDER BY is_default DESC, id ASC LIMIT 1")
+            row = cur.fetchone()
+            account = dict(row) if row else None
+
+        if account and require_enabled and not account.get('is_enabled'):
+            return None
+        return account
+    finally:
+        cur.close()
+        conn.close()
+
+
+def fetch_line_accounts(enabled_only=False):
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            query = "SELECT * FROM line_accounts"
+            if enabled_only:
+                query += " WHERE is_enabled = TRUE"
+            query += " ORDER BY is_default DESC, id ASC"
+            cur.execute(query)
+            return [dict(row) for row in cur.fetchall()]
+
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        query = "SELECT * FROM line_accounts"
+        if enabled_only:
+            query += " WHERE is_enabled = 1"
+        query += " ORDER BY is_default DESC, id ASC"
+        cur.execute(query)
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_default_line_account_id():
+    account = fetch_line_account()
+    return account.get('id') if account else None
+
+
+def send_line_broadcast(message, line_account_id=None):
+    """LINE一斉送信"""
+    account = fetch_line_account(line_account_id=line_account_id, require_enabled=True)
+    if not account or not account.get('channel_access_token'):
+        return {'success': False, 'error': '有効なLINEアカウントが設定されていません'}
+
+    import requests
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f"Bearer {account['channel_access_token']}"
+    }
+    data = {
+        'messages': [{'type': 'text', 'text': message}]
+    }
+
+    try:
+        response = requests.post(
+            'https://api.line.me/v2/bot/message/broadcast',
+            headers=headers,
+            json=data
+        )
+        if response.status_code == 200:
+            return {'success': True}
+        return {'success': False, 'error': response.text}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def send_line_push(user_id, message, line_account_id=None):
+    """LINE個別送信"""
+    ensure_line_multi_account_schema()
+    if line_account_id is None:
+        conn = get_db()
+        try:
+            if DATABASE_URL:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute(
+                    "SELECT line_account_id FROM users WHERE line_user_id = %s AND line_account_id IS NOT NULL LIMIT 1",
+                    (user_id,)
+                )
+                row = cur.fetchone()
+                if row:
+                    line_account_id = row.get('line_account_id')
+            else:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT line_account_id FROM users WHERE line_user_id = ? AND line_account_id IS NOT NULL LIMIT 1",
+                    (user_id,)
+                )
+                row = cur.fetchone()
+                if row:
+                    line_account_id = row['line_account_id']
+        finally:
+            cur.close()
+            conn.close()
+
+    account = fetch_line_account(line_account_id=line_account_id, require_enabled=True)
+    if not account or not account.get('channel_access_token'):
+        return {'success': False, 'error': '有効なLINEアカウントが設定されていません'}
+
+    import requests
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f"Bearer {account['channel_access_token']}"
+    }
+    data = {
+        'to': user_id,
+        'messages': [{'type': 'text', 'text': message}]
+    }
+
+    try:
+        response = requests.post(
+            'https://api.line.me/v2/bot/message/push',
+            headers=headers,
+            json=data
+        )
+        if response.status_code == 200:
+            return {'success': True}
+        return {'success': False, 'error': response.text}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -19158,6 +19728,530 @@ def admin_line_preview_report():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
+@app.route('/admin/line-v2')
+@login_required
+def admin_line_dashboard_v2():
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    accounts = fetch_line_accounts()
+    active_accounts_count = sum(1 for account in accounts if account.get('is_enabled'))
+
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT COUNT(*) AS count FROM users WHERE line_user_id IS NOT NULL")
+            linked_users = (cur.fetchone() or {}).get('count', 0)
+            cur.execute(
+                """
+                SELECT lsm.*, la.account_name
+                FROM line_scheduled_messages lsm
+                LEFT JOIN line_accounts la ON lsm.line_account_id = la.id
+                ORDER BY lsm.id DESC
+                """
+            )
+            scheduled_messages = [dict(row) for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT lml.*, la.account_name, u.display_name AS sent_by_name
+                FROM line_message_logs lml
+                LEFT JOIN line_accounts la ON lml.line_account_id = la.id
+                LEFT JOIN users u ON lml.sent_by = u.id
+                ORDER BY lml.sent_at DESC
+                LIMIT 20
+                """
+            )
+            logs = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS count FROM users WHERE line_user_id IS NOT NULL")
+            linked_users = dict(cur.fetchone())['count']
+            cur.execute(
+                """
+                SELECT lsm.*, la.account_name
+                FROM line_scheduled_messages lsm
+                LEFT JOIN line_accounts la ON lsm.line_account_id = la.id
+                ORDER BY lsm.id DESC
+                """
+            )
+            scheduled_messages = [dict(row) for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT lml.*, la.account_name, u.display_name AS sent_by_name
+                FROM line_message_logs lml
+                LEFT JOIN line_accounts la ON lml.line_account_id = la.id
+                LEFT JOIN users u ON lml.sent_by = u.id
+                ORDER BY lml.sent_at DESC
+                LIMIT 20
+                """
+            )
+            logs = [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template(
+        'admin/line_dashboard_v2.html',
+        accounts=accounts,
+        active_accounts_count=active_accounts_count,
+        linked_users=linked_users,
+        scheduled_messages=scheduled_messages,
+        logs=logs,
+    )
+
+
+@app.route('/admin/line-v2/accounts/new', methods=['GET', 'POST'])
+@login_required
+def admin_line_account_new():
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    if request.method == 'POST':
+        account_name = request.form.get('account_name', '').strip()
+        channel_access_token = request.form.get('channel_access_token', '').strip()
+        channel_secret = request.form.get('channel_secret', '').strip()
+        is_enabled = request.form.get('is_enabled') == 'on'
+        is_default = request.form.get('is_default') == 'on'
+
+        if not account_name:
+            flash('アカウント名を入力してください', 'error')
+            return redirect(request.url)
+
+        conn = get_db()
+        try:
+            if DATABASE_URL:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT COUNT(*) AS count FROM line_accounts")
+                existing_count = (cur.fetchone() or {}).get('count', 0)
+                if is_default or existing_count == 0:
+                    cur.execute("UPDATE line_accounts SET is_default = FALSE")
+                    is_default = True
+                cur.execute(
+                    """
+                    INSERT INTO line_accounts
+                    (account_name, channel_access_token, channel_secret, is_enabled, is_default)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (account_name, channel_access_token, channel_secret, is_enabled, is_default),
+                )
+            else:
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) AS count FROM line_accounts")
+                existing_count = dict(cur.fetchone())['count']
+                if is_default or existing_count == 0:
+                    cur.execute("UPDATE line_accounts SET is_default = 0")
+                    is_default = True
+                cur.execute(
+                    """
+                    INSERT INTO line_accounts
+                    (account_name, channel_access_token, channel_secret, is_enabled, is_default)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (account_name, channel_access_token, channel_secret, 1 if is_enabled else 0, 1 if is_default else 0),
+                )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        flash('LINEアカウントを追加しました', 'success')
+        return redirect(url_for('admin_line_dashboard_v2'))
+
+    return render_template('admin/line_account_form.html', account=None)
+
+
+@app.route('/admin/line-v2/accounts/<int:account_id>/edit', methods=['GET', 'POST'])
+@login_required
+def admin_line_account_edit(account_id):
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM line_accounts WHERE id = %s", (account_id,))
+            account = cur.fetchone()
+            account = dict(account) if account else None
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM line_accounts WHERE id = ?", (account_id,))
+            row = cur.fetchone()
+            account = dict(row) if row else None
+
+        if not account:
+            flash('LINEアカウントが見つかりません', 'error')
+            return redirect(url_for('admin_line_dashboard_v2'))
+
+        if request.method == 'POST':
+            account_name = request.form.get('account_name', '').strip()
+            channel_access_token = request.form.get('channel_access_token', '').strip() or account.get('channel_access_token', '')
+            channel_secret = request.form.get('channel_secret', '').strip() or account.get('channel_secret', '')
+            is_enabled = request.form.get('is_enabled') == 'on'
+            is_default = request.form.get('is_default') == 'on'
+
+            if DATABASE_URL:
+                if is_default:
+                    cur.execute("UPDATE line_accounts SET is_default = FALSE")
+                cur.execute(
+                    """
+                    UPDATE line_accounts
+                    SET account_name = %s,
+                        channel_access_token = %s,
+                        channel_secret = %s,
+                        is_enabled = %s,
+                        is_default = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (account_name, channel_access_token, channel_secret, is_enabled, is_default, account_id),
+                )
+            else:
+                if is_default:
+                    cur.execute("UPDATE line_accounts SET is_default = 0")
+                cur.execute(
+                    """
+                    UPDATE line_accounts
+                    SET account_name = ?,
+                        channel_access_token = ?,
+                        channel_secret = ?,
+                        is_enabled = ?,
+                        is_default = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (account_name, channel_access_token, channel_secret, 1 if is_enabled else 0, 1 if is_default else 0, account_id),
+                )
+            conn.commit()
+            flash('LINEアカウントを更新しました', 'success')
+            return redirect(url_for('admin_line_dashboard_v2'))
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template('admin/line_account_form.html', account=account)
+
+
+@app.route('/admin/line-v2/accounts/<int:account_id>/default', methods=['POST'])
+@login_required
+def admin_line_account_set_default(account_id):
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute("UPDATE line_accounts SET is_default = FALSE")
+            cur.execute("UPDATE line_accounts SET is_default = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (account_id,))
+        else:
+            cur.execute("UPDATE line_accounts SET is_default = 0")
+            cur.execute("UPDATE line_accounts SET is_default = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (account_id,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    flash('既定のLINEアカウントを変更しました', 'success')
+    return redirect(url_for('admin_line_dashboard_v2'))
+
+
+@app.route('/admin/line-v2/accounts/<int:account_id>/delete', methods=['POST'])
+@login_required
+def admin_line_account_delete(account_id):
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    accounts = fetch_line_accounts()
+    if len(accounts) <= 1:
+        flash('最後のLINEアカウントは削除できません', 'error')
+        return redirect(url_for('admin_line_dashboard_v2'))
+
+    fallback_account = next((account for account in accounts if account.get('id') != account_id), None)
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM line_accounts WHERE id = %s", (account_id,))
+            account = cur.fetchone()
+            if not account:
+                flash('LINEアカウントが見つかりません', 'error')
+                return redirect(url_for('admin_line_dashboard_v2'))
+            account = dict(account)
+            if account.get('is_default'):
+                cur.execute("UPDATE line_accounts SET is_default = FALSE")
+                cur.execute("UPDATE line_accounts SET is_default = TRUE WHERE id = %s", (fallback_account['id'],))
+            cur.execute("UPDATE line_scheduled_messages SET line_account_id = %s WHERE line_account_id = %s", (fallback_account['id'], account_id))
+            cur.execute("UPDATE line_message_logs SET line_account_id = %s WHERE line_account_id = %s", (fallback_account['id'], account_id))
+            cur.execute("UPDATE users SET line_account_id = %s WHERE line_account_id = %s", (fallback_account['id'], account_id))
+            cur.execute("DELETE FROM line_accounts WHERE id = %s", (account_id,))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM line_accounts WHERE id = ?", (account_id,))
+            row = cur.fetchone()
+            if not row:
+                flash('LINEアカウントが見つかりません', 'error')
+                return redirect(url_for('admin_line_dashboard_v2'))
+            account = dict(row)
+            if account.get('is_default'):
+                cur.execute("UPDATE line_accounts SET is_default = 0")
+                cur.execute("UPDATE line_accounts SET is_default = 1 WHERE id = ?", (fallback_account['id'],))
+            cur.execute("UPDATE line_scheduled_messages SET line_account_id = ? WHERE line_account_id = ?", (fallback_account['id'], account_id))
+            cur.execute("UPDATE line_message_logs SET line_account_id = ? WHERE line_account_id = ?", (fallback_account['id'], account_id))
+            cur.execute("UPDATE users SET line_account_id = ? WHERE line_account_id = ?", (fallback_account['id'], account_id))
+            cur.execute("DELETE FROM line_accounts WHERE id = ?", (account_id,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    flash('LINEアカウントを削除しました', 'success')
+    return redirect(url_for('admin_line_dashboard_v2'))
+
+
+@app.route('/admin/line-v2/broadcast', methods=['POST'])
+@login_required
+def admin_line_broadcast_v2():
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    ensure_line_multi_account_schema()
+    message = request.form.get('message', '').strip()
+    line_account_id = request.form.get('line_account_id', type=int)
+    if not message:
+        flash('メッセージを入力してください', 'error')
+        return redirect(url_for('admin_line_dashboard_v2'))
+
+    result = send_line_broadcast(message, line_account_id=line_account_id)
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute(
+                """
+                INSERT INTO line_message_logs (message_type, message_content, target_count, success_count, sent_by, line_account_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                ('broadcast', message, 0, 1 if result.get('success') else 0, current_user.id, line_account_id),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO line_message_logs (message_type, message_content, target_count, success_count, sent_by, line_account_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ('broadcast', message, 0, 1 if result.get('success') else 0, current_user.id, line_account_id),
+            )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    flash('メッセージを送信しました' if result.get('success') else f"送信エラー: {result.get('error')}", 'success' if result.get('success') else 'error')
+    return redirect(url_for('admin_line_dashboard_v2'))
+
+
+@app.route('/admin/line-v2/scheduled', methods=['GET', 'POST'])
+@login_required
+def admin_line_scheduled_v2():
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    accounts = fetch_line_accounts()
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        message_content = request.form.get('message_content', '').strip()
+        line_account_id = request.form.get('line_account_id', type=int)
+        schedule_type = request.form.get('schedule_type', 'daily')
+        schedule_time = request.form.get('schedule_time', '09:00')
+        schedule_day = request.form.get('schedule_day', type=int) or 1
+        is_enabled = request.form.get('is_enabled') == 'on'
+
+        if not title or not message_content or not line_account_id:
+            flash('タイトル、送信アカウント、メッセージを入力してください', 'error')
+            return redirect(request.url)
+
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    INSERT INTO line_scheduled_messages
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, is_enabled)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, is_enabled),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO line_scheduled_messages
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, is_enabled)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, 1 if is_enabled else 0),
+                )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        flash('定期送信メッセージを追加しました', 'success')
+        return redirect(url_for('admin_line_dashboard_v2'))
+
+    return render_template('admin/line_scheduled_form_v2.html', message=None, accounts=accounts)
+
+
+@app.route('/admin/line-v2/scheduled/<int:message_id>/edit', methods=['GET', 'POST'])
+@login_required
+def admin_line_scheduled_edit_v2(message_id):
+    if not current_user.is_owner():
+        flash('この機能はオーナーのみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    ensure_line_multi_account_schema()
+    accounts = fetch_line_accounts()
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM line_scheduled_messages WHERE id = %s", (message_id,))
+            message = cur.fetchone()
+            message = dict(message) if message else None
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM line_scheduled_messages WHERE id = ?", (message_id,))
+            row = cur.fetchone()
+            message = dict(row) if row else None
+
+        if not message:
+            flash('定期送信メッセージが見つかりません', 'error')
+            return redirect(url_for('admin_line_dashboard_v2'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            message_content = request.form.get('message_content', '').strip()
+            line_account_id = request.form.get('line_account_id', type=int)
+            schedule_type = request.form.get('schedule_type', 'daily')
+            schedule_time = request.form.get('schedule_time', '09:00')
+            schedule_day = request.form.get('schedule_day', type=int) or 1
+            is_enabled = request.form.get('is_enabled') == 'on'
+
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    UPDATE line_scheduled_messages
+                    SET title = %s,
+                        message_content = %s,
+                        schedule_type = %s,
+                        schedule_time = %s,
+                        schedule_day = %s,
+                        line_account_id = %s,
+                        is_enabled = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, is_enabled, message_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE line_scheduled_messages
+                    SET title = ?,
+                        message_content = ?,
+                        schedule_type = ?,
+                        schedule_time = ?,
+                        schedule_day = ?,
+                        line_account_id = ?,
+                        is_enabled = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (title, message_content, schedule_type, schedule_time, schedule_day, line_account_id, 1 if is_enabled else 0, message_id),
+                )
+            conn.commit()
+            flash('定期送信メッセージを更新しました', 'success')
+            return redirect(url_for('admin_line_dashboard_v2'))
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template('admin/line_scheduled_form_v2.html', message=message, accounts=accounts)
+
+
+@app.route('/admin/line-v2/scheduled/<int:message_id>/delete', methods=['POST'])
+@login_required
+def admin_line_scheduled_delete_v2(message_id):
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute("DELETE FROM line_scheduled_messages WHERE id = %s", (message_id,))
+        else:
+            cur.execute("DELETE FROM line_scheduled_messages WHERE id = ?", (message_id,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    flash('定期送信メッセージを削除しました', 'success')
+    return redirect(url_for('admin_line_dashboard_v2'))
+
+
+@app.route('/admin/line-v2/scheduled/<int:message_id>/toggle', methods=['POST'])
+@login_required
+def admin_line_scheduled_toggle_v2(message_id):
+    if not current_user.is_owner():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    ensure_line_multi_account_schema()
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT is_enabled FROM line_scheduled_messages WHERE id = %s", (message_id,))
+            message = cur.fetchone()
+            if message:
+                cur.execute("UPDATE line_scheduled_messages SET is_enabled = %s WHERE id = %s", (not message['is_enabled'], message_id))
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT is_enabled FROM line_scheduled_messages WHERE id = ?", (message_id,))
+            row = cur.fetchone()
+            if row:
+                cur.execute("UPDATE line_scheduled_messages SET is_enabled = ? WHERE id = ?", (0 if row['is_enabled'] else 1, message_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    return jsonify({'success': True})
+
 @app.route('/line/webhook', methods=['POST'])
 def line_webhook():
     """LINE Webhookエンドポイント（友だち追加時などにuser_idを取得）"""
@@ -19204,9 +20298,73 @@ def line_webhook():
     return 'OK', 200
 
 # 定期送信実行関数
+def handle_line_webhook_for_account(account_id=None):
+    ensure_line_multi_account_schema()
+    account = fetch_line_account(line_account_id=account_id)
+    if not account or not account.get('channel_secret'):
+        return 'OK', 200
+
+    import base64
+    import hashlib
+    import hmac
+
+    body = request.get_data(as_text=True)
+    signature = request.headers.get('X-Line-Signature', '')
+    digest = hmac.new(account['channel_secret'].encode('utf-8'), body.encode('utf-8'), hashlib.sha256).digest()
+    expected_signature = base64.b64encode(digest).decode('utf-8')
+    if signature != expected_signature:
+        return 'Invalid signature', 400
+
+    payload = request.get_json() or {}
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        for event in payload.get('events', []):
+            line_user_id = event.get('source', {}).get('userId')
+            if not line_user_id:
+                continue
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET line_account_id = %s
+                    WHERE line_user_id = %s
+                    """,
+                    (account.get('id'), line_user_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET line_account_id = ?
+                    WHERE line_user_id = ?
+                    """,
+                    (account.get('id'), line_user_id),
+                )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    return 'OK', 200
+
+
+@app.route('/line/webhook/<int:account_id>', methods=['POST'])
+def line_webhook_account(account_id):
+    return handle_line_webhook_for_account(account_id)
+
+
+def line_webhook_default_account():
+    return handle_line_webhook_for_account(get_default_line_account_id())
+
+
+app.view_functions['line_webhook'] = line_webhook_default_account
+
+
 def run_scheduled_line_messages():
     """定期送信メッセージを実行"""
     from datetime import datetime
+    ensure_line_multi_account_schema()
     now = datetime.now()
     current_time = now.strftime('%H:%M')
     current_day = now.day
@@ -19267,21 +20425,21 @@ def run_scheduled_line_messages():
                 except Exception as e:
                     print(f"月謝料金レポート生成エラー: {e}")
             
-            result = send_line_broadcast(message_content)
+            result = send_line_broadcast(message_content, line_account_id=msg_dict.get('line_account_id'))
             
             # last_sent_atを更新
             if DATABASE_URL:
                 cur.execute("UPDATE line_scheduled_messages SET last_sent_at = CURRENT_TIMESTAMP WHERE id = %s", (msg_dict['id'],))
                 cur.execute("""
-                    INSERT INTO line_message_logs (message_type, message_content, success_count)
-                    VALUES (%s, %s, %s)
-                """, ('scheduled', message_content, 1 if result['success'] else 0))
+                    INSERT INTO line_message_logs (message_type, message_content, success_count, line_account_id)
+                    VALUES (%s, %s, %s, %s)
+                """, ('scheduled', message_content, 1 if result['success'] else 0, msg_dict.get('line_account_id')))
             else:
                 cur.execute("UPDATE line_scheduled_messages SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (msg_dict['id'],))
                 cur.execute("""
-                    INSERT INTO line_message_logs (message_type, message_content, success_count)
-                    VALUES (?, ?, ?)
-                """, ('scheduled', message_content, 1 if result['success'] else 0))
+                    INSERT INTO line_message_logs (message_type, message_content, success_count, line_account_id)
+                    VALUES (?, ?, ?, ?)
+                """, ('scheduled', message_content, 1 if result['success'] else 0, msg_dict.get('line_account_id')))
     
     conn.commit()
     cur.close()
@@ -24289,9 +25447,75 @@ SALES_AGENCY_SERVICE_TYPES = {
 }
 
 SALES_AGENCY_STATUS = {
-    'pending': '審査中',
-    'approved': '承認',
-    'rejected': '却下'
+    'pending': '承認待ち',
+    'approved': '認証済み',
+    'appraising': '査定中',
+    'inspecting': '検品中',
+    'completed': '処理完了',
+    'rejected': '却下申請'
+}
+
+SALES_AGENCY_STATUS_CLIENT = {
+    'pending': '認証待ち',
+    'approved': '認証済み',
+    'appraising': '査定中',
+    'inspecting': '検品中',
+    'completed': '査定済み',
+    'rejected': '却下申請'
+}
+
+SALES_AGENCY_ACTION_LABELS = {
+    'approve': '認証済み',
+    'appraising': '査定中',
+    'inspect': '検品中',
+    'complete': '処理完了',
+    'reject': '却下申請'
+}
+
+SALES_AGENCY_ACTION_TO_STATUS = {
+    'approve': 'approved',
+    'appraising': 'appraising',
+    'inspect': 'inspecting',
+    'complete': 'completed',
+    'reject': 'rejected',
+    'revert_pending': 'pending',
+    'revert_approved': 'approved',
+    'revert_appraising': 'appraising',
+    'revert_inspecting': 'inspecting',
+}
+
+SALES_AGENCY_AVAILABLE_ACTIONS = {
+    'pending': ['approve', 'reject'],
+    'approved': ['appraising', 'reject'],
+    'appraising': ['inspect', 'reject'],
+    'inspecting': ['complete', 'reject']
+}
+
+SALES_AGENCY_ROLLBACK_ACTIONS = {
+    'approved': ['revert_pending'],
+    'appraising': ['revert_approved'],
+    'inspecting': ['revert_appraising'],
+    'completed': ['revert_inspecting'],
+    'rejected': ['revert_pending'],
+}
+
+SALES_AGENCY_ACTION_LABELS = {
+    'approve': '認証済み',
+    'appraising': '査定中',
+    'inspect': '検品中',
+    'complete': '処理完了',
+    'reject': '却下申請',
+    'revert_pending': '承認待ちへ戻す',
+    'revert_approved': '認証済みへ戻す',
+    'revert_appraising': '査定中へ戻す',
+    'revert_inspecting': '検品中へ戻す',
+}
+
+SALES_AGENCY_APPRAISAL_LABELS = {
+    'none': '',
+    'waiting': '査定待ち',
+    'inspecting': '検品中',
+    'completed': '査定済み'
 }
 
 def get_pending_sales_agency_count(service_type=None):
@@ -24341,6 +25565,145 @@ def inject_sales_agency_count():
 
 app.jinja_env.globals['get_pending_sales_agency_count'] = get_pending_sales_agency_count
 app.jinja_env.globals['get_pending_sales_agency_count_by_service'] = get_pending_sales_agency_count_by_service
+
+
+def sales_agency_open_cursor():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+    return conn, cur
+
+
+def sales_agency_placeholder():
+    return '%s' if DATABASE_URL else '?'
+
+
+def sales_agency_row_to_dict(row):
+    if row is None:
+        return None
+    return dict(row)
+
+
+def sales_agency_rows_to_dicts(rows):
+    return [dict(row) for row in rows]
+
+
+def sales_agency_format_datetime(value):
+    if not value:
+        return ''
+    if hasattr(value, 'strftime'):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    return str(value)
+
+
+def get_sales_agency_status_label(status, viewer='admin'):
+    status_map = SALES_AGENCY_STATUS_CLIENT if viewer == 'client' else SALES_AGENCY_STATUS
+    return status_map.get((status or '').strip(), status or '')
+
+
+def get_sales_agency_service_name(service_type):
+    return SALES_AGENCY_SERVICE_TYPES.get((service_type or '').strip(), service_type or '')
+
+
+def get_sales_agency_appraisal_label(status):
+    return SALES_AGENCY_APPRAISAL_LABELS.get((status or '').strip(), '')
+
+
+def sales_agency_column_exists(cur, table_name, column_name):
+    try:
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                LIMIT 1
+                """,
+                (table_name, column_name),
+            )
+            return cur.fetchone() is not None
+
+        cur.execute(f"PRAGMA table_info({table_name})")
+        columns = cur.fetchall()
+        for column in columns:
+            column_name_value = column['name'] if isinstance(column, sqlite3.Row) else column[1]
+            if column_name_value == column_name:
+                return True
+        return False
+    except Exception as e:
+        print(f"[WARN] sales_agency_column_exists failed: {table_name}.{column_name} / {e}", flush=True)
+        return False
+
+
+def fetch_sales_agency_request_details(request_id, viewer='admin'):
+    conn, cur = sales_agency_open_cursor()
+    try:
+        placeholder = sales_agency_placeholder()
+        cur.execute(
+            f'''
+            SELECT sar.*, u.display_name AS user_name, u.username,
+                   p.display_name AS processor_name
+            FROM sales_agency_requests sar
+            JOIN users u ON sar.user_id = u.id
+            LEFT JOIN users p ON sar.processed_by = p.id
+            WHERE sar.id = {placeholder}
+            ''',
+            (request_id,),
+        )
+        request_row = sales_agency_row_to_dict(cur.fetchone())
+        if not request_row:
+            return None, []
+
+        merchandise_has_appraisal_status = sales_agency_column_exists(cur, 'merchandise', 'appraisal_status')
+        cur.execute(
+            f'''
+            SELECT m.*
+            FROM sales_agency_request_items sari
+            JOIN merchandise m ON sari.merchandise_id = m.id
+            WHERE sari.request_id = {placeholder}
+            ORDER BY m.id DESC
+            ''',
+            (request_id,),
+        )
+        merchandise_items = sales_agency_rows_to_dicts(cur.fetchall())
+
+        waiting_count = 0
+        for item in merchandise_items:
+            appraisal_status = item.get('appraisal_status') if merchandise_has_appraisal_status else ''
+            item['appraisal_status_label'] = get_sales_agency_appraisal_label(appraisal_status)
+            item['detail_url'] = url_for('view_item', id=item['id'])
+            if appraisal_status in {'waiting', 'inspecting'}:
+                waiting_count += 1
+
+        if not merchandise_has_appraisal_status and request_row.get('status') in {'approved', 'appraising', 'inspecting'}:
+            waiting_count = len(merchandise_items)
+
+        request_row['created_at'] = sales_agency_format_datetime(request_row.get('created_at'))
+        request_row['processed_at'] = sales_agency_format_datetime(request_row.get('processed_at'))
+        request_row['service_name'] = get_sales_agency_service_name(request_row.get('service_type'))
+        request_row['client_name'] = request_row.get('user_name') or request_row.get('username') or '未設定ユーザー'
+        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer=viewer)
+        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client')
+        request_row['pending_appraisal_count'] = waiting_count
+        request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
+        request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
+        request_row['merchandise_items'] = merchandise_items
+        request_row['created_mitsumori_id'] = request_row.get('created_mitsumori_id')
+        request_row['created_invoice_id'] = request_row.get('created_invoice_id')
+        request_row['request_can_create_documents'] = (
+            request_row.get('service_type') == 'wholesale'
+            and request_row.get('status') in {'approved', 'appraising', 'inspecting'}
+            and waiting_count > 0
+            and not request_row.get('created_mitsumori_id')
+            and not request_row.get('created_invoice_id')
+        )
+        return request_row, merchandise_items
+    finally:
+        cur.close()
+        conn.close()
 
 @app.route('/sales-agency/apply', methods=['POST'])
 @login_required
@@ -24446,70 +25809,37 @@ def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
     requests = []
     try:
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute('''
-                SELECT sar.id, sar.user_id, sar.service_type, sar.status, sar.admin_note,
-                       sar.created_at, sar.processed_at, sar.processed_by, sar.result_notified,
-                       u.display_name as processor_name
-                FROM sales_agency_requests sar
-                LEFT JOIN users u ON sar.processed_by = u.id
-                WHERE sar.user_id = %s
-                ORDER BY sar.created_at DESC
-            ''', (current_user.id,))
-        else:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute('''
-                SELECT sar.*, u.display_name as processor_name
-                FROM sales_agency_requests sar
-                LEFT JOIN users u ON sar.processed_by = u.id
-                WHERE sar.user_id = ?
-                ORDER BY sar.created_at DESC
-            ''', (current_user.id,))
-        
-        requests_raw = cur.fetchall()
-        
-        for req in requests_raw:
-            req_dict = dict(req)
-            # datetime を文字列に変換
-            if req_dict.get('created_at') and hasattr(req_dict['created_at'], 'strftime'):
-                req_dict['created_at'] = req_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-            if req_dict.get('processed_at') and hasattr(req_dict['processed_at'], 'strftime'):
-                req_dict['processed_at'] = req_dict['processed_at'].strftime('%Y-%m-%d %H:%M:%S')
-            
-            # 関連商品を取得
-            if DATABASE_URL:
-                cur.execute('''
-                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                    FROM sales_agency_request_items sari
-                    JOIN merchandise m ON sari.merchandise_id = m.id
-                    WHERE sari.request_id = %s
-                ''', (req_dict['id'],))
-            else:
-                cur.execute('''
-                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                    FROM sales_agency_request_items sari
-                    JOIN merchandise m ON sari.merchandise_id = m.id
-                    WHERE sari.request_id = ?
-                ''', (req_dict['id'],))
-            
-            request_items = [dict(item) for item in cur.fetchall()]
-            req_dict['request_items'] = request_items
-            requests.append(req_dict)
-        
+        conn, cur = sales_agency_open_cursor()
+        placeholder = sales_agency_placeholder()
+        cur.execute(
+            f'''
+            SELECT sar.id
+            FROM sales_agency_requests sar
+            WHERE sar.user_id = {placeholder}
+            ORDER BY sar.created_at DESC
+            ''',
+            (current_user.id,),
+        )
+        request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in cur.fetchall()]
         cur.close()
         conn.close()
+
+        for request_id in request_ids:
+            request_row, request_items = fetch_sales_agency_request_details(request_id, viewer='client')
+            if not request_row:
+                continue
+            request_row['request_items'] = request_items
+            requests.append(request_row)
     except Exception as e:
         print(f"[ERROR] sales_agency_my_requests: {e}", flush=True)
-        import traceback
         traceback.print_exc()
-    
-    return render_template('sales_agency_requests.html',
-                         requests=requests,
-                         service_types=SALES_AGENCY_SERVICE_TYPES,
-                         statuses=SALES_AGENCY_STATUS)
+
+    return render_template(
+        'sales_agency_requests.html',
+        requests=requests,
+        service_types=SALES_AGENCY_SERVICE_TYPES,
+        statuses=SALES_AGENCY_STATUS_CLIENT,
+    )
 
 @app.route('/admin/sales-agency-requests')
 @login_required
@@ -24518,228 +25848,934 @@ def admin_sales_agency_requests():
     if not current_user.is_admin():
         flash('アクセス権限がありません', 'error')
         return redirect(url_for('index'))
-    
+
+    service_filter = request.args.get('service_type', 'all')
     status_filter = request.args.get('status', 'all')
-    print(f"[DEBUG] admin_sales_agency_requests called, status_filter={status_filter}", flush=True)
-    
-    # デフォルト値
+    box_title = {
+        'wholesale': '業者卸販売BOX',
+        'auction': '業者オークションBOX',
+        'simultaneous': '同時出品BOX',
+    }.get(service_filter, '販売代行サービス受信BOX')
+
     requests_list = []
-    stats = {'pending': 0, 'approved': 0, 'rejected': 0}
-    
+    stats = {
+        'pending': 0,
+        'approved': 0,
+        'appraising': 0,
+        'inspecting': 0,
+        'completed': 0,
+        'rejected': 0,
+    }
+
     try:
-        conn = get_db()
-        if DATABASE_URL:
-            from psycopg2.extras import RealDictCursor
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            if status_filter == 'processed':
-                # 処理済み（承認・却下）のみ表示
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    WHERE sar.status IN ('approved', 'rejected')
-                    ORDER BY sar.processed_at DESC
-                ''')
-            elif status_filter != 'all':
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    WHERE sar.status = %s
-                    ORDER BY sar.created_at DESC
-                ''', (status_filter,))
-            else:
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    ORDER BY 
-                        CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
-                        sar.created_at DESC
-                ''')
-        else:
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            
-            if status_filter == 'processed':
-                # 処理済み（承認・却下）のみ表示
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    WHERE sar.status IN ('approved', 'rejected')
-                    ORDER BY sar.processed_at DESC
-                ''')
-            elif status_filter != 'all':
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    WHERE sar.status = ?
-                    ORDER BY sar.created_at DESC
-                ''', (status_filter,))
-            else:
-                cur.execute('''
-                    SELECT sar.*, u.display_name as user_name, u.username,
-                           p.display_name as processor_name
-                    FROM sales_agency_requests sar
-                    JOIN users u ON sar.user_id = u.id
-                    LEFT JOIN users p ON sar.processed_by = p.id
-                    ORDER BY 
-                        CASE WHEN sar.status = 'pending' THEN 0 ELSE 1 END,
-                        sar.created_at DESC
-                ''')
-        
-        requests_raw = cur.fetchall()
-        print(f"[DEBUG] admin_sales_agency_requests: fetched {len(requests_raw)} requests", flush=True)
-        
-        for req in requests_raw:
-            req_dict = dict(req)
-            # datetime を文字列に変換
-            if req_dict.get('created_at') and hasattr(req_dict['created_at'], 'strftime'):
-                req_dict['created_at'] = req_dict['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-            if req_dict.get('processed_at') and hasattr(req_dict['processed_at'], 'strftime'):
-                req_dict['processed_at'] = req_dict['processed_at'].strftime('%Y-%m-%d %H:%M:%S')
-            
-            # 関連商品を取得
-            if DATABASE_URL:
-                cur.execute('''
-                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                    FROM sales_agency_request_items sari
-                    JOIN merchandise m ON sari.merchandise_id = m.id
-                    WHERE sari.request_id = %s
-                ''', (req_dict['id'],))
-            else:
-                cur.execute('''
-                    SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.photo_path
-                    FROM sales_agency_request_items sari
-                    JOIN merchandise m ON sari.merchandise_id = m.id
-                    WHERE sari.request_id = ?
-                ''', (req_dict['id'],))
-            
-            merchandise_items = [dict(item) for item in cur.fetchall()]
-            req_dict['merchandise_items'] = merchandise_items
-            requests_list.append(req_dict)
-        
-        # 統計を取得
-        if DATABASE_URL:
-            cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
-            for row in cur.fetchall():
-                row_dict = dict(row)
-                if row_dict.get('status') in stats:
-                    stats[row_dict['status']] = row_dict.get('cnt', 0)
-        else:
-            cur.execute("SELECT status, COUNT(*) as cnt FROM sales_agency_requests GROUP BY status")
-            for row in cur.fetchall():
-                row_dict = dict(row)
-                if row_dict.get('status') in stats:
-                    stats[row_dict['status']] = row_dict.get('cnt', 0)
-        
+        conn, cur = sales_agency_open_cursor()
+        placeholder = sales_agency_placeholder()
+        params = []
+        conditions = []
+
+        if service_filter != 'all':
+            conditions.append(f"sar.service_type = {placeholder}")
+            params.append(service_filter)
+        if status_filter != 'all':
+            conditions.append(f"sar.status = {placeholder}")
+            params.append(status_filter)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ''
+        cur.execute(
+            f'''
+            SELECT sar.id
+            FROM sales_agency_requests sar
+            {where_clause}
+            ORDER BY CASE sar.status
+                WHEN 'pending' THEN 0
+                WHEN 'approved' THEN 1
+                WHEN 'appraising' THEN 2
+                WHEN 'inspecting' THEN 3
+                WHEN 'completed' THEN 4
+                WHEN 'rejected' THEN 5
+                ELSE 9
+            END, sar.created_at DESC
+            ''',
+            tuple(params),
+        )
+        request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in cur.fetchall()]
+
+        stat_params = []
+        stat_conditions = []
+        if service_filter != 'all':
+            stat_conditions.append(f"service_type = {placeholder}")
+            stat_params.append(service_filter)
+        stat_where_clause = f"WHERE {' AND '.join(stat_conditions)}" if stat_conditions else ''
+        cur.execute(
+            f'''
+            SELECT status, COUNT(*) AS cnt
+            FROM sales_agency_requests
+            {stat_where_clause}
+            GROUP BY status
+            ''',
+            tuple(stat_params),
+        )
+        for row in cur.fetchall():
+            row_dict = dict(row)
+            if row_dict.get('status') in stats:
+                stats[row_dict['status']] = row_dict.get('cnt', 0)
+
         cur.close()
         conn.close()
-        
-        return render_template('admin/sales_agency_requests.html',
-                             requests=requests_list,
-                             stats=stats,
-                             status_filter=status_filter,
-                             service_types=SALES_AGENCY_SERVICE_TYPES,
-                             statuses=SALES_AGENCY_STATUS)
+
+        for request_id in request_ids:
+            request_row, _ = fetch_sales_agency_request_details(request_id, viewer='admin')
+            if not request_row:
+                continue
+            request_row['detail_url'] = url_for('admin_sales_agency_request_detail', id=request_row['id'])
+            requests_list.append(request_row)
+
+        return render_template(
+            'admin/sales_agency_requests.html',
+            requests=requests_list,
+            stats=stats,
+            status_filter=status_filter,
+            service_filter=service_filter,
+            box_title=box_title,
+            service_types=SALES_AGENCY_SERVICE_TYPES,
+            statuses=SALES_AGENCY_STATUS,
+        )
     except Exception as e:
-        import traceback
-        print(f"Sales agency requests error: {e}")
+        print(f"Sales agency requests error: {e}", flush=True)
         traceback.print_exc()
-        # エラーでも空の状態で表示
-        return render_template('admin/sales_agency_requests.html',
-                             requests=[],
-                             stats={'pending': 0, 'approved': 0, 'rejected': 0},
-                             status_filter=status_filter,
-                             service_types=SALES_AGENCY_SERVICE_TYPES,
-                             statuses=SALES_AGENCY_STATUS)
+        return render_template(
+            'admin/sales_agency_requests.html',
+            requests=[],
+            stats=stats,
+            status_filter=status_filter,
+            service_filter=service_filter,
+            box_title=box_title,
+            service_types=SALES_AGENCY_SERVICE_TYPES,
+            statuses=SALES_AGENCY_STATUS,
+        )
+
+
+@app.route('/admin/sales-agency-requests/<int:id>')
+@login_required
+def admin_sales_agency_request_detail(id):
+    """管理者：販売代行申請詳細"""
+    if not current_user.is_admin():
+        flash('アクセス権限がありません', 'error')
+        return redirect(url_for('index'))
+
+    request_row, _ = fetch_sales_agency_request_details(id, viewer='admin')
+    if not request_row:
+        flash('申請が見つかりません', 'error')
+        return redirect(url_for('admin_sales_agency_requests'))
+
+    back_url = url_for(
+        'admin_sales_agency_requests',
+        service_type=request_row.get('service_type'),
+        status=request_row.get('status'),
+    )
+    return render_template(
+        'admin/sales_agency_request_detail.html',
+        req=request_row,
+        back_url=back_url,
+    )
 
 @app.route('/admin/sales-agency-requests/<int:id>/process', methods=['POST'])
 @login_required
 def admin_sales_agency_process(id):
-    """管理者：販売代行申請を処理（承認/却下）"""
+    """管理者：販売代行申請を処理"""
     if not current_user.is_admin():
         return jsonify({'success': False, 'error': 'アクセス権限がありません'}), 403
-    
-    data = request.get_json()
-    action = data.get('action')  # 'approve' or 'reject'
-    admin_note = data.get('admin_note', '')
-    
-    if action not in ['approve', 'reject']:
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or request.form.get('action') or '').strip()
+    admin_note = (data.get('admin_note') or request.form.get('admin_note') or '').strip()
+
+    if action not in SALES_AGENCY_ACTION_TO_STATUS:
         return jsonify({'success': False, 'error': '無効なアクションです'}), 400
-    
-    new_status = 'approved' if action == 'approve' else 'rejected'
-    
+
     try:
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 申請を取得
-            cur.execute('SELECT * FROM sales_agency_requests WHERE id = %s', (id,))
-            req = cur.fetchone()
-            if not req:
-                return jsonify({'success': False, 'error': '申請が見つかりません'}), 404
-            
-            # ステータス更新
-            cur.execute('''
-                UPDATE sales_agency_requests
-                SET status = %s, admin_note = %s, processed_at = %s, processed_by = %s
-                WHERE id = %s
-            ''', (new_status, admin_note, datetime.now(), current_user.id, id))
-            
-            # ユーザー情報を取得
-            cur.execute('SELECT * FROM users WHERE id = %s', (req['user_id'],))
-            user = cur.fetchone()
-        else:
-            cur = conn.cursor()
-            cur.execute('SELECT * FROM sales_agency_requests WHERE id = ?', (id,))
-            row = cur.fetchone()
-            if not row:
-                return jsonify({'success': False, 'error': '申請が見つかりません'}), 404
-            req = dict(zip([d[0] for d in cur.description], row))
-            
-            cur.execute('''
-                UPDATE sales_agency_requests
-                SET status = ?, admin_note = ?, processed_at = ?, processed_by = ?
-                WHERE id = ?
-            ''', (new_status, admin_note, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, id))
-            
-            cur.execute('SELECT * FROM users WHERE id = ?', (req['user_id'],))
-            row = cur.fetchone()
-            user = dict(zip([d[0] for d in cur.description], row)) if row else None
-        
+        conn, cur = sales_agency_open_cursor()
+        placeholder = sales_agency_placeholder()
+        cur.execute(f'SELECT * FROM sales_agency_requests WHERE id = {placeholder}', (id,))
+        req = sales_agency_row_to_dict(cur.fetchone())
+        if not req:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '申請が見つかりません'}), 404
+
+        current_status = req.get('status') or 'pending'
+        allowed_actions = (
+            SALES_AGENCY_AVAILABLE_ACTIONS.get(current_status, [])
+            + SALES_AGENCY_ROLLBACK_ACTIONS.get(current_status, [])
+        )
+        if action not in allowed_actions:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '現在の状態ではこの変更はできません'}), 400
+
+        new_status = SALES_AGENCY_ACTION_TO_STATUS[action]
+        now = datetime.now()
+        processed_value = now if DATABASE_URL else now.strftime('%Y-%m-%d %H:%M:%S')
+
+        cur.execute(
+            f'''
+            UPDATE sales_agency_requests
+            SET status = {placeholder},
+                admin_note = {placeholder},
+                processed_at = {placeholder},
+                processed_by = {placeholder}
+            WHERE id = {placeholder}
+            ''',
+            (new_status, admin_note, processed_value, current_user.id, id),
+        )
+
+        if sales_agency_column_exists(cur, 'merchandise', 'appraisal_status'):
+            appraisal_status = {
+                'pending': 'none',
+                'approved': 'waiting',
+                'appraising': 'waiting',
+                'inspecting': 'inspecting',
+                'completed': 'completed',
+                'rejected': 'none',
+            }.get(new_status)
+
+            if appraisal_status is not None:
+                set_clauses = [f"appraisal_status = {placeholder}"]
+                update_params = [appraisal_status]
+                if sales_agency_column_exists(cur, 'merchandise', 'updated_at'):
+                    set_clauses.append('updated_at = CURRENT_TIMESTAMP')
+                if sales_agency_column_exists(cur, 'merchandise', 'updated_by'):
+                    set_clauses.append(f"updated_by = {placeholder}")
+                    update_params.append(current_user.id)
+
+                cur.execute(
+                    f'''
+                    UPDATE merchandise
+                    SET {', '.join(set_clauses)}
+                    WHERE id IN (
+                        SELECT merchandise_id
+                        FROM sales_agency_request_items
+                        WHERE request_id = {placeholder}
+                    )
+                    ''',
+                    tuple(update_params + [id]),
+                )
+
+        cur.execute(f'SELECT * FROM users WHERE id = {placeholder}', (req['user_id'],))
+        user = sales_agency_row_to_dict(cur.fetchone())
         conn.commit()
         cur.close()
         conn.close()
-        
-        # ユーザーにLINE通知
-        if user:
-            line_user_id = user.get('line_user_id') if isinstance(user, dict) else user[7]
-            if line_user_id:
-                service_name = SALES_AGENCY_SERVICE_TYPES.get(req['service_type'], req['service_type'])
-                status_text = '承認' if new_status == 'approved' else '却下'
-                message = f"【販売代行申請結果】\n{service_name}の申請が{status_text}されました。"
+
+        if user and user.get('line_user_id'):
+            try:
+                service_name = get_sales_agency_service_name(req.get('service_type'))
+                status_text = get_sales_agency_status_label(new_status, viewer='client')
+                message = f"【販売代行申請状況】\n{service_name}の申請状況が「{status_text}」に更新されました。"
                 if admin_note:
                     message += f"\n\n備考: {admin_note}"
-                send_line_push(line_user_id, message)
-        
-        return jsonify({'success': True, 'status': new_status})
+                send_line_push(user['line_user_id'], message)
+            except Exception as notify_error:
+                print(f"Sales agency LINE notify error: {notify_error}", flush=True)
+
+        return jsonify(
+            {
+                'success': True,
+                'status': new_status,
+                'status_label': get_sales_agency_status_label(new_status, viewer='admin'),
+                'client_status_label': get_sales_agency_status_label(new_status, viewer='client'),
+                'available_actions': SALES_AGENCY_AVAILABLE_ACTIONS.get(new_status, []),
+                'rollback_actions': SALES_AGENCY_ROLLBACK_ACTIONS.get(new_status, []),
+                'processed_at': sales_agency_format_datetime(processed_value),
+                'admin_note': admin_note,
+                'action_label': SALES_AGENCY_ACTION_LABELS.get(action, action),
+            }
+        )
     except Exception as e:
-        print(f"Sales agency process error: {e}")
+        print(f"Sales agency process error: {e}", flush=True)
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+def document_open_cursor():
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+    return conn, cur
+
+
+def document_rows_to_dicts(rows):
+    return [dict(row) for row in rows]
+
+
+def document_format_date(value):
+    if not value:
+        return ''
+    if hasattr(value, 'strftime'):
+        return value.strftime('%Y-%m-%d')
+    return str(value).replace('T', ' ')[:10]
+
+
+def document_status_label(kind, status):
+    status_value = (status or '').strip()
+    label_maps = {
+        'shikiriosho': {
+            'draft': '下書き',
+            'pending': '確認待ち',
+            'sent': '送付済み',
+            'approved': '承認済み',
+            'completed': '完了',
+        },
+        'user_mitsumori': {
+            'draft': '下書き',
+            'sent': '送信済み',
+            'submitted': '送信済み',
+            'approved': '承認済み',
+            'completed': '完了',
+        },
+        'user_kaitori_shoudaku': {
+            'draft': '下書き',
+            'sent': '送信済み',
+            'submitted': '送信済み',
+            'approved': '承認済み',
+            'completed': '完了',
+        },
+        'invoice': {
+            'draft': '下書き',
+            'sent': '送付済み',
+            'approved': '承認済み',
+            'completed': '完了',
+        },
+        'user_keisan': {
+            'draft': '下書き',
+            'completed': '送信待ち',
+            'submitted': '送付済み',
+        },
+    }
+    return label_maps.get(kind, {}).get(status_value, status_value or '-')
+
+
+def fetch_admin_document_history_rows_v2():
+    rows = []
+    conn, cur = document_open_cursor()
+    try:
+        mitsumori_request_map = {}
+        invoice_request_map = {}
+        has_created_mitsumori_id = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_mitsumori_id')
+        has_created_invoice_id = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_invoice_id')
+        if has_created_mitsumori_id or has_created_invoice_id:
+            select_columns = []
+            where_clauses = []
+            if has_created_mitsumori_id:
+                select_columns.append('created_mitsumori_id')
+                where_clauses.append('created_mitsumori_id IS NOT NULL')
+            else:
+                select_columns.append('NULL AS created_mitsumori_id')
+            if has_created_invoice_id:
+                select_columns.append('created_invoice_id')
+                where_clauses.append('created_invoice_id IS NOT NULL')
+            else:
+                select_columns.append('NULL AS created_invoice_id')
+            select_columns.append('service_type')
+            cur.execute(
+                f"""
+                SELECT {', '.join(select_columns)}
+                FROM sales_agency_requests
+                WHERE {' OR '.join(where_clauses)}
+                """
+            )
+            for mapping_row in document_rows_to_dicts(cur.fetchall()):
+                if mapping_row.get('created_mitsumori_id'):
+                    mitsumori_request_map[mapping_row['created_mitsumori_id']] = mapping_row.get('service_type') or ''
+                if mapping_row.get('created_invoice_id'):
+                    invoice_request_map[mapping_row['created_invoice_id']] = mapping_row.get('service_type') or ''
+
+        cur.execute(
+            """
+            SELECT s.id, s.document_no, s.issue_date, s.total_amount, s.status, s.created_at,
+                   s.recipient_name, u.display_name AS client_name, u.username
+            FROM shikiriosho s
+            LEFT JOIN users u ON s.recipient_id = u.id
+            ORDER BY COALESCE(s.issue_date, s.created_at) DESC, s.id DESC
+            """
+        )
+        for row in document_rows_to_dicts(cur.fetchall()):
+            rows.append({
+                'kind': 'shikiriosho',
+                'id': row['id'],
+                'document_type': '精算書',
+                'document_no': row.get('document_no') or '-',
+                'client_name': row.get('client_name') or row.get('recipient_name') or row.get('username') or '未設定',
+                'service_type': '',
+                'service_name': '',
+                'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                'total_amount': int(row.get('total_amount') or 0),
+                'status': row.get('status') or '',
+                'status_label': document_status_label('shikiriosho', row.get('status')),
+                'direction_key': 'outgoing',
+                'direction_label': '開花→クライアント',
+                'subject': '',
+                'notes': '',
+                'detail_endpoint': 'admin_shikiriosho_view',
+                'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
+            })
+
+        cur.execute(
+            """
+            SELECT m.id, m.document_no, m.issue_date, m.total_amount, m.status, m.created_at,
+                   m.subject, m.notes, m.company_name,
+                   u.display_name AS client_name, u.username
+            FROM user_mitsumori m
+            LEFT JOIN users u ON m.user_id = u.id
+            ORDER BY COALESCE(m.issue_date, m.created_at) DESC, m.id DESC
+            """
+        )
+        for row in document_rows_to_dicts(cur.fetchall()):
+            service_type = mitsumori_request_map.get(row['id']) or ''
+            is_admin_created = (row.get('document_no') or '').startswith('MT-')
+            rows.append({
+                'kind': 'user_mitsumori',
+                'id': row['id'],
+                'document_type': '見積り依頼書',
+                'document_no': row.get('document_no') or '-',
+                'client_name': row.get('client_name') or row.get('username') or '未設定',
+                'service_type': service_type,
+                'service_name': get_sales_agency_service_name(service_type) if service_type else '',
+                'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                'total_amount': int(row.get('total_amount') or 0),
+                'status': row.get('status') or '',
+                'status_label': document_status_label('user_mitsumori', row.get('status')),
+                'direction_key': 'vendor' if is_admin_created else 'incoming',
+                'direction_label': '開花→業者' if is_admin_created else 'クライアント→開花',
+                'subject': row.get('subject') or '',
+                'notes': row.get('notes') or '',
+                'detail_endpoint': 'admin_mitsumori_view' if is_admin_created else 'admin_user_mitsumori_view',
+                'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
+            })
+
+        cur.execute(
+            """
+            SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at,
+                   k.notes, k.customer_name,
+                   u.display_name AS client_name, u.username
+            FROM user_kaitori_shoudaku k
+            LEFT JOIN users u ON k.user_id = u.id
+            ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
+            """
+        )
+        for row in document_rows_to_dicts(cur.fetchall()):
+            rows.append({
+                'kind': 'user_kaitori_shoudaku',
+                'id': row['id'],
+                'document_type': '買取依頼書',
+                'document_no': row.get('document_no') or '-',
+                'client_name': row.get('client_name') or row.get('username') or '未設定',
+                'service_type': '',
+                'service_name': '',
+                'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                'total_amount': int(row.get('total_amount') or 0),
+                'status': row.get('status') or '',
+                'status_label': document_status_label('user_kaitori_shoudaku', row.get('status')),
+                'direction_key': 'incoming',
+                'direction_label': 'クライアント→開花',
+                'subject': row.get('customer_name') or '',
+                'notes': row.get('notes') or '',
+                'detail_endpoint': 'admin_user_kaitori_shoudaku_view',
+                'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
+            })
+
+        cur.execute(
+            """
+            SELECT i.id, i.invoice_no, i.issue_date, i.total_amount, i.status, i.created_at,
+                   i.notes, i.recipient_name, u.display_name AS client_name, u.username
+            FROM invoices i
+            LEFT JOIN users u ON i.sender_id = u.id
+            WHERE i.invoice_no LIKE 'KT-%'
+            ORDER BY COALESCE(i.issue_date, i.created_at) DESC, i.id DESC
+            """
+        )
+        for row in document_rows_to_dicts(cur.fetchall()):
+            service_type = invoice_request_map.get(row['id']) or ''
+            rows.append({
+                'kind': 'invoice',
+                'id': row['id'],
+                'document_type': '買取明細書',
+                'document_no': row.get('invoice_no') or '-',
+                'client_name': row.get('client_name') or row.get('recipient_name') or row.get('username') or '未設定',
+                'service_type': service_type,
+                'service_name': get_sales_agency_service_name(service_type) if service_type else '',
+                'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                'total_amount': int(row.get('total_amount') or 0),
+                'status': row.get('status') or '',
+                'status_label': document_status_label('invoice', row.get('status')),
+                'direction_key': 'outgoing',
+                'direction_label': '開花→クライアント',
+                'subject': '',
+                'notes': row.get('notes') or '',
+                'detail_endpoint': 'admin_kaitori_view',
+                'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
+            })
+
+        cur.execute(
+            """
+            SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at
+            FROM user_keisan k
+            WHERE COALESCE(k.is_admin_created, 0) = 1
+            ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
+            """
+        )
+        for row in document_rows_to_dicts(cur.fetchall()):
+            rows.append({
+                'kind': 'user_keisan',
+                'id': row['id'],
+                'document_type': 'オークション計算書',
+                'document_no': row.get('document_no') or '-',
+                'client_name': '-',
+                'service_type': 'auction',
+                'service_name': get_sales_agency_service_name('auction'),
+                'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                'total_amount': int(row.get('total_amount') or 0),
+                'status': row.get('status') or '',
+                'status_label': document_status_label('user_keisan', row.get('status')),
+                'direction_key': 'outgoing',
+                'direction_label': '開花→クライアント',
+                'subject': '',
+                'notes': '',
+                'detail_endpoint': 'admin_auction_keisan_view',
+                'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
+            })
+
+        rows.sort(key=lambda row: (row.get('sort_key') or '', row.get('id') or 0), reverse=True)
+        return rows
+    finally:
+        cur.close()
+        conn.close()
+
+
+def apply_admin_document_history_filters_v2(rows, filters):
+    filtered_rows = []
+    doc_type = (filters.get('doc_type') or 'all').strip()
+    client = (filters.get('client') or '').strip().lower()
+    status = (filters.get('status') or 'all').strip()
+    direction = (filters.get('direction') or 'all').strip()
+    service_type = (filters.get('service_type') or 'all').strip()
+    date_from = (filters.get('date_from') or '').strip()
+    date_to = (filters.get('date_to') or '').strip()
+    keyword = (filters.get('keyword') or '').strip().lower()
+
+    for row in rows:
+        if doc_type != 'all' and row.get('kind') != doc_type:
+            continue
+        if status != 'all' and row.get('status') != status:
+            continue
+        if direction != 'all' and row.get('direction_key') != direction:
+            continue
+        if service_type != 'all' and (row.get('service_type') or '') != service_type:
+            continue
+        if client and client not in (row.get('client_name') or '').lower():
+            continue
+        if date_from and (row.get('issue_date') or '') < date_from:
+            continue
+        if date_to and (row.get('issue_date') or '') > date_to:
+            continue
+        if keyword:
+            haystack = ' '.join([
+                row.get('document_no') or '',
+                row.get('client_name') or '',
+                row.get('document_type') or '',
+                row.get('service_name') or '',
+                row.get('subject') or '',
+                row.get('notes') or '',
+            ]).lower()
+            if keyword not in haystack:
+                continue
+        filtered_rows.append(row)
+    return filtered_rows
+
+
+@login_required
+@admin_required
+def admin_documents_dashboard_v2():
+    history_rows = fetch_admin_document_history_rows_v2()
+    document_counts = {
+        '精算書': 0,
+        '見積り依頼書': 0,
+        '買取依頼書': 0,
+        'オークション計算書': 0,
+    }
+    for row in history_rows:
+        if row.get('document_type') in document_counts:
+            document_counts[row['document_type']] += 1
+
+    recent_incoming_documents = [row for row in history_rows if row.get('direction_key') == 'incoming'][:10]
+
+    ongoing_request_rows = []
+    conn, cur = sales_agency_open_cursor()
+    try:
+        cur.execute(
+            """
+            SELECT id
+            FROM sales_agency_requests
+            WHERE status IN ('pending', 'approved', 'appraising', 'inspecting')
+            ORDER BY created_at DESC
+            LIMIT 20
+            """
+        )
+        for row in cur.fetchall():
+            request_id = row['id'] if isinstance(row, dict) else row[0]
+            request_row, _ = fetch_sales_agency_request_details(request_id, viewer='admin')
+            if not request_row:
+                continue
+            request_row['created_date_label'] = document_format_date(request_row.get('created_at'))
+            ongoing_request_rows.append(request_row)
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template(
+        'admin/documents_dashboard.html',
+        document_counts=document_counts,
+        recent_incoming_documents=recent_incoming_documents,
+        ongoing_request_rows=ongoing_request_rows,
+    )
+
+
+@login_required
+@admin_required
+def admin_documents_history_v2():
+    filters = {
+        'doc_type': request.args.get('doc_type', 'all'),
+        'client': request.args.get('client', '').strip(),
+        'status': request.args.get('status', 'all'),
+        'direction': request.args.get('direction', 'all'),
+        'service_type': request.args.get('service_type', 'all'),
+        'date_from': request.args.get('date_from', '').strip(),
+        'date_to': request.args.get('date_to', '').strip(),
+        'keyword': request.args.get('keyword', '').strip(),
+    }
+    all_rows = fetch_admin_document_history_rows_v2()
+    history_rows = apply_admin_document_history_filters_v2(all_rows, filters)
+    client_options = sorted({row.get('client_name') for row in all_rows if row.get('client_name') and row.get('client_name') != '-'})
+    status_options = sorted({(row.get('status'), row.get('status_label')) for row in all_rows if row.get('status')})
+    document_type_options = [
+        ('shikiriosho', '精算書'),
+        ('user_mitsumori', '見積り依頼書'),
+        ('user_kaitori_shoudaku', '買取依頼書'),
+        ('invoice', '買取明細書'),
+        ('user_keisan', 'オークション計算書'),
+    ]
+    return render_template(
+        'admin/documents_history.html',
+        history_rows=history_rows,
+        filters=filters,
+        client_options=client_options,
+        status_options=status_options,
+        document_type_options=document_type_options,
+        service_types=SALES_AGENCY_SERVICE_TYPES,
+    )
+
+
+@app.route('/admin/auction-keisan/send-bulk', methods=['POST'])
+@login_required
+@admin_required
+def admin_auction_keisan_send_bulk():
+    selected_ids = []
+    for raw_id in request.form.getlist('document_ids'):
+        try:
+            selected_ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+
+    send_scope = request.form.get('send_scope', 'selected')
+    conn = get_db()
+    updated_count = 0
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            if send_scope == 'all':
+                cur.execute("""
+                    UPDATE user_keisan
+                    SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+                    WHERE is_admin_created = TRUE
+                      AND status = 'completed'
+                """)
+                updated_count = cur.rowcount
+            elif selected_ids:
+                placeholders = ','.join(['%s'] * len(selected_ids))
+                cur.execute(
+                    f"""
+                    UPDATE user_keisan
+                    SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+                    WHERE is_admin_created = TRUE
+                      AND status = 'completed'
+                      AND id IN ({placeholders})
+                    """,
+                    tuple(selected_ids),
+                )
+                updated_count = cur.rowcount
+        else:
+            cur = conn.cursor()
+            if send_scope == 'all':
+                cur.execute("""
+                    UPDATE user_keisan
+                    SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+                    WHERE is_admin_created = 1
+                      AND status = 'completed'
+                """)
+                updated_count = cur.rowcount
+            elif selected_ids:
+                placeholders = ','.join(['?'] * len(selected_ids))
+                cur.execute(
+                    f"""
+                    UPDATE user_keisan
+                    SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+                    WHERE is_admin_created = 1
+                      AND status = 'completed'
+                      AND id IN ({placeholders})
+                    """,
+                    tuple(selected_ids),
+                )
+                updated_count = cur.rowcount
+
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    if send_scope != 'all' and not selected_ids:
+        flash('送信する計算書を選択してください', 'error')
+    elif updated_count:
+        flash(f'{updated_count}件の計算書を送信しました', 'success')
+    else:
+        flash('送信対象の計算書はありませんでした', 'info')
+    return redirect(url_for('admin_auction_keisan_list'))
+
+
+@app.route('/admin/user-kaitori-shoudaku/<int:id>')
+@login_required
+@admin_required
+def admin_user_kaitori_shoudaku_view(id):
+    conn, cur = document_open_cursor()
+    try:
+        placeholder = '%s' if DATABASE_URL else '?'
+        cur.execute(
+            f"""
+            SELECT k.*, u.display_name AS user_name, u.username
+            FROM user_kaitori_shoudaku k
+            LEFT JOIN users u ON k.user_id = u.id
+            WHERE k.id = {placeholder}
+            """,
+            (id,),
+        )
+        kaitori = cur.fetchone()
+        if not kaitori:
+            flash('買取依頼書が見つかりません', 'error')
+            return redirect(url_for('admin_documents_dashboard'))
+
+        kaitori = dict(kaitori)
+        cur.execute(
+            f"""
+            SELECT *
+            FROM user_kaitori_shoudaku_items
+            WHERE kaitori_shoudaku_id = {placeholder}
+            ORDER BY item_no
+            """,
+            (id,),
+        )
+        items = document_rows_to_dicts(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template('admin/user_kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
+
+
+@login_required
+@permission_required('announcements')
+def admin_announcements_v2():
+    conn, cur = document_open_cursor()
+    try:
+        cur.execute(
+            """
+            SELECT a.*, u.username AS author_name
+            FROM announcements a
+            LEFT JOIN users u ON a.created_by = u.id
+            ORDER BY a.created_at DESC
+            """
+        )
+        announcements = []
+        for row in document_rows_to_dicts(cur.fetchall()):
+            row['recipient_scope'] = get_announcement_recipient_scope(row)
+            row['recipient_user_ids_list'] = parse_announcement_recipient_ids(row.get('recipient_user_ids'))
+            row['recipient_summary'] = get_announcement_recipient_summary(row)
+            announcements.append(row)
+    finally:
+        cur.close()
+        conn.close()
+    return render_template('admin/announcements.html', announcements=announcements)
+
+
+@login_required
+@permission_required('announcements')
+def admin_add_announcement_v2():
+    if request.method == 'POST':
+        announcement_state = build_announcement_form_state()
+        title = announcement_state.get('title')
+        content = announcement_state.get('content')
+        announcement_type = announcement_state.get('announcement_type', 'info')
+        is_active = announcement_state.get('is_active', False)
+        publish_at = announcement_state.get('publish_at') or None
+        expire_at = announcement_state.get('expire_at') or None
+        recipient_scope = announcement_state.get('recipient_scope', 'all')
+        recipient_user_ids = announcement_state.get('recipient_user_ids')
+        line_notify_now = announcement_state.get('line_notify_now', False)
+
+        if recipient_scope == 'selected' and not announcement_state.get('recipient_user_ids_list'):
+            flash('通知先が「選択ユーザー」の場合は、少なくとも1名選択してください', 'error')
+            return render_announcement_form(announcement_state)
+
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    INSERT INTO announcements (
+                        title, content, announcement_type, is_active, publish_at, expire_at,
+                        created_by, recipient_scope, recipient_user_ids
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (title, content, announcement_type, is_active, publish_at, expire_at, current_user.id, recipient_scope, recipient_user_ids),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO announcements (
+                        title, content, announcement_type, is_active, publish_at, expire_at,
+                        created_by, recipient_scope, recipient_user_ids
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (title, content, announcement_type, 1 if is_active else 0, publish_at, expire_at, current_user.id, recipient_scope, recipient_user_ids),
+                )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        sent_count = 0
+        if line_notify_now and is_active and (not publish_at or publish_at <= datetime.now().strftime('%Y-%m-%dT%H:%M')):
+            sent_count = notify_announcement_recipients(title, content, recipient_scope, recipient_user_ids)
+
+        message = 'お知らせを追加しました'
+        if sent_count:
+            message += f' / LINE通知 {sent_count}件'
+        flash(message, 'success')
+        return redirect(url_for('admin_announcements'))
+
+    return render_announcement_form()
+
+
+@login_required
+@permission_required('announcements')
+def admin_edit_announcement_v2(id):
+    conn, cur = document_open_cursor()
+    try:
+        placeholder = '%s' if DATABASE_URL else '?'
+        cur.execute(f"SELECT * FROM announcements WHERE id = {placeholder}", (id,))
+        existing = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not existing:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('admin_announcements'))
+
+    existing_dict = dict(existing)
+
+    if request.method == 'POST':
+        announcement_state = build_announcement_form_state(existing_dict)
+        title = announcement_state.get('title')
+        content = announcement_state.get('content')
+        announcement_type = announcement_state.get('announcement_type', 'info')
+        is_active = announcement_state.get('is_active', False)
+        publish_at = announcement_state.get('publish_at') or None
+        expire_at = announcement_state.get('expire_at') or None
+        recipient_scope = announcement_state.get('recipient_scope', 'all')
+        recipient_user_ids = announcement_state.get('recipient_user_ids')
+        line_notify_now = announcement_state.get('line_notify_now', False)
+
+        if recipient_scope == 'selected' and not announcement_state.get('recipient_user_ids_list'):
+            flash('通知先が「選択ユーザー」の場合は、少なくとも1名選択してください', 'error')
+            return render_announcement_form(announcement_state)
+
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    UPDATE announcements
+                    SET title = %s,
+                        content = %s,
+                        announcement_type = %s,
+                        is_active = %s,
+                        publish_at = %s,
+                        expire_at = %s,
+                        recipient_scope = %s,
+                        recipient_user_ids = %s
+                    WHERE id = %s
+                    """,
+                    (title, content, announcement_type, is_active, publish_at, expire_at, recipient_scope, recipient_user_ids, id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE announcements
+                    SET title = ?,
+                        content = ?,
+                        announcement_type = ?,
+                        is_active = ?,
+                        publish_at = ?,
+                        expire_at = ?,
+                        recipient_scope = ?,
+                        recipient_user_ids = ?
+                    WHERE id = ?
+                    """,
+                    (title, content, announcement_type, 1 if is_active else 0, publish_at, expire_at, recipient_scope, recipient_user_ids, id),
+                )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        sent_count = 0
+        if line_notify_now and is_active and (not publish_at or publish_at <= datetime.now().strftime('%Y-%m-%dT%H:%M')):
+            sent_count = notify_announcement_recipients(title, content, recipient_scope, recipient_user_ids)
+
+        message = 'お知らせを更新しました'
+        if sent_count:
+            message += f' / LINE通知 {sent_count}件'
+        flash(message, 'success')
+        return redirect(url_for('admin_announcements'))
+
+    return render_announcement_form(existing_dict)
+
+
+app.view_functions['admin_documents_dashboard'] = admin_documents_dashboard_v2
+app.view_functions['admin_announcements'] = admin_announcements_v2
+app.view_functions['admin_add_announcement'] = admin_add_announcement_v2
+app.view_functions['admin_edit_announcement'] = admin_edit_announcement_v2
+
+if 'admin_documents_history' in app.view_functions:
+    app.view_functions['admin_documents_history'] = admin_documents_history_v2
+else:
+    app.add_url_rule('/admin/documents/history', endpoint='admin_documents_history', view_func=admin_documents_history_v2)
+
 
 # アプリ起動時にスケジューラーを初期化
 # Gunicorn等で複数ワーカーの場合、重複起動を防ぐ

@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% block title %}販売代行申請詳細 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.request-detail-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1.2rem;
+}
+
+.detail-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.92rem;
+}
+
+.detail-back-link:hover {
+    color: #0f172a;
+}
+
+.detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.95fr);
+    gap: 1rem;
+}
+
+.detail-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+}
+
+.detail-card-header {
+    padding: 1.2rem 1.3rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.detail-card-body {
+    padding: 1.2rem 1.3rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.detail-title-row {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.detail-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.detail-meta {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.meta-row {
+    display: flex;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.meta-chip,
+.status-badge,
+.service-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.72rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.meta-chip {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.service-badge.wholesale {
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+.service-badge.auction {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.service-badge.simultaneous {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.status-badge.pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-badge.approved {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-badge.appraising {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.status-badge.inspecting {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.status-badge.completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.timeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.timeline-step {
+    padding: 0.58rem 0.82rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.timeline-step.is-current {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.timeline-step.is-done {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.9rem;
+}
+
+.item-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.95rem;
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.item-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    object-fit: cover;
+    background: #e2e8f0;
+}
+
+.item-name {
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.5;
+}
+
+.item-brand,
+.item-status,
+.muted-text {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.item-status {
+    color: #1d4ed8;
+    font-weight: 700;
+}
+
+.item-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.8rem;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.item-link:hover {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.note-box,
+.action-box {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.note-box textarea {
+    width: 100%;
+    min-height: 110px;
+    resize: vertical;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+}
+
+.action-buttons,
+.document-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.rollback-box {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+}
+
+.rollback-title {
+    color: #9a3412;
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.rollback-note {
+    color: #9a3412;
+    font-size: 0.83rem;
+    line-height: 1.7;
+}
+
+.action-buttons .btn,
+.document-links .btn {
+    justify-content: center;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+@media (max-width: 960px) {
+    .detail-layout {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="page-header">
+    <h1>販売代行申請詳細</h1>
+</div>
+
+<div class="request-detail-page">
+    <a href="{{ back_url }}" class="detail-back-link">← 申請一覧へ戻る</a>
+
+    <div class="detail-layout">
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <div class="detail-title-row">
+                    <div class="detail-title">{{ req.client_name }} さんの申請</div>
+                    <span class="status-badge {{ req.status }}">{{ req.status_label }}</span>
+                </div>
+                <div class="detail-meta" style="margin-top: 0.8rem;">
+                    <div class="meta-row">
+                        <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
+                        <span class="meta-chip">申請ID {{ req.id }}</span>
+                        <span class="meta-chip">商品 {{ req.merchandise_items|length }} 点</span>
+                        {% if req.service_type == 'wholesale' %}
+                        <span class="meta-chip">査定待ち {{ req.pending_appraisal_count }} 点</span>
+                        {% endif %}
+                    </div>
+                    <div class="muted-text">申請日: {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</div>
+                    {% if req.processed_at %}
+                    <div class="muted-text">最終更新: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') }}{% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="detail-card-body">
+                <div>
+                    <div class="section-title" style="margin-bottom: 0.7rem;">現在の進行状況</div>
+                    {% set timeline_statuses = [
+                        ('pending', '承認待ち'),
+                        ('approved', '認証済み'),
+                        ('appraising', '査定中'),
+                        ('inspecting', '検品中'),
+                        ('completed', '処理完了')
+                    ] %}
+                    {% set current_index = {'pending': 0, 'approved': 1, 'appraising': 2, 'inspecting': 3, 'completed': 4, 'rejected': -1}.get(req.status, -1) %}
+                    <div class="timeline">
+                        {% for timeline_key, timeline_label in timeline_statuses %}
+                        {% set timeline_index = loop.index0 %}
+                        <div class="timeline-step {% if req.status == timeline_key %}is-current{% elif current_index > timeline_index %}is-done{% endif %}">
+                            {{ timeline_label }}
+                        </div>
+                        {% endfor %}
+                        {% if req.status == 'rejected' %}
+                        <div class="timeline-step is-current">却下申請</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if req.admin_note %}
+                <div>
+                    <div class="section-title" style="margin-bottom: 0.45rem;">管理メモ</div>
+                    <div class="muted-text" style="white-space: pre-wrap; line-height: 1.8;">{{ req.admin_note }}</div>
+                </div>
+                {% endif %}
+
+                <div>
+                    <div class="section-title" style="margin-bottom: 0.7rem;">申請商品</div>
+                    <div class="items-grid">
+                        {% for item in req.merchandise_items %}
+                        <div class="item-card">
+                            {% if item.photo_path %}
+                            <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}" class="item-thumb">
+                            {% else %}
+                            <div class="item-thumb"></div>
+                            {% endif %}
+                            <div class="item-name">{{ item.product_name }}</div>
+                            {% if item.brand_name %}
+                            <div class="item-brand">{{ item.brand_name }}</div>
+                            {% endif %}
+                            {% if item.appraisal_status_label %}
+                            <div class="item-status">{{ item.appraisal_status_label }}</div>
+                            {% endif %}
+                            <a href="{{ item.detail_url }}" class="item-link">商品詳細を見る</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-card">
+            <div class="detail-card-header">
+                <div class="section-title">状態の更新</div>
+            </div>
+            <div class="detail-card-body">
+                <div class="note-box">
+                    <label for="admin-note-input" class="muted-text">備考やクライアントへの連絡内容</label>
+                    <textarea id="admin-note-input" placeholder="必要に応じてメモを入力してください">{{ req.admin_note or '' }}</textarea>
+                </div>
+
+                {% if req.request_can_create_documents or req.created_mitsumori_id or req.created_invoice_id %}
+                <div class="document-links">
+                    {% if req.request_can_create_documents %}
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">見積依頼書を作成</a>
+                    {% endif %}
+                    {% if req.created_mitsumori_id %}
+                    <a href="{{ url_for('admin_mitsumori_view', id=req.created_mitsumori_id) }}" class="btn btn-secondary">見積依頼書を見る</a>
+                    {% endif %}
+                    {% if req.created_invoice_id %}
+                    <a href="{{ url_for('admin_kaitori_view', id=req.created_invoice_id) }}" class="btn btn-secondary">買取明細書を見る</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if req.available_actions %}
+                <div class="action-box">
+                    <div class="muted-text">この申請で次に進める状態をここで切り替えられます。</div>
+                    <div class="action-buttons">
+                        {% if 'approve' in req.available_actions %}
+                        <button type="button" class="btn btn-approve" onclick="processRequest('{{ req.id }}', 'approve')">認証済みにする</button>
+                        {% endif %}
+                        {% if 'appraising' in req.available_actions %}
+                        <button type="button" class="btn btn-primary" onclick="processRequest('{{ req.id }}', 'appraising')">査定中にする</button>
+                        {% endif %}
+                        {% if 'inspect' in req.available_actions %}
+                        <button type="button" class="btn btn-primary" onclick="processRequest('{{ req.id }}', 'inspect')">検品中にする</button>
+                        {% endif %}
+                        {% if 'complete' in req.available_actions %}
+                        <button type="button" class="btn btn-approve" onclick="processRequest('{{ req.id }}', 'complete')">処理完了にする</button>
+                        {% endif %}
+                        {% if 'reject' in req.available_actions %}
+                        <button type="button" class="btn btn-reject" onclick="processRequest('{{ req.id }}', 'reject')">却下申請にする</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if req.rollback_actions %}
+                <div class="rollback-box">
+                    <div class="rollback-title">進行状況を戻す</div>
+                    <div class="rollback-note">誤って次の段階へ進めた場合は、ここから1段階前の状態へ戻せます。クライアント側の表示もあわせて戻ります。</div>
+                    <div class="action-buttons">
+                        {% if 'revert_pending' in req.rollback_actions %}
+                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_pending')">承認待ちへ戻す</button>
+                        {% endif %}
+                        {% if 'revert_approved' in req.rollback_actions %}
+                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_approved')">認証済みへ戻す</button>
+                        {% endif %}
+                        {% if 'revert_appraising' in req.rollback_actions %}
+                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_appraising')">査定中へ戻す</button>
+                        {% endif %}
+                        {% if 'revert_inspecting' in req.rollback_actions %}
+                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_inspecting')">検品中へ戻す</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if not req.available_actions and not req.rollback_actions %}
+                <div class="muted-text">この申請は現在の状態から変更できる操作がありません。</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function processRequest(requestId, action) {
+    const noteEl = document.getElementById('admin-note-input');
+    const adminNote = noteEl ? noteEl.value : '';
+    const actionLabels = {
+        approve: '認証済み',
+        appraising: '査定中',
+        inspect: '検品中',
+        complete: '処理完了',
+        reject: '却下申請',
+        revert_pending: '承認待ち',
+        revert_approved: '認証済み',
+        revert_appraising: '査定中',
+        revert_inspecting: '検品中'
+    };
+
+    if (!confirm(`この申請を「${actionLabels[action] || action}」へ変更しますか？`)) {
+        return;
+    }
+
+    fetch(`/admin/sales-agency-requests/${requestId}/process`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            action: action,
+            admin_note: adminNote
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+            return;
+        }
+        alert('エラー: ' + (data.error || '処理に失敗しました'));
+    })
+    .catch(error => {
+        console.error(error);
+        alert('通信エラーが発生しました');
+    });
+}
+</script>
+{% endblock %}
