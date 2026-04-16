@@ -55,9 +55,9 @@
                 <div class="thread-header">
                     <span class="thread-author">
                         {% if reply.is_admin_reply %}
-                        <span class="admin-badge">管理者</span>
+                        <span class="admin-badge">{{ reply.public_author_badge or '運営' }}</span>
                         {% endif %}
-                        {{ reply.display_name or reply.username }}
+                        {{ reply.public_author_name or reply.display_name or reply.username }}
                     </span>
                     <span class="thread-date">{{ reply.created_at[:16].replace('-', '/').replace('T', ' ') if reply.created_at else '-' }}</span>
                 </div>

@@ -22385,6 +22385,12 @@ def inquiry_view(id):
             reply = dict(row)
             if reply.get('created_at') and hasattr(reply['created_at'], 'strftime'):
                 reply['created_at'] = reply['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            if reply.get('is_admin_reply'):
+                reply['public_author_name'] = '運営'
+                reply['public_author_badge'] = '運営'
+            else:
+                reply['public_author_name'] = reply.get('display_name') or reply.get('username') or 'ユーザー'
+                reply['public_author_badge'] = ''
             replies.append(reply)
         
         cur.close()
