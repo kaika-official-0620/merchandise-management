@@ -7,6 +7,7 @@ from typing import Any
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
+from werkzeug.routing import BuildError
 
 
 SALES_AGENCY_DOCUMENT_FLOW_STEPS = [
@@ -480,6 +481,14 @@ def apply(module: Any) -> None:
     def mark():
         return "%s" if DATABASE_URL else "?"
 
+    def safe_url(endpoint: str | None, **values):
+        if not endpoint or endpoint not in app.view_functions:
+            return None
+        try:
+            return url_for(endpoint, **values)
+        except (BuildError, KeyError, TypeError, ValueError):
+            return None
+
     def to_timestamp_text(value):
         if not value:
             return ""
@@ -587,6 +596,7 @@ def apply(module: Any) -> None:
         conn, cur = open_cursor()
         try:
             request_map = {}
+            request_detail_cache = {}
             cur.execute(
                 """
                 SELECT id, service_type, vendor_mitsumori_id, vendor_kaitori_shoudaku_id, client_invoice_id
@@ -606,6 +616,36 @@ def apply(module: Any) -> None:
                 row["client_invoice_id"]: row for row in request_map.values() if row.get("client_invoice_id")
             }
 
+            def get_request_detail(request_id):
+                if not request_id:
+                    return {}
+                if request_id not in request_detail_cache:
+                    request_row, _ = fetch_sales_agency_request_details_v2(request_id, viewer="admin")
+                    request_detail_cache[request_id] = request_row or {}
+                return request_detail_cache[request_id]
+
+            def append_row(payload):
+                request_id = payload.get("request_id")
+                request_detail = get_request_detail(request_id)
+                if request_detail:
+                    payload.setdefault("request_status", request_detail.get("status") or "")
+                    payload.setdefault("request_status_label", request_detail.get("status_label") or "")
+                    payload.setdefault("request_flow_label", request_detail.get("document_flow_label") or "")
+                    if not payload.get("client_name") or payload.get("client_name") == "-":
+                        payload["client_name"] = request_detail.get("client_name") or payload.get("client_name") or "-"
+                    if not payload.get("service_type"):
+                        payload["service_type"] = request_detail.get("service_type") or ""
+                    if not payload.get("service_name"):
+                        payload["service_name"] = request_detail.get("service_name") or service_name(payload.get("service_type") or "")
+                else:
+                    payload.setdefault("request_status", "")
+                    payload.setdefault("request_status_label", "")
+                    payload.setdefault("request_flow_label", "")
+
+                payload["detail_url"] = safe_url(payload.get("detail_endpoint"), id=payload.get("id"))
+                payload["request_url"] = safe_url("admin_sales_agency_request_detail", id=request_id) if request_id else None
+                rows.append(payload)
+
             cur.execute(
                 """
                 SELECT s.id, s.document_no, s.issue_date, s.total_amount, s.status, s.created_at,
@@ -616,9 +656,10 @@ def apply(module: Any) -> None:
                 """
             )
             for row in rows_to_dicts(cur.fetchall()):
-                rows.append(
+                append_row(
                     {
                         "kind": "shikiriosho",
+                        "document_key": "shikiriosho",
                         "id": row["id"],
                         "request_id": None,
                         "document_type": "仕切書",
@@ -630,7 +671,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("shikiriosho", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": "",
                         "notes": "",
@@ -652,12 +693,14 @@ def apply(module: Any) -> None:
             for row in rows_to_dicts(cur.fetchall()):
                 scope = row.get("document_scope") or ("vendor_outgoing" if (row.get("document_no") or "").startswith("MT-") else "client_incoming")
                 request_info = request_map.get(row.get("sales_agency_request_id")) or vendor_mitsumori_map.get(row["id"]) or {}
-                rows.append(
+                is_vendor_outgoing = scope == "vendor_outgoing"
+                append_row(
                     {
                         "kind": "user_mitsumori",
+                        "document_key": "vendor_estimate" if is_vendor_outgoing else "client_mitsumori",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
-                        "document_type": "見積り依頼書",
+                        "document_type": "業者向け見積依頼書" if is_vendor_outgoing else "見積り依頼書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": row.get("client_name") or row.get("username") or "未設定",
                         "service_type": request_info.get("service_type") or "",
@@ -666,11 +709,11 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("user_mitsumori", row.get("status")),
-                        "direction_key": "vendor" if scope == "vendor_outgoing" else "incoming",
-                        "direction_label": "開花→業者" if scope == "vendor_outgoing" else "クライアント→開花",
+                        "direction_key": "vendor_outgoing" if is_vendor_outgoing else "client_incoming",
+                        "direction_label": "開花→業者" if is_vendor_outgoing else "クライアント→開花",
                         "subject": row.get("subject") or row.get("company_name") or "",
                         "notes": row.get("notes") or "",
-                        "detail_endpoint": "admin_mitsumori_view" if scope == "vendor_outgoing" else "admin_user_mitsumori_view",
+                        "detail_endpoint": "admin_mitsumori_view" if is_vendor_outgoing else "admin_user_mitsumori_view",
                         "sort_key": str(row.get("issue_date") or row.get("created_at") or ""),
                     }
                 )
@@ -687,9 +730,10 @@ def apply(module: Any) -> None:
             )
             for row in rows_to_dicts(cur.fetchall()):
                 request_info = request_map.get(row.get("sales_agency_request_id")) or {}
-                rows.append(
+                append_row(
                     {
                         "kind": "user_kaitori_shoudaku",
+                        "document_key": "client_kaitori_request",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
                         "document_type": "買取依頼書",
@@ -701,7 +745,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("user_kaitori_shoudaku", row.get("status")),
-                        "direction_key": "incoming",
+                        "direction_key": "client_incoming",
                         "direction_label": "クライアント→開花",
                         "subject": row.get("customer_name") or "",
                         "notes": row.get("notes") or "",
@@ -720,21 +764,22 @@ def apply(module: Any) -> None:
             )
             for row in rows_to_dicts(cur.fetchall()):
                 request_info = request_map.get(row.get("sales_agency_request_id")) or vendor_kaitori_map.get(row["id"]) or {}
-                rows.append(
+                append_row(
                     {
                         "kind": "admin_kaitori_shoudaku",
+                        "document_key": "vendor_statement",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
                         "document_type": "業者買取明細書",
                         "document_no": row.get("document_no") or "-",
-                        "client_name": (fetch_sales_agency_request_details_v2(request_info.get("id"), viewer="admin")[0].get("client_name") if request_info.get("id") else "-"),
+                        "client_name": "-",
                         "service_type": request_info.get("service_type") or "",
                         "service_name": service_name(request_info.get("service_type") or ""),
                         "issue_date": format_date(row.get("issue_date") or row.get("created_at")),
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("admin_kaitori_shoudaku", row.get("status")),
-                        "direction_key": "vendor",
+                        "direction_key": "vendor_incoming",
                         "direction_label": "業者→開花",
                         "subject": row.get("company_name") or "",
                         "notes": row.get("notes") or "",
@@ -756,12 +801,13 @@ def apply(module: Any) -> None:
             )
             for row in rows_to_dicts(cur.fetchall()):
                 request_info = request_map.get(row.get("sales_agency_request_id")) or client_invoice_map.get(row["id"]) or {}
-                rows.append(
+                append_row(
                     {
                         "kind": "invoice",
+                        "document_key": "client_invoice",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
-                        "document_type": "買取明細書",
+                        "document_type": "ユーザー向け買取明細書",
                         "document_no": row.get("invoice_no") or "-",
                         "client_name": row.get("client_name") or row.get("recipient_name") or row.get("username") or "未設定",
                         "service_type": request_info.get("service_type") or "",
@@ -770,7 +816,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("invoice", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": "",
                         "notes": row.get("notes") or "",
@@ -788,9 +834,10 @@ def apply(module: Any) -> None:
                 """
             )
             for row in rows_to_dicts(cur.fetchall()):
-                rows.append(
+                append_row(
                     {
                         "kind": "user_keisan",
+                        "document_key": "auction_keisan",
                         "id": row["id"],
                         "request_id": None,
                         "document_type": "オークション計算書",
@@ -802,7 +849,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": document_status_label("user_keisan", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": "",
                         "notes": "",
@@ -968,7 +1015,7 @@ def apply(module: Any) -> None:
 
         filtered_rows = []
         for row in rows:
-            if doc_type != "all" and row.get("kind") != doc_type:
+            if doc_type != "all" and row.get("document_key") != doc_type:
                 continue
             if status != "all" and row.get("status") != status:
                 continue
@@ -1027,6 +1074,25 @@ def apply(module: Any) -> None:
             if not request_row:
                 continue
             request_row["created_date_label"] = format_date(request_row.get("created_at"))
+            request_row["detail_url"] = safe_url("admin_sales_agency_request_detail", id=request_row.get("id"))
+            request_row["box_url"] = safe_url(
+                "admin_sales_agency_requests",
+                service_type=request_row.get("service_type"),
+            ) or safe_url("admin_sales_agency_requests")
+            request_row["vendor_mitsumori_url"] = safe_url("admin_mitsumori_view", id=request_row.get("vendor_mitsumori_id")) if request_row.get("vendor_mitsumori_id") else None
+            request_row["vendor_kaitori_url"] = safe_url("admin_kaitori_shoudaku_view", id=request_row.get("vendor_kaitori_shoudaku_id")) if request_row.get("vendor_kaitori_shoudaku_id") else None
+            request_row["client_invoice_url"] = safe_url("admin_kaitori_view", id=request_row.get("client_invoice_id")) if request_row.get("client_invoice_id") else None
+            request_row["create_vendor_estimate_url"] = safe_url("admin_mitsumori_add", request_id=request_row.get("id")) if request_row.get("request_can_create_vendor_estimate") else None
+            request_row["create_vendor_kaitori_url"] = safe_url("admin_kaitori_shoudaku_add", request_id=request_row.get("id")) if request_row.get("request_can_register_vendor_kaitori") else None
+            request_row["create_client_invoice_url"] = safe_url("admin_kaitori_add", request_id=request_row.get("id")) if request_row.get("request_can_create_client_invoice") else None
+            if request_row.get("request_can_create_vendor_estimate"):
+                request_row["next_document_label"] = "業者向け見積依頼書を作成"
+            elif request_row.get("request_can_register_vendor_kaitori"):
+                request_row["next_document_label"] = "業者買取明細書を登録"
+            elif request_row.get("request_can_create_client_invoice"):
+                request_row["next_document_label"] = "ユーザー向け買取明細書を確認・発行"
+            else:
+                request_row["next_document_label"] = "次の書類待ちまたは処理完了"
             request_rows.append(request_row)
         return request_rows
 
@@ -1037,33 +1103,37 @@ def apply(module: Any) -> None:
 
         history_rows = fetch_admin_document_history_rows_v3()
         document_counts = {
-            "精算書": 0,
-            "見積り依頼書": 0,
-            "買取明細書": 0,
-            "オークション計算書": 0,
+            "client_incoming": 0,
+            "vendor_estimate": 0,
+            "vendor_statement": 0,
+            "client_outgoing": 0,
         }
         for row in history_rows:
-            if row.get("kind") == "shikiriosho":
-                document_counts["精算書"] += 1
-            elif row.get("kind") == "user_mitsumori" and row.get("direction_key") == "incoming":
-                document_counts["見積り依頼書"] += 1
-            elif row.get("kind") == "invoice":
-                document_counts["買取明細書"] += 1
-            elif row.get("kind") == "user_keisan":
-                document_counts["オークション計算書"] += 1
+            if row.get("direction_key") == "client_incoming":
+                document_counts["client_incoming"] += 1
+            elif row.get("document_key") == "vendor_estimate":
+                document_counts["vendor_estimate"] += 1
+            elif row.get("document_key") == "vendor_statement":
+                document_counts["vendor_statement"] += 1
+            elif row.get("direction_key") == "client_outgoing":
+                document_counts["client_outgoing"] += 1
 
-        recent_incoming_documents = [row for row in history_rows if row.get("direction_key") == "incoming"][:8]
-        recent_outgoing_documents = [row for row in history_rows if row.get("direction_key") == "outgoing"][:8]
-        recent_vendor_documents = [row for row in history_rows if row.get("direction_key") == "vendor"][:8]
+        recent_client_incoming_documents = [row for row in history_rows if row.get("direction_key") == "client_incoming"][:8]
+        recent_vendor_outgoing_documents = [row for row in history_rows if row.get("direction_key") == "vendor_outgoing"][:8]
+        recent_vendor_incoming_documents = [row for row in history_rows if row.get("direction_key") == "vendor_incoming"][:8]
+        recent_client_outgoing_documents = [row for row in history_rows if row.get("direction_key") == "client_outgoing"][:8]
         ongoing_request_rows = build_ongoing_request_rows()
+        review_ready_request_rows = [row for row in ongoing_request_rows if row.get("request_can_create_client_invoice")]
 
         return render_template(
             "admin/documents_dashboard.html",
             document_counts=document_counts,
             ongoing_request_rows=ongoing_request_rows,
-            recent_incoming_documents=recent_incoming_documents,
-            recent_outgoing_documents=recent_outgoing_documents,
-            recent_vendor_documents=recent_vendor_documents,
+            review_ready_request_rows=review_ready_request_rows,
+            recent_client_incoming_documents=recent_client_incoming_documents,
+            recent_vendor_outgoing_documents=recent_vendor_outgoing_documents,
+            recent_vendor_incoming_documents=recent_vendor_incoming_documents,
+            recent_client_outgoing_documents=recent_client_outgoing_documents,
         )
 
     def admin_documents_history_v2():
@@ -1086,12 +1156,13 @@ def apply(module: Any) -> None:
         client_options = sorted({row.get("client_name") for row in all_rows if row.get("client_name")})
         status_options = sorted({(row.get("status"), row.get("status_label")) for row in all_rows if row.get("status")})
         document_type_options = [
-            ("shikiriosho", "精算書"),
-            ("user_mitsumori", "見積依頼書"),
-            ("user_kaitori_shoudaku", "買取依頼書"),
-            ("admin_kaitori_shoudaku", "業者買取明細書"),
-            ("invoice", "買取明細書"),
-            ("user_keisan", "計算書"),
+            ("client_mitsumori", "見積り依頼書"),
+            ("client_kaitori_request", "買取依頼書"),
+            ("vendor_estimate", "業者向け見積依頼書"),
+            ("vendor_statement", "業者買取明細書"),
+            ("client_invoice", "ユーザー向け買取明細書"),
+            ("shikiriosho", "仕切書"),
+            ("auction_keisan", "オークション計算書"),
         ]
         return render_template(
             "admin/documents_history.html",

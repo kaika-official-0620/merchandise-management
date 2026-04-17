@@ -2,6 +2,13 @@
 {% block title %}書類履歴 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set history_rows = history_rows if history_rows is defined else [] %}
+{% set filters = filters if filters is defined else {} %}
+{% set client_options = client_options if client_options is defined else [] %}
+{% set status_options = status_options if status_options is defined else [] %}
+{% set document_type_options = document_type_options if document_type_options is defined else [] %}
+{% set service_types = service_types if service_types is defined else {} %}
+
 <style>
 .history-page {
     display: grid;
@@ -16,12 +23,19 @@
     flex-wrap: wrap;
 }
 
-.history-header p {
-    margin: 0.45rem 0 0;
+.history-header p,
+.results-meta p,
+.hint-card p,
+.service-name {
     color: #64748b;
     line-height: 1.8;
 }
 
+.history-header p {
+    margin: 0.45rem 0 0;
+}
+
+.hint-card,
 .filter-card,
 .results-card {
     background: #fff;
@@ -31,10 +45,24 @@
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
+.hint-grid,
 .filter-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 0.9rem;
+}
+
+.hint-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    background: #f8fafc;
+}
+
+.hint-item strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #0f172a;
 }
 
 .form-group {
@@ -58,11 +86,15 @@
     font-size: 0.92rem;
 }
 
-.filter-actions {
+.filter-actions,
+.inline-actions {
     display: flex;
     gap: 0.75rem;
-    margin-top: 1rem;
     flex-wrap: wrap;
+}
+
+.filter-actions {
+    margin-top: 1rem;
 }
 
 .results-meta {
@@ -74,9 +106,13 @@
     flex-wrap: wrap;
 }
 
+.results-meta h2,
+.hint-card h2 {
+    margin: 0 0 0.45rem;
+}
+
 .results-meta p {
     margin: 0;
-    color: #64748b;
 }
 
 .history-table {
@@ -102,14 +138,7 @@
     border-bottom: none;
 }
 
-.service-name {
-    color: #64748b;
-    font-size: 0.82rem;
-    margin-top: 0.28rem;
-}
-
-.status-badge,
-.direction-badge {
+.status-badge {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
@@ -118,7 +147,8 @@
     font-weight: 700;
 }
 
-.status-badge.draft {
+.status-badge.draft,
+.status-badge.pending {
     background: #fef3c7;
     color: #b45309;
 }
@@ -140,21 +170,6 @@
     color: #1d4ed8;
 }
 
-.direction-badge.incoming {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.direction-badge.outgoing {
-    background: #e2e8f0;
-    color: #334155;
-}
-
-.direction-badge.vendor {
-    background: #fef3c7;
-    color: #92400e;
-}
-
 .table-scroll {
     overflow-x: auto;
 }
@@ -169,13 +184,14 @@
 }
 
 @media (max-width: 768px) {
+    .hint-card,
     .filter-card,
     .results-card {
         padding: 1rem;
     }
 
     .history-table {
-        min-width: 1040px;
+        min-width: 1140px;
     }
 }
 </style>
@@ -184,9 +200,31 @@
     <div class="history-header">
         <div>
             <h1>書類履歴</h1>
-            <p>クライアント、日付、書類種別、サービス種別で絞り込んで、過去の書類履歴を確認できます。</p>
+            <p>クライアント、日付、書類種別、サービス種別で絞り込んで、どの案件に対してどの書類が出入りしたかを確認できます。</p>
         </div>
         <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+    </div>
+
+    <div class="hint-card">
+        <h2>履歴の見方</h2>
+        <div class="hint-grid">
+            <div class="hint-item">
+                <strong>クライアント→開花</strong>
+                ユーザーが開花へ送った依頼書です。ここが案件の起点になります。
+            </div>
+            <div class="hint-item">
+                <strong>開花→業者</strong>
+                開花が業者へ送った見積依頼書です。
+            </div>
+            <div class="hint-item">
+                <strong>業者→開花</strong>
+                業者から返ってきた回答書類です。ここを確認してからユーザー向け書類を作成します。
+            </div>
+            <div class="hint-item">
+                <strong>開花→クライアント</strong>
+                最終的にユーザー画面へ反映される書類です。
+            </div>
+        </div>
     </div>
 
     <div class="filter-card">
@@ -220,12 +258,13 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="direction">届き先</label>
+                    <label for="direction">向き</label>
                     <select id="direction" name="direction" class="form-control">
                         <option value="all">すべて</option>
-                        <option value="incoming" {% if filters.direction == 'incoming' %}selected{% endif %}>クライアント→開花</option>
-                        <option value="outgoing" {% if filters.direction == 'outgoing' %}selected{% endif %}>開花→クライアント</option>
-                        <option value="vendor" {% if filters.direction == 'vendor' %}selected{% endif %}>開花→業者</option>
+                        <option value="client_incoming" {% if filters.direction == 'client_incoming' %}selected{% endif %}>クライアント→開花</option>
+                        <option value="vendor_outgoing" {% if filters.direction == 'vendor_outgoing' %}selected{% endif %}>開花→業者</option>
+                        <option value="vendor_incoming" {% if filters.direction == 'vendor_incoming' %}selected{% endif %}>業者→開花</option>
+                        <option value="client_outgoing" {% if filters.direction == 'client_outgoing' %}selected{% endif %}>開花→クライアント</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -271,11 +310,12 @@
                         <th>書類種別</th>
                         <th>書類No.</th>
                         <th>クライアント</th>
-                        <th>届き先</th>
+                        <th>向き</th>
                         <th>サービス</th>
                         <th>発行日</th>
                         <th>金額</th>
                         <th>状態</th>
+                        <th>案件進行</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -285,7 +325,7 @@
                         <td>{{ row.document_type }}</td>
                         <td>{{ row.document_no }}</td>
                         <td>{{ row.client_name }}</td>
-                        <td><span class="direction-badge {{ row.direction_key }}">{{ row.direction_label }}</span></td>
+                        <td>{{ row.direction_label }}</td>
                         <td>
                             {% if row.service_name %}
                             <div>{{ row.service_name }}</div>
@@ -295,12 +335,17 @@
                         </td>
                         <td>{{ row.issue_date or '-' }}</td>
                         <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td>
-                        <td><span class="status-badge {{ row.status }}">{{ row.status_label }}</span></td>
+                        <td><span class="status-badge {{ row.status or 'draft' }}">{{ row.status_label }}</span></td>
+                        <td>{{ row.request_flow_label or row.request_status_label or '-' }}</td>
                         <td>
-                            <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
-                                <a href="{{ url_for(row.detail_endpoint, id=row.id) }}" class="btn btn-info btn-sm">詳細</a>
-                                {% if row.request_id %}
-                                <a href="{{ url_for('admin_sales_agency_request_detail', id=row.request_id) }}" class="btn btn-secondary btn-sm">案件詳細</a>
+                            <div class="inline-actions">
+                                {% if row.detail_url %}
+                                <a href="{{ row.detail_url }}" class="btn btn-info btn-sm">書類詳細</a>
+                                {% else %}
+                                <span class="service-name">詳細リンク準備中</span>
+                                {% endif %}
+                                {% if row.request_url %}
+                                <a href="{{ row.request_url }}" class="btn btn-secondary btn-sm">案件詳細</a>
                                 {% endif %}
                             </div>
                         </td>
