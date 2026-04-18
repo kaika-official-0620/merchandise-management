@@ -34,7 +34,7 @@
                     <th>書類種別</th>
                     <th>書類No.</th>
                     <th>クライアント</th>
-                    <th>サービス</th>
+                    <th class="col-service">サービス</th>
                     <th>発行日</th>
                     <th>状態</th>
                     <th>案件進行</th>
@@ -233,6 +233,12 @@
     font-weight: 700;
     text-align: left;
     background: #f8fafc;
+}
+
+.request-table th.col-service,
+.history-table th.col-service {
+    white-space: nowrap;
+    min-width: 5.5rem;
 }
 
 .request-table tr:last-child td,
@@ -435,7 +441,7 @@
             <table class="request-table">
                 <thead>
                     <tr>
-                        <th>サービス</th>
+                        <th class="col-service">サービス</th>
                         <th>クライアント</th>
                         <th>管理画面の状況</th>
                         <th>クライアント表示</th>
