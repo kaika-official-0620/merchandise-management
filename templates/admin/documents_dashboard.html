@@ -152,15 +152,13 @@
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
-.overview-grid,
-.summary-grid {
+.overview-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
 }
 
 .overview-card,
-.summary-card,
 .section-card {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -168,13 +166,11 @@
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
-.overview-card,
-.summary-card {
+.overview-card {
     padding: 1.15rem 1.05rem;
 }
 
 .overview-card h2,
-.summary-card h2,
 .section-card h2 {
     margin: 0 0 0.45rem;
     color: #0f172a;
@@ -195,16 +191,33 @@
     margin-bottom: 0.35rem;
 }
 
-.summary-card-label {
-    color: #64748b;
-    font-size: 0.88rem;
-    margin-bottom: 0.55rem;
+.overview-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
 }
 
-.summary-card-value {
-    color: #0f172a;
-    font-size: 1.9rem;
+.overview-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.2rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 1.05rem;
     font-weight: 700;
+    white-space: nowrap;
+}
+
+.overview-count-sub {
+    display: grid;
+    gap: 0.22rem;
+    margin-top: 0.8rem;
+    color: #475569;
+    font-size: 0.84rem;
 }
 
 .section-card {
@@ -408,54 +421,56 @@
 
     <div class="overview-grid">
         <div class="overview-card">
-            <h2>1. クライアントから受付</h2>
+            <div class="overview-card-head">
+                <h2>1. クライアントから受付</h2>
+                <span class="overview-count">{{ document_counts.get('client_incoming', 0) }}件</span>
+            </div>
             <p>クライアントが作成した見積り依頼書、買取依頼書をまずここで確認します。販売代行案件に紐づく書類の起点です。</p>
             <ul class="overview-list">
                 <li>見積り依頼書</li>
                 <li>買取依頼書</li>
             </ul>
+            <div class="overview-count-sub">
+                <span>見積り依頼書: {{ document_type_counts.get('client_mitsumori', 0) }}件</span>
+                <span>買取依頼書: {{ document_type_counts.get('client_kaitori_request', 0) }}件</span>
+            </div>
         </div>
         <div class="overview-card">
-            <h2>2. 開花から業者へ依頼</h2>
+            <div class="overview-card-head">
+                <h2>2. 開花から業者へ依頼</h2>
+                <span class="overview-count">{{ document_counts.get('vendor_estimate', 0) }}件</span>
+            </div>
             <p>ユーザーからの依頼内容を確認したら、開花名義で業者向け見積依頼書を作成します。</p>
             <ul class="overview-list">
                 <li>業者向け見積依頼書</li>
             </ul>
         </div>
         <div class="overview-card">
-            <h2>3. 業者から回答受領</h2>
+            <div class="overview-card-head">
+                <h2>3. 業者から回答受領</h2>
+                <span class="overview-count">{{ document_counts.get('vendor_statement', 0) }}件</span>
+            </div>
             <p>業者買取明細書が届いてから、開花側で最終確認を行います。ここが済むまでユーザー向け買取明細書は確定しません。</p>
             <ul class="overview-list">
                 <li>業者買取明細書</li>
             </ul>
         </div>
         <div class="overview-card">
-            <h2>4. クライアントへ返送</h2>
+            <div class="overview-card-head">
+                <h2>4. クライアントへ返送</h2>
+                <span class="overview-count">{{ document_counts.get('client_outgoing', 0) }}件</span>
+            </div>
             <p>確認が完了したら、ユーザー向け買取明細書や仕切書、計算書を発行し、クライアント画面へ反映します。</p>
             <ul class="overview-list">
                 <li>ユーザー向け買取明細書</li>
                 <li>仕切書</li>
                 <li>オークション計算書</li>
             </ul>
-        </div>
-    </div>
-
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="summary-card-label">クライアントから届いた依頼書</div>
-            <div class="summary-card-value">{{ document_counts.get('client_incoming', 0) }}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-card-label">業者向け見積依頼書</div>
-            <div class="summary-card-value">{{ document_counts.get('vendor_estimate', 0) }}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-card-label">業者買取明細書</div>
-            <div class="summary-card-value">{{ document_counts.get('vendor_statement', 0) }}</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-card-label">クライアントへ返した書類</div>
-            <div class="summary-card-value">{{ document_counts.get('client_outgoing', 0) }}</div>
+            <div class="overview-count-sub">
+                <span>ユーザー向け買取明細書: {{ document_type_counts.get('client_invoice', 0) }}件</span>
+                <span>仕切書: {{ document_type_counts.get('shikiriosho', 0) }}件</span>
+                <span>オークション計算書: {{ document_type_counts.get('auction_keisan', 0) }}件</span>
+            </div>
         </div>
     </div>
 
