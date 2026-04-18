@@ -26318,11 +26318,16 @@ def fetch_admin_document_history_rows_v2():
                 'sort_key': str(row.get('issue_date') or row.get('created_at') or ''),
             })
 
+        admin_created_condition = (
+            "COALESCE(k.is_admin_created, FALSE) = TRUE"
+            if DATABASE_URL
+            else "COALESCE(k.is_admin_created, 0) = 1"
+        )
         cur.execute(
-            """
+            f"""
             SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at
             FROM user_keisan k
-            WHERE COALESCE(k.is_admin_created, 0) = 1
+            WHERE {admin_created_condition}
             ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
             """
         )
