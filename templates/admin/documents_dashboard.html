@@ -47,7 +47,7 @@
                     <td>{{ row.document_type }}</td>
                     <td>{{ row.document_no }}</td>
                     <td>{{ row.client_name }}</td>
-                    <td>
+                    <td class="col-service">
                         {% if row.service_name %}
                         <div>{{ row.service_name }}</div>
                         {% else %}
@@ -236,9 +236,12 @@
 }
 
 .request-table th.col-service,
-.history-table th.col-service {
+.history-table th.col-service,
+.request-table td.col-service,
+.history-table td.col-service {
     white-space: nowrap;
-    min-width: 5.5rem;
+    word-break: keep-all;
+    min-width: 7rem;
 }
 
 .request-table tr:last-child td,
@@ -453,7 +456,7 @@
                 <tbody>
                     {% for req in ongoing_request_rows %}
                     <tr>
-                        <td>
+                        <td class="col-service">
                             <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
                             <div class="meta-sub" style="margin-top: 0.3rem;">申請ID {{ req.id }}</div>
                         </td>
