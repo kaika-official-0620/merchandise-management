@@ -314,6 +314,7 @@
 
 .table-scroll {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .empty-state {
@@ -326,13 +327,26 @@
 }
 
 @media (max-width: 768px) {
+    .documents-header {
+        flex-direction: column;
+    }
+
+    .documents-actions {
+        width: 100%;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .overview-card,
     .section-card {
         padding: 1rem;
     }
 
     .request-table,
     .history-table {
-        min-width: 980px;
+        min-width: 820px;
     }
 }
 </style>
