@@ -9,6 +9,11 @@
 {% set recent_vendor_outgoing_documents = recent_vendor_outgoing_documents if recent_vendor_outgoing_documents is defined else [] %}
 {% set recent_vendor_incoming_documents = recent_vendor_incoming_documents if recent_vendor_incoming_documents is defined else (recent_vendor_documents if recent_vendor_documents is defined else []) %}
 {% set recent_client_outgoing_documents = recent_client_outgoing_documents if recent_client_outgoing_documents is defined else (recent_outgoing_documents if recent_outgoing_documents is defined else []) %}
+{% set document_type_counts = document_type_counts if document_type_counts is defined else {} %}
+{% set selected_group = selected_group if selected_group is defined else 'all' %}
+{% set selected_doc_type = selected_doc_type if selected_doc_type is defined else 'all' %}
+{% set dashboard_group_options = dashboard_group_options if dashboard_group_options is defined else [] %}
+{% set dashboard_type_options = dashboard_type_options if dashboard_type_options is defined else [] %}
 
 {% macro document_action_links(row) -%}
     <div class="inline-actions">
@@ -93,6 +98,58 @@
     display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
+}
+
+.filter-toolbar,
+.filter-chip-row {
+    display: flex;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.filter-toolbar {
+    margin-top: 0.2rem;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 999px;
+    padding: 0.62rem 0.9rem;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.filter-chip.active {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.filter-chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.08);
+    color: inherit;
+    font-size: 0.78rem;
+}
+
+.filter-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.15rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 
 .overview-grid,
@@ -310,6 +367,45 @@
         </div>
     </div>
 
+    <div class="filter-card">
+        <div class="meta-stack">
+            <strong>種類ごとに確認する</strong>
+            <span class="section-note">流れごとの切り替えと、書類種別ごとの絞り込みを同時に使えます。必要な書類だけを見て、運営時の見落としを減らせるようにしています。</span>
+        </div>
+        <div class="filter-toolbar">
+            {% for value, label in dashboard_group_options %}
+            {% set group_count = (
+                (document_counts.get('client_incoming', 0) + document_counts.get('vendor_estimate', 0) + document_counts.get('vendor_statement', 0) + document_counts.get('client_outgoing', 0))
+                if value == 'all'
+                else document_counts.get('vendor_estimate', 0) if value == 'vendor_outgoing'
+                else document_counts.get('vendor_statement', 0) if value == 'vendor_incoming'
+                else document_counts.get('client_incoming', 0) if value == 'client_incoming'
+                else document_counts.get('client_outgoing', 0)
+            ) %}
+            <a href="{{ url_for('admin_documents_dashboard', group=value, doc_type=selected_doc_type) }}" class="filter-chip {% if selected_group == value %}active{% endif %}">
+                <span>{{ label }}</span>
+                <span class="filter-chip-count">{{ group_count }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="filter-chip-row">
+            {% for value, label in dashboard_type_options %}
+            {% set type_count = (
+                (document_type_counts.get('client_mitsumori', 0) + document_type_counts.get('client_kaitori_request', 0) + document_type_counts.get('vendor_estimate', 0) + document_type_counts.get('vendor_statement', 0) + document_type_counts.get('client_invoice', 0) + document_type_counts.get('shikiriosho', 0) + document_type_counts.get('auction_keisan', 0))
+                if value == 'all'
+                else document_type_counts.get(value, 0)
+            ) %}
+            <a href="{{ url_for('admin_documents_dashboard', group=selected_group, doc_type=value) }}" class="filter-chip {% if selected_doc_type == value %}active{% endif %}">
+                <span>{{ label }}</span>
+                <span class="filter-chip-count">{{ type_count }}</span>
+            </a>
+            {% endfor %}
+            {% if selected_group != 'all' or selected_doc_type != 'all' %}
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="filter-chip">絞り込み解除</a>
+            {% endif %}
+        </div>
+    </div>
+
     <div class="overview-grid">
         <div class="overview-card">
             <h2>1. クライアントから受付</h2>
@@ -363,7 +459,7 @@
         </div>
     </div>
 
-    {% if review_ready_request_rows %}
+    {% if review_ready_request_rows and selected_group in ['all', 'client_outgoing'] %}
     <div class="section-card section-card-alert">
         <h2>確認待ちの案件</h2>
         <p class="section-note">業者買取明細書までは受領済みで、次にユーザー向け買取明細書を確認・発行する案件です。ここを処理すると、クライアント側の書類一覧へ最終書類が反映されます。</p>
@@ -389,6 +485,7 @@
     </div>
     {% endif %}
 
+    {% if selected_group == 'all' %}
     <div class="section-card">
         <h2>進行中の販売代行と次の作業</h2>
         <p class="section-note">案件ごとに、今どこまで進んでいて、次に何を作るべきかをまとめています。誤送信を防ぐため、書類は順番どおりにしか進めません。</p>
@@ -473,7 +570,9 @@
         <div class="empty-state">進行中の販売代行案件はありません。</div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if selected_group in ['all', 'client_incoming'] %}
     <div class="section-card">
         <h2>クライアントから届いた書類</h2>
         <p class="section-note">クライアントが作成した依頼書です。ここで内容を確認してから、販売代行BOXや案件詳細へ進んでください。</p>
@@ -483,7 +582,9 @@
         <div class="empty-state">クライアントから届いた書類はまだありません。</div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if selected_group in ['all', 'vendor_outgoing'] %}
     <div class="section-card">
         <h2>開花から業者へ送った書類</h2>
         <p class="section-note">業者向け見積依頼書です。業者買取明細書がまだ無い案件は、この一覧と案件詳細を見ながら進めます。</p>
@@ -493,7 +594,9 @@
         <div class="empty-state">業者へ送った書類はまだありません。</div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if selected_group in ['all', 'vendor_incoming'] %}
     <div class="section-card">
         <h2>業者から開花へ届いた書類</h2>
         <p class="section-note">業者買取明細書です。ここで内容を確認したあとに、ユーザー向け買取明細書を発行します。</p>
@@ -503,7 +606,9 @@
         <div class="empty-state">業者から届いた書類はまだありません。</div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if selected_group in ['all', 'client_outgoing'] %}
     <div class="section-card">
         <h2>開花からクライアントへ返した書類</h2>
         <p class="section-note">ユーザー向け買取明細書、仕切書、オークション計算書です。ここにあるものがクライアント側の書類一覧へ反映されます。</p>
@@ -513,5 +618,6 @@
         <div class="empty-state">クライアントへ返した書類はまだありません。</div>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -1107,11 +1107,22 @@ def apply(module: Any) -> None:
             return redirect(url_for("index"))
 
         history_rows = fetch_admin_document_history_rows_v3()
+        selected_group = request.args.get("group", "all").strip() or "all"
+        selected_doc_type = request.args.get("doc_type", "all").strip() or "all"
         document_counts = {
             "client_incoming": 0,
             "vendor_estimate": 0,
             "vendor_statement": 0,
             "client_outgoing": 0,
+        }
+        document_type_counts = {
+            "client_mitsumori": 0,
+            "client_kaitori_request": 0,
+            "vendor_estimate": 0,
+            "vendor_statement": 0,
+            "client_invoice": 0,
+            "shikiriosho": 0,
+            "auction_keisan": 0,
         }
         for row in history_rows:
             if row.get("direction_key") == "client_incoming":
@@ -1122,23 +1133,66 @@ def apply(module: Any) -> None:
                 document_counts["vendor_statement"] += 1
             elif row.get("direction_key") == "client_outgoing":
                 document_counts["client_outgoing"] += 1
+            if row.get("document_key") in document_type_counts:
+                document_type_counts[row.get("document_key")] += 1
 
-        recent_client_incoming_documents = [row for row in history_rows if row.get("direction_key") == "client_incoming"][:8]
-        recent_vendor_outgoing_documents = [row for row in history_rows if row.get("direction_key") == "vendor_outgoing"][:8]
-        recent_vendor_incoming_documents = [row for row in history_rows if row.get("direction_key") == "vendor_incoming"][:8]
-        recent_client_outgoing_documents = [row for row in history_rows if row.get("direction_key") == "client_outgoing"][:8]
+        def row_matches_dashboard_filters(row: dict[str, Any]) -> bool:
+            if selected_group != "all" and row.get("direction_key") != selected_group:
+                return False
+            if selected_doc_type != "all" and row.get("document_key") != selected_doc_type:
+                return False
+            return True
+
+        recent_client_incoming_documents = [
+            row for row in history_rows
+            if row.get("direction_key") == "client_incoming" and row_matches_dashboard_filters(row)
+        ][:8]
+        recent_vendor_outgoing_documents = [
+            row for row in history_rows
+            if row.get("direction_key") == "vendor_outgoing" and row_matches_dashboard_filters(row)
+        ][:8]
+        recent_vendor_incoming_documents = [
+            row for row in history_rows
+            if row.get("direction_key") == "vendor_incoming" and row_matches_dashboard_filters(row)
+        ][:8]
+        recent_client_outgoing_documents = [
+            row for row in history_rows
+            if row.get("direction_key") == "client_outgoing" and row_matches_dashboard_filters(row)
+        ][:8]
         ongoing_request_rows = build_ongoing_request_rows()
         review_ready_request_rows = [row for row in ongoing_request_rows if row.get("request_can_create_client_invoice")]
+        dashboard_group_options = [
+            ("all", "すべて"),
+            ("client_incoming", "クライアント受付"),
+            ("vendor_outgoing", "開花→業者"),
+            ("vendor_incoming", "業者→開花"),
+            ("client_outgoing", "開花→クライアント"),
+        ]
+        dashboard_type_options = [
+            ("all", "すべての書類"),
+            ("client_mitsumori", "見積り依頼書"),
+            ("client_kaitori_request", "買取依頼書"),
+            ("vendor_estimate", "業者向け見積依頼書"),
+            ("vendor_statement", "業者買取明細書"),
+            ("client_invoice", "ユーザー向け買取明細書"),
+            ("shikiriosho", "仕切書"),
+            ("auction_keisan", "オークション計算書"),
+        ]
 
         return render_template(
             "admin/documents_dashboard.html",
             document_counts=document_counts,
+            document_type_counts=document_type_counts,
             ongoing_request_rows=ongoing_request_rows,
             review_ready_request_rows=review_ready_request_rows,
             recent_client_incoming_documents=recent_client_incoming_documents,
             recent_vendor_outgoing_documents=recent_vendor_outgoing_documents,
             recent_vendor_incoming_documents=recent_vendor_incoming_documents,
             recent_client_outgoing_documents=recent_client_outgoing_documents,
+            selected_group=selected_group,
+            selected_doc_type=selected_doc_type,
+            dashboard_group_options=dashboard_group_options,
+            dashboard_type_options=dashboard_type_options,
         )
 
     def admin_documents_history_v2():
