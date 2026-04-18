@@ -1108,7 +1108,6 @@ def apply(module: Any) -> None:
 
         history_rows = fetch_admin_document_history_rows_v3()
         selected_group = request.args.get("group", "all").strip() or "all"
-        selected_doc_type = request.args.get("doc_type", "all").strip() or "all"
         document_counts = {
             "client_incoming": 0,
             "vendor_estimate": 0,
@@ -1137,11 +1136,7 @@ def apply(module: Any) -> None:
                 document_type_counts[row.get("document_key")] += 1
 
         def row_matches_dashboard_filters(row: dict[str, Any]) -> bool:
-            if selected_group != "all" and row.get("direction_key") != selected_group:
-                return False
-            if selected_doc_type != "all" and row.get("document_key") != selected_doc_type:
-                return False
-            return True
+            return selected_group == "all" or row.get("direction_key") == selected_group
 
         recent_client_incoming_documents = [
             row for row in history_rows
@@ -1159,25 +1154,49 @@ def apply(module: Any) -> None:
             row for row in history_rows
             if row.get("direction_key") == "client_outgoing" and row_matches_dashboard_filters(row)
         ][:8]
-        ongoing_request_rows = build_ongoing_request_rows()
-        review_ready_request_rows = [row for row in ongoing_request_rows if row.get("request_can_create_client_invoice")]
-        dashboard_group_options = [
-            ("all", "すべて"),
-            ("client_incoming", "クライアント受付"),
-            ("vendor_outgoing", "開花→業者"),
-            ("vendor_incoming", "業者→開花"),
-            ("client_outgoing", "開花→クライアント"),
+        all_ongoing_request_rows = build_ongoing_request_rows()
+
+        def request_matches_group(row: dict[str, Any]) -> bool:
+            if selected_group == "all":
+                return True
+            flow_key = row.get("document_flow_key") or ""
+            if selected_group == "client_incoming":
+                return flow_key == "user_request" or row.get("request_can_create_vendor_estimate")
+            if selected_group == "vendor_outgoing":
+                return flow_key == "vendor_estimate" or row.get("request_can_register_vendor_kaitori")
+            if selected_group == "vendor_incoming":
+                return flow_key == "vendor_statement" or row.get("request_can_create_client_invoice")
+            if selected_group == "client_outgoing":
+                return flow_key in {"client_invoice", "completed"} or bool(row.get("client_invoice_id"))
+            return True
+
+        ongoing_request_rows = [row for row in all_ongoing_request_rows if request_matches_group(row)]
+        review_ready_request_rows = [
+            row for row in ongoing_request_rows
+            if row.get("request_can_create_client_invoice")
         ]
-        dashboard_type_options = [
-            ("all", "すべての書類"),
-            ("client_mitsumori", "見積り依頼書"),
-            ("client_kaitori_request", "買取依頼書"),
-            ("vendor_estimate", "業者向け見積依頼書"),
-            ("vendor_statement", "業者買取明細書"),
-            ("client_invoice", "ユーザー向け買取明細書"),
-            ("shikiriosho", "仕切書"),
-            ("auction_keisan", "オークション計算書"),
-        ]
+        group_meta = {
+            "all": {
+                "title": "進行中の販売代行と次の作業",
+                "note": "案件ごとに、今どこまで進んでいて、次に何を作るべきかをまとめています。誤送信を防ぐため、書類は順番どおりにしか進めません。",
+            },
+            "client_incoming": {
+                "title": "受付後の案件と次の作業",
+                "note": "クライアントから依頼書が届いた段階の案件です。ここで内容確認をして、次は業者向け見積依頼書の作成へ進みます。",
+            },
+            "vendor_outgoing": {
+                "title": "業者へ依頼中の案件と次の作業",
+                "note": "開花から業者へ見積依頼を送った段階です。次は業者買取明細書の受領・登録へ進みます。",
+            },
+            "vendor_incoming": {
+                "title": "業者回答受領後の案件と次の作業",
+                "note": "業者買取明細書が届いた案件です。内容確認をして、次はユーザー向け買取明細書の確認・発行へ進みます。",
+            },
+            "client_outgoing": {
+                "title": "クライアント返送段階の案件と次の作業",
+                "note": "ユーザー向け書類の作成・返送段階です。送付済みや処理完了の案件もここで追えます。",
+            },
+        }
 
         return render_template(
             "admin/documents_dashboard.html",
@@ -1190,9 +1209,7 @@ def apply(module: Any) -> None:
             recent_vendor_incoming_documents=recent_vendor_incoming_documents,
             recent_client_outgoing_documents=recent_client_outgoing_documents,
             selected_group=selected_group,
-            selected_doc_type=selected_doc_type,
-            dashboard_group_options=dashboard_group_options,
-            dashboard_type_options=dashboard_type_options,
+            group_meta=group_meta,
         )
 
     def admin_documents_history_v2():
