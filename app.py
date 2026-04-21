@@ -1980,6 +1980,18 @@ if DATABASE_URL:
                 result_notified BOOLEAN DEFAULT FALSE
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS created_mitsumori_id INTEGER")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS created_invoice_id INTEGER")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN IF NOT EXISTS documents_created_at TIMESTAMP")
+        except:
+            pass
 
         # 販売代行申請商品テーブル
         cur.execute('''
@@ -2988,6 +3000,18 @@ else:
                 result_notified INTEGER DEFAULT 0
             )
         ''')
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN created_mitsumori_id INTEGER")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN created_invoice_id INTEGER")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sales_agency_requests ADD COLUMN documents_created_at TIMESTAMP")
+        except:
+            pass
 
         # 販売代行申請商品テーブル
         cur.execute('''
@@ -3079,6 +3103,10 @@ class User(UserMixin):
                 return True  # 権限が設定されていない場合は全権限
             return permission in self.admin_permissions
         return False
+
+    def can_manage_proxy_service(self):
+        """代行サービス管理を利用できるか確認"""
+        return self.role in ['admin', 'owner']
 
     def get_proxy_service_used_amount(self):
         """代行仕入れサービスで使用済みの金額を取得"""
@@ -9459,7 +9487,11 @@ def admin_auction_keisan_list():
     cur.close()
     conn.close()
 
-    return render_template('admin/auction_keisan_list.html', keisan_list=keisan_list)
+    return render_template(
+        'admin/auction_keisan_list.html',
+        keisan_list=keisan_list,
+        target_month=datetime.now().strftime('%Y-%m')
+    )
 
 @app.route('/admin/auction-keisan/<int:id>')
 @login_required
@@ -9631,6 +9663,65 @@ def admin_auction_keisan_submit(id):
     conn.close()
 
     flash('計算書をユーザーに送信しました', 'success')
+    return redirect(url_for('admin_auction_keisan_list'))
+
+@app.route('/admin/auction-keisan/send-bulk', methods=['POST'])
+@login_required
+@admin_required
+def admin_auction_keisan_send_bulk():
+    document_ids = [doc_id for doc_id in request.form.getlist('document_ids') if doc_id]
+    send_all = request.form.get('send_scope') == 'all'
+
+    if not send_all and not document_ids:
+        flash('送信する計算書を選択してください', 'error')
+        return redirect(url_for('admin_auction_keisan_list'))
+
+    conn = get_db()
+    updated_count = 0
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        params = []
+        where_clause = "status = 'completed' AND is_admin_created = TRUE"
+        if not send_all:
+            placeholders = ', '.join(['%s'] * len(document_ids))
+            where_clause += f" AND id IN ({placeholders})"
+            params.extend(document_ids)
+        cur.execute(
+            f"""
+            UPDATE user_keisan
+            SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+            WHERE {where_clause}
+            """,
+            tuple(params),
+        )
+        updated_count = cur.rowcount or 0
+    else:
+        cur = conn.cursor()
+        params = []
+        where_clause = "status = 'completed' AND is_admin_created = 1"
+        if not send_all:
+            placeholders = ', '.join(['?'] * len(document_ids))
+            where_clause += f" AND id IN ({placeholders})"
+            params.extend(document_ids)
+        cur.execute(
+            f"""
+            UPDATE user_keisan
+            SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+            WHERE {where_clause}
+            """,
+            tuple(params),
+        )
+        updated_count = cur.rowcount or 0
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if updated_count:
+        flash(f'{updated_count}件の計算書をユーザーに送信しました', 'success')
+    else:
+        flash('送信対象の計算書はありませんでした', 'info')
     return redirect(url_for('admin_auction_keisan_list'))
 
 @app.route('/admin/auction-keisan/<int:id>/pdf')
@@ -14775,6 +14866,65 @@ def admin_shikiriosho_send(id):
     conn.close()
 
     flash('精算書を送信しました', 'success')
+    return redirect(url_for('admin_shikiriosho_list'))
+
+@app.route('/admin/shikiriosho/send-bulk', methods=['POST'])
+@login_required
+@permission_required('shikiriosho')
+def admin_shikiriosho_send_bulk():
+    document_ids = [doc_id for doc_id in request.form.getlist('document_ids') if doc_id]
+    send_all = request.form.get('send_scope') == 'all'
+
+    if not send_all and not document_ids:
+        flash('送信する精算書を選択してください', 'error')
+        return redirect(url_for('admin_shikiriosho_list'))
+
+    conn = get_db()
+    updated_count = 0
+
+    if DATABASE_URL:
+        cur = conn.cursor()
+        params = []
+        where_clause = "status = 'completed'"
+        if not send_all:
+            placeholders = ', '.join(['%s'] * len(document_ids))
+            where_clause += f" AND id IN ({placeholders})"
+            params.extend(document_ids)
+        cur.execute(
+            f"""
+            UPDATE shikiriosho
+            SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+            WHERE {where_clause}
+            """,
+            tuple(params),
+        )
+        updated_count = cur.rowcount or 0
+    else:
+        cur = conn.cursor()
+        params = []
+        where_clause = "status = 'completed'"
+        if not send_all:
+            placeholders = ', '.join(['?'] * len(document_ids))
+            where_clause += f" AND id IN ({placeholders})"
+            params.extend(document_ids)
+        cur.execute(
+            f"""
+            UPDATE shikiriosho
+            SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+            WHERE {where_clause}
+            """,
+            tuple(params),
+        )
+        updated_count = cur.rowcount or 0
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if updated_count:
+        flash(f'{updated_count}件の精算書を送信しました', 'success')
+    else:
+        flash('送信対象の精算書はありませんでした', 'info')
     return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/shikiriosho/view/<int:id>')
@@ -23256,9 +23406,17 @@ def admin_sale_requests():
         return redirect(url_for('index'))
 
     requests_list = []
-    pending_count = 0
-    approved_count = 0
-    rejected_count = 0
+    shipping_requests = []
+    completion_requests = []
+    shipping_counts = {'pending': 0, 'approved': 0, 'rejected': 0}
+    completion_counts = {'pending': 0, 'approved': 0, 'rejected': 0}
+    active_box = 'completion' if request.endpoint == 'admin_completion_requests' else 'shipping'
+    filter_values = {
+        'q': (request.args.get('q') or '').strip(),
+        'status': (request.args.get('status') or '').strip(),
+        'date_from': (request.args.get('date_from') or '').strip(),
+        'date_to': (request.args.get('date_to') or '').strip(),
+    }
 
     try:
         conn = get_db()
@@ -23267,7 +23425,7 @@ def admin_sale_requests():
             cur = conn.cursor(cursor_factory=RealDictCursor)
             # メインクエリ
             cur.execute('''
-                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price, m.is_shipped,
                        u.username, u.display_name as user_display_name,
                        p.username as processor_name, p.display_name as processor_display_name
                 FROM sale_requests sr
@@ -23279,18 +23437,10 @@ def admin_sale_requests():
                     sr.created_at DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
-
-            # 統計情報
-            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'pending'")
-            pending_count = cur.fetchone()['count']
-            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'approved'")
-            approved_count = cur.fetchone()['count']
-            cur.execute("SELECT COUNT(*) as count FROM sale_requests WHERE status = 'rejected'")
-            rejected_count = cur.fetchone()['count']
         else:
             cur = conn.cursor()
             cur.execute('''
-                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
+                SELECT sr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price, m.is_shipped,
                        u.username, u.display_name as user_display_name,
                        p.username as processor_name, p.display_name as processor_display_name
                 FROM sale_requests sr
@@ -23302,19 +23452,33 @@ def admin_sale_requests():
                     sr.created_at DESC
             ''')
             requests_list = [dict(row) for row in cur.fetchall()]
-
-            # 統計情報
-            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
-            pending_count = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'approved'")
-            approved_count = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'rejected'")
-            rejected_count = cur.fetchone()[0]
 
         for req in requests_list:
             req['request_type'] = normalize_sale_request_type(req.get('request_type'))
             req['request_type_label'] = get_sale_request_type_label(req['request_type'])
             req['commission'] = req.get('commission') or 0
+            req['can_mark_shipped'] = (
+                req['request_type'] == 'shipping_request'
+                and req.get('status') == 'approved'
+                and not bool(req.get('is_shipped'))
+            )
+            req['can_revert_shipment'] = (
+                req['request_type'] == 'shipping_request'
+                and req.get('status') == 'approved'
+                and bool(req.get('is_shipped'))
+            )
+            created_at = req.get('created_at')
+            if created_at and hasattr(created_at, 'strftime'):
+                req['created_at'] = created_at.strftime('%Y-%m-%d %H:%M:%S')
+            processed_at = req.get('processed_at')
+            if processed_at and hasattr(processed_at, 'strftime'):
+                req['processed_at'] = processed_at.strftime('%Y-%m-%d %H:%M:%S')
+
+            target_requests = shipping_requests if req['request_type'] == 'shipping_request' else completion_requests
+            target_counts = shipping_counts if req['request_type'] == 'shipping_request' else completion_counts
+            target_requests.append(req)
+            if req.get('status') in target_counts:
+                target_counts[req['status']] += 1
 
         cur.close()
         conn.close()
@@ -23324,11 +23488,129 @@ def admin_sale_requests():
         import traceback
         traceback.print_exc()
 
+    current_requests = shipping_requests if active_box == 'shipping' else completion_requests
+    current_counts = shipping_counts if active_box == 'shipping' else completion_counts
+
+    def matches_filters(req):
+        query = filter_values['q'].lower()
+        if query:
+            searchable_values = [
+                req.get('product_name'),
+                req.get('brand_name'),
+                req.get('user_display_name'),
+                req.get('username'),
+                req.get('processor_display_name'),
+                req.get('processor_name'),
+                req.get('sales_destination'),
+                req.get('id'),
+                req.get('merchandise_id'),
+            ]
+            if not any(query in str(value or '').lower() for value in searchable_values):
+                return False
+
+        status_filter = filter_values['status']
+        if status_filter and req.get('status') != status_filter:
+            return False
+
+        created_at_text = str(req.get('created_at') or '')[:10]
+        if filter_values['date_from'] and created_at_text and created_at_text < filter_values['date_from']:
+            return False
+        if filter_values['date_to'] and created_at_text and created_at_text > filter_values['date_to']:
+            return False
+
+        return True
+
+    filtered_requests = [req for req in current_requests if matches_filters(req)]
+
     return render_template('admin/sale_requests.html',
                          requests=requests_list,
-                         pending_count=pending_count,
-                         approved_count=approved_count,
-                         rejected_count=rejected_count)
+                         pending_count=sum(1 for req in requests_list if req.get('status') == 'pending'),
+                         approved_count=sum(1 for req in requests_list if req.get('status') == 'approved'),
+                         rejected_count=sum(1 for req in requests_list if req.get('status') == 'rejected'),
+                         active_box=active_box,
+                         shipping_requests=shipping_requests,
+                         completion_requests=completion_requests,
+                         shipping_counts=shipping_counts,
+                         completion_counts=completion_counts,
+                         filtered_requests=filtered_requests,
+                         current_counts=current_counts,
+                         filter_values=filter_values)
+
+@app.route('/admin/sale-request/<int:request_id>/shipment', methods=['POST'])
+@login_required
+def admin_sale_request_shipment(request_id):
+    if not current_user.is_admin():
+        flash('管理者権限が必要です', 'error')
+        return redirect(url_for('index'))
+
+    action = (request.form.get('action') or 'mark').strip().lower()
+    redirect_to = request.form.get('redirect_to') or url_for('admin_shipping_requests')
+    if not isinstance(redirect_to, str) or not redirect_to.startswith('/'):
+        redirect_to = url_for('admin_shipping_requests')
+
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                '''
+                SELECT sr.id, sr.merchandise_id, sr.request_type, sr.status, m.is_shipped
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = %s
+                ''',
+                (request_id,),
+            )
+            sale_request = cur.fetchone()
+        else:
+            cur = conn.cursor()
+            cur.execute(
+                '''
+                SELECT sr.id, sr.merchandise_id, sr.request_type, sr.status, m.is_shipped
+                FROM sale_requests sr
+                JOIN merchandise m ON sr.merchandise_id = m.id
+                WHERE sr.id = ?
+                ''',
+                (request_id,),
+            )
+            row = cur.fetchone()
+            sale_request = dict(row) if row else None
+
+        if not sale_request:
+            flash('対象の発送依頼が見つかりません', 'error')
+            return redirect(redirect_to)
+
+        request_type = normalize_sale_request_type(sale_request.get('request_type'))
+        if request_type != 'shipping_request' or sale_request.get('status') != 'approved':
+            flash('承認済みの発送依頼のみ更新できます', 'error')
+            return redirect(redirect_to)
+
+        mark_shipped = action != 'revert'
+        if DATABASE_URL:
+            cur.execute(
+                '''
+                UPDATE merchandise
+                SET is_shipped = %s, updated_at = CURRENT_TIMESTAMP, updated_by = %s
+                WHERE id = %s
+                ''',
+                (mark_shipped, current_user.id, sale_request['merchandise_id']),
+            )
+        else:
+            cur.execute(
+                '''
+                UPDATE merchandise
+                SET is_shipped = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+                WHERE id = ?
+                ''',
+                (1 if mark_shipped else 0, current_user.id, sale_request['merchandise_id']),
+            )
+
+        conn.commit()
+        flash('発送状態を更新しました' if mark_shipped else '発送状態を発送待ちに戻しました', 'success')
+        return redirect(redirect_to)
+    finally:
+        cur.close()
+        conn.close()
 
 # 管理者：売却申請承認
 @app.route('/admin/sale-request/<int:request_id>/approve', methods=['POST'])

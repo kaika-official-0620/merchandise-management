@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import has_request_context, jsonify, redirect, request
+from flask import flash, has_request_context, jsonify, redirect, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 
@@ -216,6 +216,77 @@ add_endpoint_fallback(
     "admin_line_dashboard",
     ["GET"],
 )
+add_endpoint_fallback(
+    "admin_shipping_requests",
+    "/admin/sale-requests/shipping",
+    "admin_sale_requests",
+    ["GET"],
+)
+add_endpoint_fallback(
+    "admin_completion_requests",
+    "/admin/sale-requests/completion",
+    "admin_sale_requests",
+    ["GET"],
+)
+add_endpoint_fallback(
+    "admin_analytics_kaika_sales",
+    "/admin/analytics/kaika/sales",
+    "admin_analytics_kaika",
+    ["GET"],
+)
+add_endpoint_fallback(
+    "admin_line_broadcast_v2",
+    "/admin/line-v2/broadcast",
+    "admin_line_broadcast",
+    ["POST"],
+)
+add_endpoint_fallback(
+    "admin_line_scheduled_v2",
+    "/admin/line-v2/scheduled",
+    "admin_line_scheduled",
+    ["GET", "POST"],
+)
+
+
+def redirect_line_dashboard_with_notice(message: str):
+    flash(message, "info")
+    return redirect(url_for("admin_line_dashboard_v2"))
+
+
+if "admin_line_scheduled_edit_v2" not in app.view_functions and "admin_line_scheduled_edit" in app.view_functions:
+    @app.route("/admin/line-v2/scheduled/<int:message_id>/edit", endpoint="admin_line_scheduled_edit_v2", methods=["GET", "POST"])
+    def admin_line_scheduled_edit_v2(message_id: int):
+        return app.view_functions["admin_line_scheduled_edit"](message_id)
+
+
+if "admin_line_scheduled_delete_v2" not in app.view_functions and "admin_line_scheduled_delete" in app.view_functions:
+    @app.route("/admin/line-v2/scheduled/<int:message_id>/delete", endpoint="admin_line_scheduled_delete_v2", methods=["POST"])
+    def admin_line_scheduled_delete_v2(message_id: int):
+        return app.view_functions["admin_line_scheduled_delete"](message_id)
+
+
+if "admin_line_account_new" not in app.view_functions:
+    @app.route("/admin/line-v2/accounts/new", endpoint="admin_line_account_new", methods=["GET"])
+    def admin_line_account_new():
+        return redirect_line_dashboard_with_notice("LINEアカウント追加は現行画面では未対応です。")
+
+
+if "admin_line_account_edit" not in app.view_functions:
+    @app.route("/admin/line-v2/accounts/<int:account_id>/edit", endpoint="admin_line_account_edit", methods=["GET"])
+    def admin_line_account_edit(account_id: int):
+        return redirect_line_dashboard_with_notice("LINEアカウント編集は現行画面では未対応です。")
+
+
+if "admin_line_account_set_default" not in app.view_functions:
+    @app.route("/admin/line-v2/accounts/<int:account_id>/default", endpoint="admin_line_account_set_default", methods=["POST"])
+    def admin_line_account_set_default(account_id: int):
+        return redirect_line_dashboard_with_notice("既定アカウント切り替えは現行画面では未対応です。")
+
+
+if "admin_line_account_delete" not in app.view_functions:
+    @app.route("/admin/line-v2/accounts/<int:account_id>/delete", endpoint="admin_line_account_delete", methods=["POST"])
+    def admin_line_account_delete(account_id: int):
+        return redirect_line_dashboard_with_notice("LINEアカウント削除は現行画面では未対応です。")
 
 
 def ensure_template_helper(name: str, func):

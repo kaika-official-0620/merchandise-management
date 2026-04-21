@@ -126,6 +126,28 @@ def apply(module: Any) -> None:
             cur = conn.cursor()
         return conn, cur
 
+    def get_table_columns(cur, table_name):
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = %s
+                """,
+                (table_name,),
+            )
+            return {row["column_name"] if isinstance(row, dict) else row[0] for row in cur.fetchall()}
+
+        cur.execute(f"PRAGMA table_info({table_name})")
+        columns = set()
+        for row in cur.fetchall():
+            if isinstance(row, sqlite3.Row):
+                columns.add(row["name"])
+            else:
+                columns.add(row[1])
+        return columns
+
     def rows_to_dicts(rows):
         return [dict(row) for row in rows]
 
@@ -1076,19 +1098,21 @@ def apply(module: Any) -> None:
         try:
             mitsumori_request_map = {}
             invoice_request_map = {}
-            cur.execute(
-                """
-                SELECT created_mitsumori_id, created_invoice_id, service_type
-                FROM sales_agency_requests
-                WHERE created_mitsumori_id IS NOT NULL OR created_invoice_id IS NOT NULL
-                """
-            )
-            for mapping_row in cur.fetchall():
-                mapping_dict = dict(mapping_row)
-                if mapping_dict.get("created_mitsumori_id"):
-                    mitsumori_request_map[mapping_dict["created_mitsumori_id"]] = mapping_dict.get("service_type")
-                if mapping_dict.get("created_invoice_id"):
-                    invoice_request_map[mapping_dict["created_invoice_id"]] = mapping_dict.get("service_type")
+            sales_agency_columns = get_table_columns(cur, "sales_agency_requests")
+            if {"created_mitsumori_id", "created_invoice_id"}.issubset(sales_agency_columns):
+                cur.execute(
+                    """
+                    SELECT created_mitsumori_id, created_invoice_id, service_type
+                    FROM sales_agency_requests
+                    WHERE created_mitsumori_id IS NOT NULL OR created_invoice_id IS NOT NULL
+                    """
+                )
+                for mapping_row in cur.fetchall():
+                    mapping_dict = dict(mapping_row)
+                    if mapping_dict.get("created_mitsumori_id"):
+                        mitsumori_request_map[mapping_dict["created_mitsumori_id"]] = mapping_dict.get("service_type")
+                    if mapping_dict.get("created_invoice_id"):
+                        invoice_request_map[mapping_dict["created_invoice_id"]] = mapping_dict.get("service_type")
 
             cur.execute(
                 """
