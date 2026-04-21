@@ -11177,7 +11177,7 @@ def admin_proxy_service_detail(auction_id):
 @app.route('/admin/proxy-service/<int:auction_id>/start', methods=['POST'])
 @login_required
 def admin_proxy_service_start(auction_id):
-    """オークションを現在時刻で開始"""
+    """オークションを現在時刻で公開開始"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': '権限がありません'}), 403
 
@@ -11202,7 +11202,7 @@ def admin_proxy_service_start(auction_id):
             if auction_state['status'] == 'ended':
                 cur.close()
                 conn.close()
-                return jsonify({'success': False, 'error': '終了済みのため開始できません'}), 400
+                return jsonify({'success': False, 'error': '終了済みのため公開できません'}), 400
             if auction_state['is_open']:
                 cur.close()
                 conn.close()
@@ -11245,7 +11245,7 @@ def admin_proxy_service_start(auction_id):
             if auction_state['status'] == 'ended':
                 cur.close()
                 conn.close()
-                return jsonify({'success': False, 'error': '終了済みのため開始できません'}), 400
+                return jsonify({'success': False, 'error': '終了済みのため公開できません'}), 400
             if auction_state['is_open']:
                 cur.close()
                 conn.close()
@@ -11278,7 +11278,7 @@ def admin_proxy_service_start(auction_id):
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'success': True, 'message': 'オークションを開始しました'})
+        return jsonify({'success': True, 'message': 'オークションを公開しました'})
     except Exception as e:
         conn.rollback()
         import traceback
@@ -11288,7 +11288,7 @@ def admin_proxy_service_start(auction_id):
             conn.close()
         except Exception:
             pass
-        return jsonify({'success': False, 'error': '開始処理に失敗しました'}), 500
+        return jsonify({'success': False, 'error': '公開処理に失敗しました'}), 500
 
 @app.route('/admin/proxy-service/<int:auction_id>/delete', methods=['POST'])
 @login_required

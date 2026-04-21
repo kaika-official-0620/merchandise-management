@@ -9,18 +9,18 @@
     </h1>
     <div class="header-actions">
         <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
-        {% if not auction_state.is_ended %}
-        <button type="button" class="btn btn-primary" onclick="startAuctionNow()" {% if auction_state.is_open %}disabled{% endif %}>
-            {% if auction_state.is_open %}公開中{% else %}今すぐ開始する{% endif %}
+        {% if not auction_state.is_ended and not auction_state.is_open %}
+        <button type="button" class="btn btn-primary" onclick="startAuctionNow()">
+            今すぐ公開する
         </button>
         {% endif %}
-        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">履歴一覧</a>
-        {% if result_summary.pending_finalize_count > 0 or not auction_state.is_ended %}
-        <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
-        {% else %}
-        <button class="btn btn-secondary" disabled>確定対象なし</button>
+        {% if auction_state.is_open %}
+        <button onclick="finalizeAuction()" class="btn btn-danger">
+            {% if settings.sale_mode == 'fixed' %}販売終了{% else %}オークション終了・落札確定{% endif %}
+        </button>
+        {% elif result_summary.pending_finalize_count > 0 %}
+        <button onclick="finalizeAuction()" class="btn btn-danger">落札確定</button>
         {% endif %}
-        <button onclick="deleteAuction()" class="btn btn-outline-danger">削除</button>
     </div>
 </div>
 
@@ -92,7 +92,7 @@
                 <div class="toggle-info">
                     <span class="toggle-text">ページを公開する</span>
                     <p class="form-hint">オフにするとページは非公開になります</p>
-                    <p class="form-hint">上の「今すぐ開始する」を押すと、開始日時を現在時刻に更新してすぐ公開できます。</p>
+                    <p class="form-hint">上の「今すぐ公開する」を押すと、開始日時を現在時刻に更新してすぐ公開できます。</p>
                 </div>
                 <div class="toggle-buttons">
                     <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false)">非公開</button>
@@ -2079,7 +2079,7 @@ function finalizeAuction() {
 }
 
 function startAuctionNow() {
-    if (!confirm('このオークションを今すぐ開始しますか？\n\n開始日時が現在時刻に更新され、公開ページに反映されます。')) {
+    if (!confirm('このオークションを今すぐ公開しますか？\n\n開始日時が現在時刻に更新され、公開ページに反映されます。')) {
         return;
     }
 
@@ -2092,14 +2092,14 @@ function startAuctionNow() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(data.message || 'オークションを開始しました');
+            alert(data.message || 'オークションを公開しました');
             location.reload();
         } else {
-            alert(data.error || '開始処理に失敗しました');
+            alert(data.error || '公開処理に失敗しました');
         }
     })
     .catch(() => {
-        alert('開始処理中にエラーが発生しました');
+        alert('公開処理中にエラーが発生しました');
     });
 }
 
