@@ -445,7 +445,10 @@ PREVIEW_ROOT, PREVIEW_ENTRY = _active_preview_root()
 if PREVIEW_ROOT:
     @_preview_login_wrapped
     def admin_documents_v4_preview():
-        return send_from_directory(str(PREVIEW_ROOT), PREVIEW_ENTRY)
+        return redirect(
+            url_for("admin_documents_v4_preview_page", page=PREVIEW_ENTRY),
+            code=302,
+        )
 
     @_preview_login_wrapped
     def admin_documents_v4_preview_page(page: str):
@@ -459,6 +462,12 @@ if PREVIEW_ROOT:
         app.add_url_rule(
             "/admin/documents-v4-preview",
             endpoint="admin_documents_v4_preview",
+            view_func=admin_documents_v4_preview,
+            methods=["GET"],
+        )
+        app.add_url_rule(
+            "/admin/documents-v4-preview/",
+            endpoint="admin_documents_v4_preview_slash",
             view_func=admin_documents_v4_preview,
             methods=["GET"],
         )
