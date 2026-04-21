@@ -84,6 +84,9 @@ except Exception as patch_exc:
 app = module.app
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
+login_required_decorator = getattr(module, "login_required", None)
+admin_required_decorator = getattr(module, "admin_required", None)
+
 DEFAULT_PRIMARY_DOMAIN = "stock.kaika-potential.co.jp"
 PRIMARY_DOMAIN = (os.environ.get("PRIMARY_DOMAIN") or os.environ.get("APP_DOMAIN") or DEFAULT_PRIMARY_DOMAIN).strip().lower()
 PRIMARY_SCHEME = (os.environ.get("PRIMARY_SCHEME") or "https").strip().lower() or "https"
@@ -179,6 +182,20 @@ def add_endpoint_fallback(endpoint: str, rule: str, target_endpoint: str, method
     )
 
 
+def harden_endpoint_auth(endpoint: str, *decorators):
+    view = app.view_functions.get(endpoint)
+    if not callable(view):
+        return
+
+    wrapped = view
+    for decorator in reversed(decorators):
+        if callable(decorator):
+            wrapped = decorator(wrapped)
+
+    wrapped._render_auth_hardened = True
+    app.view_functions[endpoint] = wrapped
+
+
 # Keep the production menu usable even if preview/runtime-only endpoints are absent on Render.
 add_endpoint_fallback(
     "admin_company_sales_analytics",
@@ -246,6 +263,28 @@ add_endpoint_fallback(
     "admin_line_scheduled",
     ["GET", "POST"],
 )
+
+
+for endpoint in [
+    "user_home",
+    "documents",
+    "profile",
+    "reports",
+    "long_term_items",
+]:
+    harden_endpoint_auth(endpoint, login_required_decorator)
+
+
+for endpoint in [
+    "admin_dashboard",
+    "admin_documents_dashboard",
+    "admin_documents_history",
+    "admin_line_dashboard_v2",
+    "admin_shipping_requests",
+    "admin_completion_requests",
+    "admin_proxy_service_history",
+]:
+    harden_endpoint_auth(endpoint, login_required_decorator, admin_required_decorator)
 
 
 def redirect_line_dashboard_with_notice(message: str):
