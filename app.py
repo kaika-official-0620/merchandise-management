@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, make_response, abort, has_request_context
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
@@ -58,6 +59,15 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'merchandise-management-secret-key-2024')
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+PRIMARY_DOMAIN = (os.environ.get('PRIMARY_DOMAIN') or os.environ.get('APP_DOMAIN') or '').strip().lower()
+PRIMARY_SCHEME = (os.environ.get('PRIMARY_SCHEME') or 'https').strip().lower() or 'https'
+PRIMARY_DOMAIN_REDIRECT = (os.environ.get('PRIMARY_DOMAIN_REDIRECT') or '1').strip().lower() in {'1', 'true', 'yes', 'on'}
+RENDER_EXTERNAL_HOSTNAME = (os.environ.get('RENDER_EXTERNAL_HOSTNAME') or '').strip().lower()
+
+if PRIMARY_DOMAIN:
+    app.config['PREFERRED_URL_SCHEME'] = PRIMARY_SCHEME
 
 JST = timezone(timedelta(hours=9), name='JST')
 
@@ -65,6 +75,38 @@ JST = timezone(timedelta(hours=9), name='JST')
 def get_jst_now():
     """公開開始/終了の比較は日本時間基準で揃える。"""
     return datetime.now(JST).replace(tzinfo=None)
+
+
+def normalize_request_host(hostname):
+    return (hostname or '').split(':', 1)[0].strip().lower()
+
+
+def build_primary_domain_url():
+    parsed = urlsplit(request.url)
+    return urlunsplit((PRIMARY_SCHEME, PRIMARY_DOMAIN, parsed.path, parsed.query, ''))
+
+
+def should_redirect_to_primary_domain():
+    if not PRIMARY_DOMAIN or not PRIMARY_DOMAIN_REDIRECT or not has_request_context():
+        return False
+
+    if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
+        return False
+
+    if request.path == '/healthz':
+        return False
+
+    current_host = normalize_request_host(request.host)
+    if not current_host or current_host == PRIMARY_DOMAIN:
+        return False
+
+    if current_host in {'localhost', '127.0.0.1'}:
+        return False
+
+    trusted_hosts = {normalize_request_host(RENDER_EXTERNAL_HOSTNAME)}
+    trusted_hosts.discard('')
+
+    return current_host.endswith('.onrender.com') or current_host in trusted_hosts
 
 
 def parse_proxy_service_datetime(value):
@@ -102,6 +144,39 @@ def parse_proxy_service_datetime(value):
                 continue
 
     return None
+
+
+@app.route('/healthz')
+def healthz():
+    try:
+        if DATABASE_URL:
+            conn = get_db()
+            try:
+                cur = conn.cursor()
+                cur.execute('SELECT 1')
+                cur.fetchone()
+            finally:
+                conn.close()
+            database_backend = 'postgres'
+        else:
+            import sqlite3
+            conn = sqlite3.connect(DATABASE)
+            try:
+                cur = conn.cursor()
+                cur.execute('SELECT 1')
+                cur.fetchone()
+            finally:
+                conn.close()
+            database_backend = 'sqlite'
+
+        return jsonify({
+            'status': 'ok',
+            'database': database_backend,
+            'primary_domain': PRIMARY_DOMAIN or None,
+        }), 200
+    except Exception as exc:
+        print(f"[HEALTH] health check failed: {exc}")
+        return jsonify({'status': 'error'}), 503
 
 
 def normalize_proxy_service_datetime_input(value):
@@ -3456,6 +3531,13 @@ def get_preview_feature_target(key):
         ensure_preview_sale_request('completion_report')
         return 'admin', url_for('admin_sale_requests')
     return None, None
+
+@app.before_request
+def enforce_primary_domain():
+    if should_redirect_to_primary_domain():
+        return redirect(build_primary_domain_url(), code=301)
+    return None
+
 
 @app.before_request
 def apply_preview_role_context():

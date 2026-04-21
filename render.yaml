@@ -2,30 +2,17 @@ services:
   - type: web
     name: merchandise-management
     env: python
-    plan: standard  # Standardプラン
+    plan: standard
+    autoDeployTrigger: commit
     buildCommand: pip install -r requirements.txt
-    # --preloadを削除（環境変数の読み込み問題を回避）
+    healthCheckPath: /healthz
     startCommand: gunicorn render_app:app --bind 0.0.0.0:$PORT --timeout 300
-    
-    # 永続ディスク設定（画像保存用）
     disk:
       name: uploads-storage
       mountPath: /opt/render/project/src/static/uploads
-      sizeGB: 200  # 200GB
-    
-    # 注意: 手動でWebサービスを作成した場合、envVarsはダッシュボードで設定してください
-    # render.yamlのenvVarsは、Blueprint経由でデプロイした場合のみ有効です
+      sizeGB: 200
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      # DATABASE_URL, SECRET_KEY等はRenderダッシュボードで直接設定してください
 
-# Blueprint経由でデプロイする場合のデータベース設定
-# 手動設定の場合は、Renderダッシュボードで別途PostgreSQLを作成してください
-# databases:
-#   - name: merchandise-db
-#     plan: basic-1gb
-#     databaseName: merchandise
-#     user: merchandise_user
-
-
+# Configure DATABASE_URL and SECRET_KEY in the Render dashboard.
