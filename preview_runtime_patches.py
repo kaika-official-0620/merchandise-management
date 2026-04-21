@@ -84,6 +84,15 @@ def apply(module: Any) -> None:
     calculate_kaika_marketplace_fee = getattr(module, "calculate_kaika_marketplace_fee", None)
     get_item_back_url = getattr(module, "get_item_back_url", None)
     resolve_internal_back_url = getattr(module, "resolve_internal_back_url", None)
+    derive_appraisal_status = getattr(module, "derive_appraisal_status", lambda status: "completed" if status == "sold" else ("waiting" if status == "listed" else "none"))
+    db_boolean_param = getattr(module, "db_boolean_param", None)
+
+    if not callable(db_boolean_param):
+        def db_boolean_param(value):
+            normalized = bool(value)
+            if DATABASE_URL:
+                return normalized
+            return 1 if normalized else 0
 
     if not callable(fetch_sales_agency_request_source):
         def fetch_sales_agency_request_source(*_args, **_kwargs):
@@ -2016,6 +2025,7 @@ def apply(module: Any) -> None:
 
                 item_status = (request.form.get("item_status") or "unlisted").strip()
                 appraisal_status = derive_appraisal_status(item_status)
+                is_listed_db_value = db_boolean_param(item_status in {"listed", "sold"})
 
                 is_kaika_scope = False
                 if callable(is_kaika_inventory_item):
@@ -2051,6 +2061,7 @@ def apply(module: Any) -> None:
                         )
                     except Exception:
                         pass
+                is_shipped_db_value = db_boolean_param(bool(item_dict.get("is_shipped")))
 
                 update_fields = [
                     ("purchase_date", form_value("purchase_date", item_dict.get("purchase_date")) or None),
@@ -2072,7 +2083,7 @@ def apply(module: Any) -> None:
                     ("listing_price", money_value("listing_price", item_dict.get("listing_price"))),
                     ("expected_shipping", money_value("expected_shipping", item_dict.get("expected_shipping"))),
                     ("expected_commission", money_value("expected_commission", item_dict.get("expected_commission"))),
-                    ("is_listed", 1 if item_status in {"listed", "sold"} else 0),
+                    ("is_listed", is_listed_db_value),
                     ("listing_date", (form_value("listing_date", item_dict.get("listing_date")) or None) if item_status in {"listed", "sold"} else None),
                     ("sale_date", (form_value("sale_date", item_dict.get("sale_date")) or None) if item_status == "sold" else None),
                     ("sale_type", sale_type_value),
@@ -2080,7 +2091,7 @@ def apply(module: Any) -> None:
                     ("shipping_cost", money_value("shipping_cost", item_dict.get("shipping_cost"))),
                     ("sales_destination", sales_destination_value),
                     ("commission", commission_value),
-                    ("is_shipped", 1 if item_dict.get("is_shipped") else 0),
+                    ("is_shipped", is_shipped_db_value),
                     ("notes", form_value("notes", item_dict.get("notes") or "") or ""),
                     ("updated_by", current_user.id),
                     ("appraisal_status", appraisal_status),
@@ -2170,6 +2181,7 @@ def apply(module: Any) -> None:
 
                 item_status = (request.form.get("item_status") or "unlisted").strip()
                 appraisal_status = derive_appraisal_status(item_status)
+                is_listed_db_value = db_boolean_param(item_status in {"listed", "sold"})
                 default_sale_type = "normal" if mode == "admin" else "photo_packing,normal"
                 sale_type_value = request.form.get("sale_type") or default_sale_type
                 if mode == "admin" and callable(normalize_kaika_sale_type):
@@ -2197,6 +2209,7 @@ def apply(module: Any) -> None:
                         )
                     except Exception:
                         pass
+                is_shipped_db_value = db_boolean_param("is_shipped" in request.form)
 
                 photo_path = request.form.get("google_drive_photo_path") or save_uploaded_image(request.files.get("photo"))
                 additional_photos = normalize_path_list(request.form.get("google_drive_additional_paths"))
@@ -2266,7 +2279,7 @@ def apply(module: Any) -> None:
                     money_value("listing_price"),
                     money_value("expected_shipping"),
                     money_value("expected_commission"),
-                    1 if item_status in {"listed", "sold"} else 0,
+                    is_listed_db_value,
                     (request.form.get("listing_date") or None) if item_status in {"listed", "sold"} else None,
                     (request.form.get("sale_date") or None) if item_status == "sold" else None,
                     sale_type_value,
@@ -2274,7 +2287,7 @@ def apply(module: Any) -> None:
                     money_value("shipping_cost"),
                     sales_destination_value,
                     commission_value,
-                    1 if "is_shipped" in request.form else 0,
+                    is_shipped_db_value,
                     form_value("notes") or "",
                     scope_value,
                     appraisal_status,

@@ -3752,7 +3752,7 @@ def derive_appraisal_status(item_status):
 def db_boolean_param(value):
     normalized = bool(value)
     if DATABASE_URL:
-        return 'true' if normalized else 'false'
+        return normalized
     return 1 if normalized else 0
 
 
