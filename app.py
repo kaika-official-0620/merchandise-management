@@ -3646,6 +3646,15 @@ def parse_money_value(value, default=0):
         return max(int(default), 0)
 
 
+def derive_appraisal_status(item_status):
+    status = (item_status or 'unlisted').strip()
+    if status == 'appraisal_pending':
+        return 'waiting'
+    if status in {'listed', 'sold'}:
+        return 'completed'
+    return 'none'
+
+
 def calculate_kaika_marketplace_fee(sale_type, sale_price, commission_rate=None, manual_commission=None):
     normalized_type = normalize_kaika_sale_type(sale_type)
     sale_price_value = max(int(sale_price or 0), 0)
@@ -7092,14 +7101,14 @@ def edit_item(id):
     
     if request.method == 'POST':
         try:
-            # オーナーかどうかを判定
-            is_owner_user = current_user.is_owner()
+            # 管理者は商品基本情報まで含めて編集可能
+            can_edit_basic_fields = current_user.is_owner() or current_user.is_admin()
             
             # sqlite3.Rowをdictに変換（.get()を使用可能にする）
             item_dict = dict(item)
             
             # 管理者（非オーナー）の場合、基本情報は元の値を維持
-            if is_owner_user:
+            if can_edit_basic_fields:
                 # オーナーは全フィールド編集可能
                 photo_path = item_dict['photo_path']
                 
@@ -7241,23 +7250,24 @@ def edit_item(id):
             
             # ステータスを取得（未出品/出品中/売却済み）
             item_status = request.form.get('item_status', 'unlisted')
-            if not is_owner_user:
+            if not can_edit_basic_fields:
                 item_status = 'sold' if item_dict.get('sale_date') else ('listed' if item_dict.get('is_listed') else 'unlisted')
+            appraisal_status = derive_appraisal_status(item_status)
 
             is_kaika_scope = is_kaika_inventory_item(item_dict)
-            listing_price_value = int(request.form.get('listing_price') or 0) if is_owner_user else int(item_dict.get('listing_price') or 0)
-            expected_shipping_value = int(request.form.get('expected_shipping') or 0) if is_owner_user else int(item_dict.get('expected_shipping') or 0)
-            expected_commission_value = int(request.form.get('expected_commission') or 0) if is_owner_user else int(item_dict.get('expected_commission') or 0)
-            listing_date_value = (request.form.get('listing_date') or None) if is_owner_user else (item_dict.get('listing_date') or None)
-            sale_date_value = (request.form.get('sale_date') or None) if is_owner_user else (item_dict.get('sale_date') or None)
-            raw_sale_type_value = (request.form.get('sale_type') or 'normal') if is_owner_user else (item_dict.get('sale_type') or 'normal')
-            sale_type_value = normalize_kaika_sale_type(raw_sale_type_value) if (is_owner_user and is_kaika_scope) else raw_sale_type_value
-            sale_price_value = parse_money_value(request.form.get('sale_price'), 0) if is_owner_user else parse_money_value(item_dict.get('sale_price'), 0)
-            shipping_cost_value = parse_money_value(request.form.get('shipping_cost'), 0) if is_owner_user else parse_money_value(item_dict.get('shipping_cost'), 0)
+            listing_price_value = int(request.form.get('listing_price') or 0) if can_edit_basic_fields else int(item_dict.get('listing_price') or 0)
+            expected_shipping_value = int(request.form.get('expected_shipping') or 0) if can_edit_basic_fields else int(item_dict.get('expected_shipping') or 0)
+            expected_commission_value = int(request.form.get('expected_commission') or 0) if can_edit_basic_fields else int(item_dict.get('expected_commission') or 0)
+            listing_date_value = (request.form.get('listing_date') or None) if can_edit_basic_fields else (item_dict.get('listing_date') or None)
+            sale_date_value = (request.form.get('sale_date') or None) if can_edit_basic_fields else (item_dict.get('sale_date') or None)
+            raw_sale_type_value = (request.form.get('sale_type') or 'normal') if can_edit_basic_fields else (item_dict.get('sale_type') or 'normal')
+            sale_type_value = normalize_kaika_sale_type(raw_sale_type_value) if (can_edit_basic_fields and is_kaika_scope) else raw_sale_type_value
+            sale_price_value = parse_money_value(request.form.get('sale_price'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('sale_price'), 0)
+            shipping_cost_value = parse_money_value(request.form.get('shipping_cost'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('shipping_cost'), 0)
             sales_destination_value = (
                 resolve_kaika_sales_destination(sale_type_value, request.form.get('sales_destination'))
-                if (is_owner_user and is_kaika_scope)
-                else (request.form.get('sales_destination') if is_owner_user else item_dict.get('sales_destination'))
+                if (can_edit_basic_fields and is_kaika_scope)
+                else (request.form.get('sales_destination') if can_edit_basic_fields else item_dict.get('sales_destination'))
             )
             commission_value = (
                 calculate_kaika_marketplace_fee(
@@ -7266,11 +7276,11 @@ def edit_item(id):
                     request.form.get('commission_rate'),
                     request.form.get('commission')
                 )
-                if (is_owner_user and is_kaika_scope)
-                else (parse_money_value(request.form.get('commission'), 0) if is_owner_user else parse_money_value(item_dict.get('commission'), 0))
+                if (can_edit_basic_fields and is_kaika_scope)
+                else (parse_money_value(request.form.get('commission'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('commission'), 0))
             )
             is_shipped_value = bool(item_dict.get('is_shipped'))
-            if not is_owner_user:
+            if not can_edit_basic_fields:
                 photo_path = item_dict.get('photo_path')
                 additional_photos_json = item_dict.get('additional_photos')
                 id_document_path = item_dict.get('id_document_path')
@@ -7288,7 +7298,7 @@ def edit_item(id):
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
                             shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
-                            notes = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                            notes = %s, appraisal_status = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                     ''', (
                         new_purchase_date,
@@ -7320,6 +7330,7 @@ def edit_item(id):
                         commission_value,
                         is_shipped_value,
                         new_notes,
+                        appraisal_status,
                         current_user.id,
                         id
                     ))
@@ -7333,7 +7344,7 @@ def edit_item(id):
                             expected_shipping = %s, expected_commission = %s,
                             is_listed = %s, listing_date = %s, sale_date = %s, sale_type = %s, sale_price = %s,
                             shipping_cost = %s, sales_destination = %s, commission = %s, is_shipped = %s,
-                            notes = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
+                            notes = %s, appraisal_status = %s, updated_by = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s AND user_id = %s
                     ''', (
                         new_purchase_date,
@@ -7365,6 +7376,7 @@ def edit_item(id):
                         commission_value,
                         is_shipped_value,
                         new_notes,
+                        appraisal_status,
                         current_user.id,
                         id, current_user.id
                     ))
@@ -7379,7 +7391,7 @@ def edit_item(id):
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
                             shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
-                            notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                            notes = ?, appraisal_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                     ''', (
                         new_purchase_date,
@@ -7411,6 +7423,7 @@ def edit_item(id):
                         commission_value,
                         1 if is_shipped_value else 0,
                         new_notes,
+                        appraisal_status,
                         current_user.id,
                         id
                     ))
@@ -7424,7 +7437,7 @@ def edit_item(id):
                             expected_shipping = ?, expected_commission = ?,
                             is_listed = ?, listing_date = ?, sale_date = ?, sale_type = ?, sale_price = ?,
                             shipping_cost = ?, sales_destination = ?, commission = ?, is_shipped = ?,
-                            notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                            notes = ?, appraisal_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ? AND user_id = ?
                     ''', (
                         new_purchase_date,
@@ -7456,6 +7469,7 @@ def edit_item(id):
                         commission_value,
                         1 if is_shipped_value else 0,
                         new_notes,
+                        appraisal_status,
                         current_user.id,
                         id, current_user.id
                     ))
@@ -16427,7 +16441,20 @@ def admin_add_item():
         else:
             cur = conn.cursor()
             placeholder = '?'
-        
+
+        if form_mode == 'user':
+            cur.execute(f"SELECT id, role FROM users WHERE id = {placeholder}", (target_user_id,))
+            target_user_row = cur.fetchone()
+            if DATABASE_URL:
+                target_user = dict(target_user_row) if target_user_row else None
+            else:
+                target_user = {'id': target_user_row[0], 'role': target_user_row[1]} if target_user_row else None
+            if not target_user or target_user.get('role') != 'user':
+                cur.close()
+                conn.close()
+                flash('登録先ユーザーが見つかりません', 'error')
+                return redirect(url_for('admin_add_item', mode='user'))
+
         # 画像処理
         photo_path = None
         if 'photo' in request.files:
@@ -16478,8 +16505,9 @@ def admin_add_item():
         # ステータス処理
         item_status = request.form.get('item_status', 'unlisted')
         is_listed = item_status in ['listed', 'sold']
+        appraisal_status = derive_appraisal_status(item_status)
         sale_date = request.form.get('sale_date') if item_status == 'sold' else None
-        sale_type_value = request.form.get('sale_type') or 'normal'
+        sale_type_value = request.form.get('sale_type') or ('normal' if form_mode == 'admin' else 'photo_packing,normal')
         sale_price_value = parse_money_value(request.form.get('sale_price'), 0)
         if form_mode == 'admin':
             sale_type_value = normalize_kaika_sale_type(sale_type_value)
@@ -16501,8 +16529,8 @@ def admin_add_item():
                     id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping,
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price,
-                    shipping_cost, sales_destination, commission, is_shipped, notes, scope
-                ) VALUES ({', '.join([placeholder] * 31)})
+                    shipping_cost, sales_destination, commission, is_shipped, notes, scope, appraisal_status
+                ) VALUES ({', '.join([placeholder] * 32)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
@@ -16534,7 +16562,8 @@ def admin_add_item():
                 commission_value,
                 'is_shipped' in request.form,
                 request.form.get('notes'),
-                target_scope
+                target_scope,
+                appraisal_status
             ))
             conn.commit()
             
