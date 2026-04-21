@@ -23103,14 +23103,11 @@ def admin_notify_long_term_item(item_id):
                 JOIN users u ON u.id = m.user_id
                 WHERE m.id = %s
                   AND u.role = 'user'
-                  AND m.sale_date IS NULL
-                  AND COALESCE(m.created_at::date, m.purchase_date::date) <= (CURRENT_DATE - INTERVAL '90 days')::DATE
             """, (item_id,))
             item = cur.fetchone()
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            three_months_ago = datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)
             cur.execute("""
                 SELECT m.id, m.user_id, m.product_name,
                        COALESCE(date(m.created_at), m.purchase_date) AS storage_started_at,
@@ -23119,9 +23116,7 @@ def admin_notify_long_term_item(item_id):
                 JOIN users u ON u.id = m.user_id
                 WHERE m.id = ?
                   AND u.role = 'user'
-                  AND m.sale_date IS NULL
-                  AND COALESCE(date(m.created_at), m.purchase_date) <= ?
-            """, (item_id, three_months_ago.strftime('%Y-%m-%d')))
+            """, (item_id,))
             row = cur.fetchone()
             item = dict(row) if row else None
 
