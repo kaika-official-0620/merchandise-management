@@ -1,9 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{% if request.args.get('inventory_view') == 'long_term' %}長期保存商品{% else %}ユーザーの商品一覧{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{{ '長期保存商品' if long_term_only else 'ユーザーの商品一覧' }} - 株式会社 開花{% endblock %}
 
 {% block content %}
-{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
-{% set is_long_term_view = request.args.get('inventory_view') == 'long_term' %}
 <style>
     /* 検索ボタン */
     .search-toggle-container {
@@ -187,6 +185,280 @@
     .action-buttons-group {
         display: flex;
         gap: 0.5rem;
+        align-items: center;
+    }
+
+    .page-description {
+        margin-top: 0.5rem;
+        color: #64748b;
+        font-size: 0.95rem;
+    }
+
+    .proxy-source-chip {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 0.35rem;
+        padding: 0.22rem 0.55rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .sort-control {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.55rem 0.8rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+    }
+
+    .sort-control label {
+        color: #475569;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .sort-control select {
+        min-width: 220px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0.45rem 0.7rem;
+        font-size: 0.85rem;
+        color: #1e293b;
+        background: white;
+    }
+
+    .long-term-scope-note {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.45rem 0.75rem;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 999px;
+        color: #c2410c;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .long-term-overview {
+        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+        border: 1px solid #fed7aa;
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.08);
+    }
+
+    .long-term-overview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .long-term-overview-header h2 {
+        margin: 0;
+        color: #9a3412;
+        font-size: 1.1rem;
+    }
+
+    .long-term-overview-header p {
+        margin: 0.35rem 0 0;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-overview-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }
+
+    .summary-filter-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        border: 1px solid #fdba74;
+        background: white;
+        color: #c2410c;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .summary-filter-link:hover,
+    .summary-filter-link.active {
+        background: #ea580c;
+        border-color: #ea580c;
+        color: white;
+    }
+
+    .long-term-client-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+    }
+
+    .long-term-client-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        background: white;
+        border: 1px solid #fed7aa;
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .long-term-client-row.active {
+        border-color: #f97316;
+        box-shadow: 0 12px 24px rgba(249, 115, 22, 0.16);
+    }
+
+    .long-term-client-summary {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        min-width: 0;
+    }
+
+    .long-term-client-name {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .long-term-client-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .long-term-client-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .notify-form {
+        margin: 0;
+    }
+
+    .client-open-btn,
+    .notify-client-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #fdba74;
+        border-radius: 10px;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .client-open-btn {
+        background: #f97316;
+        border-color: #f97316;
+        color: white;
+    }
+
+    .client-open-btn:hover,
+    .client-open-btn.active {
+        background: #ea580c;
+        border-color: #ea580c;
+        color: white;
+    }
+
+    .notify-client-btn {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .notify-client-btn:hover {
+        background: #ffedd5;
+    }
+
+    .long-term-current-filter {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed #fdba74;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-current-filter a {
+        color: #c2410c;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .long-term-current-filter-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .long-term-empty-state {
+        background: white;
+        border: 1px dashed #fdba74;
+        border-radius: 12px;
+        padding: 1rem;
+        color: #9a3412;
+        text-align: center;
+    }
+
+    .long-term-detail-placeholder {
+        margin: 1rem 0 0;
+        background: white;
+        border: 1px dashed #fdba74;
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+        color: #9a3412;
+        font-size: 0.9rem;
+    }
+
+    .long-term-mobile-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.6rem;
+    }
+
+    .long-term-mobile-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 0.74rem;
+        font-weight: 600;
     }
 
     /* テーブルスタイル */
@@ -200,15 +472,15 @@
 
     .data-table {
         width: 100%;
-        min-width: 1500px;
+        min-width: 1400px;
         border-collapse: collapse;
-        font-size: 1.04rem;
+        font-size: 0.9rem;
         border: 1px solid #d1d5db;
     }
 
     .data-table th {
         background: #f8fafc;
-        padding: 13px 11px;
+        padding: 12px 10px;
         text-align: left;
         font-weight: 600;
         color: #475569;
@@ -229,7 +501,7 @@
     }
 
     .data-table td {
-        padding: 12px 11px;
+        padding: 10px;
         border: 1px solid #d1d5db;
         vertical-align: middle;
     }
@@ -250,75 +522,6 @@
     .data-table th.updater-col,
     .data-table td.updater-col {
         min-width: 120px;
-    }
-
-    .data-table th.fee-col,
-    .data-table td.fee-col {
-        min-width: 220px;
-        width: 220px;
-    }
-
-    .data-table th.shipping-col,
-    .data-table td.shipping-col {
-        min-width: 130px;
-        width: 130px;
-    }
-
-    .fee-breakdown {
-        display: inline-block;
-        text-align: left;
-    }
-
-    .fee-breakdown summary {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        list-style: none;
-        font-weight: 600;
-        color: inherit;
-    }
-
-    .fee-breakdown summary::-webkit-details-marker {
-        display: none;
-    }
-
-    .fee-breakdown-body {
-        margin-top: 6px;
-        padding: 8px 10px;
-        border: 1px solid #dbeafe;
-        border-radius: 10px;
-        background: #f8fbff;
-        min-width: 220px;
-        line-height: 1.6;
-        white-space: normal;
-    }
-
-    .fee-detail-line {
-        white-space: normal;
-    }
-
-    .fee-summary-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: #eff6ff;
-        color: #2563eb;
-        font-size: 0.66rem;
-        font-weight: 700;
-        line-height: 1.2;
-    }
-
-    .fee-summary-meta {
-        display: inline-flex;
-        align-items: center;
-        margin-left: 8px;
-        font-size: 0.68rem;
-        color: #64748b;
-        line-height: 1.5;
-        white-space: normal;
     }
 
     .data-table td.product-name-col {
@@ -541,11 +744,6 @@
         color: #1e40af;
     }
 
-    .status-badge.pending-sale {
-        background: #fef3c7;
-        color: #b45309;
-    }
-
     .status-badge.unlisted {
         background: #f1f5f9;
         color: #64748b;
@@ -563,32 +761,6 @@
 
     .amount.negative {
         color: #ef4444;
-    }
-
-    .item-checkbox,
-    #select-all {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 18px;
-        height: 18px;
-        border: 2px solid #93c5fd;
-        border-radius: 999px;
-        background: #fff;
-        display: inline-block;
-        vertical-align: middle;
-        margin: 0 !important;
-        cursor: pointer;
-        box-sizing: border-box;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-    }
-
-    .item-checkbox:checked,
-    #select-all:checked {
-        border-color: #2563eb;
-        background:
-            radial-gradient(circle at center, #2563eb 0 42%, transparent 46%),
-            #ffffff;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
     }
 
     /* コンディションバッジ */
@@ -638,6 +810,121 @@
         margin-right: 3px;
     }
 
+    .long-term-request-cell {
+        min-width: 260px;
+        white-space: normal;
+    }
+
+    .long-term-request-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        align-items: flex-start;
+    }
+
+    .long-term-request-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .long-term-request-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .long-term-request-type.auction {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
+    .long-term-request-type.liquidation {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .long-term-request-type.shipping {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .long-term-request-type.none {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    .long-term-request-status.pending {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .long-term-request-status.processing {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .long-term-request-status.completed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .long-term-request-status.rejected {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .long-term-request-status.none {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    .long-term-request-meta,
+    .long-term-request-note {
+        font-size: 0.76rem;
+        line-height: 1.5;
+        color: #475569;
+    }
+
+    .long-term-request-note {
+        width: 100%;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .long-term-request-links {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    .long-term-request-links form {
+        margin: 0;
+    }
+
+    .long-term-request-links .btn {
+        margin-right: 0;
+    }
+
+    .btn-secondary-link {
+        background: #fff7ed;
+        color: #c2410c;
+        border: 1px solid #fdba74;
+    }
+
+    .mobile-long-term-request {
+        margin-top: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+    }
+
     /* 所有者バッジ */
     .badge-user {
         background: #059669;
@@ -645,6 +932,15 @@
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.75rem;
+    }
+
+    /* 一括操作エリア */
+    .bulk-actions {
+        background: #f8fafc;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
     }
 
     /* モーダル */
@@ -719,6 +1015,42 @@
     }
 
     @media (max-width: 768px) {
+        .long-term-overview-header,
+        .long-term-current-filter {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .long-term-overview-actions {
+            justify-content: flex-start;
+        }
+
+        .long-term-client-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .long-term-client-actions {
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .client-open-btn,
+        .notify-client-btn {
+            flex: 1;
+        }
+
+        .sort-control {
+            width: 100%;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .sort-control select {
+            min-width: 0;
+            width: 100%;
+        }
+
         .search-action-bar {
             flex-direction: row;
             gap: 0.5rem;
@@ -961,7 +1293,7 @@
 
         .user-card-title h3 {
             margin: 0;
-            font-size: 0.9rem;
+            font-size: 0.7rem;
             font-weight: 500;
             color: #1e293b;
             line-height: 1.3;
@@ -981,109 +1313,26 @@
 
         /* 価格のみコンパクト表示 */
         .user-card-info-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 6px;
+            display: block;
         }
 
         .user-card-info-item {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .user-card-info-label {
-            display: block;
-            font-size: 0.78rem;
-            color: #94a3b8;
-        }
-
-        .user-card-info-value {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        .fee-breakdown {
-            display: inline-block;
-            text-align: left;
-        }
-
-        .fee-breakdown summary {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            list-style: none;
-            font-weight: 600;
-            color: inherit;
-        }
-
-        .fee-breakdown summary::-webkit-details-marker {
             display: none;
         }
 
-        .fee-breakdown-body {
-            margin-top: 6px;
-            padding: 8px 10px;
-            border: 1px solid #dbeafe;
-            border-radius: 10px;
-            background: #f8fbff;
-            font-size: 0.72rem;
-            line-height: 1.6;
-            color: #475569;
-            white-space: nowrap;
+        /* 仕入価格のみ表示 */
+        .user-card-info-item:first-child {
+            display: block;
         }
 
-        .sale-type-inline {
-            margin-top: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
+        .user-card-info-label {
+            display: none;
         }
 
-        .sale-type-chip {
-            display: inline-flex;
-            align-items: center;
-            padding: 2px 8px;
-            border-radius: 999px;
-            background: #eef2ff;
-            color: #4338ca;
-            font-size: 0.68rem;
+        .user-card-info-value {
+            font-size: 0.75rem;
             font-weight: 600;
-            line-height: 1.4;
-        }
-
-        .fee-detail-line {
-            white-space: normal;
-        }
-
-        .fee-summary-meta {
-            display: inline-flex;
-            align-items: center;
-            margin-left: 8px;
-            font-size: 0.68rem;
-            color: #64748b;
-            line-height: 1.5;
-            white-space: normal;
-        }
-
-        .fee-breakdown-note {
-            color: #94a3b8;
-            font-size: 0.68rem;
-        }
-
-        .fee-summary-toggle {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2px 8px;
-            border-radius: 999px;
-            background: #eff6ff;
-            color: #2563eb;
-            font-size: 0.66rem;
-            font-weight: 700;
-            line-height: 1.2;
+            color: #1e293b;
         }
 
         .user-card-info-value.positive {
@@ -1121,16 +1370,76 @@
 
 <div class="page-header">
     <div>
-        <h1>{{ '長期保存商品' if is_long_term_view else 'ユーザーの商品一覧' }}</h1>
-        {% if is_long_term_view %}
-        <p style="margin: 0.35rem 0 0; color: #64748b; font-size: 0.92rem; line-height: 1.7;">仕入日から90日以上経過し、まだ販売完了していない商品だけを表示しています。</p>
+        <h1>{{ '長期保存商品' if long_term_only else 'ユーザーの商品一覧' }}</h1>
+        <p class="page-description">
+            {% if long_term_only %}
+            一般ユーザーの商品は、登録から90日を超えると長期保存商品へ自動反映されます。クライアント別の確認や並び替えにも対応しています。
+            {% else %}
+            クライアントごとの商品一覧です。代行仕入れで反映した商品もこの一覧で確認できます。
+            {% endif %}
+        </p>
+    </div>
+    <div class="header-actions">
+        {% if long_term_only %}
+        <a href="{{ url_for('admin_user_products') }}" class="btn btn-secondary">通常の商品一覧へ戻る</a>
+        {% else %}
+        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="btn btn-secondary">長期保存一覧</a>
         {% endif %}
     </div>
-    {% if is_long_term_view %}
-    <a href="{{ url_for('admin_user_products') }}" class="btn">商品一覧に戻る</a>
-    {% endif %}
 </div>
 
+{% if show_long_term_overview and (long_term_summary or long_term_only) %}
+<section class="long-term-overview">
+    <div class="long-term-overview-header">
+        <div>
+            <h2>クライアント別長期保存商品</h2>
+            <p>未売却かつ90日以上保管されている商品が合計 {{ total_long_term_count }} 件あります。</p>
+        </div>
+    </div>
+
+    {% if long_term_summary %}
+    <div class="long-term-client-list">
+        {% for client in long_term_summary %}
+        <div class="long-term-client-row {% if selected_owner_id == client.user_id and long_term_only %}active{% endif %}">
+            <div class="long-term-client-summary">
+                <span class="long-term-client-name">{{ client.client_name }}</span>
+                <span class="long-term-client-chip">長期保存 {{ client.item_count }}件</span>
+                <span class="long-term-client-chip">最長保管 {{ client.oldest_days_in_storage }}日</span>
+            </div>
+            <div class="long-term-client-actions">
+                <a href="{{ url_for('admin_user_products', long_term_only=1, owner_id=client.user_id) }}"
+                    class="client-open-btn {% if selected_owner_id == client.user_id and long_term_only %}active{% endif %}">表示</a>
+                <form method="POST" action="{{ url_for('admin_notify_long_term_user', user_id=client.user_id) }}" class="notify-form">
+                    <button type="submit" class="notify-client-btn">お客様へ通知</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="long-term-empty-state">現在、長期保存として該当する商品はありません。</div>
+    {% endif %}
+
+    {% if long_term_only and selected_owner_name %}
+    <div class="long-term-current-filter">
+        <span>{{ selected_owner_name }} の長期保存商品と申請内容を表示中です。内容は「商品処分申請」にも反映されます。</span>
+        <div class="long-term-current-filter-actions">
+            <form method="POST" action="{{ url_for('admin_notify_long_term_user', user_id=selected_owner_id) }}" class="notify-form">
+                <button type="submit" class="notify-client-btn">このお客様へ通知</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if long_term_only and not show_long_term_details %}
+<div class="long-term-detail-placeholder">
+    クライアントの「表示」を押すと、そのお客様の長期保存商品の詳細、検索フィルター、並び替えが下に表示されます。
+</div>
+{% endif %}
+
+{% if show_long_term_details %}
 <!-- 検索ボタン＆アクションボタン -->
 <div class="search-action-bar">
     <div class="search-toggle-container">
@@ -1142,7 +1451,21 @@
         </button>
     </div>
     <div class="action-buttons-group">
+        {% if long_term_only %}
+        <div class="sort-control">
+            <label for="sortControl">並び替え</label>
+            <select id="sortControl" onchange="applySortSelection()">
+                <option value="storage_desc">保管期間が長い順</option>
+                <option value="storage_asc">保管期間が短い順</option>
+                <option value="purchase_oldest">登録日が古い順</option>
+                <option value="purchase_newest">登録日が新しい順</option>
+                <option value="product_asc">商品名順</option>
+            </select>
+        </div>
+        <span class="long-term-scope-note">一般ユーザー商品を登録から90日で自動表示</span>
+        {% else %}
         <a href="{{ url_for('admin_add_item', mode='user') }}" class="btn btn-primary">+ ユーザー商品登録</a>
+        {% endif %}
     </div>
 </div>
 
@@ -1173,10 +1496,23 @@
                 <label>型番</label>
                 <input type="text" id="tab-filter-model" placeholder="型番">
             </div>
+            {% if not long_term_only %}
             <div class="filter-item">
-                <label>所有者</label>
-                <input type="text" id="tab-filter-owner" placeholder="所有者名">
+                <label>{{ 'クライアント' if long_term_only else '所有者' }}</label>
+                <select id="tab-filter-owner-select">
+                    <option value="">{{ 'すべてのクライアント' if long_term_only else 'すべての所有者' }}</option>
+                    {% if long_term_only %}
+                    {% for client in long_term_summary %}
+                    <option value="{{ client.user_id }}">{{ client.client_name }}（{{ client.item_count }}件）</option>
+                    {% endfor %}
+                    {% else %}
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+                    {% endfor %}
+                    {% endif %}
+                </select>
             </div>
+            {% endif %}
         </div>
     </div>
 
@@ -1199,7 +1535,6 @@
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
                     <option value="sold">売却済</option>
-                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="unlisted">未出品</option>
                 </select>
@@ -1211,7 +1546,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>仕入れ額</label>
+                <label>卸価格</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1223,7 +1558,7 @@
                 <input type="number" id="tab-filter-sale-max" placeholder="以下">
             </div>
             <div class="filter-item">
-                <label>最終利益</label>
+                <label>利益</label>
                 <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-profit-max" placeholder="以下">
@@ -1238,12 +1573,34 @@
     </div>
 </div>
 
+{% if items and not long_term_only %}
+<div class="bulk-actions">
+    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST"
+        style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
+            <span>すべて選択</span>
+        </label>
+        <select name="target_user_id" required style="min-width: 200px;">
+            <option value="">転送先ユーザーを選択</option>
+            {% for user in users %}
+            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
+    </form>
+</div>
+{% endif %}
+
 <!-- 商品テーブル -->
 <div class="table-container">
     <div class="table-scroll">
         <table class="data-table" id="itemsTable">
             <thead>
                 <tr>
+                    {% if not long_term_only %}
+                    <th style="width: 40px;"></th>
+                    {% endif %}
                     <th style="width: 60px;">写真</th>
                     <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
                     <th class="sortable product-name-col" data-sort="product_name">商品名</th>
@@ -1251,16 +1608,16 @@
                     <th>型番</th>
                     <th>状態</th>
                     <th class="sortable store-col" data-sort="store_name">仕入先</th>
-                    <th class="owner-col">登録者</th>
+                    <th class="sortable owner-col" data-sort="owner_name">{{ 'クライアント' if long_term_only else '登録者' }}</th>
                     <th class="updater-col">最終更新者</th>
-                    <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">仕入れ額</th>
-                    <th class="sortable fee-col" data-sort="commission_total">手数料</th>
-                    <th class="shipping-col">送料</th>
+                    <th class="sortable" data-sort="purchase_date">{{ '登録日' if long_term_only else '仕入日' }}</th>
+                    <th class="sortable" data-sort="days_since_purchase">保管日数</th>
+                    <th class="sortable" data-sort="purchase_price">卸価格</th>
+                    <th class="sortable" data-sort="listing_price">出品価格</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
-                    <th class="sortable" data-sort="profit">最終利益</th>
+                    <th class="sortable" data-sort="profit">利益</th>
                     <th>販売状況</th>
-                    <th style="width: 100px;">操作</th>
+                    <th style="width: {{ '260px' if long_term_only else '100px' }};">{{ '長期保存対応' if long_term_only else '操作' }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -1270,14 +1627,22 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
-                    data-sales-destination="{{ item.sales_destination_display or '' }}"
+                    data-sales-destination="{{ item.sales_destination or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
-                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.display_purchase_price or 0 }}"
-                    data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.display_sale_price or 0 }}"
+                    data-owner-id="{{ item.user_id or '' }}"
+                    data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}" data-purchase-price="{{ item.wholesale_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
+                    data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    {% if not long_term_only %}
+                    <td>
+                        <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
+                            class="item-checkbox">
+                    </td>
+                    {% endif %}
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1292,6 +1657,9 @@
                     <td>{{ item.kaika_product_code or '-' }}</td>
                     <td class="product-name-col">
                         <strong>{{ item.product_name or '-' }}</strong>
+                        {% if item.is_proxy_service_reflection %}
+                        <div class="proxy-source-chip">{{ item.proxy_service_source_label }}</div>
+                        {% endif %}
                         {% if item.notes %}
                         <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;" title="{{ item.notes }}">メモ: {{ item.notes|truncate(36) }}</div>
                         {% endif %}
@@ -1307,33 +1675,17 @@
                     <td class="store-col" title="{{ item.store_name or '-' }}">{{ item.store_name or '-' }}</td>
                     <td class="owner-col"><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
                     <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
-                    <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
-                    <td class="amount fee-col">
-                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
-                        <details class="fee-breakdown">
-                            <summary><span>¥{{ "{:,}".format(item.display_fee_total or 0) }}</span><span class="fee-summary-toggle">内訳</span></summary>
-                            <div class="fee-breakdown-body">
-                                {% for fee_detail in item.fee_breakdown_details or [] %}
-                                {% if not fee_detail.startswith('送料:') %}
-                                <div class="fee-detail-line">{{ fee_detail }}</div>
-                                {% endif %}
-                                {% endfor %}
-                                {% if item.kaika_fee %}
-                                <div class="fee-breakdown-note">開花手数料は仕入れ額に含めて計算しています。</div>
-                                {% endif %}
-                            </div>
-                        </details>
-                        {% else %}-{% endif %}
-                    </td>
-                    <td class="amount shipping-col">
-                        {% if item.sale_date or item.display_shipping_cost %}
-                        ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                    <td>{{ item.storage_started_at_display if long_term_only else item.purchase_date or '-' }}</td>
+                    <td class="amount">{{ item.days_since_purchase or 0 }}日</td>
+                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
+                    <td class="amount">
+                        {% if item.listing_price %}
+                        ¥{{ "{:,}".format(item.listing_price) }}
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount">
                         {% if item.sale_date %}
-                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
+                        ¥{{ "{:,}".format(item.sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td
@@ -1346,29 +1698,69 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
-                        {% elif item.appraisal_status == 'waiting' %}
-                        <span class="status-badge pending-sale">査定待ち</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
                         <span class="status-badge unlisted">未出品</span>
                         {% endif %}
                     </td>
-                    <td class="action-cell">
-                        <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
-                        <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                    <td class="action-cell {% if long_term_only %}long-term-request-cell{% endif %}">
+                        {% if long_term_only %}
+                        <div class="long-term-request-stack">
+                            <div class="long-term-request-badges">
+                                <span class="long-term-request-badge long-term-request-type {{ item.disposal_type or 'none' }}">
+                                    {{ item.disposal_type_label }}
+                                </span>
+                                <span class="long-term-request-badge long-term-request-status {{ item.disposal_status_stage or 'none' }}">
+                                    {{ item.disposal_status_label }}
+                                </span>
+                            </div>
+                            <div class="long-term-request-meta">
+                                申請日: {{ item.disposal_requested_at_display }}
+                                {% if item.disposal_processed_at_display %}
+                                <br>更新日: {{ item.disposal_processed_at_display }}
+                                {% endif %}
+                                {% if item.disposal_request_id %}
+                                <br>次の対応: {{ item.disposal_next_action_label }}
+                                {% endif %}
+                            </div>
+                            <div class="long-term-request-links">
+                                <form method="POST" action="{{ url_for('admin_notify_long_term_item', item_id=item.id) }}" class="notify-form">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" {% if not item.can_notify_owner %}disabled title="LINE連携が未設定のため通知できません"{% endif %}>この商品を通知</button>
+                                </form>
+                                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">商品詳細</a>
+                                {% if item.show_sale_entry %}
+                                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
+                                {% endif %}
+                                {% if item.finish_action and item.disposal_request_id %}
+                                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                                    <input type="hidden" name="action" value="{{ item.finish_action }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                                </form>
+                                {% endif %}
+                                <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
+                            </div>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
                         <button class="btn btn-sm btn-primary"
                             onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
                         {% if item.can_delete %}
                         <button class="btn btn-sm btn-danger"
                             onclick="openDeleteModal({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
                         {% endif %}
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="17" style="text-align: center; padding: 40px; color: #94a3b8;">
+                    <td colspan="{{ '18' if not long_term_only else '17' }}" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        {% if long_term_only %}
+                        {{ selected_owner_name ~ ' の長期保存商品はありません' if selected_owner_name else '長期保存商品はありません' }}
+                        {% else %}
                         ユーザーの商品がありません
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -1389,23 +1781,22 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}"
-            data-id="{{ item.id }}"
-            data-name="{{ item.product_name or '' }}"
-            data-brand="{{ item.brand_name or '' }}"
-            data-model="{{ item.model_number or '' }}"
-            data-condition="{{ item.item_condition or '' }}"
-            data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
-            data-date="{{ item.purchase_date or '' }}"
-            data-purchase-price="{{ item.display_purchase_price or 0 }}"
-            data-sale-price="{{ item.display_sale_price or 0 }}"
-            data-profit="{{ item.profit or 0 }}"
-            data-sale-type="{{ item.sale_type or '' }}"
-            data-sale-date="{{ item.sale_date or '' }}"
-            data-sales-destination="{{ item.sales_destination_display or '' }}"
-            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}" data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
+            data-owner="{{ item.owner_display_name or item.owner_username or '' }}" data-owner-id="{{ item.user_id or '' }}"
+            data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-purchase-price="{{ item.wholesale_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+            data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
+            data-days-since-purchase="{{ item.days_since_purchase or 0 }}">
             <div
                 class="user-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
+                {% if not long_term_only %}
+                <div class="user-card-checkbox">
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
+                        class="item-checkbox">
+                </div>
+                {% endif %}
                 <div class="user-card-photo">
                     {% if item.all_photos and item.all_photos|length > 1 %}
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
@@ -1424,6 +1815,9 @@
                 <div class="user-card-title">
                     <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
                     <h3>{{ item.product_name or '-' }}</h3>
+                    {% if item.is_proxy_service_reflection %}
+                    <div class="proxy-source-chip">{{ item.proxy_service_source_label }}</div>
+                    {% endif %}
                     {% if item.notes %}
                     <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;">メモ: {{ item.notes|truncate(48) }}</div>
                     {% endif %}
@@ -1432,8 +1826,6 @@
                 <div class="user-card-status">
                     {% if item.sale_date %}
                     <span class="status-badge sold">売却済</span>
-                    {% elif item.appraisal_status == 'waiting' %}
-                    <span class="status-badge pending-sale">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -1442,56 +1834,86 @@
                 </div>
             </div>
             <div class="user-card-body">
+                {% if long_term_only %}
+                <div class="long-term-mobile-meta">
+                    <span class="long-term-mobile-chip">{{ item.owner_display_name or item.owner_username or '-' }}</span>
+                    <span class="long-term-mobile-chip">保管 {{ item.days_since_purchase or 0 }}日</span>
+                </div>
+                {% endif %}
                 <div class="user-card-info-grid">
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">仕入れ額</span>
-                        <span class="user-card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
+                        <span class="user-card-info-label">卸価格</span>
+                        <span class="user-card-info-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
                     </div>
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">手数料</span>
-                        <span class="user-card-info-value">
-                            {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
-                            ¥{{ "{:,}".format(item.display_fee_total or 0) }}
-                            {% else %}-{% endif %}
-                        </span>
-                    </div>
-                    <div class="user-card-info-item">
-                        <span class="user-card-info-label">送料</span>
-                        <span class="user-card-info-value">
-                            {% if item.sale_date or item.display_shipping_cost %}
-                            ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
-                            {% else %}-{% endif %}
-                        </span>
+                        <span class="user-card-info-label">出品</span>
+                        <span class="user-card-info-value">{% if item.listing_price %}¥{{
+                            "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
                     </div>
                     <div class="user-card-info-item">
                         <span class="user-card-info-label">売上</span>
-                        <span class="user-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or
+                        <span class="user-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or
                             0) }}{% else %}-{% endif %}</span>
                     </div>
-                    <div class="user-card-info-item">
-                        <span class="user-card-info-label">最終利益</span>
-                        <span class="user-card-info-value {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
-                            {% if item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                </div>
+                {% if long_term_only %}
+                <div class="mobile-long-term-request">
+                    <div class="long-term-request-badges">
+                        <span class="long-term-request-badge long-term-request-type {{ item.disposal_type or 'none' }}">
+                            {{ item.disposal_type_label }}
+                        </span>
+                        <span class="long-term-request-badge long-term-request-status {{ item.disposal_status_stage or 'none' }}">
+                            {{ item.disposal_status_label }}
                         </span>
                     </div>
+                    <div class="long-term-request-meta">申請日: {{ item.disposal_requested_at_display }}</div>
+                    {% if item.disposal_processed_at_display %}
+                    <div class="long-term-request-meta">更新日: {{ item.disposal_processed_at_display }}</div>
+                    {% endif %}
+                    {% if item.disposal_request_id %}
+                    <div class="long-term-request-meta">次の対応: {{ item.disposal_next_action_label }}</div>
+                    {% endif %}
                 </div>
+                {% endif %}
             </div>
             <div class="user-card-footer">
                 <div class="user-card-actions">
-                    <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
-                    <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                    {% if long_term_only %}
+                    <form method="POST" action="{{ url_for('admin_notify_long_term_item', item_id=item.id) }}" class="notify-form">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" {% if not item.can_notify_owner %}disabled title="LINE連携が未設定のため通知できません"{% endif %}>通知</button>
+                    </form>
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">商品詳細</a>
+                    {% if item.show_sale_entry %}
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
+                    {% endif %}
+                    {% if item.finish_action and item.disposal_request_id %}
+                    <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                        <input type="hidden" name="action" value="{{ item.finish_action }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                    </form>
+                    {% endif %}
+                    <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
+                    {% else %}
+                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
         {% else %}
         <div class="user-item-card">
             <div class="user-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                {% if long_term_only %}
+                {{ selected_owner_name ~ ' の長期保存商品はありません' if selected_owner_name else '長期保存商品はありません' }}
+                {% else %}
                 ユーザーの商品がありません
+                {% endif %}
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
+{% endif %}
 
 <!-- 削除確認モーダル -->
 <div id="delete-modal" class="modal" style="display: none;">
@@ -1578,7 +2000,7 @@
         document.getElementById('tab-filter-name').value = '';
         document.getElementById('tab-filter-brand').value = '';
         document.getElementById('tab-filter-model').value = '';
-        document.getElementById('tab-filter-owner').value = '';
+        document.getElementById('tab-filter-owner-select').value = '';
         document.getElementById('tab-filter-condition').value = '';
         document.getElementById('tab-filter-status').value = '';
         document.getElementById('tab-filter-purchase-min').value = '';
@@ -1608,7 +2030,7 @@
         if (document.getElementById('tab-filter-name')?.value) count++;
         if (document.getElementById('tab-filter-brand')?.value) count++;
         if (document.getElementById('tab-filter-model')?.value) count++;
-        if (document.getElementById('tab-filter-owner')?.value) count++;
+        if (document.getElementById('tab-filter-owner-select')?.value) count++;
         if (document.getElementById('tab-filter-condition')?.value) count++;
         if (document.getElementById('tab-filter-status')?.value) count++;
         if (document.getElementById('tab-filter-purchase-min')?.value) count++;
@@ -1633,7 +2055,7 @@
         const filterName = (document.getElementById('tab-filter-name')?.value || '').toLowerCase();
         const filterBrand = (document.getElementById('tab-filter-brand')?.value || '').toLowerCase();
         const filterModel = (document.getElementById('tab-filter-model')?.value || '').toLowerCase();
-        const filterOwner = (document.getElementById('tab-filter-owner')?.value || '').toLowerCase();
+        const filterOwnerId = document.getElementById('tab-filter-owner-select')?.value || '';
         const filterCondition = document.getElementById('tab-filter-condition')?.value || '';
         const filterStatus = document.getElementById('tab-filter-status')?.value || '';
         const query = new URLSearchParams(window.location.search);
@@ -1644,7 +2066,6 @@
         const queryDestination = (query.get('destination') || '').toLowerCase();
         const queryDateFrom = query.get('date_from') || '';
         const queryDateTo = query.get('date_to') || '';
-        const queryInventoryView = (query.get('inventory_view') || '').toLowerCase();
 
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
         const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
@@ -1662,35 +2083,22 @@
             return true;
         }
 
-        function formatDateKey(dateValue) {
-            const date = new Date(dateValue);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-
-        const longTermCutoffDate = new Date();
-        longTermCutoffDate.setHours(0, 0, 0, 0);
-        longTermCutoffDate.setDate(longTermCutoffDate.getDate() - 90);
-        const longTermCutoffKey = formatDateKey(longTermCutoffDate);
-
-        function shouldShowRecord(record) {
-            const id = record.dataset.id || '';
-            const name = (record.dataset.name || '').toLowerCase();
-            const brand = (record.dataset.brand || '').toLowerCase();
-            const model = (record.dataset.model || '').toLowerCase();
-            const owner = (record.dataset.owner || '').toLowerCase();
-            const condition = record.dataset.condition || '';
-            const status = record.dataset.status || '';
-            const saleType = (record.dataset.saleType || '').toLowerCase();
+        function matchesElement(element) {
+            const dataset = element.dataset;
+            const id = (dataset.id || '').toLowerCase();
+            const name = (dataset.name || '').toLowerCase();
+            const brand = (dataset.brand || '').toLowerCase();
+            const model = (dataset.model || '').toLowerCase();
+            const ownerId = dataset.ownerId || '';
+            const condition = dataset.condition || '';
+            const status = dataset.status || '';
+            const saleType = (dataset.saleType || '').toLowerCase();
             const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
-            const saleDate = record.dataset.saleDate || '';
-            const purchaseDate = (record.dataset.date || '').slice(0, 10);
-            const salesDestination = (record.dataset.salesDestination || '').toLowerCase();
-            const purchasePrice = record.dataset.purchasePrice || '0';
-            const salePrice = record.dataset.salePrice || '0';
-            const profit = record.dataset.profit || '0';
+            const saleDate = dataset.saleDate || '';
+            const salesDestination = (dataset.salesDestination || '').toLowerCase();
+            const purchasePrice = dataset.purchasePrice || '0';
+            const salePrice = dataset.salePrice || '0';
+            const profit = dataset.profit || '0';
 
             let show = true;
 
@@ -1698,7 +2106,7 @@
             if (filterName && !name.includes(filterName)) show = false;
             if (filterBrand && !brand.includes(filterBrand)) show = false;
             if (filterModel && !model.includes(filterModel)) show = false;
-            if (filterOwner && !owner.includes(filterOwner)) show = false;
+            if (filterOwnerId && ownerId !== filterOwnerId) show = false;
             if (filterCondition && condition !== filterCondition) show = false;
             if (filterStatus && status !== filterStatus) show = false;
             if (queryStatus === 'unsold') {
@@ -1712,7 +2120,6 @@
             if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
             if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
             if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
-            if (queryInventoryView == 'long_term' && (!purchaseDate || status === 'sold' || purchaseDate > longTermCutoffKey)) show = false;
 
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
             if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
@@ -1721,27 +2128,29 @@
             return show;
         }
 
-        const rows = document.querySelectorAll('#itemsTable tbody tr[data-id]');
+        const rows = document.querySelectorAll('#itemsTable tbody tr');
         rows.forEach(row => {
-            const show = shouldShowRecord(row);
+            if (!row.dataset.id) return;
+            const show = matchesElement(row);
+
             row.style.display = show ? '' : 'none';
             if (show) visibleCount++;
         });
 
-        const cards = document.querySelectorAll('#mobileCards .user-item-card[data-id]');
+        let visibleMobileCount = 0;
+        const cards = document.querySelectorAll('#mobileCards .user-item-card');
         cards.forEach(card => {
-            const show = shouldShowRecord(card);
+            if (!card.dataset.id) return;
+            const show = matchesElement(card);
             card.style.display = show ? '' : 'none';
+            if (show) visibleMobileCount++;
         });
 
         const countEl = document.getElementById('filtered-count');
         if (countEl) countEl.textContent = visibleCount + '件表示';
 
         const totalCountEl = document.querySelector('.total-count');
-        if (totalCountEl) totalCountEl.textContent = visibleCount;
-
-        const currentIndexEl = document.querySelector('.current-index');
-        if (currentIndexEl) currentIndexEl.textContent = visibleCount > 0 ? '1' : '0';
+        if (totalCountEl && visibleMobileCount > 0) totalCountEl.textContent = visibleMobileCount;
     }
 
     function openTransferModal(itemId, itemName) {
@@ -1810,6 +2219,20 @@
 
     // ソート機能
     let sortDirection = {};
+    const sortKeyMap = {
+        kaika_product_code: 'kaikaProductCode',
+        product_name: 'name',
+        brand_name: 'brand',
+        owner_name: 'owner',
+        store_name: 'store',
+        purchase_date: 'date',
+        purchase_price: 'purchasePrice',
+        listing_price: 'listingPrice',
+        sale_price: 'salePrice',
+        profit: 'profit',
+        days_since_purchase: 'daysSincePurchase'
+    };
+    const numericSortColumns = new Set(['purchase_price', 'listing_price', 'sale_price', 'profit', 'days_since_purchase']);
 
     document.querySelectorAll('.sortable').forEach(th => {
         th.addEventListener('click', function () {
@@ -1819,42 +2242,58 @@
         });
     });
 
-    function sortTable(column, ascending) {
-        const tbody = document.querySelector('#itemsTable tbody');
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        const datasetKey = column.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    function getSortValue(element, column) {
+        const datasetKey = sortKeyMap[column] || column;
+        const rawValue = element.dataset[datasetKey] || '';
+        if (numericSortColumns.has(column)) {
+            return parseInt(rawValue, 10) || 0;
+        }
+        return String(rawValue).toLowerCase();
+    }
 
-        rows.sort((a, b) => {
-            if (!a.dataset.id) return 1;
-            if (!b.dataset.id) return -1;
+    function sortElements(containerSelector, itemSelector, column, ascending) {
+        const container = document.querySelector(containerSelector);
+        if (!container) return;
 
-            let aVal, bVal;
+        const items = Array.from(container.querySelectorAll(itemSelector));
+        const sortableItems = items.filter(item => item.dataset.id);
+        const fixedItems = items.filter(item => !item.dataset.id);
 
-            switch (column) {
-                case 'purchase_price':
-                case 'commission_total':
-                case 'sale_price':
-                case 'profit':
-                    aVal = parseInt(a.dataset[datasetKey] || '0') || 0;
-                    bVal = parseInt(b.dataset[datasetKey] || '0') || 0;
-                    break;
-                case 'kaika_product_code':
-                    aVal = (a.dataset.kaikaProductCode || '');
-                    bVal = (b.dataset.kaikaProductCode || '');
-                    break;
-                default:
-                    aVal = a.dataset[datasetKey] || '';
-                    bVal = b.dataset[datasetKey] || '';
-            }
+        sortableItems.sort((a, b) => {
+            const aVal = getSortValue(a, column);
+            const bVal = getSortValue(b, column);
 
+            if (aVal === bVal) return 0;
             if (ascending) {
                 return aVal > bVal ? 1 : -1;
-            } else {
-                return aVal < bVal ? 1 : -1;
             }
+            return aVal < bVal ? 1 : -1;
         });
 
-        rows.forEach(row => tbody.appendChild(row));
+        sortableItems.concat(fixedItems).forEach(item => container.appendChild(item));
+    }
+
+    function sortTable(column, ascending) {
+        sortElements('#itemsTable tbody', 'tr', column, ascending);
+        sortElements('#mobileCards', '.user-item-card', column, ascending);
+    }
+
+    function applySortSelection() {
+        const sortControl = document.getElementById('sortControl');
+        if (!sortControl) return;
+
+        const sortMap = {
+            storage_desc: ['days_since_purchase', false],
+            storage_asc: ['days_since_purchase', true],
+            purchase_oldest: ['purchase_date', true],
+            purchase_newest: ['purchase_date', false],
+            owner_asc: ['owner_name', true],
+            product_asc: ['product_name', true]
+        };
+
+        const [column, ascending] = sortMap[sortControl.value] || ['days_since_purchase', false];
+        sortDirection[column] = ascending;
+        sortTable(column, ascending);
     }
 
     // ========== ライトボックス機能 ==========
@@ -2041,6 +2480,7 @@
         const query = new URLSearchParams(window.location.search);
         const queryStatus = query.get('status');
         const queryBrand = query.get('brand');
+        const queryOwnerId = query.get('owner_id');
         if (queryStatus) {
             const statusInput = document.getElementById('tab-filter-status');
             if (statusInput) statusInput.value = queryStatus;
@@ -2049,10 +2489,16 @@
             const brandInput = document.getElementById('tab-filter-brand');
             if (brandInput) brandInput.value = queryBrand;
         }
-        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to') || query.get('inventory_view')) {
+        if (queryOwnerId) {
+            const ownerSelect = document.getElementById('tab-filter-owner-select');
+            if (ownerSelect) ownerSelect.value = queryOwnerId;
+        }
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to') || queryOwnerId) {
             filterTable();
             updateFilterCount();
         }
+
+        applySortSelection();
 
         const mobileCards = document.getElementById('mobileCards');
         const currentIndex = document.querySelector('.current-index');

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import traceback
 from datetime import date, datetime, timedelta
@@ -9,6 +10,7 @@ from typing import Any
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
+from werkzeug.utils import secure_filename
 
 
 APPRAISAL_STATUS_LABELS = {
@@ -50,10 +52,22 @@ def apply(module: Any) -> None:
     RealDictCursor = getattr(module, "RealDictCursor", None)
     login_required = module.login_required
     get_db = module.get_db
-    fetch_sales_agency_request_source = module.fetch_sales_agency_request_source
-    generate_admin_mitsumori_document_no = module.generate_admin_mitsumori_document_no
-    generate_admin_kaitori_document_no = module.generate_admin_kaitori_document_no
-    build_mitsumori_items_from_form = module.build_mitsumori_items_from_form
+    fetch_sales_agency_request_source = getattr(module, "fetch_sales_agency_request_source", None)
+    generate_admin_mitsumori_document_no = getattr(
+        module,
+        "generate_admin_mitsumori_document_no",
+        lambda: f"MIT-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+    )
+    generate_admin_kaitori_document_no = getattr(
+        module,
+        "generate_admin_kaitori_document_no",
+        lambda: f"KAI-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+    )
+    build_mitsumori_items_from_form = getattr(
+        module,
+        "build_mitsumori_items_from_form",
+        lambda: ([], 0),
+    )
     generate_password_hash = module.generate_password_hash
     get_monthly_fee = module.get_monthly_fee
     User = module.User
@@ -63,6 +77,17 @@ def apply(module: Any) -> None:
     is_kaika_inventory_item = getattr(module, "is_kaika_inventory_item", None)
     build_user_fee_components = getattr(module, "build_user_fee_components", None)
     get_fee_settings = getattr(module, "get_fee_settings", None)
+    allowed_file = getattr(module, "allowed_file", None)
+    parse_money_value = getattr(module, "parse_money_value", None)
+    normalize_kaika_sale_type = getattr(module, "normalize_kaika_sale_type", None)
+    resolve_kaika_sales_destination = getattr(module, "resolve_kaika_sales_destination", None)
+    calculate_kaika_marketplace_fee = getattr(module, "calculate_kaika_marketplace_fee", None)
+    get_item_back_url = getattr(module, "get_item_back_url", None)
+    resolve_internal_back_url = getattr(module, "resolve_internal_back_url", None)
+
+    if not callable(fetch_sales_agency_request_source):
+        def fetch_sales_agency_request_source(*_args, **_kwargs):
+            return None, []
 
     module.APPRAISAL_STATUS_LABELS = APPRAISAL_STATUS_LABELS
     module.SALES_AGENCY_SERVICE_TYPES = SALES_AGENCY_SERVICE_TYPES
@@ -190,6 +215,110 @@ def apply(module: Any) -> None:
                 except ValueError:
                     continue
         return None
+
+    def form_value(name, fallback=None):
+        if name in request.form:
+            return request.form.get(name)
+        return fallback
+
+    def money_value(name, fallback=0):
+        raw_value = request.form.get(name) if name in request.form else fallback
+        if callable(parse_money_value):
+            try:
+                return parse_money_value(raw_value, to_int_local(fallback))
+            except Exception:
+                pass
+        return to_int_local(raw_value)
+
+    def float_value(name, fallback=0.0):
+        raw_value = request.form.get(name) if name in request.form else fallback
+        try:
+            if raw_value in (None, ""):
+                return float(fallback or 0)
+            return float(raw_value)
+        except (TypeError, ValueError):
+            return float(fallback or 0)
+
+    def normalize_path_list(raw_value):
+        if not raw_value:
+            return []
+        parsed = raw_value
+        if isinstance(raw_value, str):
+            try:
+                parsed = json.loads(raw_value)
+            except Exception:
+                parsed = raw_value
+        if isinstance(parsed, (list, tuple)):
+            values = parsed
+        else:
+            values = [parsed]
+        normalized = []
+        seen = set()
+        for value in values:
+            if value in (None, ""):
+                continue
+            path_value = str(value).replace("\\", "/")
+            if path_value in seen:
+                continue
+            seen.add(path_value)
+            normalized.append(path_value)
+        return normalized
+
+    def save_uploaded_image(file_storage, prefix=""):
+        if not file_storage or not getattr(file_storage, "filename", ""):
+            return None
+        if callable(allowed_file):
+            try:
+                if not allowed_file(file_storage.filename):
+                    return None
+            except Exception:
+                pass
+        timestamp_prefix = datetime.now().strftime("%Y%m%d_%H%M%S_")
+        filename = timestamp_prefix + prefix + secure_filename(file_storage.filename)
+        destination = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        file_storage.save(destination)
+        return f"uploads/{filename}"
+
+    def save_uploaded_document(file_storage, label):
+        if not file_storage or not getattr(file_storage, "filename", ""):
+            return None
+        timestamp_prefix = datetime.now().strftime("%Y%m%d_%H%M%S_")
+        filename = timestamp_prefix + f"{label}_" + secure_filename(file_storage.filename)
+        destination = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        file_storage.save(destination)
+        return f"uploads/{filename}"
+
+    def resolve_back_url(candidate, fallback=""):
+        if callable(resolve_internal_back_url):
+            try:
+                return resolve_internal_back_url(candidate, fallback)
+            except Exception:
+                pass
+        if isinstance(candidate, str) and candidate.startswith("/"):
+            return candidate
+        return fallback
+
+    def derive_appraisal_status(item_status):
+        status = (item_status or "unlisted").strip()
+        if status == "appraisal_pending":
+            return "waiting"
+        if status in {"listed", "sold"}:
+            return "completed"
+        return "none"
+
+    def fallback_item_redirect(item_dict):
+        fallback = url_for("admin_items")
+        try:
+            if callable(is_kaika_inventory_item) and is_kaika_inventory_item(item_dict):
+                return fallback
+        except Exception:
+            pass
+        user_id = item_dict.get("user_id")
+        if user_id:
+            return url_for("admin_user_items", id=user_id)
+        return fallback
 
     def classify_company_scope(item_dict, role_map):
         item_user_id = item_dict.get("user_id")
@@ -1800,6 +1929,368 @@ def apply(module: Any) -> None:
             flash(f"マスター設定の同期に失敗しました: {exc}", "error")
         return response
 
+    def edit_item_v2(id):
+        if not current_user.is_admin():
+            flash("管理者権限が必要です。", "error")
+            return redirect(url_for("index"))
+
+        can_edit_merchandise = getattr(current_user, "can_edit_merchandise", None)
+        if callable(can_edit_merchandise) and not can_edit_merchandise():
+            flash("商品の編集権限がありません。", "error")
+            return redirect(url_for("disposal_options"))
+
+        conn, cur = open_cursor()
+        placeholder = "%s" if DATABASE_URL else "?"
+        try:
+            cur.execute(f"SELECT * FROM merchandise WHERE id = {placeholder}", (id,))
+            item = cur.fetchone()
+            if not item:
+                flash("商品が見つかりません。", "error")
+                fallback = url_for("admin_items")
+                if callable(get_item_back_url):
+                    try:
+                        fallback = get_item_back_url(fallback)
+                    except Exception:
+                        pass
+                return redirect(fallback)
+
+            item_dict = dict(item)
+
+            if request.method == "POST":
+                photo_path = request.form.get("google_drive_photo_path") or item_dict.get("photo_path")
+                uploaded_photo = save_uploaded_image(request.files.get("photo"))
+                if uploaded_photo:
+                    photo_path = uploaded_photo
+
+                additional_photos = normalize_path_list(item_dict.get("additional_photos"))
+                additional_photos.extend(normalize_path_list(request.form.get("google_drive_additional_paths")))
+                for file_storage in request.files.getlist("additional_photos"):
+                    if len(additional_photos) >= 19:
+                        break
+                    saved_path = save_uploaded_image(file_storage, prefix=f"{len(additional_photos) + 2}_")
+                    if saved_path:
+                        additional_photos.append(saved_path)
+                delete_photos = set(request.form.getlist("delete_photos"))
+                additional_photos = [path for path in normalize_path_list(additional_photos) if path not in delete_photos]
+                additional_photos_json = json.dumps(additional_photos) if additional_photos else None
+
+                id_document_path = item_dict.get("id_document_path")
+                uploaded_id_document = save_uploaded_document(request.files.get("id_document"), "id")
+                if uploaded_id_document:
+                    id_document_path = uploaded_id_document
+
+                consent_form_path = item_dict.get("consent_form_path")
+                uploaded_consent_form = save_uploaded_document(request.files.get("consent_form"), "consent")
+                if uploaded_consent_form:
+                    consent_form_path = uploaded_consent_form
+
+                purchase_price = money_value("purchase_price", item_dict.get("purchase_price"))
+                wholesale_fee_rate = float_value("wholesale_fee_rate", item_dict.get("wholesale_fee_rate"))
+                wholesale_price = money_value("wholesale_price", item_dict.get("wholesale_price"))
+                if wholesale_price <= 0:
+                    wholesale_price = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
+
+                item_status = (request.form.get("item_status") or "unlisted").strip()
+                appraisal_status = derive_appraisal_status(item_status)
+
+                is_kaika_scope = False
+                if callable(is_kaika_inventory_item):
+                    try:
+                        is_kaika_scope = is_kaika_inventory_item(item_dict)
+                    except Exception:
+                        is_kaika_scope = False
+
+                default_sale_type = "normal" if is_kaika_scope else "photo_packing,normal"
+                sale_type_value = form_value("sale_type", item_dict.get("sale_type") or default_sale_type) or default_sale_type
+                if is_kaika_scope and callable(normalize_kaika_sale_type):
+                    try:
+                        sale_type_value = normalize_kaika_sale_type(sale_type_value)
+                    except Exception:
+                        pass
+
+                sale_price_value = money_value("sale_price", item_dict.get("sale_price"))
+                sales_destination_value = form_value("sales_destination", item_dict.get("sales_destination"))
+                if is_kaika_scope and callable(resolve_kaika_sales_destination):
+                    try:
+                        sales_destination_value = resolve_kaika_sales_destination(sale_type_value, sales_destination_value)
+                    except Exception:
+                        pass
+
+                commission_value = money_value("commission", item_dict.get("commission"))
+                if is_kaika_scope and callable(calculate_kaika_marketplace_fee):
+                    try:
+                        commission_value = calculate_kaika_marketplace_fee(
+                            sale_type_value,
+                            sale_price_value,
+                            form_value("commission_rate"),
+                            form_value("commission"),
+                        )
+                    except Exception:
+                        pass
+
+                update_fields = [
+                    ("purchase_date", form_value("purchase_date", item_dict.get("purchase_date")) or None),
+                    ("photo_path", photo_path),
+                    ("additional_photos", additional_photos_json),
+                    ("product_name", form_value("product_name", item_dict.get("product_name"))),
+                    ("kaika_product_code", form_value("kaika_product_code", item_dict.get("kaika_product_code"))),
+                    ("brand_name", form_value("brand_name", item_dict.get("brand_name"))),
+                    ("model_number", form_value("model_number", item_dict.get("model_number"))),
+                    ("item_condition", form_value("item_condition", item_dict.get("item_condition"))),
+                    ("store_name", form_value("store_name", item_dict.get("store_name"))),
+                    ("supplier_detail", form_value("supplier_detail", item_dict.get("supplier_detail"))),
+                    ("id_document_path", id_document_path),
+                    ("consent_form_path", consent_form_path),
+                    ("wholesale_price", wholesale_price),
+                    ("wholesale_fee_rate", wholesale_fee_rate),
+                    ("purchase_price", purchase_price),
+                    ("payment_method", form_value("payment_method", item_dict.get("payment_method"))),
+                    ("listing_price", money_value("listing_price", item_dict.get("listing_price"))),
+                    ("expected_shipping", money_value("expected_shipping", item_dict.get("expected_shipping"))),
+                    ("expected_commission", money_value("expected_commission", item_dict.get("expected_commission"))),
+                    ("is_listed", 1 if item_status in {"listed", "sold"} else 0),
+                    ("listing_date", (form_value("listing_date", item_dict.get("listing_date")) or None) if item_status in {"listed", "sold"} else None),
+                    ("sale_date", (form_value("sale_date", item_dict.get("sale_date")) or None) if item_status == "sold" else None),
+                    ("sale_type", sale_type_value),
+                    ("sale_price", sale_price_value),
+                    ("shipping_cost", money_value("shipping_cost", item_dict.get("shipping_cost"))),
+                    ("sales_destination", sales_destination_value),
+                    ("commission", commission_value),
+                    ("is_shipped", 1 if item_dict.get("is_shipped") else 0),
+                    ("notes", form_value("notes", item_dict.get("notes") or "") or ""),
+                    ("updated_by", current_user.id),
+                    ("appraisal_status", appraisal_status),
+                ]
+                set_sql = ", ".join([f"{column} = {placeholder}" for column, _ in update_fields] + ["updated_at = CURRENT_TIMESTAMP"])
+                cur.execute(
+                    f"UPDATE merchandise SET {set_sql} WHERE id = {placeholder}",
+                    tuple(value for _, value in update_fields) + (id,),
+                )
+                conn.commit()
+                flash("商品を更新しました。", "success")
+
+                back_url = resolve_back_url(request.form.get("back_url", ""), "")
+                return redirect(back_url or fallback_item_redirect(item_dict))
+        except Exception as exc:
+            traceback.print_exc()
+            conn.rollback()
+            flash(f"商品更新に失敗しました: {exc}", "error")
+            retry_back_url = resolve_back_url(request.form.get("back_url", ""), "")
+            return redirect(url_for("edit_item", id=id, back_url=retry_back_url))
+        finally:
+            cur.close()
+            conn.close()
+
+        item_dict = dict(item)
+        if item_dict.get("photo_path"):
+            item_dict["photo_path"] = str(item_dict["photo_path"]).replace("\\", "/")
+        item_dict["additional_photos_list"] = normalize_path_list(item_dict.get("additional_photos"))
+
+        fallback_back_url = fallback_item_redirect(item_dict)
+        if callable(get_item_back_url):
+            try:
+                back_url = get_item_back_url(fallback_back_url)
+            except Exception:
+                back_url = fallback_back_url
+        else:
+            back_url = resolve_back_url(request.args.get("back_url", ""), "") or resolve_back_url(request.referrer or "", "") or fallback_back_url
+
+        is_kaika_scope = False
+        if callable(is_kaika_inventory_item):
+            try:
+                is_kaika_scope = is_kaika_inventory_item(item_dict)
+            except Exception:
+                is_kaika_scope = False
+
+        return render_template(
+            "form.html",
+            item=item_dict,
+            back_url=back_url,
+            fee_settings=get_fee_settings(),
+            is_kaika_scope=is_kaika_scope,
+        )
+
+    def admin_add_item_v2():
+        denied = ensure_admin()
+        if denied:
+            return denied
+
+        mode = (request.form.get("mode") or request.args.get("mode") or "admin").strip().lower()
+        if mode not in {"admin", "user"}:
+            mode = "admin"
+
+        if request.method == "POST":
+            conn, cur = open_cursor()
+            placeholder = "%s" if DATABASE_URL else "?"
+            try:
+                target_user_id = current_user.id
+                scope_value = "admin"
+                if mode == "user":
+                    target_user_id = to_int_local(request.form.get("target_user_id"))
+                    if target_user_id <= 0:
+                        flash("登録先ユーザーを選択してください。", "error")
+                        return redirect(url_for("admin_add_item", mode="user"))
+                    cur.execute(f"SELECT id, role FROM users WHERE id = {placeholder}", (target_user_id,))
+                    target_user = cur.fetchone()
+                    target_user = dict(target_user) if target_user else None
+                    if not target_user or target_user.get("role") != "user":
+                        flash("登録先ユーザーが見つかりません。", "error")
+                        return redirect(url_for("admin_add_item", mode="user"))
+                    scope_value = "user"
+
+                purchase_price = money_value("purchase_price")
+                wholesale_fee_rate = float_value("wholesale_fee_rate")
+                wholesale_price = money_value("wholesale_price")
+                if wholesale_price <= 0:
+                    wholesale_price = int(round(purchase_price * (1 + wholesale_fee_rate / 100)))
+
+                item_status = (request.form.get("item_status") or "unlisted").strip()
+                appraisal_status = derive_appraisal_status(item_status)
+                default_sale_type = "normal" if mode == "admin" else "photo_packing,normal"
+                sale_type_value = request.form.get("sale_type") or default_sale_type
+                if mode == "admin" and callable(normalize_kaika_sale_type):
+                    try:
+                        sale_type_value = normalize_kaika_sale_type(sale_type_value)
+                    except Exception:
+                        pass
+
+                sale_price_value = money_value("sale_price")
+                sales_destination_value = form_value("sales_destination") or None
+                if mode == "admin" and callable(resolve_kaika_sales_destination):
+                    try:
+                        sales_destination_value = resolve_kaika_sales_destination(sale_type_value, sales_destination_value)
+                    except Exception:
+                        pass
+
+                commission_value = money_value("commission")
+                if mode == "admin" and callable(calculate_kaika_marketplace_fee):
+                    try:
+                        commission_value = calculate_kaika_marketplace_fee(
+                            sale_type_value,
+                            sale_price_value,
+                            form_value("commission_rate"),
+                            form_value("commission"),
+                        )
+                    except Exception:
+                        pass
+
+                photo_path = request.form.get("google_drive_photo_path") or save_uploaded_image(request.files.get("photo"))
+                additional_photos = normalize_path_list(request.form.get("google_drive_additional_paths"))
+                for file_storage in request.files.getlist("additional_photos"):
+                    if len(additional_photos) >= 19:
+                        break
+                    saved_path = save_uploaded_image(file_storage, prefix=f"{len(additional_photos) + 2}_")
+                    if saved_path:
+                        additional_photos.append(saved_path)
+                additional_photos_json = json.dumps(normalize_path_list(additional_photos)) if additional_photos else None
+
+                id_document_path = save_uploaded_document(request.files.get("id_document"), "id")
+                consent_form_path = save_uploaded_document(request.files.get("consent_form"), "consent")
+
+                columns = [
+                    "user_id",
+                    "purchase_date",
+                    "photo_path",
+                    "additional_photos",
+                    "product_name",
+                    "kaika_product_code",
+                    "brand_name",
+                    "model_number",
+                    "item_condition",
+                    "store_name",
+                    "supplier_detail",
+                    "id_document_path",
+                    "consent_form_path",
+                    "wholesale_price",
+                    "wholesale_fee_rate",
+                    "purchase_price",
+                    "payment_method",
+                    "listing_price",
+                    "expected_shipping",
+                    "expected_commission",
+                    "is_listed",
+                    "listing_date",
+                    "sale_date",
+                    "sale_type",
+                    "sale_price",
+                    "shipping_cost",
+                    "sales_destination",
+                    "commission",
+                    "is_shipped",
+                    "notes",
+                    "scope",
+                    "appraisal_status",
+                ]
+                values = [
+                    target_user_id,
+                    request.form.get("purchase_date") or None,
+                    photo_path,
+                    additional_photos_json,
+                    request.form.get("product_name"),
+                    form_value("kaika_product_code") or None,
+                    form_value("brand_name") or None,
+                    form_value("model_number") or None,
+                    form_value("item_condition") or None,
+                    form_value("store_name") or None,
+                    form_value("supplier_detail") or None,
+                    id_document_path,
+                    consent_form_path,
+                    wholesale_price,
+                    wholesale_fee_rate,
+                    purchase_price,
+                    form_value("payment_method") or None,
+                    money_value("listing_price"),
+                    money_value("expected_shipping"),
+                    money_value("expected_commission"),
+                    1 if item_status in {"listed", "sold"} else 0,
+                    (request.form.get("listing_date") or None) if item_status in {"listed", "sold"} else None,
+                    (request.form.get("sale_date") or None) if item_status == "sold" else None,
+                    sale_type_value,
+                    sale_price_value,
+                    money_value("shipping_cost"),
+                    sales_destination_value,
+                    commission_value,
+                    1 if "is_shipped" in request.form else 0,
+                    form_value("notes") or "",
+                    scope_value,
+                    appraisal_status,
+                ]
+                placeholders_sql = ", ".join([placeholder] * len(columns))
+                cur.execute(
+                    f"INSERT INTO merchandise ({', '.join(columns)}) VALUES ({placeholders_sql})",
+                    tuple(values),
+                )
+                conn.commit()
+                flash("商品を登録しました。", "success")
+                return redirect(url_for("admin_user_products" if mode == "user" else "admin_items"))
+            except Exception as exc:
+                traceback.print_exc()
+                conn.rollback()
+                flash(f"商品登録に失敗しました: {exc}", "error")
+                return redirect(url_for("admin_add_item", mode=mode, user_id=request.form.get("target_user_id", "")))
+            finally:
+                cur.close()
+                conn.close()
+
+        users = []
+        if mode == "user":
+            conn, cur = open_cursor()
+            try:
+                cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user' ORDER BY display_name, username")
+                users = rows_to_dicts(cur.fetchall())
+            finally:
+                cur.close()
+                conn.close()
+
+        return render_template(
+            "admin/item_form.html",
+            item=None,
+            users=users,
+            default_user_id=request.args.get("user_id", ""),
+            mode=mode,
+            fee_settings=get_fee_settings(),
+        )
+
     sync_shared_master_settings()
 
     module.get_sales_agency_status_label = get_sales_agency_status_label
@@ -1818,6 +2309,8 @@ def apply(module: Any) -> None:
     app.view_functions["admin_add_user"] = login_required(admin_add_client_view)
     app.view_functions["admin_edit_user"] = login_required(admin_edit_client_view)
     app.view_functions["delete_user"] = login_required(admin_delete_client_view)
+    app.view_functions["edit_item"] = login_required(edit_item_v2)
+    app.view_functions["admin_add_item"] = login_required(admin_add_item_v2)
     app.view_functions["user_master_settings"] = login_required(user_master_settings_redirect)
     app.view_functions["user_master_add"] = login_required(user_master_action_redirect)
     app.view_functions["user_master_edit"] = login_required(user_master_action_redirect)

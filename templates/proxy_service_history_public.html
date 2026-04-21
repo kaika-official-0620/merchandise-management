@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}代行仕入れサービス履歴{% endblock %}
+
+{% macro format_schedule(value) -%}
+    {%- if value -%}
+        {%- if value is string -%}
+            {{ value }}
+        {%- else -%}
+            {{ value.strftime('%Y/%m/%d %H:%M') }}
+        {%- endif -%}
+    {%- else -%}
+        未設定
+    {%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-header">
+    <h1>代行仕入れサービス履歴</h1>
+    <p class="page-lead">締切済みのオークション一覧です。詳細ページでは、ログイン中のご本人に関係する結果だけを表示します。</p>
+</div>
+
+<div class="history-toolbar">
+    <a href="{{ url_for('public_proxy_service_list') }}" class="back-link">公開中・公開前一覧へ戻る</a>
+    <span class="history-count">{{ history_auctions|length }}件</span>
+</div>
+
+{% if history_auctions %}
+<div class="history-grid">
+    {% for auction in history_auctions %}
+    <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="history-card">
+        <div class="history-card-head">
+            <span class="status-badge ended">{{ auction.status_label }}</span>
+            <span class="mode-badge {{ auction.sale_mode or 'auction' }}">
+                {{ '即決購入' if auction.sale_mode == 'fixed' else 'オークション' }}
+            </span>
+        </div>
+        <div class="history-card-body">
+            <h2>{{ auction.page_title or auction.auction_name or '代行仕入れサービス' }}</h2>
+            {% if auction.page_description %}
+            <p>{{ auction.page_description[:120] }}{% if auction.page_description|length > 120 %}...{% endif %}</p>
+            {% endif %}
+            <dl class="history-meta">
+                <div>
+                    <dt>掲載商品</dt>
+                    <dd>{{ auction.item_count or 0 }}件</dd>
+                </div>
+                <div>
+                    <dt>成立件数</dt>
+                    <dd>{{ auction.winner_count or 0 }}件</dd>
+                </div>
+                <div>
+                    <dt>終了日時</dt>
+                    <dd>{{ format_schedule(auction.end_datetime) }}</dd>
+                </div>
+                {% if current_user.is_authenticated %}
+                <div>
+                    <dt>あなたの結果</dt>
+                    <dd>{{ auction.user_result_count or 0 }}件</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+        <div class="history-card-foot">結果ページを開く</div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-card">
+    <h2>履歴はまだありません</h2>
+    <p>締切済みのオークションが追加されると、ここに表示されます。</p>
+</div>
+{% endif %}
+
+<style>
+.page-lead {
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.history-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.history-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 68px;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-weight: 700;
+}
+
+.history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.2rem;
+}
+
+.history-card {
+    display: flex;
+    flex-direction: column;
+    border-radius: 18px;
+    border: 1px solid #cbd5e1;
+    background: white;
+    color: inherit;
+    text-decoration: none;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.history-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.history-card-head,
+.history-card-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.95rem 1.1rem;
+    background: #f8fafc;
+}
+
+.history-card-foot {
+    justify-content: flex-start;
+    border-top: 1px solid #e2e8f0;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.history-card-body {
+    padding: 1.1rem;
+}
+
+.history-card-body h2 {
+    margin: 0 0 0.45rem;
+    font-size: 1.08rem;
+    color: #0f172a;
+}
+
+.history-card-body p {
+    margin: 0 0 1rem;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.status-badge,
+.mode-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.72rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.status-badge.ended {
+    background: #475569;
+    color: white;
+}
+
+.mode-badge.auction {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.mode-badge.fixed {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.history-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.history-meta div {
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 12px;
+}
+
+.history-meta dt {
+    margin-bottom: 0.35rem;
+    font-size: 0.74rem;
+    color: #64748b;
+}
+
+.history-meta dd {
+    margin: 0;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.empty-card {
+    padding: 1.4rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+}
+
+.empty-card h2 {
+    margin: 0 0 0.45rem;
+}
+
+.empty-card p {
+    margin: 0;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .history-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .back-link,
+    .history-count {
+        justify-content: center;
+    }
+
+    .history-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .history-meta {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}

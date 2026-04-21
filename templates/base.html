@@ -209,7 +209,7 @@
             </div>
         </div>
     </nav>
-    
+
     <!-- 支払い遅延警告バナー -->
     {% if current_user.is_payment_overdue() %}
     <div class="payment-warning-banner">
@@ -219,7 +219,7 @@
         <a href="{{ url_for('disposal_options') }}" class="warning-link disposal-link">📦 商品処分オプション</a>
     </div>
     {% endif %}
-    
+
     <!-- サイドバーメニュー -->
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
     <aside class="sidebar" id="sidebar">
@@ -247,7 +247,7 @@
             {% endif %}
             <!-- ========== ユーザー機能 ========== -->
             <div class="sidebar-group-label">ユーザー管理</div>
-            
+
             {% if current_user.is_admin() %}
             <!-- 管理者用：書類 -->
             <div class="sidebar-category">
@@ -270,19 +270,19 @@
                     <span class="category-arrow">▼</span>
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
-                    
+
                     <!-- 受信BOX -->
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">受信BOX</div>
                         <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類一覧</a>
                     </div>
-                    
+
                     <!-- 開花への依頼 -->
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">開花への依頼</div>
                         <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
                     </div>
-                    
+
                     <!-- 顧客への書類 -->
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">顧客への書類</div>
@@ -291,7 +291,7 @@
                 </div>
             </div>
             {% endif %}
-            
+
             <!-- 商品管理 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -300,12 +300,17 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['index', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
-                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') != 'long_term' %}active{% endif %}">商品一覧</a>
-                    <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') == 'long_term' %}active{% endif %}">長期保存商品</a>
+                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') != '1' %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') == '1' %}active{% endif %}">
+                        <span class="menu-label">長期保存商品</span>
+                        {% if get_admin_long_term_item_count() > 0 %}
+                        <span class="menu-badge-inline warning">{{ get_admin_long_term_item_count() }}</span>
+                        {% endif %}
+                    </a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
-                        <span class="menu-label">長期在庫商品</span>
+                        <span class="menu-label">長期保存商品</span>
                         {% if get_long_term_item_count() > 0 %}
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}
@@ -365,7 +370,7 @@
                 </div>
             </div>
             {% endif %}
-            
+
             <!-- データ確認 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['user_analytics', 'reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -381,7 +386,7 @@
                     {% endif %}
                 </div>
             </div>
-            
+
             {% if current_user.is_admin() %}
             <!-- マスター設定（ユーザー機能用） -->
             <div class="sidebar-category">
@@ -394,7 +399,7 @@
                 </div>
             </div>
             {% endif %}
-            
+
             {% if current_user.is_admin() %}
             <!-- 機能（ユーザー機能用） -->
             <div class="sidebar-category">
@@ -410,7 +415,7 @@
                     <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
                 </div>
             </div>
-            
+
             <!-- 問い合わせ管理（管理者用） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -425,7 +430,7 @@
                 </div>
             </div>
             {% endif %}
-            
+
             {% if not current_user.is_admin() %}
             <!-- お問い合わせ（一般ユーザーのみ表示） -->
             <div class="sidebar-category">
@@ -438,7 +443,7 @@
                     <a href="{{ url_for('inquiry_new') }}" class="{% if request.endpoint == 'inquiry_new' %}active{% endif %}">新規問い合わせ</a>
                 </div>
             </div>
-            
+
             <!-- サービス（一般ユーザーのみ表示） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -450,11 +455,11 @@
                 </div>
             </div>
             {% endif %}
-            
+
             {% if current_user.is_admin() %}
             <!-- ========== 開花管理 ========== -->
             <div class="sidebar-group-label admin-label">開花管理</div>
-            
+
             <!-- 書類 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -462,7 +467,7 @@
                     <span class="category-arrow">▼</span>
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_shikiriosho_add', 'admin_shikiriosho_list', 'admin_shikiriosho_view', 'admin_shikiriosho_edit', 'admin_kaitori_add', 'admin_kaitori_list', 'admin_kaitori_view', 'admin_kaitori_edit', 'admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit', 'admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view', 'admin_mitsumori_houjin_list', 'admin_mitsumori_houjin_add'] %}open{% endif %}">
-                    
+
                     <!-- 書類作成 -->
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">書類作成</div>
@@ -471,10 +476,10 @@
                         <a href="{{ url_for('admin_mitsumori_list') }}" class="{% if request.endpoint in ['admin_mitsumori_add', 'admin_mitsumori_list', 'admin_mitsumori_view', 'admin_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
                         <a href="{{ url_for('admin_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['admin_kaitori_shoudaku_list', 'admin_kaitori_shoudaku_add', 'admin_kaitori_shoudaku_view'] %}active{% endif %}">買取承諾書（法人版）</a>
                     </div>
-                    
+
                 </div>
             </div>
-            
+
             <!-- 商品管理（管理者の商品） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_items', 'admin_add_item'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -485,7 +490,7 @@
                     <a href="{{ url_for('admin_items') }}" class="{% if request.endpoint == 'admin_items' or request.endpoint == 'admin_add_item' %}active{% endif %}">商品一覧</a>
                 </div>
             </div>
-            
+
             <!-- データ確認 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}" onclick="toggleCategory(this)">
@@ -500,7 +505,7 @@
                     {% endif %}
                 </div>
             </div>
-            
+
             <!-- マスター設定 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -516,9 +521,9 @@
                     {% endif %}
                 </div>
             </div>
-            
+
             <!-- ===== 開花管理のみ ===== -->
-            
+
             <!-- ユーザー管理 -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -533,7 +538,7 @@
                     {% endif %}
                 </div>
             </div>
-            
+
             <!-- サービス -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
@@ -555,7 +560,7 @@
         </div>
     </aside>
     {% endif %}
-    
+
     <main class="container">
         {% set history_back_fallback = url_for('admin_items') if current_user.is_authenticated and current_user.is_admin() else (url_for('index') if current_user.is_authenticated else url_for('login')) %}
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -568,7 +573,7 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        
+
         {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] %}
         {% if not hide_history_back %}
         <div class="history-back-bar">
@@ -583,7 +588,7 @@
 
         {% block content %}{% endblock %}
     </main>
-    
+
     <!-- 利益計算式モーダル -->
     <div class="profit-calc-modal" id="profitCalcModal">
         <div class="profit-calc-overlay" onclick="closeProfitCalculator()"></div>
@@ -613,7 +618,7 @@
                         <div>※ 販売タイプ手数料は段階別固定額（マスター設定連動）</div>
                     </div>
                 </div>
-                
+
                 <!-- 計算機 -->
                 <div class="calc-input-section">
                     <h3>利益計算機</h3>
@@ -661,7 +666,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 計算結果 -->
                 <div class="calc-result-section">
                     <h3>計算結果</h3>
@@ -684,7 +689,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 逆算機能 -->
                 <div class="calc-reverse-section">
                     <h3>目標利益から売上を逆算</h3>
@@ -746,7 +751,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 目標利益率から逆算機能 -->
                 <div class="calc-reverse-section" style="border-top: 2px solid #f59e0b; padding-top: 1.5rem; margin-top: 1.5rem;">
                     <h3 style="color: #f59e0b;">目標利益率から売上を逆算</h3>
@@ -811,7 +816,7 @@
             </div>
         </div>
     </div>
-    
+
     <style>
     /* 利益計算ボタン */
     .btn-calculator {
@@ -822,7 +827,7 @@
     .btn-calculator:hover {
         background: linear-gradient(135deg, #059669 0%, #047857 100%);
     }
-    
+
     /* 利益計算モーダル */
     .profit-calc-modal {
         display: none;
@@ -894,7 +899,7 @@
         border-bottom: 2px solid #10b981;
         padding-bottom: 8px;
     }
-    
+
     /* 計算式セクション */
     .calc-formula-section {
         margin-bottom: 24px;
@@ -926,7 +931,7 @@
     .formula-value {
         color: #1e293b;
     }
-    
+
     /* 計算入力セクション */
     .calc-input-section,
     .calc-reverse-section {
@@ -1017,7 +1022,7 @@
     .calc-checkbox-label span {
         font-weight: 500;
     }
-    
+
     /* 計算結果セクション */
     .calc-result-section {
         margin-bottom: 24px;
@@ -1060,7 +1065,7 @@
     .result-value.negative {
         color: #dc2626 !important;
     }
-    
+
     @media (max-width: 600px) {
         /* モーダルをPCと同様にポップアップ表示 */
         .profit-calc-content {
@@ -1084,7 +1089,7 @@
             margin-bottom: 8px;
             padding-bottom: 6px;
         }
-        
+
         /* 計算式セクション */
         .calc-formula-section {
             margin-bottom: 16px;
@@ -1109,13 +1114,13 @@
             font-size: 0.75rem;
             color: #64748b;
         }
-        
+
         /* 入力セクション */
         .calc-input-section,
         .calc-reverse-section {
             margin-bottom: 16px;
         }
-        
+
         /* 入力行を縦並びに */
         .calc-input-row {
             display: flex;
@@ -1133,7 +1138,7 @@
             display: flex;
             flex-direction: column;
         }
-        
+
         /* 入力欄とセレクトボックス */
         .calc-input-row input {
             width: 100%;
@@ -1150,7 +1155,7 @@
             padding: 8px;
             box-sizing: border-box;
         }
-        
+
         /* 単位（円、%）を右寄せ */
         .input-unit {
             position: absolute;
@@ -1158,7 +1163,7 @@
             bottom: 10px;
             font-size: 0.8rem;
         }
-        
+
         /* チェックボックスの長いテキストを折り返し */
         .calc-checkbox-row {
             padding: 6px 0;
@@ -1174,13 +1179,13 @@
             font-size: 0.7rem;
             line-height: 1.4;
         }
-        
+
         /* 送料無料の注記 */
         .calc-shipping-note {
             padding: 6px 8px;
             font-size: 0.7rem;
         }
-        
+
         /* 結果セクション */
         .calc-result-grid {
             padding: 8px;
@@ -1195,7 +1200,7 @@
             font-size: 0.95rem;
         }
     }
-    
+
     /* 準備中メニュー項目 */
     .sidebar-item-disabled {
         display: block;
@@ -1221,20 +1226,20 @@
         }
     }
     </style>
-    
+
     <script>
         // アラート自動非表示
         document.querySelectorAll('.alert').forEach(alert => {
             setTimeout(() => alert.remove(), 5000);
         });
-        
+
         // サイドバートグル
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
             document.querySelector('.sidebar-overlay').classList.toggle('open');
             document.body.classList.toggle('sidebar-open');
         }
-        
+
         // カテゴリトグル
         function toggleCategory(btn) {
             const items = btn.nextElementSibling;
@@ -1243,7 +1248,7 @@
                 items.classList.toggle('open');
             }
         }
-        
+
         // ページ読み込み時にアクティブなカテゴリを開く
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.sidebar-category-items.open').forEach(function(items) {
@@ -1253,13 +1258,13 @@
                 }
             });
         });
-        
+
         // ユーザーメニュートグル（スマホ対応）
         function toggleUserMenu(e) {
             e.stopPropagation();
             document.getElementById('navUser').classList.toggle('open');
         }
-        
+
         // メニュー外をタップしたら閉じる
         document.addEventListener('click', function(e) {
             const navUser = document.getElementById('navUser');
@@ -1267,29 +1272,29 @@
                 navUser.classList.remove('open');
             }
         });
-        
+
         // 利益計算モーダル開閉
         function openProfitCalculator() {
             document.getElementById('profitCalcModal').classList.add('open');
             document.body.style.overflow = 'hidden';
         }
-        
+
         function closeProfitCalculator() {
             document.getElementById('profitCalcModal').classList.remove('open');
             document.body.style.overflow = '';
         }
-        
+
         // ESCキーでモーダルを閉じる
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeProfitCalculator();
             }
         });
-        
+
         // DB設定から動的に手数料を反映（form.htmlと同じ方式）
         const _fs = {{ fee_settings | default({}) | tojson }};
         const _commNormal = parseFloat(_fs.commission_normal) || 10;
-        
+
         // 媒体手数料率（DB設定に連動）
         const platformRates = {
             'mercari': _commNormal,
@@ -1299,7 +1304,7 @@
             'buyma': _commNormal,
             'other': null
         };
-        
+
         // 段階別固定額の計算ヘルパー
         function _tierCalc(tiers, price) {
             for (const t of tiers) {
@@ -1307,7 +1312,7 @@
             }
             return tiers[tiers.length - 1].fee;
         }
-        
+
         // 段階別ティア定義（DB設定から動的生成）
         const _ppTiers = [
             {max: parseInt(_fs.photo_packing_t1_max)||19999, fee: parseInt(_fs.photo_packing_t1_fee)||500},
@@ -1333,7 +1338,7 @@
             {max: parseInt(_fs.auction_t3_max)||99999, fee: parseInt(_fs.auction_t3_fee)||500},
             {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
         ];
-        
+
         // 販売タイプ別の手数料計算ルール
         const saleTypeCalcRules = {
             'photo_packing': { name: '撮影梱包発送', tiers: _ppTiers },
@@ -1341,7 +1346,7 @@
             'multi_listing': { name: '同時出品',     tiers: _mlTiers },
             'auction':       { name: 'オークション', tiers: _aucTiers }
         };
-        
+
         // 共通：媒体変更ハンドラー
         function handlePlatformChange(selectId, feeInputId, callback) {
             const platform = document.getElementById(selectId).value;
@@ -1356,16 +1361,16 @@
             }
             callback();
         }
-        
+
         function onPlatformChange() { handlePlatformChange('calcPlatform', 'calcPlatformFeeRate', calculateProfit); }
         function onReversePlatformChange() { handlePlatformChange('calcReversePlatform', 'calcReversePlatformFeeRate', calculateReversePrice); }
         function onRateReversePlatformChange() { handlePlatformChange('calcRateReversePlatform', 'calcRateReversePlatformFeeRate', calculateRateReversePrice); }
-        
+
         // 共通：販売タイプ変更ハンドラー
         function onSaleTypeChange() { calculateProfit(); }
         function onReverseSaleTypeChange() { calculateReversePrice(); }
         function onRateReverseSaleTypeChange() { calculateRateReversePrice(); }
-        
+
         // 利益計算
         function calculateProfit() {
             const saleType = document.getElementById('calcSaleType').value;
@@ -1373,9 +1378,9 @@
             const purchasePrice = parseFloat(document.getElementById('calcPurchasePrice').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcPlatformFeeRate').value) || 0;
             let shipping = parseFloat(document.getElementById('calcShipping').value) || 0;
-            
+
             const platformFee = Math.floor(salePrice * (platformFeeRate / 100));
-            
+
             let saleTypeFee = 0;
             let saleTypeFeeLabel = '';
             if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
@@ -1383,12 +1388,12 @@
                 saleTypeFee = _tierCalc(rule.tiers, salePrice);
                 saleTypeFeeLabel = rule.name;
             }
-            
+
             const profit = salePrice - purchasePrice - platformFee - saleTypeFee - shipping;
             const profitRate = purchasePrice > 0 ? (profit / purchasePrice * 100) : 0;
-            
+
             document.getElementById('resultPlatformFee').textContent = '¥' + platformFee.toLocaleString();
-            
+
             const saleTypeFeeRow = document.getElementById('resultSaleTypeFeeRow');
             if (saleType !== 'none' && saleTypeFee > 0) {
                 saleTypeFeeRow.style.display = 'flex';
@@ -1397,16 +1402,16 @@
             } else {
                 saleTypeFeeRow.style.display = 'none';
             }
-            
+
             const profitEl = document.getElementById('resultProfit');
             profitEl.textContent = '¥' + profit.toLocaleString();
             profitEl.classList.toggle('negative', profit < 0);
-            
+
             const profitRateEl = document.getElementById('resultProfitRate');
             profitRateEl.textContent = profitRate.toFixed(1) + '%';
             profitRateEl.classList.toggle('negative', profitRate < 0);
         }
-        
+
         // 逆算計算（目標利益から必要な売上を計算）
         function calculateReversePrice() {
             const saleType = document.getElementById('calcReverseSaleType').value;
@@ -1414,17 +1419,17 @@
             const purchasePrice = parseFloat(document.getElementById('calcReversePurchase').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcReversePlatformFeeRate').value) || 0;
             let shipping = parseFloat(document.getElementById('calcReverseShipping').value) || 0;
-            
+
             // 段階別固定額の場合、反復法で必要売上を求める
             const totalNeeded = purchasePrice + targetProfit + shipping;
             let requiredPrice = 0;
-            
+
             if (platformFeeRate >= 100) {
                 requiredPrice = 0;
             } else {
                 // まず媒体手数料のみで概算
                 requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
-                
+
                 // 販売タイプ手数料がある場合、反復で収束させる
                 if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
                     for (let i = 0; i < 10; i++) {
@@ -1436,7 +1441,7 @@
                     }
                 }
             }
-            
+
             // 販売タイプ手数料の表示
             const feeRow = document.getElementById('resultReverseSaleTypeFeeRow');
             if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
@@ -1447,33 +1452,33 @@
             } else {
                 feeRow.style.display = 'none';
             }
-            
+
             const profitRate = purchasePrice > 0 ? (targetProfit / purchasePrice * 100) : 0;
-            
+
             document.getElementById('resultRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             const profitRateEl = document.getElementById('resultReverseProfitRate');
             profitRateEl.textContent = profitRate.toFixed(1) + '%';
             profitRateEl.classList.toggle('negative', profitRate < 0);
         }
-        
+
         // ========== 目標利益率から逆算 ==========
-        
+
         function calculateRateReversePrice() {
             const saleType = document.getElementById('calcRateReverseSaleType').value;
             const targetProfitRate = parseFloat(document.getElementById('calcTargetProfitRate').value) || 0;
             const purchasePrice = parseFloat(document.getElementById('calcRateReversePurchase').value) || 0;
             const platformFeeRate = parseFloat(document.getElementById('calcRateReversePlatformFeeRate').value) || 0;
             let shipping = parseFloat(document.getElementById('calcRateReverseShipping').value) || 0;
-            
+
             const targetProfit = Math.floor(purchasePrice * targetProfitRate / 100);
             const totalNeeded = purchasePrice + targetProfit + shipping;
             let requiredPrice = 0;
-            
+
             if (platformFeeRate >= 100) {
                 requiredPrice = 0;
             } else {
                 requiredPrice = Math.ceil(totalNeeded / (1 - platformFeeRate / 100));
-                
+
                 if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
                     for (let i = 0; i < 10; i++) {
                         const pFee = Math.floor(requiredPrice * (platformFeeRate / 100));
@@ -1484,7 +1489,7 @@
                     }
                 }
             }
-            
+
             // 販売タイプ手数料の表示
             const feeRow = document.getElementById('resultRateReverseSaleTypeFeeRow');
             if (saleType !== 'none' && saleTypeCalcRules[saleType]) {
@@ -1495,7 +1500,7 @@
             } else {
                 feeRow.style.display = 'none';
             }
-            
+
             document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             document.getElementById('resultRateProfit').textContent = '¥' + targetProfit.toLocaleString();
         }

@@ -119,6 +119,15 @@
     margin-top: 4px;
 }
 
+.target-user-search-input {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.target-user-search-status {
+    color: #065f46;
+}
+
 </style>
 
 <div class="page-header">
@@ -145,24 +154,41 @@
 
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
     <input type="hidden" name="mode" value="{{ mode or 'admin' }}">
-    
+
     <div class="form-grid">
         <!-- 左カラム: 基本情報 -->
         <div class="form-section">
             <h2>基本情報</h2>
-            
+
             {% if mode == 'user' %}
             <!-- ユーザーモード：ユーザー選択必須 -->
             <div class="form-group" style="background: #ecfdf5; padding: 1rem; border-radius: 8px; border: 2px solid #10b981; margin-bottom: 1.5rem;">
                 <label for="target_user_id" style="color: #065f46; font-weight: 600;">👤 登録先ユーザー <span style="color: #ef4444;">*必須</span></label>
+                <input
+                    type="search"
+                    id="target_user_search"
+                    class="target-user-search-input"
+                    placeholder="名前・会員番号で検索"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
                 <select id="target_user_id" name="target_user_id" required style="margin-top: 0.5rem;">
                     <option value="">-- ユーザーを選択してください --</option>
                     {% for user in users %}
-                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}>
-                        {{ user.display_name or user.username }}
+                    {% set target_user_name = user.display_name or '' %}
+                    {% set target_user_member_code = user.username or '' %}
+                    {% set target_user_label = target_user_name or ('会員番号: ' ~ target_user_member_code) %}
+                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}
+                            data-display-name="{{ target_user_name }}"
+                            data-member-code="{{ target_user_member_code }}"
+                            data-search-text="{{ target_user_name }} {{ target_user_member_code }}">
+                        {{ target_user_label }}{% if target_user_name and target_user_member_code %} / 会員番号: {{ target_user_member_code }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
+                <small id="target_user_search_status" class="form-help target-user-search-status">
+                    全{{ users|length }}件から選択できます。名前または会員番号で絞り込めます。
+                </small>
                 <small class="form-help" style="color: #065f46;">この商品は選択したユーザーの商品として登録されます</small>
             </div>
             {% else %}
@@ -174,12 +200,12 @@
                 <small style="color: #92400e;">この画面では開花商品のみを登録します。お客様向けの商品は「ユーザー商品一覧」から登録してください。</small>
             </div>
             {% endif %}
-            
+
             <div class="form-group">
                 <label for="purchase_date">仕入日</label>
                 <input type="date" id="purchase_date" name="purchase_date">
             </div>
-            
+
             <div class="form-group">
                 <label for="product_name">商品名</label>
                 <div class="brand-combobox">
@@ -199,11 +225,11 @@
                 <label for="kaika_product_code">開花商品番号</label>
                 <input type="text" id="kaika_product_code" name="kaika_product_code" placeholder="開花独自の管理番号">
             </div>
-            
+
             <div class="form-group">
                 <label for="brand_name">ブランド名</label>
                 <div class="brand-combobox">
-                    <input type="text" id="brand_name" name="brand_name" 
+                    <input type="text" id="brand_name" name="brand_name"
                            autocomplete="off" placeholder="選択または入力してください">
                     <button type="button" class="combobox-toggle" id="brand-toggle">▼</button>
                     <div class="brand-dropdown" id="brand-dropdown"></div>
@@ -222,12 +248,12 @@
                 <input type="hidden" id="master_category_id" name="master_category_id">
                 <small class="form-help">任意です。カテゴリでブランド候補と商品候補を絞り込めます。</small>
             </div>
-            
+
             <div class="form-group">
                 <label for="model_number">型番</label>
                 <input type="text" id="model_number" name="model_number" placeholder="例: M44874, 116500LN">
             </div>
-            
+
             <div class="form-group">
                 <label for="item_condition">商品状態</label>
                 <select id="item_condition" name="item_condition">
@@ -235,7 +261,7 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-            
+
             <div class="form-group">
                 <label for="store_name">仕入先</label>
                 <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
@@ -243,7 +269,7 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-            
+
             <!-- 個人選択時の追加フィールド -->
             <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
                 <div class="form-group">
@@ -253,20 +279,20 @@
                         <!-- マスターデータから動的に生成 -->
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="id_document">身分証</label>
                     <input type="file" id="id_document" name="id_document" accept="image/*,.pdf">
                     <small class="form-help">画像またはPDF</small>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="consent_form">同意書</label>
                     <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf">
                     <small class="form-help">画像またはPDF</small>
                 </div>
             </div>
-            
+
             <div class="form-group">
                 <label for="purchase_price">仕入額</label>
                 <input type="number" id="purchase_price" name="purchase_price" value="0" min="0"
@@ -285,7 +311,7 @@
                        oninput="if(typeof recalculateWholesalePrice==='function'){document.getElementById('wholesale_price_hint').textContent='手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';calculateProfit()}">
                 <small class="form-help" id="wholesale_price_hint">手動入力がなければ自動計算します（手動変更可）</small>
             </div>
-            
+
             <div class="form-group">
                 <label for="payment_method">支払方法</label>
                 <select id="payment_method" name="payment_method">
@@ -293,23 +319,23 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-            
+
             <div class="form-group">
                 <label for="photo">メイン写真（1枚目）</label>
                 <input type="file" id="photo" name="photo" accept="image/*">
             </div>
-            
+
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
                 <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
             </div>
         </div>
-        
+
         <!-- 右カラム: 売却情報 -->
         <div class="form-section">
             <h2>売却情報</h2>
-            
+
             <div class="form-group">
                 <label for="item_status">ステータス</label>
                 <select id="item_status" name="item_status" onchange="updateStatusFields()">
@@ -319,7 +345,7 @@
                     <option value="sold">売却済み</option>
                 </select>
             </div>
-            
+
             <!-- 出品中・売却済み時のみ表示 -->
             <div id="listing-date-group" class="form-group" style="display: none;">
                 <label for="listing_date">出品日</label>
@@ -331,13 +357,13 @@
                 <label for="listing_price">出品価格</label>
                 <input type="number" id="listing_price" name="listing_price" value="0" min="0">
             </div>
-            
+
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
                 <input type="date" id="sale_date" name="sale_date">
             </div>
-            
+
             <!-- 売却済み時のみ表示するフィールド -->
             <div id="sold-fields" style="display: none;">
                 <div class="form-group">
@@ -403,17 +429,17 @@
                     </small>
                     <input type="hidden" id="sale_type" name="sale_type" value="{{ 'normal' if is_kaika_scope else 'photo_packing,normal' }}">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="sale_price">売上金（税込販売価格）</label>
                     <input type="number" id="sale_price" name="sale_price" value="0" min="0">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="shipping_cost">送料</label>
                     <input type="number" id="shipping_cost" name="shipping_cost" value="0" min="0">
                 </div>
-                
+
                 <div class="form-group" id="sales-destination-group">
                     <label for="sales_destination_choice">販売先</label>
                     <div class="sales-destination-stack">
@@ -429,7 +455,7 @@
                     <input type="number" id="commission_rate" name="commission_rate" value="10" min="0" step="0.1">
                     <small class="form-help" id="commission_rate_hint">通常販売のときだけ、販売媒体ごとの手数料率を入力できます。</small>
                 </div>
-                
+
                 <div class="form-group" id="commission-group">
                     <label for="{{ 'commission' if is_kaika_scope else 'commission_display' }}">手数料</label>
                     {% if is_kaika_scope %}
@@ -447,7 +473,7 @@
                     </small>
                     <div id="commission_breakdown" class="sale-type-breakdown"></div>
                 </div>
-                
+
                 <div class="form-group result-field">
                     <label>実際の利益</label>
                     <div class="calculated-value" id="actual_profit">¥0</div>
@@ -455,7 +481,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="form-actions">
         <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">キャンセル</a>
         <button type="submit" class="btn btn-primary" id="submit-btn">
@@ -776,6 +802,85 @@ function normalizeKaikaSaleTypeValue(value) {
     return 'normal';
 }
 
+function normalizeTargetUserSearchValue(value) {
+    return (value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function initializeTargetUserSearch() {
+    const searchInput = document.getElementById('target_user_search');
+    const targetUserSelect = document.getElementById('target_user_id');
+    const searchStatus = document.getElementById('target_user_search_status');
+
+    if (!searchInput || !targetUserSelect) {
+        return;
+    }
+
+    const userOptions = Array.from(targetUserSelect.options)
+        .filter((option) => option.value)
+        .map((option) => ({
+            value: option.value,
+            label: option.textContent.trim(),
+            displayName: option.dataset.displayName || '',
+            memberCode: option.dataset.memberCode || '',
+            searchText: normalizeTargetUserSearchValue(
+                option.dataset.searchText || `${option.textContent} ${option.value}`
+            ),
+            initiallySelected: option.selected
+        }));
+    const initialSelectedValue = targetUserSelect.value || (userOptions.find((option) => option.initiallySelected) || {}).value || '';
+
+    function renderTargetUserOptions(query) {
+        const normalizedQuery = normalizeTargetUserSearchValue(query);
+        const previousValue = targetUserSelect.value || initialSelectedValue;
+        const matchedOptions = normalizedQuery
+            ? userOptions.filter((option) => option.searchText.includes(normalizedQuery))
+            : userOptions;
+        const selectedValue = matchedOptions.some((option) => option.value === previousValue)
+            ? previousValue
+            : '';
+
+        targetUserSelect.innerHTML = '';
+
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = matchedOptions.length === 0 && normalizedQuery
+            ? '-- 該当するユーザーがいません --'
+            : '-- ユーザーを選択してください --';
+        placeholderOption.selected = !selectedValue;
+        targetUserSelect.appendChild(placeholderOption);
+
+        matchedOptions.forEach((optionData) => {
+            const option = document.createElement('option');
+            option.value = optionData.value;
+            option.textContent = optionData.label;
+            option.dataset.displayName = optionData.displayName;
+            option.dataset.memberCode = optionData.memberCode;
+            option.dataset.searchText = optionData.searchText;
+            option.selected = optionData.value === selectedValue;
+            targetUserSelect.appendChild(option);
+        });
+
+        if (searchStatus) {
+            if (!normalizedQuery) {
+                searchStatus.textContent = `全${userOptions.length}件から選択できます。名前または会員番号で絞り込めます。`;
+            } else if (matchedOptions.length === 0) {
+                searchStatus.textContent = '一致するユーザーがいません。名前や会員番号を変えてお試しください。';
+            } else {
+                searchStatus.textContent = `${matchedOptions.length}件に絞り込みました。名前または会員番号で続けて検索できます。`;
+            }
+        }
+    }
+
+    searchInput.addEventListener('input', function() {
+        renderTargetUserOptions(this.value);
+    });
+
+    renderTargetUserOptions(searchInput.value);
+}
+
 // DB設定から動的に手数料計算ルール（段階別固定額）を反映
 const _fs = {{ fee_settings | default({}) | tojson }};
 const _commNormal = (parseFloat(_fs.commission_normal) || 10) / 100;
@@ -945,7 +1050,7 @@ function updateSaleTypeValue() {
         values.unshift('photo_packing');
     }
     document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
-    
+
     if (autoCalculateCommission) {
         calculateCommission();
     }
@@ -956,7 +1061,7 @@ function calculateProfit() {
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
     const commission = parseInt(document.getElementById('commission').value) || 0;
-    
+
     const actualProfit = salePrice - purchasePrice - shippingCost - commission;
     const actualEl = document.getElementById('actual_profit');
     actualEl.textContent = '¥' + actualProfit.toLocaleString();
@@ -974,7 +1079,7 @@ function recalculateWholesalePrice() {
 
 function calculateCommission() {
     if (!autoCalculateCommission) return;
-    
+
     const saleTypeValue = document.getElementById('sale_type').value;
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
 
@@ -987,10 +1092,10 @@ function calculateCommission() {
     }
 
     const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
-    
+
     let totalCommission = 0;
     let hints = [];
-    
+
     selectedTypes.forEach(saleType => {
         const rule = saleTypeRules[saleType];
         if (rule) {
@@ -1007,12 +1112,12 @@ function calculateCommission() {
             }
         }
     });
-    
+
     document.getElementById('commission').value = totalCommission;
-    
+
     const hintEl = document.getElementById('commission_hint');
     hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
-    
+
     calculateProfit();
 }
 
@@ -1113,7 +1218,7 @@ function updateStatusFields() {
     const listingPriceGroup = document.getElementById('listing-price-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
-    
+
     if (status === 'listed' || status === 'sold') {
         listingDateGroup.style.display = 'block';
         listingPriceGroup.style.display = 'block';
@@ -1121,7 +1226,7 @@ function updateStatusFields() {
         listingDateGroup.style.display = 'none';
         listingPriceGroup.style.display = 'none';
     }
-    
+
     if (status === 'sold') {
         saleDateGroup.style.display = 'block';
         soldFields.style.display = 'block';
@@ -1141,7 +1246,7 @@ function toggleSupplierDetail() {
         '個人業者仕入れ',
         'クライアントからの買取'
     ];
-    
+
     if (detailTargetSuppliers.includes(storeType)) {
         detailSection.style.display = 'block';
     } else {
@@ -1193,10 +1298,10 @@ async function loadMasterData() {
         const scope = mode === 'user' ? 'user' : 'admin';
         const response = await fetch(`/api/master-data?scope=${scope}`);
         const data = await response.json();
-        
+
         // ブランド名コンボボックスのドロップダウンを生成
         window.brandMasterList = data.brands || [];
-        
+
         // カテゴリごとにグループ化
         const brandsByCategory = {};
         data.brands.forEach(brand => {
@@ -1206,53 +1311,53 @@ async function loadMasterData() {
             }
             brandsByCategory[categoryId].push(brand);
         });
-        
+
         // カテゴリ情報をマッピング
         const categoryMap = {};
         data.brand_categories.forEach(cat => {
             categoryMap[cat.id] = cat.name;
         });
-        
+
         // ドロップダウンデータを保存
         window.brandCategoryData = { brandsByCategory, categoryMap };
-        
+
         // 商品状態セレクトボックスを生成
         const conditionSelect = document.getElementById('item_condition');
         conditionSelect.innerHTML = '<option value="">選択してください</option>';
-        
+
         data.conditions.forEach(condition => {
             const option = document.createElement('option');
             option.value = condition.value;
             option.textContent = condition.display_name || condition.value;
             conditionSelect.appendChild(option);
         });
-        
+
         // 仕入先セレクトボックスを生成
         const supplierSelect = document.getElementById('store_name');
         populateSupplierSelectOptions(supplierSelect, scope);
-        
+
         // 仕入先詳細セレクトボックスを生成
         const supplierDetailSelect = document.getElementById('supplier_detail');
         supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
-        
+
         data.supplier_details.forEach(detail => {
             const option = document.createElement('option');
             option.value = detail.value;
             option.textContent = detail.display_name || detail.value;
             supplierDetailSelect.appendChild(option);
         });
-        
+
         // 支払方法セレクトボックスを生成
         const paymentSelect = document.getElementById('payment_method');
         paymentSelect.innerHTML = '<option value="">選択してください</option>';
-        
+
         data.payment_methods.forEach(method => {
             const option = document.createElement('option');
             option.value = method.value;
             option.textContent = method.display_name || method.value;
             paymentSelect.appendChild(option);
         });
-        
+
         // 仕入先詳細の表示状態を更新
         toggleSupplierDetail();
 
@@ -1263,7 +1368,7 @@ async function loadMasterData() {
                 formSelector: '#item-form'
             });
         }
-        
+
     } catch (error) {
         console.error('マスターデータの読み込みに失敗しました:', error);
     }
@@ -1273,28 +1378,28 @@ async function loadMasterData() {
 function buildBrandDropdown(filter) {
     const dropdown = document.getElementById('brand-dropdown');
     if (!dropdown || !window.brandCategoryData) return;
-    
+
     const { brandsByCategory, categoryMap } = window.brandCategoryData;
     dropdown.innerHTML = '';
     const filterLower = filter.toLowerCase();
     let hasMatch = false;
-    
+
     for (const [catId, brands] of Object.entries(brandsByCategory)) {
         const filteredBrands = brands.filter(b => {
             const name = (b.display_name || b.value).toLowerCase();
             const val = b.value.toLowerCase();
             return !filterLower || name.includes(filterLower) || val.includes(filterLower);
         });
-        
+
         if (filteredBrands.length === 0) continue;
         hasMatch = true;
-        
+
         const categoryName = categoryMap[catId] || 'その他';
         const catDiv = document.createElement('div');
         catDiv.className = 'dropdown-category';
         catDiv.textContent = categoryName;
         dropdown.appendChild(catDiv);
-        
+
         filteredBrands.forEach(brand => {
             const item = document.createElement('div');
             item.className = 'dropdown-item';
@@ -1309,7 +1414,7 @@ function buildBrandDropdown(filter) {
             dropdown.appendChild(item);
         });
     }
-    
+
     if (!hasMatch && filter) {
         const noMatch = document.createElement('div');
         noMatch.className = 'dropdown-no-match';
@@ -1324,20 +1429,20 @@ function setupBrandCombobox() {
     const brandToggle = document.getElementById('brand-toggle');
     const dropdown = document.getElementById('brand-dropdown');
     if (!brandInput || !dropdown) return;
-    
+
     // 入力時にフィルタ
     brandInput.addEventListener('input', function() {
         this.dataset.autoDetected = 'false';
         buildBrandDropdown(this.value);
         dropdown.classList.add('open');
     });
-    
+
     // フォーカス時にドロップダウン表示
     brandInput.addEventListener('focus', function() {
         buildBrandDropdown(this.value);
         dropdown.classList.add('open');
     });
-    
+
     // トグルボタン
     if (brandToggle) {
         brandToggle.addEventListener('click', function(e) {
@@ -1352,7 +1457,7 @@ function setupBrandCombobox() {
             }
         });
     }
-    
+
     // 外側クリックで閉じる
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.brand-combobox')) {
@@ -1409,7 +1514,7 @@ const brandKeywords = {
 // 商品名からブランド名を自動判定
 function detectBrandFromProductName(productName) {
     const input = productName.toLowerCase();
-    
+
     for (const [brand, keywords] of Object.entries(brandKeywords)) {
         for (const keyword of keywords) {
             if (input.includes(keyword.toLowerCase())) {
@@ -1424,16 +1529,16 @@ function detectBrandFromProductName(productName) {
 function setupBrandAutoDetect() {
     const productNameInput = document.getElementById('product_name');
     const brandInput = document.getElementById('brand_name');
-    
+
     if (productNameInput && brandInput) {
         productNameInput.addEventListener('input', function() {
             const detectedBrand = detectBrandFromProductName(this.value);
-            
+
             if (detectedBrand) {
                 if (brandInput.value === '' || brandInput.dataset.autoDetected === 'true') {
                     brandInput.value = detectedBrand;
                     brandInput.dataset.autoDetected = 'true';
-                    
+
                     brandInput.classList.add('brand-auto-detected');
                     setTimeout(() => {
                         brandInput.classList.remove('brand-auto-detected');
@@ -1447,16 +1552,17 @@ function setupBrandAutoDetect() {
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
-    
+    initializeTargetUserSearch();
+
     updateStatusFields();
     toggleSupplierDetail();
-    
+
     // ステータス変更イベントリスナー（onchange属性のバックアップ）
     var statusSelect = document.getElementById('item_status');
     if (statusSelect) {
         statusSelect.addEventListener('change', updateStatusFields);
     }
-    
+
     // 初期表示時に卸価格を計算（管理者フォームは新規登録のみなので常に自動計算）
     recalculateWholesalePrice();
     updateSaleTypeValue();
@@ -1466,19 +1572,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const initialSaleType = document.getElementById('sale_type').value || 'normal';
         document.getElementById('commission_hint').textContent = getKaikaSaleTypeMeta(initialSaleType, parseInt(document.getElementById('sale_price').value) || 0).hint;
     }
-    
+
     // 画像リサイズ処理
     const MAX_WIDTH = 1200;
     const MAX_HEIGHT = 1200;
     const QUALITY = 0.85;
-    
+
     async function resizeImage(file) {
         return new Promise((resolve) => {
             if (!file.type.startsWith('image/')) {
                 resolve(file);
                 return;
             }
-            
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const img = new Image();
@@ -1487,10 +1593,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         resolve(file);
                         return;
                     }
-                    
+
                     let width = img.width;
                     let height = img.height;
-                    
+
                     if (width > height) {
                         if (width > MAX_WIDTH) {
                             height = Math.round(height * MAX_WIDTH / width);
@@ -1502,13 +1608,13 @@ document.addEventListener('DOMContentLoaded', function() {
                             height = MAX_HEIGHT;
                         }
                     }
-                    
+
                     const canvas = document.createElement('canvas');
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    
+
                     canvas.toBlob(function(blob) {
                         const resizedFile = new File([blob], file.name, {
                             type: 'image/jpeg',
@@ -1522,32 +1628,32 @@ document.addEventListener('DOMContentLoaded', function() {
             reader.readAsDataURL(file);
         });
     }
-    
+
     const form = document.getElementById('item-form');
     const submitBtn = document.getElementById('submit-btn');
     const btnText = submitBtn.querySelector('.btn-text');
     const btnLoading = submitBtn.querySelector('.btn-loading');
-    
+
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         if (submitBtn.disabled) return;
-        
+
         submitBtn.disabled = true;
         submitBtn.style.opacity = '0.7';
         btnText.style.display = 'none';
         btnLoading.style.display = 'inline';
-        
+
         try {
             const formData = new FormData(form);
-            
+
             const photoInput = document.getElementById('photo');
             if (photoInput.files.length > 0) {
                 formData.delete('photo');
                 const resizedPhoto = await resizeImage(photoInput.files[0]);
                 formData.append('photo', resizedPhoto);
             }
-            
+
             const additionalInput = document.getElementById('additional_photos');
             if (additionalInput.files.length > 0) {
                 formData.delete('additional_photos');
@@ -1556,12 +1662,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     formData.append('additional_photos', resizedPhoto);
                 }
             }
-            
+
             const response = await fetch(form.action || window.location.href, {
                 method: 'POST',
                 body: formData
             });
-            
+
             if (response.redirected) {
                 window.location.href = response.url;
             } else if (response.ok) {

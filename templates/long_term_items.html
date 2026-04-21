@@ -1,32 +1,32 @@
 {% extends "base.html" %}
-{% block title %}長期在庫商品 - 株式会社 開花{% endblock %}
+{% block title %}長期保存商品 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>長期在庫商品</h1>
+    <h1>長期保存商品</h1>
 </div>
 
 <div class="long-term-container">
     <!-- 説明 -->
     <div class="info-card">
-        <h3>📦 長期在庫商品について</h3>
-        <p>仕入れ日から<strong>3ヶ月以上</strong>経過した未売却商品は、以下の処分オプションを選択できます。</p>
+        <h3>📦 長期保存商品について</h3>
+        <p>商品一覧へ<strong>登録してから90日以上</strong>経過した未売却商品は、自動的にこの一覧へ反映されます。</p>
         <ul>
             <li><strong>オークション販売</strong> - 弊社でオークションに出品し販売</li>
             <li><strong>在庫処分</strong> - 弊社で処分</li>
             <li><strong>受け取り郵送</strong> - ご指定の住所に郵送（送料自己負担）</li>
         </ul>
         <div class="warning-note">
-            <strong>⚠️ ご注意</strong>：仕入れ日から<strong>5ヶ月</strong>を過ぎると、商品は自動的に管理者へ移管されます。
+            <strong>⚠️ ご注意</strong>：登録から<strong>150日</strong>を過ぎると、商品は自動的に管理者へ移管されます。
         </div>
     </div>
-    
+
     {% if items %}
     <!-- 商品一覧 -->
     <form method="POST" action="{{ url_for('submit_long_term_disposal_request') }}" id="disposal-form">
         <div class="items-section">
             <h3>対象商品（{{ items|length }}件）</h3>
-            
+
             <div class="items-grid">
                 {% for item in items %}
                 <div class="item-card {% if item.disposal_request_id %}has-request{% endif %}">
@@ -53,18 +53,14 @@
                             <span class="auto-transfer-warning">まもなく自動移管</span>
                             {% endif %}
                         </div>
-                        <div class="item-price">仕入: ¥{{ "{:,}".format(item.purchase_price or 0) }}</div>
-                        
+                        <div class="item-price">登録日: {{ item.storage_started_at_display }}</div>
+
                         {% if item.disposal_request_id %}
                         <div class="request-status">
-                            <span class="status-badge status-{{ item.disposal_status }}">
-                                {% if item.disposal_status == 'pending' %}申請中{% elif item.disposal_status == 'processing' %}処理中{% endif %}
+                            <span class="status-badge status-{{ item.disposal_status_stage }}">
+                                {{ item.disposal_status_label }}
                             </span>
-                            <span class="disposal-type">
-                                {% if item.disposal_type == 'auction' %}オークション販売
-                                {% elif item.disposal_type == 'liquidation' %}在庫処分
-                                {% elif item.disposal_type == 'shipping' %}受け取り郵送{% endif %}
-                            </span>
+                            <span class="disposal-type">{{ item.disposal_type_label }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -72,11 +68,11 @@
                 {% endfor %}
             </div>
         </div>
-        
+
         <!-- 処分オプション選択 -->
         <div class="disposal-options">
             <h3>処分方法を選択</h3>
-            
+
             <div class="options-grid">
                 <label class="option-card" onclick="selectOption('auction')">
                     <input type="radio" name="disposal_type" value="auction" id="option-auction">
@@ -86,7 +82,7 @@
                         <span class="option-desc">弊社でオークションに出品</span>
                     </div>
                 </label>
-                
+
                 <label class="option-card" onclick="selectOption('liquidation')">
                     <input type="radio" name="disposal_type" value="liquidation" id="option-liquidation">
                     <div class="option-content">
@@ -95,7 +91,7 @@
                         <span class="option-desc">弊社で処分</span>
                     </div>
                 </label>
-                
+
                 <label class="option-card" onclick="selectOption('shipping')">
                     <input type="radio" name="disposal_type" value="shipping" id="option-shipping">
                     <div class="option-content">
@@ -106,7 +102,7 @@
                     </div>
                 </label>
             </div>
-            
+
             <!-- 郵送先住所（郵送選択時のみ表示） -->
             <div class="shipping-info" id="shipping-info" style="display: none;">
                 <h4>郵送先情報</h4>
@@ -127,7 +123,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="form-actions">
             <button type="button" class="btn btn-secondary" onclick="selectAll()">すべて選択</button>
             <button type="submit" class="btn btn-primary" id="submit-btn" disabled>選択した商品を申請</button>
@@ -135,8 +131,8 @@
     </form>
     {% else %}
     <div class="empty-message">
-        <p>仕入れ日から3ヶ月以上経過した商品はありません</p>
-        
+        <p>登録から90日以上経過した商品はありません</p>
+
         {% if debug_info %}
         <!-- デバッグ情報 -->
         <div class="debug-info" style="margin-top: 2rem; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem;">
@@ -144,7 +140,7 @@
             <ul style="margin: 0; padding-left: 1.5rem; color: #64748b;">
                 <li>現在日付: {{ debug_info.today or 'N/A' }}</li>
                 <li>基準日（90日前）: {{ debug_info.cutoff_date or 'N/A' }}</li>
-                <li>日付条件に合う商品数: {{ debug_info.total_matching_date or 0 }}件</li>
+                <li>登録日条件に合う商品数: {{ debug_info.total_matching_date or 0 }}件</li>
                 <li>申請未作成の商品数: {{ debug_info.no_request or 0 }}件</li>
                 <li>取得された商品数（申請なし）: {{ debug_info.items_no_request_count or 0 }}件</li>
                 <li>取得された商品数（申請あり）: {{ debug_info.items_with_request_count or 0 }}件</li>
@@ -154,7 +150,7 @@
                 <li style="margin-top: 0.5rem; color: #1e293b;"><strong>サンプル商品:</strong>
                     <ul style="margin-top: 0.25rem;">
                         {% for item in debug_info.sample_items %}
-                        <li>ID: {{ item.id }}, 商品名: {{ item.product_name }}, 仕入日: {{ item.purchase_date }}, 売却日: {{ item.sale_date or 'なし' }}</li>
+                        <li>ID: {{ item.id }}, 商品名: {{ item.product_name }}, 登録日: {{ item.storage_started_at }}, 売却日: {{ item.sale_date or 'なし' }}</li>
                         {% endfor %}
                     </ul>
                 </li>
@@ -373,6 +369,16 @@
     color: #1d4ed8;
 }
 
+.status-badge.status-completed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 .disposal-type {
     font-size: 0.8rem;
     color: #059669;
@@ -530,11 +536,11 @@ function selectOption(type) {
 function selectAll() {
     const checkboxes = document.querySelectorAll('input[name="merchandise_ids"]');
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
+
     checkboxes.forEach(cb => {
         cb.checked = !allChecked;
     });
-    
+
     updateSubmitButton();
 }
 
@@ -542,11 +548,11 @@ function updateSubmitButton() {
     const checkboxes = document.querySelectorAll('input[name="merchandise_ids"]:checked');
     const optionSelected = document.querySelector('input[name="disposal_type"]:checked');
     const submitBtn = document.getElementById('submit-btn');
-    
+
     if (submitBtn) {
         submitBtn.disabled = !(checkboxes.length > 0 && optionSelected);
-        submitBtn.textContent = checkboxes.length > 0 
-            ? `選択した商品を申請（${checkboxes.length}件）` 
+        submitBtn.textContent = checkboxes.length > 0
+            ? `選択した商品を申請（${checkboxes.length}件）`
             : '選択した商品を申請';
     }
 }
