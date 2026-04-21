@@ -4673,7 +4673,10 @@ migrate_add_scope_column()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    next_page = get_internal_redirect_target(request.values.get('next'), '')
     if current_user.is_authenticated:
+        if next_page:
+            return redirect(next_page)
         # 管理者/オーナーの場合は管理者ホームへ
         if current_user.is_admin() or current_user.is_owner():
             return redirect(url_for('admin_dashboard'))
@@ -4741,7 +4744,12 @@ def login():
                             cur.close()
                             conn.close()
                             flash('月謝の未納が3ヶ月を超えているため、ログインできません。管理者にお問い合わせください。', 'error')
-                            return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
+                            return render_template(
+                                'login.html',
+                                remembered_username=remembered_username,
+                                remember_me=remember_me,
+                                next_page=next_page
+                            )
             
             # ログイン日時更新
             if DATABASE_URL:
@@ -4762,7 +4770,6 @@ def login():
             
             flash(f'ようこそ、{user_obj.display_name}さん！', 'success')
             
-            next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
             
@@ -4777,7 +4784,12 @@ def login():
         cur.close()
         conn.close()
     
-    return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
+    return render_template(
+        'login.html',
+        remembered_username=remembered_username,
+        remember_me=remember_me,
+        next_page=next_page
+    )
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

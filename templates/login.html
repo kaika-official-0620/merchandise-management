@@ -55,6 +55,9 @@
         </style>
 
         <form method="POST" class="auth-form">
+            {% if next_page %}
+            <input type="hidden" name="next" value="{{ next_page }}">
+            {% endif %}
             <div class="form-group">
                 <label for="username">ユーザー名</label>
                 <input type="text" id="username" name="username" value="{{ remembered_username|default('') }}" required autofocus>
