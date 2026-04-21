@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. 業者から回答受領</title>
+  <link rel="stylesheet" href="static/preview.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="index.html">書類一覧</a>
+      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
+    </div>
+    <div class="page-head">
+      <div>
+        <h1>3. 業者から回答受領</h1>
+        <p>業者から届いた回答ファイルを登録し、どの商品が誰の案件かを確認して、そのまま4番へ振り分けます。</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>業者回答ファイルを登録する</h3>
+          <p class="section-note">登録したファイルは、新しいタブで開いて中身を確認できる想定です。</p>
+        </div>
+      </div>
+      <div class="upload-box">
+        <div class="file-row">
+          <div class="file-input-wrap">
+            <label>回答ファイル</label>
+            <input type="file">
+          </div>
+          <div class="field">
+            <label>登録月</label>
+            <select>
+              <option>2026年4月</option>
+              <option>2026年3月</option>
+              <option>2026年2月</option>
+            </select>
+          </div>
+          <div class="actions">
+            <a class="btn btn-primary" href="vendor_incoming_uploaded.html">ファイルを登録</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="helper-note">ファイル確認から、そのまま `4番の返送対象クライアント` へ振り分けられるようにしています。行き来を減らすための整理です。</div>
+
+      <div class="assign-board">
+        <div class="assign-card">
+          <div class="assign-head">
+            <div>
+              <div class="assign-title">東京業者センター / 2026年4月回答ファイル</div>
+              <div class="assign-sub">山田 太郎さんの商品2点が含まれています。</div>
+            </div>
+            <span class="status-badge appraising">受領済み</span>
+          </div>
+          <div class="assign-grid">
+            <div class="record-field"><div class="record-label">ファイル名</div><div class="record-value">vendor_reply_2026_04.pdf</div></div>
+            <div class="record-field"><div class="record-label">商品数</div><div class="record-value">2点</div></div>
+            <div class="record-field"><div class="record-label">次の処理</div><div class="record-value">4番で山田 太郎さんへ返送</div></div>
+          </div>
+          <div class="doc-inline-links">
+            <a class="doc-inline-link" target="_blank" rel="noopener noreferrer" href="documents_v2_vendor_response_file_yamada_alma.html">ルイヴィトン アルマの回答ファイルを開く</a>
+            <a class="doc-inline-link" target="_blank" rel="noopener noreferrer" href="documents_v2_vendor_response_file_yamada_wallet.html">シャネル 財布の回答ファイルを開く</a>
+          </div>
+          <div class="assign-actions">
+            <a class="btn btn-primary" href="client_delivery_yamada.html">山田 太郎さんの4番へ引き継ぐ</a>
+          </div>
+        </div>
+
+        <div class="assign-card">
+          <div class="assign-head">
+            <div>
+              <div class="assign-title">関西ブランド市場 / 2026年3月回答ファイル</div>
+              <div class="assign-sub">佐藤 花子さんの商品1点が含まれています。</div>
+            </div>
+            <span class="status-badge appraising">受領済み</span>
+          </div>
+          <div class="assign-grid">
+            <div class="record-field"><div class="record-label">ファイル名</div><div class="record-value">vendor_reply_2026_03.pdf</div></div>
+            <div class="record-field"><div class="record-label">商品数</div><div class="record-value">1点</div></div>
+            <div class="record-field"><div class="record-label">次の処理</div><div class="record-value">4番で佐藤 花子さんへ返送</div></div>
+          </div>
+          <div class="doc-inline-links">
+            <a class="doc-inline-link" target="_blank" rel="noopener noreferrer" href="documents_v2_vendor_response_file_sato_scarf.html">エルメス スカーフの回答ファイルを開く</a>
+          </div>
+          <div class="assign-actions">
+            <a class="btn btn-primary" href="client_delivery_yamada.html">4番の返送対象一覧を開く</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview.js"></script>
+</body>
+</html>

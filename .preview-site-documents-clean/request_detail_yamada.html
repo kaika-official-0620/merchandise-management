@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申請詳細 - 山田 太郎</title>
+  <link rel="stylesheet" href="static/preview.css">
+</head>
+<body>
+<div class="page">
+  <div class="back-bar">
+    <a class="btn btn-outline" href="index.html">書類一覧</a>
+    <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
+  </div>
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <h3>申請詳細</h3>
+        <p class="section-note">ここで商品ごとに状態を更新します。更新した状態はクライアント側にも通知される想定です。</p>
+      </div>
+    </div>
+    <div class="helper-note">初期状態はクライアント側で `認証待ち` です。開花側では `認証済み / 査定中 / 入金待ち / 受付不可通知` をここで切り替えるイメージです。</div>
+
+    <div class="product-list">
+      <div class="product-card">
+        <div class="request-item-layout">
+          <div class="request-thumb">申請画像<br>ルイヴィトン<br>アルマ</div>
+          <div>
+            <div class="product-head">
+              <div>
+                <div class="product-title"><a href="product_detail_lv_alma.html">ルイヴィトン アルマ</a></div>
+                <div class="product-meta">バッグ / 業者卸販売 / 商品ID KAIKA-101</div>
+              </div>
+              <span class="status-badge approved">認証済み</span>
+            </div>
+            <div class="request-item-grid">
+              <div class="record-field"><div class="record-label">現在の状態</div><div class="record-value">認証済み</div></div>
+              <div class="record-field"><div class="record-label">次の流れ</div><div class="record-value">2番で業者向け見積依頼書を作成</div></div>
+              <div class="record-field"><div class="record-label">クライアント表示</div><div class="record-value">認証済み</div></div>
+            </div>
+            <div class="status-action-list">
+              <a class="status-action is-active" href="status_update_preview.html">認証済み</a>
+              <a class="status-action" href="status_update_preview.html">査定中</a>
+              <a class="status-action" href="status_update_preview.html">入金待ち</a>
+              <a class="status-action" href="notify_unavailable.html">受付不可通知</a>
+            </div>
+            <div class="request-actions">
+              <a class="btn btn-secondary" href="product_detail_lv_alma.html">商品詳細を見る</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="request-item-layout">
+          <div class="request-thumb">申請画像<br>シャネル<br>財布</div>
+          <div>
+            <div class="product-head">
+              <div>
+                <div class="product-title"><a href="product_detail_chanel_wallet.html">シャネル マトラッセ 財布</a></div>
+                <div class="product-meta">財布 / 業者卸販売 / 商品ID KAIKA-102</div>
+              </div>
+              <span class="status-badge pending">認証待ち</span>
+            </div>
+            <div class="request-item-grid">
+              <div class="record-field"><div class="record-label">現在の状態</div><div class="record-value">認証待ち</div></div>
+              <div class="record-field"><div class="record-label">次の流れ</div><div class="record-value">内容確認後に受付可否を判断</div></div>
+              <div class="record-field"><div class="record-label">クライアント表示</div><div class="record-value">認証待ち</div></div>
+            </div>
+            <div class="status-action-list">
+              <a class="status-action" href="status_update_preview.html">認証済み</a>
+              <a class="status-action" href="status_update_preview.html">査定中</a>
+              <a class="status-action" href="status_update_preview.html">入金待ち</a>
+              <a class="status-action" href="notify_unavailable.html">受付不可通知</a>
+            </div>
+            <div class="request-actions">
+              <a class="btn btn-secondary" href="product_detail_chanel_wallet.html">商品詳細を見る</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

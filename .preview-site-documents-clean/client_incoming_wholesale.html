@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. クライアントから受付 - 業者卸販売</title>
+  <link rel="stylesheet" href="static/preview.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="index.html">書類一覧</a>
+      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
+    </div>
+    <div class="page-head">
+      <div>
+        <h1>1. クライアントから受付</h1>
+        <p>業者卸販売の案件だけを確認します。依頼書、対象商品、次の流れは全件表示と同じ粒度で見られます。</p>
+      </div>
+      <div class="head-tools">
+        <button class="mini-toggle" type="button" onclick="togglePanel('point-panel')">確認ポイント</button>
+        <button class="mini-toggle" type="button" onclick="togglePanel('status-panel')">現在の状況</button>
+      </div>
+    </div>
+    <div id="point-panel" class="mini-panel" hidden>
+      <ul>
+        <li>商品ごとの状態更新は詳細画面で行う</li>
+        <li>受付不可はキャンセルではなく通知送信にする</li>
+      </ul>
+    </div>
+    <div id="status-panel" class="mini-panel" hidden>
+      <ul><li>進行中 2件</li></ul>
+    </div>
+
+    <div class="service-tabs">
+      <a class="service-tab" href="client_incoming.html">すべて</a>
+      <a class="service-tab is-active" href="client_incoming_wholesale.html">業者卸販売</a>
+      <a class="service-tab" href="client_incoming_auction.html">業者オークション</a>
+      <a class="service-tab" href="client_incoming_simultaneous.html">同時出品</a>
+    </div>
+
+    <div class="record-list">
+      <div class="record-card">
+        <div class="record-head">
+          <div>
+            <div class="record-title">山田 太郎</div>
+            <div class="record-sub">業者卸販売 / 受付日 2026/04/20 / 案件番号 REQ-2026-041</div>
+          </div>
+          <span class="status-badge approved">認証済み</span>
+        </div>
+        <div class="record-grid">
+          <div class="record-field"><div class="record-label">依頼書</div><div class="record-value">見積依頼書 / 買取依頼書</div></div>
+          <div class="record-field"><div class="record-label">対象商品</div><div class="record-value">バッグ2点 / 財布1点</div></div>
+          <div class="record-field"><div class="record-label">次の流れ</div><div class="record-value">2番で業者向け見積依頼書を作成</div></div>
+          <div class="record-field"><div class="record-label">クライアント表示</div><div class="record-value">認証済み</div></div>
+        </div>
+        <div class="request-items">
+          <div class="request-item">
+            <div class="request-item-layout">
+              <div class="request-thumb">申請画像<br>ルイヴィトン<br>アルマ</div>
+              <div>
+                <div class="request-item-title"><a href="product_detail_lv_alma.html">ルイヴィトン アルマ</a></div>
+                <div class="request-item-sub">バッグ / 見積依頼書 / 次は2番へ進行</div>
+              </div>
+            </div>
+          </div>
+          <div class="request-item">
+            <div class="request-item-layout">
+              <div class="request-thumb">申請画像<br>シャネル<br>財布</div>
+              <div>
+                <div class="request-item-title"><a href="product_detail_chanel_wallet.html">シャネル マトラッセ 財布</a></div>
+                <div class="request-item-sub">財布 / 買取依頼書 / 次は2番へ進行</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="record-actions">
+          <a class="btn btn-secondary" href="request_detail_yamada.html">詳細確認</a>
+        </div>
+      </div>
+
+      <div class="record-card">
+        <div class="record-head">
+          <div>
+            <div class="record-title">佐藤 花子</div>
+            <div class="record-sub">業者卸販売 / 受付日 2026/04/18 / 案件番号 REQ-2026-039</div>
+          </div>
+          <span class="status-badge pending">認証待ち</span>
+        </div>
+        <div class="record-grid">
+          <div class="record-field"><div class="record-label">依頼書</div><div class="record-value">見積依頼書 / 買取依頼書</div></div>
+          <div class="record-field"><div class="record-label">対象商品</div><div class="record-value">小物3点</div></div>
+          <div class="record-field"><div class="record-label">次の流れ</div><div class="record-value">2番で業者向け見積依頼書を作成</div></div>
+          <div class="record-field"><div class="record-label">クライアント表示</div><div class="record-value">認証待ち</div></div>
+        </div>
+        <div class="request-items">
+          <div class="request-item">
+            <div class="request-item-layout">
+              <div class="request-thumb">申請画像<br>エルメス<br>スカーフ</div>
+              <div>
+                <div class="request-item-title"><a href="product_detail_hermes_scarf.html">エルメス スカーフ</a></div>
+                <div class="request-item-sub">小物 / 見積依頼書 / 次は2番へ進行</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="record-actions">
+          <a class="btn btn-secondary" href="request_detail_sato.html">詳細確認</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview.js"></script>
+</body>
+</html>

@@ -82,6 +82,7 @@ except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
 
 app = module.app
+PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
@@ -421,9 +422,17 @@ def _preview_login_wrapped(view_func):
     return wrapped
 
 
-def _safe_preview_target(page: str) -> Path:
-    target = (PREVIEW_V4_DIR / page).resolve()
-    root = PREVIEW_V4_DIR.resolve()
+def _active_preview_root() -> tuple[Path | None, str]:
+    if PREVIEW_CLEAN_DIR.exists():
+        return PREVIEW_CLEAN_DIR, "documents_v2_index.html"
+    if PREVIEW_V4_DIR.exists():
+        return PREVIEW_V4_DIR, "home.html"
+    return None, ""
+
+
+def _safe_preview_target(root: Path, page: str) -> Path:
+    target = (root / page).resolve()
+    root = root.resolve()
     if root not in target.parents and target != root:
         raise FileNotFoundError(page)
     if not target.exists() or not target.is_file():
@@ -431,15 +440,17 @@ def _safe_preview_target(page: str) -> Path:
     return target
 
 
-if PREVIEW_V4_DIR.exists():
+PREVIEW_ROOT, PREVIEW_ENTRY = _active_preview_root()
+
+if PREVIEW_ROOT:
     @_preview_login_wrapped
     def admin_documents_v4_preview():
-        return send_from_directory(str(PREVIEW_V4_DIR), "home.html")
+        return send_from_directory(str(PREVIEW_ROOT), PREVIEW_ENTRY)
 
     @_preview_login_wrapped
     def admin_documents_v4_preview_page(page: str):
         try:
-            target = _safe_preview_target(page)
+            target = _safe_preview_target(PREVIEW_ROOT, page)
         except FileNotFoundError:
             abort(404)
         return send_from_directory(str(target.parent), target.name)

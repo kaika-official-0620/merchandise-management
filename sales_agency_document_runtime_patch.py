@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from werkzeug.routing import BuildError
+from werkzeug.utils import secure_filename
 
 
 SALES_AGENCY_DOCUMENT_FLOW_STEPS = [
@@ -78,6 +80,31 @@ def prepare(module: Any) -> None:
 
     def rows_to_dicts(rows):
         return [dict(row) for row in rows]
+
+    vendor_response_allowed_extensions = {"pdf", "png", "jpg", "jpeg", "gif", "webp"}
+
+    def save_vendor_response_file(file_storage):
+        if not file_storage or not getattr(file_storage, "filename", ""):
+            return None, None
+
+        original_name = secure_filename(file_storage.filename)
+        if not original_name:
+            return None, None
+
+        ext = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else ""
+        if ext not in vendor_response_allowed_extensions:
+            raise ValueError("対応しているファイル形式は PDF / JPG / PNG / GIF / WEBP です。")
+
+        upload_root = module.app.config.get("UPLOAD_FOLDER")
+        if not upload_root:
+            raise ValueError("アップロード先の設定が見つかりません。")
+
+        vendor_dir = os.path.join(upload_root, "vendor_responses")
+        os.makedirs(vendor_dir, exist_ok=True)
+
+        stored_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S_')}{original_name}"
+        file_storage.save(os.path.join(vendor_dir, stored_name))
+        return f"uploads/vendor_responses/{stored_name}", original_name
 
     def column_exists(cur, table_name: str, column_name: str) -> bool:
         if DATABASE_URL:
@@ -171,6 +198,16 @@ def prepare(module: Any) -> None:
                     "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN source_mitsumori_id INTEGER",
                     "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN source_mitsumori_id INTEGER",
                 ),
+                (
+                    "vendor_response_file_path",
+                    "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN vendor_response_file_path VARCHAR(255)",
+                    "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN vendor_response_file_path TEXT",
+                ),
+                (
+                    "vendor_response_file_name",
+                    "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN vendor_response_file_name VARCHAR(255)",
+                    "ALTER TABLE admin_kaitori_shoudaku ADD COLUMN vendor_response_file_name TEXT",
+                ),
             ],
             "invoices": [
                 (
@@ -189,6 +226,20 @@ def prepare(module: Any) -> None:
                     "ALTER TABLE invoices ADD COLUMN source_admin_kaitori_id INTEGER",
                 ),
             ],
+            "shikiriosho": [
+                (
+                    "sales_agency_request_id",
+                    "ALTER TABLE shikiriosho ADD COLUMN sales_agency_request_id INTEGER",
+                    "ALTER TABLE shikiriosho ADD COLUMN sales_agency_request_id INTEGER",
+                ),
+            ],
+            "user_keisan": [
+                (
+                    "sales_agency_request_id",
+                    "ALTER TABLE user_keisan ADD COLUMN sales_agency_request_id INTEGER",
+                    "ALTER TABLE user_keisan ADD COLUMN sales_agency_request_id INTEGER",
+                ),
+            ],
         }
 
         conn, cur = open_cursor()
@@ -199,22 +250,30 @@ def prepare(module: Any) -> None:
                         continue
                     cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
 
-            cur.execute(
-                """
-                UPDATE sales_agency_requests
-                SET vendor_mitsumori_id = created_mitsumori_id
-                WHERE vendor_mitsumori_id IS NULL
-                  AND created_mitsumori_id IS NOT NULL
-                """
-            )
-            cur.execute(
-                """
-                UPDATE sales_agency_requests
-                SET client_invoice_id = created_invoice_id
-                WHERE client_invoice_id IS NULL
-                  AND created_invoice_id IS NOT NULL
-                """
-            )
+            request_has_vendor_mitsumori_id = column_exists(cur, "sales_agency_requests", "vendor_mitsumori_id")
+            request_has_created_mitsumori_id = column_exists(cur, "sales_agency_requests", "created_mitsumori_id")
+            request_has_client_invoice_id = column_exists(cur, "sales_agency_requests", "client_invoice_id")
+            request_has_created_invoice_id = column_exists(cur, "sales_agency_requests", "created_invoice_id")
+            request_has_vendor_kaitori_id = column_exists(cur, "sales_agency_requests", "vendor_kaitori_shoudaku_id")
+
+            if request_has_vendor_mitsumori_id and request_has_created_mitsumori_id:
+                cur.execute(
+                    """
+                    UPDATE sales_agency_requests
+                    SET vendor_mitsumori_id = created_mitsumori_id
+                    WHERE vendor_mitsumori_id IS NULL
+                      AND created_mitsumori_id IS NOT NULL
+                    """
+                )
+            if request_has_client_invoice_id and request_has_created_invoice_id:
+                cur.execute(
+                    """
+                    UPDATE sales_agency_requests
+                    SET client_invoice_id = created_invoice_id
+                    WHERE client_invoice_id IS NULL
+                      AND created_invoice_id IS NOT NULL
+                    """
+                )
 
             cur.execute(
                 """
@@ -240,70 +299,73 @@ def prepare(module: Any) -> None:
                 WHERE document_scope IS NULL OR TRIM(document_scope) = ''
                 """
             )
-            cur.execute(
-                """
-                UPDATE user_mitsumori
-                SET sales_agency_request_id = (
-                    SELECT sar.id
-                    FROM sales_agency_requests sar
-                    WHERE sar.vendor_mitsumori_id = user_mitsumori.id
-                    LIMIT 1
+            if request_has_vendor_mitsumori_id:
+                cur.execute(
+                    """
+                    UPDATE user_mitsumori
+                    SET sales_agency_request_id = (
+                        SELECT sar.id
+                        FROM sales_agency_requests sar
+                        WHERE sar.vendor_mitsumori_id = user_mitsumori.id
+                        LIMIT 1
+                    )
+                    WHERE sales_agency_request_id IS NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM sales_agency_requests sar
+                        WHERE sar.vendor_mitsumori_id = user_mitsumori.id
+                      )
+                    """
                 )
-                WHERE sales_agency_request_id IS NULL
-                  AND EXISTS (
-                    SELECT 1
-                    FROM sales_agency_requests sar
-                    WHERE sar.vendor_mitsumori_id = user_mitsumori.id
-                  )
-                """
-            )
-            cur.execute(
-                """
-                UPDATE admin_kaitori_shoudaku
-                SET sales_agency_request_id = (
-                    SELECT sar.id
-                    FROM sales_agency_requests sar
-                    WHERE sar.vendor_kaitori_shoudaku_id = admin_kaitori_shoudaku.id
-                    LIMIT 1
+            if request_has_vendor_kaitori_id:
+                cur.execute(
+                    """
+                    UPDATE admin_kaitori_shoudaku
+                    SET sales_agency_request_id = (
+                        SELECT sar.id
+                        FROM sales_agency_requests sar
+                        WHERE sar.vendor_kaitori_shoudaku_id = admin_kaitori_shoudaku.id
+                        LIMIT 1
+                    )
+                    WHERE sales_agency_request_id IS NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM sales_agency_requests sar
+                        WHERE sar.vendor_kaitori_shoudaku_id = admin_kaitori_shoudaku.id
+                      )
+                    """
                 )
-                WHERE sales_agency_request_id IS NULL
-                  AND EXISTS (
-                    SELECT 1
-                    FROM sales_agency_requests sar
-                    WHERE sar.vendor_kaitori_shoudaku_id = admin_kaitori_shoudaku.id
-                  )
-                """
-            )
-            cur.execute(
-                """
-                UPDATE invoices
-                SET document_scope = 'client_outgoing'
-                WHERE (document_scope IS NULL OR TRIM(document_scope) = '')
-                  AND invoice_no LIKE 'KT-%'
-                  AND EXISTS (
-                    SELECT 1
-                    FROM sales_agency_requests sar
-                    WHERE sar.client_invoice_id = invoices.id
-                  )
-                """
-            )
-            cur.execute(
-                """
-                UPDATE invoices
-                SET sales_agency_request_id = (
-                    SELECT sar.id
-                    FROM sales_agency_requests sar
-                    WHERE sar.client_invoice_id = invoices.id
-                    LIMIT 1
+            if request_has_client_invoice_id:
+                cur.execute(
+                    """
+                    UPDATE invoices
+                    SET document_scope = 'client_outgoing'
+                    WHERE (document_scope IS NULL OR TRIM(document_scope) = '')
+                      AND invoice_no LIKE 'KT-%'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM sales_agency_requests sar
+                        WHERE sar.client_invoice_id = invoices.id
+                      )
+                    """
                 )
-                WHERE sales_agency_request_id IS NULL
-                  AND EXISTS (
-                    SELECT 1
-                    FROM sales_agency_requests sar
-                    WHERE sar.client_invoice_id = invoices.id
-                  )
-                """
-            )
+                cur.execute(
+                    """
+                    UPDATE invoices
+                    SET sales_agency_request_id = (
+                        SELECT sar.id
+                        FROM sales_agency_requests sar
+                        WHERE sar.client_invoice_id = invoices.id
+                        LIMIT 1
+                    )
+                    WHERE sales_agency_request_id IS NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM sales_agency_requests sar
+                        WHERE sar.client_invoice_id = invoices.id
+                      )
+                    """
+                )
             conn.commit()
         finally:
             cur.close()
@@ -565,20 +627,30 @@ def apply(module: Any) -> None:
         request_row["created_mitsumori_id"] = request_row.get("vendor_mitsumori_id")
         request_row["created_invoice_id"] = request_row.get("client_invoice_id")
 
+        document_enabled_service_types = {"wholesale", "auction", "simultaneous"}
+
         request_row["request_can_create_vendor_estimate"] = (
-            request_row.get("service_type") == "wholesale"
+            request_row.get("service_type") in document_enabled_service_types
             and request_row.get("status") in {"approved", "appraising", "inspecting"}
             and not request_row.get("vendor_mitsumori_id")
         )
         request_row["request_can_register_vendor_kaitori"] = (
-            request_row.get("service_type") == "wholesale"
+            request_row.get("service_type") in document_enabled_service_types
             and bool(request_row.get("vendor_mitsumori_id"))
             and not request_row.get("vendor_kaitori_shoudaku_id")
         )
         request_row["request_can_create_client_invoice"] = (
-            request_row.get("service_type") == "wholesale"
+            request_row.get("service_type") in document_enabled_service_types
             and bool(request_row.get("vendor_kaitori_shoudaku_id"))
             and not request_row.get("client_invoice_id")
+        )
+        request_row["request_can_create_shikiriosho"] = (
+            request_row.get("service_type") in document_enabled_service_types
+            and bool(request_row.get("vendor_kaitori_shoudaku_id") or request_row.get("client_invoice_id"))
+        )
+        request_row["request_can_create_auction_keisan"] = (
+            request_row.get("service_type") in {"auction", "simultaneous"}
+            and bool(request_row.get("vendor_kaitori_shoudaku_id") or request_row.get("client_invoice_id"))
         )
         request_row["request_can_create_documents"] = request_row["request_can_create_vendor_estimate"]
 
@@ -646,27 +718,31 @@ def apply(module: Any) -> None:
                 payload["request_url"] = safe_url("admin_sales_agency_request_detail", id=request_id) if request_id else None
                 rows.append(payload)
 
+            has_shikiriosho_request_id = column_exists(cur, "shikiriosho", "sales_agency_request_id")
+            shikiriosho_request_select = ", s.sales_agency_request_id" if has_shikiriosho_request_id else ", NULL AS sales_agency_request_id"
             cur.execute(
-                """
+                f"""
                 SELECT s.id, s.document_no, s.issue_date, s.total_amount, s.status, s.created_at,
                        s.recipient_name, u.display_name AS client_name, u.username
+                       {shikiriosho_request_select}
                 FROM shikiriosho s
                 LEFT JOIN users u ON s.recipient_id = u.id
                 ORDER BY COALESCE(s.issue_date, s.created_at) DESC, s.id DESC
                 """
             )
             for row in rows_to_dicts(cur.fetchall()):
+                request_info = request_map.get(row.get("sales_agency_request_id")) or {}
                 append_row(
                     {
                         "kind": "shikiriosho",
                         "document_key": "shikiriosho",
                         "id": row["id"],
-                        "request_id": None,
+                        "request_id": row.get("sales_agency_request_id"),
                         "document_type": "仕切書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": row.get("client_name") or row.get("recipient_name") or row.get("username") or "未設定",
-                        "service_type": "",
-                        "service_name": "",
+                        "service_type": request_info.get("service_type") or "",
+                        "service_name": service_name(request_info.get("service_type") or "") if request_info.get("service_type") else "",
                         "issue_date": format_date(row.get("issue_date") or row.get("created_at")),
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
@@ -757,7 +833,8 @@ def apply(module: Any) -> None:
             cur.execute(
                 """
                 SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at,
-                       k.notes, k.company_name, k.document_scope, k.sales_agency_request_id
+                       k.notes, k.company_name, k.document_scope, k.sales_agency_request_id,
+                       k.vendor_response_file_path, k.vendor_response_file_name
                 FROM admin_kaitori_shoudaku k
                 ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
                 """
@@ -783,6 +860,8 @@ def apply(module: Any) -> None:
                         "direction_label": "業者→開花",
                         "subject": row.get("company_name") or "",
                         "notes": row.get("notes") or "",
+                        "attachment_path": row.get("vendor_response_file_path") or "",
+                        "attachment_name": row.get("vendor_response_file_name") or "",
                         "detail_endpoint": "admin_kaitori_shoudaku_view",
                         "sort_key": str(row.get("issue_date") or row.get("created_at") or ""),
                     }
@@ -830,26 +909,30 @@ def apply(module: Any) -> None:
                 if DATABASE_URL
                 else "COALESCE(k.is_admin_created, 0) = 1"
             )
+            has_keisan_request_id = column_exists(cur, "user_keisan", "sales_agency_request_id")
+            keisan_request_select = ", k.sales_agency_request_id" if has_keisan_request_id else ", NULL AS sales_agency_request_id"
             cur.execute(
                 f"""
                 SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at
+                       {keisan_request_select}
                 FROM user_keisan k
                 WHERE {admin_created_condition}
                 ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
                 """
             )
             for row in rows_to_dicts(cur.fetchall()):
+                request_info = request_map.get(row.get("sales_agency_request_id")) or {}
                 append_row(
                     {
                         "kind": "user_keisan",
                         "document_key": "auction_keisan",
                         "id": row["id"],
-                        "request_id": None,
+                        "request_id": row.get("sales_agency_request_id"),
                         "document_type": "オークション計算書",
                         "document_no": row.get("document_no") or "-",
-                        "client_name": "-",
-                        "service_type": "auction",
-                        "service_name": service_name("auction"),
+                        "client_name": request_info.get("client_name") or "-",
+                        "service_type": request_info.get("service_type") or "auction",
+                        "service_name": service_name(request_info.get("service_type") or "auction"),
                         "issue_date": format_date(row.get("issue_date") or row.get("created_at")),
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
@@ -1008,6 +1091,128 @@ def apply(module: Any) -> None:
             )
         return kaitori_row, prepared_items
 
+    def generate_admin_auction_keisan_document_no() -> str:
+        now = datetime.now()
+        conn, cur = open_cursor()
+        try:
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM user_keisan
+                    WHERE issue_date >= %s
+                      AND COALESCE(is_admin_created, FALSE) = TRUE
+                    """,
+                    (now.strftime("%Y-%m-01"),),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM user_keisan
+                    WHERE issue_date >= ?
+                      AND COALESCE(is_admin_created, 0) = 1
+                    """,
+                    (now.strftime("%Y-%m-01"),),
+                )
+            result = row_to_dict(cur.fetchone()) or {}
+            count = int(result.get("count") or 0) + 1
+            return f"AK-{now.strftime('%Y%m')}-{count:04d}"
+        finally:
+            cur.close()
+            conn.close()
+
+    def load_client_invoice_items(request_row: dict | None):
+        if not request_row or not request_row.get("client_invoice_id"):
+            return []
+        conn, cur = open_cursor()
+        try:
+            cur.execute(
+                f"""
+                SELECT ii.item_no,
+                       ii.item_name,
+                       ii.merchandise_id,
+                       ii.quantity,
+                       ii.unit,
+                       ii.unit_price,
+                       ii.amount,
+                       m.purchase_date,
+                       m.item_code,
+                       m.product_name
+                FROM invoice_items ii
+                LEFT JOIN merchandise m ON ii.merchandise_id = m.id
+                WHERE ii.invoice_id = {mark()}
+                ORDER BY ii.item_no ASC, ii.id ASC
+                """,
+                (request_row["client_invoice_id"],),
+            )
+            rows = rows_to_dicts(cur.fetchall())
+        finally:
+            cur.close()
+            conn.close()
+
+        prepared = []
+        for row in rows:
+            prepared.append(
+                {
+                    "item_no": row.get("item_no"),
+                    "product_name": row.get("item_name") or row.get("product_name") or "",
+                    "product_date": format_date(row.get("purchase_date")) if row.get("purchase_date") else "",
+                    "product_code": row.get("item_code") or "",
+                    "merchandise_id": row.get("merchandise_id"),
+                    "quantity": int(row.get("quantity") or 1),
+                    "unit_price": int(row.get("unit_price") or row.get("amount") or 0),
+                    "amount": int(row.get("amount") or 0),
+                }
+            )
+        return prepared
+
+    def build_client_outgoing_prefill_items(request_row: dict | None):
+        if not request_row:
+            return []
+
+        invoice_items = load_client_invoice_items(request_row)
+        if invoice_items:
+            return invoice_items
+
+        source_vendor_kaitori, vendor_items = load_vendor_kaitori_context(request_row)
+        if vendor_items:
+            prepared = []
+            for item in vendor_items:
+                prepared.append(
+                    {
+                        "item_no": item.get("item_no"),
+                        "product_name": item.get("product_name") or "",
+                        "product_date": item.get("purchase_date") or "",
+                        "product_code": "",
+                        "merchandise_id": item.get("merchandise_id"),
+                        "quantity": 1,
+                        "unit_price": int(item.get("amount") or 0),
+                        "amount": int(item.get("amount") or 0),
+                        "unit": "点",
+                        "item_name": item.get("product_name") or "",
+                    }
+                )
+            return prepared
+
+        prepared = []
+        for index, item in enumerate(request_row.get("merchandise_items") or [], start=1):
+            prepared.append(
+                {
+                    "item_no": index,
+                    "product_name": item.get("product_name") or "",
+                    "product_date": format_date(item.get("purchase_date")) if item.get("purchase_date") else "",
+                    "product_code": item.get("item_code") or "",
+                    "merchandise_id": item.get("id"),
+                    "quantity": 1,
+                    "unit_price": 0,
+                    "amount": 0,
+                    "unit": "点",
+                    "item_name": item.get("product_name") or "",
+                }
+            )
+        return prepared
+
     def apply_admin_document_history_filters(rows, filters):
         doc_type = (filters.get("doc_type") or "all").strip()
         client = (filters.get("client") or "").strip().lower()
@@ -1090,12 +1295,16 @@ def apply(module: Any) -> None:
             request_row["create_vendor_estimate_url"] = safe_url("admin_mitsumori_add", request_id=request_row.get("id")) if request_row.get("request_can_create_vendor_estimate") else None
             request_row["create_vendor_kaitori_url"] = safe_url("admin_kaitori_shoudaku_add", request_id=request_row.get("id")) if request_row.get("request_can_register_vendor_kaitori") else None
             request_row["create_client_invoice_url"] = safe_url("admin_kaitori_add", request_id=request_row.get("id")) if request_row.get("request_can_create_client_invoice") else None
+            request_row["create_shikiriosho_url"] = safe_url("admin_shikiriosho_add", request_id=request_row.get("id")) if request_row.get("request_can_create_shikiriosho") else None
+            request_row["create_auction_keisan_url"] = safe_url("admin_auction_keisan_add", request_id=request_row.get("id")) if request_row.get("request_can_create_auction_keisan") else None
             if request_row.get("request_can_create_vendor_estimate"):
                 request_row["next_document_label"] = "業者向け見積依頼書を作成"
             elif request_row.get("request_can_register_vendor_kaitori"):
                 request_row["next_document_label"] = "業者買取明細書を登録"
             elif request_row.get("request_can_create_client_invoice"):
                 request_row["next_document_label"] = "ユーザー向け買取明細書を確認・発行"
+            elif request_row.get("request_can_create_shikiriosho"):
+                request_row["next_document_label"] = "仕切書・計算書を作成"
             else:
                 request_row["next_document_label"] = "次の書類待ちまたは処理完了"
             request_rows.append(request_row)
@@ -1108,108 +1317,258 @@ def apply(module: Any) -> None:
 
         history_rows = fetch_admin_document_history_rows_v3()
         selected_group = request.args.get("group", "all").strip() or "all"
-        document_counts = {
-            "client_incoming": 0,
-            "vendor_estimate": 0,
-            "vendor_statement": 0,
-            "client_outgoing": 0,
-        }
-        document_type_counts = {
-            "client_mitsumori": 0,
-            "client_kaitori_request": 0,
-            "vendor_estimate": 0,
-            "vendor_statement": 0,
-            "client_invoice": 0,
-            "shikiriosho": 0,
-            "auction_keisan": 0,
-        }
-        for row in history_rows:
-            if row.get("direction_key") == "client_incoming":
-                document_counts["client_incoming"] += 1
-            elif row.get("document_key") == "vendor_estimate":
-                document_counts["vendor_estimate"] += 1
-            elif row.get("document_key") == "vendor_statement":
-                document_counts["vendor_statement"] += 1
-            elif row.get("direction_key") == "client_outgoing":
-                document_counts["client_outgoing"] += 1
-            if row.get("document_key") in document_type_counts:
-                document_type_counts[row.get("document_key")] += 1
+        selected_service_type = request.args.get("service_type", "all").strip() or "all"
 
-        def row_matches_dashboard_filters(row: dict[str, Any]) -> bool:
-            return selected_group == "all" or row.get("direction_key") == selected_group
+        service_options = [
+            {"key": "all", "label": "すべてのサービス"},
+            {"key": "wholesale", "label": "業者卸販売"},
+            {"key": "auction", "label": "業者オークション"},
+            {"key": "simultaneous", "label": "同時出品"},
+        ]
 
-        recent_client_incoming_documents = [
-            row for row in history_rows
-            if row.get("direction_key") == "client_incoming" and row_matches_dashboard_filters(row)
-        ][:8]
-        recent_vendor_outgoing_documents = [
-            row for row in history_rows
-            if row.get("direction_key") == "vendor_outgoing" and row_matches_dashboard_filters(row)
-        ][:8]
-        recent_vendor_incoming_documents = [
-            row for row in history_rows
-            if row.get("direction_key") == "vendor_incoming" and row_matches_dashboard_filters(row)
-        ][:8]
-        recent_client_outgoing_documents = [
-            row for row in history_rows
-            if row.get("direction_key") == "client_outgoing" and row_matches_dashboard_filters(row)
-        ][:8]
-        all_ongoing_request_rows = build_ongoing_request_rows()
+        if selected_group != "client_incoming":
+            selected_service_type = "all"
 
-        def request_matches_group(row: dict[str, Any]) -> bool:
-            if selected_group == "all":
+        def row_service_type(row: dict[str, Any]) -> str:
+            return (row.get("service_type") or "").strip()
+
+        def service_matches(row: dict[str, Any]) -> bool:
+            if selected_group != "client_incoming":
                 return True
-            flow_key = row.get("document_flow_key") or ""
-            if selected_group == "client_incoming":
-                return flow_key == "user_request" or row.get("request_can_create_vendor_estimate")
-            if selected_group == "vendor_outgoing":
-                return flow_key == "vendor_estimate" or row.get("request_can_register_vendor_kaitori")
-            if selected_group == "vendor_incoming":
-                return flow_key == "vendor_statement" or row.get("request_can_create_client_invoice")
-            if selected_group == "client_outgoing":
-                return flow_key in {"client_invoice", "completed"} or bool(row.get("client_invoice_id"))
+            if selected_service_type == "all":
+                return True
+            return row_service_type(row) == selected_service_type
+
+        def stage_document_matches(stage_key: str, row: dict[str, Any]) -> bool:
+            direction_key = row.get("direction_key") or ""
+            if stage_key == "client_incoming":
+                return direction_key == "client_incoming"
+            if stage_key == "vendor_outgoing":
+                return direction_key == "vendor_outgoing"
+            if stage_key == "vendor_incoming":
+                return direction_key == "vendor_incoming"
+            if stage_key == "client_outgoing":
+                return direction_key == "client_outgoing"
             return True
 
-        ongoing_request_rows = [row for row in all_ongoing_request_rows if request_matches_group(row)]
-        review_ready_request_rows = [
-            row for row in ongoing_request_rows
-            if row.get("request_can_create_client_invoice")
-        ]
+        def stage_request_matches(stage_key: str, row: dict[str, Any]) -> bool:
+            flow_key = row.get("document_flow_key") or ""
+            if stage_key == "client_incoming":
+                return flow_key == "user_request" or row.get("request_can_create_vendor_estimate")
+            if stage_key == "vendor_outgoing":
+                return flow_key == "vendor_estimate" or row.get("request_can_register_vendor_kaitori")
+            if stage_key == "vendor_incoming":
+                return flow_key == "vendor_statement" or row.get("request_can_create_client_invoice")
+            if stage_key == "client_outgoing":
+                return (
+                    flow_key in {"client_invoice", "completed"}
+                    or bool(row.get("client_invoice_id"))
+                    or row.get("request_can_create_client_invoice")
+                    or row.get("request_can_create_shikiriosho")
+                    or row.get("request_can_create_auction_keisan")
+                )
+            return True
+
+        all_ongoing_request_rows = build_ongoing_request_rows()
+
+        current_counts = {
+            "client_incoming": sum(1 for row in all_ongoing_request_rows if stage_request_matches("client_incoming", row)),
+            "vendor_outgoing": sum(1 for row in all_ongoing_request_rows if stage_request_matches("vendor_outgoing", row)),
+            "vendor_incoming": sum(1 for row in all_ongoing_request_rows if stage_request_matches("vendor_incoming", row)),
+            "client_outgoing": sum(1 for row in all_ongoing_request_rows if stage_request_matches("client_outgoing", row)),
+        }
+
         group_meta = {
             "all": {
-                "title": "進行中の販売代行と次の作業",
-                "note": "案件ごとに、今どこまで進んでいて、次に何を作るべきかをまとめています。誤送信を防ぐため、書類は順番どおりにしか進めません。",
+                "title": "書類管理",
+                "note": "販売代行の書類は 1 → 2 → 3 → 4 の順に進みます。過去の取引は左メニューの「書類履歴」から確認できます。",
             },
             "client_incoming": {
-                "title": "受付後の案件と次の作業",
-                "note": "クライアントから依頼書が届いた段階の案件です。ここで内容確認をして、次は業者向け見積依頼書の作成へ進みます。",
+                "flow_label": "クライアント → 開花",
+                "stage_title": "1. クライアントから受付",
+                "summary": "クライアントから届いた依頼書を確認して、どのサービスの案件かを整理する段階です。",
+                "documents": ["見積り依頼書", "買取依頼書"],
+                "create_guidance": "この段階ではクライアント側で作成された書類を確認します。開花側の書類作成は不要で、内容確認後に案件行から次の業者向け書類作成へ進みます。",
+                "check_points": [
+                    "依頼書の内容と対象商品に漏れがないかを確認します。",
+                    "業者卸販売 / 業者オークション / 同時出品のどの案件かを確認します。",
+                    "内容確認後、次は業者向け見積り依頼書の作成へ進みます。",
+                ],
+                "action_title": "受付中の案件",
+                "action_note": "未完了の受付案件だけを表示しています。過去の受付履歴は左メニューの「書類履歴」から確認してください。",
+                "documents_title": "受付済みの依頼書",
             },
             "vendor_outgoing": {
-                "title": "業者へ依頼中の案件と次の作業",
-                "note": "開花から業者へ見積依頼を送った段階です。次は業者買取明細書の受領・登録へ進みます。",
+                "flow_label": "開花 → 業者",
+                "stage_title": "2. 開花から業者へ依頼",
+                "summary": "クライアントの依頼内容を確認し、開花名義で業者へ見積り依頼を出す段階です。",
+                "documents": ["業者向け見積り依頼書"],
+                "create_guidance": "各案件行の「業者向け見積依頼書を作成」から、クライアントの依頼内容を引用した業者向け書類を作成できます。",
+                "check_points": [
+                    "クライアントから届いた内容を業者へ流す前に再確認します。",
+                    "業者への依頼はサービス別に分けず、開花から業者への依頼書としてまとめて管理します。",
+                    "業者から返答が届いたら、3番で回答書類を登録します。",
+                ],
+                "action_title": "業者へ依頼中の案件",
+                "action_note": "この段階では、業者へ依頼済みで回答待ちの案件を確認します。",
+                "documents_title": "業者へ送った見積り依頼書",
             },
             "vendor_incoming": {
-                "title": "業者回答受領後の案件と次の作業",
-                "note": "業者買取明細書が届いた案件です。内容確認をして、次はユーザー向け買取明細書の確認・発行へ進みます。",
+                "flow_label": "業者 → 開花",
+                "stage_title": "3. 業者から回答受領",
+                "summary": "業者から届いた回答書類を登録し、内容を確認する段階です。",
+                "documents": ["業者買取明細書", "回答添付ファイル"],
+                "create_guidance": "各案件行の「業者買取明細書を登録」から、業者向け見積依頼書の内容を引用しつつ、届いたPDFや画像を添付して回答書類を登録できます。",
+                "check_points": [
+                    "メールやPDF、画像で届いた回答を対象案件に紐付けて登録します。",
+                    "この段階ではサービス別に分けず、業者から開花へ届いた書類として扱います。",
+                    "登録後に内容確認を行い、次はクライアント向け書類の作成へ進みます。",
+                ],
+                "action_title": "新しく業者回答を登録する案件",
+                "action_note": "業者から返答が届いた案件はここから登録します。添付ファイルも一緒に保存できます。",
+                "secondary_title": "登録済みの業者回答と次の作業",
+                "secondary_note": "登録済みの業者回答を確認し、ユーザー向け買取明細書の作成へ進めます。",
+                "documents_title": "受領済みの業者回答書類",
             },
             "client_outgoing": {
-                "title": "クライアント返送段階の案件と次の作業",
-                "note": "ユーザー向け書類の作成・返送段階です。送付済みや処理完了の案件もここで追えます。",
+                "flow_label": "開花 → クライアント",
+                "stage_title": "4. クライアントへ返送",
+                "summary": "業者回答を確認後、クライアント向けの書類を作成して返送する段階です。",
+                "documents": ["ユーザー向け買取明細書", "仕切書", "オークション計算書"],
+                "create_guidance": "各案件行から、ユーザー向け買取明細書・仕切書・オークション計算書を作成できます。既に作成済みの書類は関連書類としてその場で確認できます。",
+                "check_points": [
+                    "業者から届いた回答内容を確認したうえで、クライアント向けの書類を作成します。",
+                    "各クライアントへ返送する書類は、この段階から作成・送信します。",
+                    "送信済みや完了済みの案件は左メニューの「書類履歴」で追えます。",
+                ],
+                "action_title": "返送前の案件",
+                "action_note": "クライアントへ返送する前の未完了案件を表示しています。",
+                "documents_title": "クライアントへ返送した書類",
             },
         }
+
+        stage_cards = []
+        for key in ["client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing"]:
+            meta = group_meta[key]
+            stage_cards.append(
+                {
+                    "key": key,
+                    "title": meta["stage_title"],
+                    "flow_label": meta["flow_label"],
+                    "summary": meta["summary"],
+                    "documents": meta["documents"],
+                    "current_count": current_counts[key],
+                    "url": safe_url("admin_documents_dashboard", group=key),
+                }
+            )
+
+        def history_matches_selected_filters(row: dict[str, Any]) -> bool:
+            return (selected_group == "all" or stage_document_matches(selected_group, row)) and service_matches(row)
+
+        selected_group_documents = [
+            row for row in history_rows
+            if history_matches_selected_filters(row)
+        ] if selected_group != "all" else []
+
+        request_document_map: dict[int, list[dict[str, Any]]] = {}
+        for row in selected_group_documents:
+            request_id = row.get("request_id")
+            if not request_id:
+                continue
+            request_document_map.setdefault(int(request_id), []).append(row)
+
+        def request_matches_selected_group(row: dict[str, Any]) -> bool:
+            if selected_group == "all":
+                return True
+            return stage_request_matches(selected_group, row) and service_matches(row)
+
+        ongoing_request_rows = [
+            row for row in all_ongoing_request_rows
+            if request_matches_selected_group(row)
+        ]
+
+        action_request_rows = []
+        secondary_request_rows = []
+        if selected_group == "client_incoming":
+            action_request_rows = ongoing_request_rows
+        elif selected_group == "vendor_outgoing":
+            action_request_rows = ongoing_request_rows
+        elif selected_group == "vendor_incoming":
+            action_request_rows = [
+                row for row in all_ongoing_request_rows
+                if row.get("request_can_register_vendor_kaitori")
+            ]
+            secondary_request_rows = ongoing_request_rows
+        elif selected_group == "client_outgoing":
+            action_request_rows = ongoing_request_rows
+
+        service_breakdown = []
+        if selected_group == "client_incoming":
+            for option in service_options:
+                service_key = option["key"]
+                if service_key == "all":
+                    current_count = sum(1 for row in all_ongoing_request_rows if stage_request_matches("client_incoming", row))
+                else:
+                    current_count = sum(
+                        1
+                        for row in all_ongoing_request_rows
+                        if stage_request_matches("client_incoming", row) and row_service_type(row) == service_key
+                    )
+                service_breakdown.append(
+                    {
+                        "key": service_key,
+                        "label": option["label"],
+                        "current_count": current_count,
+                        "is_selected": selected_service_type == service_key,
+                        "url": safe_url("admin_documents_dashboard", group="client_incoming", service_type=service_key),
+                    }
+                )
+
+        def with_related_documents(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            merged_rows: list[dict[str, Any]] = []
+            for row in rows:
+                payload = dict(row)
+                payload["related_documents"] = list(request_document_map.get(int(payload.get("id") or 0), []))
+                shikiriosho_doc = next((doc for doc in payload["related_documents"] if doc.get("document_key") == "shikiriosho"), None)
+                auction_keisan_doc = next((doc for doc in payload["related_documents"] if doc.get("document_key") == "auction_keisan"), None)
+                payload["shikiriosho_url"] = (shikiriosho_doc or {}).get("detail_url")
+                payload["auction_keisan_url"] = (auction_keisan_doc or {}).get("detail_url")
+                merged_rows.append(payload)
+            return merged_rows
+
+        stage_request_rows = []
+        stage_request_ids = set()
+        for row in action_request_rows + secondary_request_rows:
+            row_id = row.get("id")
+            if row_id in stage_request_ids:
+                continue
+            stage_request_ids.add(row_id)
+            stage_request_rows.append(row)
+
+        stage_request_rows = with_related_documents(stage_request_rows)
+
+        selected_group_service_label = next(
+            (option["label"] for option in service_options if option["key"] == selected_service_type),
+            "すべてのサービス",
+        )
+        selected_group_history_url = safe_url("admin_documents_history", direction=selected_group) if selected_group != "all" else safe_url("admin_documents_history")
 
         return render_template(
             "admin/documents_dashboard.html",
-            document_counts=document_counts,
-            document_type_counts=document_type_counts,
             ongoing_request_rows=ongoing_request_rows,
-            review_ready_request_rows=review_ready_request_rows,
-            recent_client_incoming_documents=recent_client_incoming_documents,
-            recent_vendor_outgoing_documents=recent_vendor_outgoing_documents,
-            recent_vendor_incoming_documents=recent_vendor_incoming_documents,
-            recent_client_outgoing_documents=recent_client_outgoing_documents,
+            action_request_rows=action_request_rows,
+            secondary_request_rows=secondary_request_rows,
             selected_group=selected_group,
+            selected_service_type=selected_service_type,
             group_meta=group_meta,
+            stage_cards=stage_cards,
+            stage_request_rows=stage_request_rows,
+            service_breakdown=service_breakdown,
+            selected_group_documents=selected_group_documents,
+            selected_group_document_count=len(selected_group_documents),
+            selected_group_current_count=current_counts.get(selected_group, 0) if selected_group != "all" else 0,
+            selected_group_history_url=selected_group_history_url,
+            selected_group_service_label=selected_group_service_label,
         )
 
     def admin_documents_history_v2():
@@ -1658,6 +2017,7 @@ def apply(module: Any) -> None:
             conditions = request.form.getlist("condition[]")
             quantities = request.form.getlist("quantity[]")
             unit_prices = request.form.getlist("unit_price[]")
+            vendor_response_file = request.files.get("vendor_response_file")
 
             source_request = fetch_sales_agency_request_details_v2(request_id, viewer="admin")[0] if request_id else None
             if request_id and not source_request:
@@ -1699,6 +2059,11 @@ def apply(module: Any) -> None:
 
             tax_amount = int(subtotal * tax_rate / 100)
             total_amount = subtotal + tax_amount
+            try:
+                vendor_response_file_path, vendor_response_file_name = save_vendor_response_file(vendor_response_file)
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return redirect(request.url)
 
             conn, cur = open_cursor()
             try:
@@ -1710,8 +2075,9 @@ def apply(module: Any) -> None:
                         INSERT INTO admin_kaitori_shoudaku
                         (document_no, admin_id, company_name, company_address, company_phone, contact_name,
                          issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes,
-                         status, document_scope, sales_agency_request_id, source_mitsumori_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         status, document_scope, sales_agency_request_id, source_mitsumori_id,
+                         vendor_response_file_path, vendor_response_file_name)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
@@ -1733,6 +2099,8 @@ def apply(module: Any) -> None:
                             "vendor_incoming",
                             request_id,
                             source_request.get("vendor_mitsumori_id") if source_request else None,
+                            vendor_response_file_path,
+                            vendor_response_file_name,
                         ),
                     )
                     kaitori_id = cur.fetchone()["id"]
@@ -1742,8 +2110,9 @@ def apply(module: Any) -> None:
                         INSERT INTO admin_kaitori_shoudaku
                         (document_no, admin_id, company_name, company_address, company_phone, contact_name,
                          issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes,
-                         status, document_scope, sales_agency_request_id, source_mitsumori_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         status, document_scope, sales_agency_request_id, source_mitsumori_id,
+                         vendor_response_file_path, vendor_response_file_name)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             document_no,
@@ -1764,6 +2133,8 @@ def apply(module: Any) -> None:
                             "vendor_incoming",
                             request_id,
                             source_request.get("vendor_mitsumori_id") if source_request else None,
+                            vendor_response_file_path,
+                            vendor_response_file_name,
                         ),
                     )
                     kaitori_id = cur.lastrowid
@@ -2056,6 +2427,362 @@ def apply(module: Any) -> None:
             source_vendor_kaitori=source_vendor_kaitori,
         )
 
+    def admin_shikiriosho_add_v2():
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash("アクセス権限がありません。", "error")
+            return redirect(url_for("index"))
+
+        request_id = request.args.get("request_id", type=int)
+        source_request = None
+        prefilled_items = []
+
+        if request.method == "POST":
+            request_id = request.form.get("request_id", type=int)
+            recipient_id = request.form.get("recipient_id", type=int)
+            recipient_name = (request.form.get("recipient_name") or "").strip()
+            contact_name = (request.form.get("contact_name") or "").strip()
+            personal_number = (request.form.get("personal_number") or "").strip()
+            issue_date = request.form.get("issue_date")
+            due_date = request.form.get("due_date") or None
+            try:
+                tax_rate = float(request.form.get("tax_rate") or 10)
+            except (TypeError, ValueError):
+                tax_rate = 10.0
+            notes = (request.form.get("notes") or "").strip()
+            status = request.form.get("status", "draft")
+
+            source_request = fetch_sales_agency_request_details_v2(request_id, viewer="admin")[0] if request_id else None
+            if request_id and not source_request:
+                flash("対象の申請が見つかりません。", "error")
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+
+            if source_request:
+                recipient_id = recipient_id or source_request.get("user_id")
+                recipient_name = recipient_name or source_request.get("client_name") or ""
+
+            item_names = request.form.getlist("item_name[]")
+            product_dates = request.form.getlist("product_date[]")
+            product_codes = request.form.getlist("product_code[]")
+            amounts = request.form.getlist("amount[]")
+            merchandise_ids = request.form.getlist("merchandise_id[]")
+
+            items = []
+            total_amount = 0
+            for index, name in enumerate(item_names, start=1):
+                product_name = (name or "").strip()
+                if not product_name:
+                    continue
+                try:
+                    amount = int(float(amounts[index - 1] or 0))
+                except (TypeError, ValueError):
+                    amount = 0
+                merchandise_id_raw = merchandise_ids[index - 1] if index - 1 < len(merchandise_ids) else ""
+                try:
+                    merchandise_id = int(merchandise_id_raw) if merchandise_id_raw not in ("", None) else None
+                except (TypeError, ValueError):
+                    merchandise_id = None
+                items.append(
+                    {
+                        "item_no": len(items) + 1,
+                        "product_name": product_name,
+                        "product_date": product_dates[index - 1] if index - 1 < len(product_dates) else None,
+                        "product_code": product_codes[index - 1] if index - 1 < len(product_codes) else "",
+                        "merchandise_id": merchandise_id,
+                        "quantity": 1,
+                        "unit_price": amount,
+                        "amount": amount,
+                    }
+                )
+                total_amount += amount
+
+            if not items:
+                flash("仕切書に追加する商品を1件以上入力してください。", "error")
+                return redirect(request.url)
+
+            tax_amount = int(total_amount * tax_rate / (100 + tax_rate)) if tax_rate >= 0 else 0
+            subtotal = total_amount
+            document_no = module.generate_document_no()
+
+            conn, cur = open_cursor()
+            try:
+                if DATABASE_URL:
+                    cur.execute(
+                        """
+                        INSERT INTO shikiriosho
+                        (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
+                         issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status, sales_agency_request_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            document_no,
+                            current_user.id,
+                            recipient_id,
+                            recipient_name,
+                            contact_name,
+                            personal_number,
+                            issue_date,
+                            due_date,
+                            subtotal,
+                            tax_amount,
+                            total_amount,
+                            tax_rate,
+                            notes,
+                            status,
+                            request_id,
+                        ),
+                    )
+                    shikiriosho_id = row_to_dict(cur.fetchone())["id"]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO shikiriosho
+                        (document_no, sender_id, recipient_id, recipient_name, contact_name, personal_number,
+                         issue_date, due_date, subtotal, tax_amount, total_amount, tax_rate, notes, status, sales_agency_request_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            document_no,
+                            current_user.id,
+                            recipient_id,
+                            recipient_name,
+                            contact_name,
+                            personal_number,
+                            issue_date,
+                            due_date,
+                            subtotal,
+                            tax_amount,
+                            total_amount,
+                            tax_rate,
+                            notes,
+                            status,
+                            request_id,
+                        ),
+                    )
+                    shikiriosho_id = cur.lastrowid
+
+                for item in items:
+                    cur.execute(
+                        f"""
+                        INSERT INTO shikiriosho_items
+                        (shikiriosho_id, item_no, product_name, product_date, product_code, merchandise_id, quantity, unit_price, amount)
+                        VALUES ({mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()})
+                        """,
+                        (
+                            shikiriosho_id,
+                            item["item_no"],
+                            item["product_name"],
+                            item["product_date"],
+                            item["product_code"],
+                            item["merchandise_id"],
+                            item["quantity"],
+                            item["unit_price"],
+                            item["amount"],
+                        ),
+                    )
+                conn.commit()
+            finally:
+                cur.close()
+                conn.close()
+
+            flash(f"仕切書 {document_no} を作成しました。", "success")
+            if request_id:
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+            return redirect(url_for("admin_shikiriosho_list"))
+
+        if request_id:
+            source_request = fetch_sales_agency_request_details_v2(request_id, viewer="admin")[0]
+            if not source_request:
+                flash("対象の申請が見つかりません。", "error")
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+            prefilled_items = build_client_outgoing_prefill_items(source_request)
+
+        conn, cur = open_cursor()
+        try:
+            cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+            users = rows_to_dicts(cur.fetchall())
+        finally:
+            cur.close()
+            conn.close()
+
+        return render_template(
+            "admin/shikiriosho_form.html",
+            users=users,
+            document_no=module.generate_document_no(),
+            today=datetime.now().strftime("%Y-%m-%d"),
+            items=prefilled_items,
+            source_request=source_request,
+            recipient_id_default=(source_request.get("user_id") if source_request else None),
+            recipient_name_default=(source_request.get("client_name") if source_request else ""),
+            contact_name_default="",
+            personal_number_default="",
+            notes_default=(f"{source_request.get('service_name')} の返送書類" if source_request else ""),
+        )
+
+    def admin_auction_keisan_add_v1():
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash("アクセス権限がありません。", "error")
+            return redirect(url_for("index"))
+
+        request_id = request.args.get("request_id", type=int)
+        source_request = None
+        prefilled_items = []
+
+        if request.method == "POST":
+            request_id = request.form.get("request_id", type=int)
+            target_user_id = request.form.get("user_id", type=int)
+            issue_date = request.form.get("issue_date")
+            recipient_name = (request.form.get("recipient_name") or "").strip()
+            subject = (request.form.get("subject") or "").strip()
+            notes = (request.form.get("notes") or "").strip()
+            status = request.form.get("status", "draft")
+
+            source_request = fetch_sales_agency_request_details_v2(request_id, viewer="admin")[0] if request_id else None
+            if request_id and not source_request:
+                flash("対象の申請が見つかりません。", "error")
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+            if source_request:
+                target_user_id = target_user_id or source_request.get("user_id")
+                recipient_name = recipient_name or source_request.get("client_name") or ""
+
+            item_names = request.form.getlist("item_name[]")
+            merchandise_ids = request.form.getlist("merchandise_id[]")
+            quantities = request.form.getlist("quantity[]")
+            units = request.form.getlist("unit[]")
+            unit_prices = request.form.getlist("unit_price[]")
+
+            total_amount = 0
+            items = []
+            for index, item_name in enumerate(item_names, start=1):
+                item_name = (item_name or "").strip()
+                if not item_name:
+                    continue
+                try:
+                    quantity = int(quantities[index - 1] or 1)
+                except (TypeError, ValueError):
+                    quantity = 1
+                try:
+                    unit_price = int(float(unit_prices[index - 1] or 0))
+                except (TypeError, ValueError):
+                    unit_price = 0
+                amount = quantity * unit_price
+                merchandise_id_raw = merchandise_ids[index - 1] if index - 1 < len(merchandise_ids) else ""
+                try:
+                    merchandise_id = int(merchandise_id_raw) if merchandise_id_raw not in ("", None) else None
+                except (TypeError, ValueError):
+                    merchandise_id = None
+                items.append(
+                    {
+                        "item_no": len(items) + 1,
+                        "item_name": item_name,
+                        "merchandise_id": merchandise_id,
+                        "quantity": quantity,
+                        "unit": (units[index - 1] if index - 1 < len(units) else "") or "点",
+                        "unit_price": unit_price,
+                        "amount": amount,
+                    }
+                )
+                total_amount += amount
+
+            if not target_user_id:
+                flash("送付先クライアントを特定できませんでした。", "error")
+                return redirect(request.url)
+            if not items:
+                flash("オークション計算書に追加する明細を1件以上入力してください。", "error")
+                return redirect(request.url)
+
+            conn, cur = open_cursor()
+            try:
+                document_no = generate_admin_auction_keisan_document_no()
+                if DATABASE_URL:
+                    cur.execute(
+                        """
+                        INSERT INTO user_keisan
+                        (document_no, user_id, issue_date, recipient_name, subject, total_amount, notes, status, is_admin_created, sales_agency_request_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+                        RETURNING id
+                        """,
+                        (
+                            document_no,
+                            target_user_id,
+                            issue_date,
+                            recipient_name,
+                            subject,
+                            total_amount,
+                            notes,
+                            status,
+                            request_id,
+                        ),
+                    )
+                    keisan_id = row_to_dict(cur.fetchone())["id"]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO user_keisan
+                        (document_no, user_id, issue_date, recipient_name, subject, total_amount, notes, status, is_admin_created, sales_agency_request_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                        """,
+                        (
+                            document_no,
+                            target_user_id,
+                            issue_date,
+                            recipient_name,
+                            subject,
+                            total_amount,
+                            notes,
+                            status,
+                            request_id,
+                        ),
+                    )
+                    keisan_id = cur.lastrowid
+
+                for item in items:
+                    cur.execute(
+                        f"""
+                        INSERT INTO user_keisan_items
+                        (keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                        VALUES ({mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()})
+                        """,
+                        (
+                            keisan_id,
+                            item["item_no"],
+                            item["item_name"],
+                            item["merchandise_id"],
+                            item["quantity"],
+                            item["unit"],
+                            item["unit_price"],
+                            item["amount"],
+                        ),
+                    )
+                conn.commit()
+            finally:
+                cur.close()
+                conn.close()
+
+            flash(f"オークション計算書 {document_no} を作成しました。", "success")
+            if request_id:
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+            return redirect(url_for("admin_auction_keisan_list"))
+
+        if request_id:
+            source_request = fetch_sales_agency_request_details_v2(request_id, viewer="admin")[0]
+            if not source_request:
+                flash("対象の申請が見つかりません。", "error")
+                return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
+            prefilled_items = build_client_outgoing_prefill_items(source_request)
+
+        return render_template(
+            "admin/auction_keisan_form.html",
+            today=datetime.now().strftime("%Y-%m-%d"),
+            document_no=generate_admin_auction_keisan_document_no(),
+            items=prefilled_items,
+            source_request=source_request,
+            user_id_default=(source_request.get("user_id") if source_request else None),
+            recipient_name_default=(source_request.get("client_name") if source_request else ""),
+            subject_default=(f"{source_request.get('service_name')} 計算書" if source_request else "オークション計算書"),
+            notes_default=(f"{source_request.get('service_name')} の返送書類" if source_request else ""),
+        )
+
     module.fetch_sales_agency_request_details = fetch_sales_agency_request_details_v2
     module.fetch_admin_document_history_rows_v2 = fetch_admin_document_history_rows_v3
     module.fetch_admin_document_history_rows = fetch_admin_document_history_rows_v3
@@ -2078,6 +2805,8 @@ def apply(module: Any) -> None:
     module.admin_mitsumori_add = admin_mitsumori_add_v4
     module.admin_kaitori_shoudaku_add = admin_kaitori_shoudaku_add_v2
     module.admin_kaitori_add = admin_kaitori_add_v2
+    module.admin_shikiriosho_add = admin_shikiriosho_add_v2
+    module.admin_auction_keisan_add = admin_auction_keisan_add_v1
     module.admin_kaitori_view = admin_kaitori_view_v2
 
     for endpoint in [
@@ -2107,6 +2836,16 @@ def apply(module: Any) -> None:
     app.view_functions["admin_mitsumori_add"] = admin_mitsumori_add_v4
     app.view_functions["admin_kaitori_shoudaku_add"] = admin_kaitori_shoudaku_add_v2
     app.view_functions["admin_kaitori_add"] = admin_kaitori_add_v2
+    app.view_functions["admin_shikiriosho_add"] = admin_shikiriosho_add_v2
     app.view_functions["admin_kaitori_view"] = admin_kaitori_view_v2
     app.view_functions["admin_documents_dashboard"] = admin_documents_dashboard_v2
     app.view_functions["admin_documents_history"] = admin_documents_history_v2
+    if "admin_auction_keisan_add" in app.view_functions:
+        app.view_functions["admin_auction_keisan_add"] = admin_auction_keisan_add_v1
+    if "admin_auction_keisan_add" not in {rule.endpoint for rule in app.url_map.iter_rules()}:
+        app.add_url_rule(
+            "/admin/auction-keisan/add",
+            endpoint="admin_auction_keisan_add",
+            view_func=admin_auction_keisan_add_v1,
+            methods=["GET", "POST"],
+        )

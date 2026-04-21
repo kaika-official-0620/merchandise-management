@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申請詳細 - 山田 太郎</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+      <a class="btn btn-outline" href="documents_v2_client_incoming_wholesale.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>申請詳細</h3>
+          <p class="section-note">商品ごとの状態更新と、受付不可時のクライアント通知はこの画面で行う想定です。</p>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div class="field-block"><div class="field-label">クライアント</div><div class="field-value">山田 太郎</div></div>
+        <div class="field-block"><div class="field-label">案件番号</div><div class="field-value">REQ-2026-041</div></div>
+        <div class="field-block"><div class="field-label">サービス</div><div class="field-value">業者卸販売</div></div>
+        <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">見積依頼書 / 買取依頼書</div></div>
+      </div>
+
+      <div class="product-line">
+        <div class="product-thumb has-image">
+          <img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ">
+          <div class="product-thumb-caption">申請画像 / ルイヴィトン アルマ</div>
+        </div>
+        <div>
+          <div class="product-head">
+            <div>
+              <div class="product-title"><a href="documents_v2_product_detail_lv_alma.html">ルイヴィトン アルマ</a></div>
+              <div class="product-meta">バッグ / 商品ID KAIKA-101 / 依頼時の画像と詳細を確認可能</div>
+            </div>
+            <span id="yamada-badge-1" class="pill approved">認証済み</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">現在の状態</div><div id="yamada-state-1" class="field-value">認証済み</div></div>
+            <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">見積依頼書 / 買取依頼書</div></div>
+            <div class="field-block"><div class="field-label">受付日時</div><div class="field-value">2026/04/20 11:24</div></div>
+            <div class="field-block"><div class="field-label">メモ</div><div class="field-value">卸販売を優先希望</div></div>
+          </div>
+          <div class="status-row">
+            <select id="yamada-select-1">
+              <option>認証待ち</option>
+              <option selected>認証済み</option>
+              <option>査定中</option>
+              <option>入金待ち</option>
+            </select>
+            <button class="btn btn-primary" type="button" onclick="applyStatus('yamada-select-1','yamada-badge-1','yamada-state-1','yamada-notice-1','ルイヴィトン アルマ')">状態を反映する</button>
+            <button class="btn btn-outline" type="button" onclick="notifyUnavailable('yamada-notice-1','yamada-badge-1','yamada-state-1','ルイヴィトン アルマ')">受付不可を通知する</button>
+          </div>
+          <div id="yamada-notice-1" class="inline-notice" hidden></div>
+        </div>
+      </div>
+
+      <div class="product-line">
+        <div class="product-thumb has-image">
+          <img src="static/img_chanel_wallet.svg" alt="シャネル マトラッセ 長財布">
+          <div class="product-thumb-caption">申請画像 / シャネル 長財布</div>
+        </div>
+        <div>
+          <div class="product-head">
+            <div>
+              <div class="product-title"><a href="documents_v2_product_detail_chanel_wallet.html">シャネル マトラッセ 長財布</a></div>
+              <div class="product-meta">財布 / 商品ID KAIKA-102 / 依頼時の画像と詳細を確認可能</div>
+            </div>
+            <span id="yamada-badge-2" class="pill pending">認証待ち</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">現在の状態</div><div id="yamada-state-2" class="field-value">認証待ち</div></div>
+            <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">見積依頼書 / 買取依頼書</div></div>
+            <div class="field-block"><div class="field-label">受付日時</div><div class="field-value">2026/04/20 11:24</div></div>
+            <div class="field-block"><div class="field-label">メモ</div><div class="field-value">表面擦れあり</div></div>
+          </div>
+          <div class="status-row">
+            <select id="yamada-select-2">
+              <option selected>認証待ち</option>
+              <option>認証済み</option>
+              <option>査定中</option>
+              <option>入金待ち</option>
+            </select>
+            <button class="btn btn-primary" type="button" onclick="applyStatus('yamada-select-2','yamada-badge-2','yamada-state-2','yamada-notice-2','シャネル マトラッセ 長財布')">状態を反映する</button>
+            <button class="btn btn-outline" type="button" onclick="notifyUnavailable('yamada-notice-2','yamada-badge-2','yamada-state-2','シャネル マトラッセ 長財布')">受付不可を通知する</button>
+          </div>
+          <div id="yamada-notice-2" class="inline-notice" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview_v2.js"></script>
+</body>
+</html>

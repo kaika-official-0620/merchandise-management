@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申請詳細 - 佐藤 花子</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+      <a class="btn btn-outline" href="documents_v2_client_incoming_wholesale.html">1個前に戻る</a>
+    </div>
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>申請詳細</h3>
+          <p class="section-note">受付可否の判断と、状態更新・通知はこの画面で行う想定です。</p>
+        </div>
+      </div>
+      <div class="product-line">
+        <div class="product-thumb has-image">
+          <img src="static/img_hermes_scarf.svg" alt="エルメス スカーフ">
+          <div class="product-thumb-caption">申請画像 / エルメス スカーフ</div>
+        </div>
+        <div>
+          <div class="product-head">
+            <div>
+              <div class="product-title"><a href="documents_v2_product_detail_hermes_scarf.html">エルメス スカーフ</a></div>
+              <div class="product-meta">服飾小物 / 商品ID KAIKA-103</div>
+            </div>
+            <span id="sato-badge-1" class="pill pending">認証待ち</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">現在の状態</div><div id="sato-state-1" class="field-value">認証待ち</div></div>
+            <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">見積依頼書 / 買取依頼書</div></div>
+            <div class="field-block"><div class="field-label">受付日時</div><div class="field-value">2026/04/18 14:18</div></div>
+            <div class="field-block"><div class="field-label">メモ</div><div class="field-value">早めの査定希望</div></div>
+          </div>
+          <div class="status-row">
+            <select id="sato-select-1">
+              <option selected>認証待ち</option>
+              <option>認証済み</option>
+              <option>査定中</option>
+              <option>入金待ち</option>
+            </select>
+            <button class="btn btn-primary" type="button" onclick="applyStatus('sato-select-1','sato-badge-1','sato-state-1','sato-notice-1','エルメス スカーフ')">状態を反映する</button>
+            <button class="btn btn-outline" type="button" onclick="notifyUnavailable('sato-notice-1','sato-badge-1','sato-state-1','エルメス スカーフ')">受付不可を通知する</button>
+          </div>
+          <div id="sato-notice-1" class="inline-notice" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview_v2.js"></script>
+</body>
+</html>

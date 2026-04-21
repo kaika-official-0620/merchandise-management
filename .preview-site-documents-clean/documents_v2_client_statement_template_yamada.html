@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>買取明細書 - 山田 太郎</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_client_delivery_yamada.html">1個前に戻る</a>
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+    </div>
+    <div class="section" data-doc-editor>
+      <div class="doc-template-actions">
+        <div class="doc-toolbar">
+          <div class="doc-toolbar-copy">
+            クライアントへ返送する買取明細書です。金額や商品名、備考は書類本体の中でそのまま編集できます。
+          </div>
+          <div class="doc-toolbar-actions">
+            <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
+            <button class="btn btn-outline" type="button" data-action="reset-doc">初期値に戻す</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="doc-sheet doc-sheet-compact a4-layout">
+        <div class="doc-title">買取明細書</div>
+        <div class="doc-head-note">山田 太郎さんへ返送する、業者回答反映後の最終書類イメージです。</div>
+
+        <div class="doc-transaction-row">
+          <div class="doc-transaction-types">
+            <span class="doc-check"><span class="doc-check-box"></span> 出品</span>
+            <span class="doc-check"><span class="doc-check-box"></span> 査定</span>
+            <span class="doc-check"><span class="doc-check-box is-checked"></span> 買取</span>
+          </div>
+          <div>発行日 2026/04/21 / 担当 山本 真一</div>
+        </div>
+
+        <div class="doc-notes-box">
+          <h4>確認事項</h4>
+          <ul>
+            <li>業者からの回答内容を確認したうえで、売却済み商品のみを明細へ反映しています。</li>
+            <li>入金予定日や振込方法は、必要に応じてこちらで編集してください。</li>
+            <li>この帳票は確定申告で利用する想定のため、商品名と金額は正確に記載します。</li>
+          </ul>
+        </div>
+
+        <div class="doc-head">
+          <div class="doc-recipient">
+            <div class="doc-recipient-name">山田 太郎 様</div>
+            <div class="doc-request-text">下記の通り、買取明細をご案内いたします。</div>
+          </div>
+          <div class="doc-company">
+            <div>株式会社 開花</div>
+            <div>東京都港区南青山1-2-3</div>
+            <div>TEL 03-1234-5678</div>
+            <div>No. BUY-2026-041</div>
+          </div>
+        </div>
+
+        <div class="doc-inline-summary">
+          <div class="field-block"><div class="field-label">元案件</div><div class="field-value">REQ-2026-041</div></div>
+          <div class="field-block"><div class="field-label">サービス</div><div class="field-value">業者卸販売</div></div>
+          <div class="field-block"><div class="field-label">入金予定日</div><div class="field-value">2026/04/25</div></div>
+        </div>
+
+        <div class="doc-amount-row">
+          <div class="doc-amount-box doc-amount-box-success">
+            <span class="doc-amount-label">買取金額合計</span>
+            <strong data-total-output>¥138,000</strong>
+          </div>
+          <div class="doc-meta-list">
+            <div><span>振込方法</span><strong>銀行振込</strong></div>
+            <div><span>対象商品数</span><strong>2商品</strong></div>
+            <div><span>担当者</span><strong>山本 真一</strong></div>
+          </div>
+        </div>
+
+        <table class="doc-table" data-sum-selector=".doc-cell-price">
+          <colgroup>
+            <col style="width:5%;">
+            <col style="width:35%;">
+            <col style="width:16%;">
+            <col style="width:16%;">
+            <col style="width:8%;">
+            <col style="width:20%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>商品名</th>
+              <th>ブランド</th>
+              <th>状態</th>
+              <th>数量</th>
+              <th>買取額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="doc-cell-no">1</td>
+              <td class="doc-cell-product">ルイヴィトン アルマ</td>
+              <td class="doc-cell-brand">Louis Vuitton</td>
+              <td class="doc-cell-state">良好</td>
+              <td class="doc-cell-qty">1</td>
+              <td class="doc-cell-price">¥82,000</td>
+            </tr>
+            <tr>
+              <td class="doc-cell-no">2</td>
+              <td class="doc-cell-product">シャネル マトラッセ 長財布 ロングウォレット ブラック</td>
+              <td class="doc-cell-brand">CHANEL</td>
+              <td class="doc-cell-state">良好</td>
+              <td class="doc-cell-qty">1</td>
+              <td class="doc-cell-price">¥56,000</td>
+            </tr>
+            <tr class="blank-row"><td class="doc-cell-no">3</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">4</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">5</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">6</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">7</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">8</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">9</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">10</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">11</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">12</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">13</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">14</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">15</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-brand">&nbsp;</td><td class="doc-cell-state">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-price">&nbsp;</td></tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" class="doc-right">合計買取額</td>
+              <td class="doc-cell-price doc-total-value" data-total-output>¥138,000</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="doc-footer-space">
+          <div class="doc-notes">
+            <div class="doc-subtitle">備考</div>
+            <p>振込予定日や特記事項がある場合のみ、必要な内容をこちらで入力してください。</p>
+            <div class="doc-edit-note">備考は自動反映せず、実際にクライアントへ伝える内容だけを記入する想定です。</div>
+          </div>
+          <div class="doc-page-note">1ページあたり15行固定のため、商品数が少ない場合もA4印刷時に下まできれいに収まります。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/doc_editor.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申請詳細 - 鈴木 一郎</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+      <a class="btn btn-outline" href="documents_v2_client_incoming_auction.html">1個前に戻る</a>
+    </div>
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>申請詳細</h3>
+          <p class="section-note">業者オークションへ進める前に、商品詳細と状態を確認する想定です。</p>
+        </div>
+      </div>
+      <div class="product-line">
+        <div class="product-thumb has-image">
+          <img src="static/img_rolex_dj.svg" alt="ロレックス デイトジャスト">
+          <div class="product-thumb-caption">申請画像 / ロレックス</div>
+        </div>
+        <div>
+          <div class="product-head">
+            <div>
+              <div class="product-title"><a href="documents_v2_product_detail_rolex.html">ロレックス デイトジャスト</a></div>
+              <div class="product-meta">時計 / 商品ID KAIKA-104</div>
+            </div>
+            <span id="suzuki-badge-1" class="pill approved">認証済み</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">現在の状態</div><div id="suzuki-state-1" class="field-value">認証済み</div></div>
+            <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">見積依頼書</div></div>
+            <div class="field-block"><div class="field-label">受付日時</div><div class="field-value">2026/04/17 09:12</div></div>
+            <div class="field-block"><div class="field-label">メモ</div><div class="field-value">オークション希望</div></div>
+          </div>
+          <div class="status-row">
+            <select id="suzuki-select-1">
+              <option>認証待ち</option>
+              <option selected>認証済み</option>
+              <option>査定中</option>
+              <option>入金待ち</option>
+            </select>
+            <button class="btn btn-primary" type="button" onclick="applyStatus('suzuki-select-1','suzuki-badge-1','suzuki-state-1','suzuki-notice-1','ロレックス デイトジャスト')">状態を反映する</button>
+            <button class="btn btn-outline" type="button" onclick="notifyUnavailable('suzuki-notice-1','suzuki-badge-1','suzuki-state-1','ロレックス デイトジャスト')">受付不可を通知する</button>
+          </div>
+          <div id="suzuki-notice-1" class="inline-notice" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview_v2.js"></script>
+</body>
+</html>

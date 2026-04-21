@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>業者向け見積依頼書</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_vendor_outgoing.html">1個前に戻る</a>
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+    </div>
+
+    <div class="section" data-doc-editor>
+      <div class="doc-template-actions">
+        <div class="doc-toolbar">
+          <div class="doc-toolbar-copy">
+            業者へ送る見積依頼書です。上の入力欄ではなく、書類本体の中で宛先や商品明細、備考をそのまま修正する想定にしています。
+          </div>
+          <div class="doc-toolbar-actions">
+            <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
+            <button class="btn btn-outline" type="button" data-action="reset-doc">初期値に戻す</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="doc-sheet doc-sheet-compact a4-layout">
+        <div class="doc-title">見 積 依 頼 書</div>
+        <div class="doc-head-note">業者卸販売として送る商品のみを反映した見積依頼書イメージです。</div>
+
+        <div class="doc-head">
+          <div class="doc-recipient">
+            <div class="doc-recipient-name">東京業者センター 御中</div>
+            <div class="doc-request-text">下記商品の査定および買取可否について、ご確認をお願いいたします。</div>
+          </div>
+          <div class="doc-company">
+            <div>株式会社 開花</div>
+            <div>東京都港区南青山1-2-3</div>
+            <div>TEL 03-1234-5678</div>
+            <div>No. EST-2026-041</div>
+          </div>
+        </div>
+
+        <div class="doc-inline-summary">
+          <div class="field-block"><div class="field-label">発行日</div><div class="field-value">2026/04/21</div></div>
+          <div class="field-block"><div class="field-label">担当者</div><div class="field-value">山本 真一</div></div>
+          <div class="field-block"><div class="field-label">対象案件</div><div class="field-value">山田 太郎さん / 2商品</div></div>
+        </div>
+
+        <div class="doc-amount-row">
+          <div class="doc-amount-box">
+            <span class="doc-amount-label">見積依頼合計額</span>
+            <strong data-total-output>¥138,000</strong>
+          </div>
+          <div class="doc-meta-list">
+            <div><span>有効期限</span><strong>2026/04/28</strong></div>
+            <div><span>送付方法</span><strong>メール添付</strong></div>
+            <div><span>依頼区分</span><strong>業者卸販売</strong></div>
+          </div>
+        </div>
+
+        <table class="doc-table" data-sum-selector=".doc-cell-amount">
+          <colgroup>
+            <col style="width:5%;">
+            <col style="width:46%;">
+            <col style="width:10%;">
+            <col style="width:9%;">
+            <col style="width:14%;">
+            <col style="width:16%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>商品名・内容</th>
+              <th>数量</th>
+              <th>単位</th>
+              <th>単価</th>
+              <th>金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="doc-cell-no">1</td>
+              <td class="doc-cell-product">ルイヴィトン アルマ</td>
+              <td class="doc-cell-qty">1</td>
+              <td class="doc-cell-unit">点</td>
+              <td class="doc-cell-price">¥82,000</td>
+              <td class="doc-cell-amount">¥82,000</td>
+            </tr>
+            <tr>
+              <td class="doc-cell-no">2</td>
+              <td class="doc-cell-product">シャネル マトラッセ 長財布 ロングウォレット ブラック</td>
+              <td class="doc-cell-qty">1</td>
+              <td class="doc-cell-unit">点</td>
+              <td class="doc-cell-price">¥56,000</td>
+              <td class="doc-cell-amount">¥56,000</td>
+            </tr>
+            <tr class="blank-row"><td class="doc-cell-no">3</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">4</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">5</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">6</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">7</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">8</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">9</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">10</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">11</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">12</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">13</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">14</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+            <tr class="blank-row"><td class="doc-cell-no">15</td><td class="doc-cell-product">&nbsp;</td><td class="doc-cell-qty">&nbsp;</td><td class="doc-cell-unit">&nbsp;</td><td class="doc-cell-price">&nbsp;</td><td class="doc-cell-amount">&nbsp;</td></tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" class="doc-right">合計見積額</td>
+              <td class="doc-cell-amount doc-total-value" data-total-output>¥138,000</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="doc-footer-space">
+          <div class="doc-notes">
+            <div class="doc-subtitle">備考</div>
+            <p>査定コメントや確認事項がある場合のみ、ここへ自由入力してください。</p>
+            <div class="doc-edit-note">備考は自動反映ではなく、必要な内容だけをこちらで入力する想定です。</div>
+          </div>
+          <div class="doc-page-note">15行固定の帳票です。商品数が多い場合は2ページ目へ続く想定で、少ない場合もA4印刷時に下まできれいに収まります。</div>
+        </div>
+      </div>
+
+      <div class="card-actions" style="margin-top:16px;">
+        <a class="btn btn-primary" href="documents_v2_vendor_response_file_yamada_alma.html">この書類で返答を確認する</a>
+        <a class="btn btn-outline" href="documents_v2_vendor_outgoing.html">依頼一覧へ戻る</a>
+      </div>
+    </div>
+  </div>
+  <script src="static/doc_editor.js"></script>
+</body>
+</html>

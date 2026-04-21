@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. 業者から回答受領</title>
+  <link rel="stylesheet" href="static/preview_v2.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
+    </div>
+    <div class="page-head">
+      <div>
+        <h1>3. 業者から回答受領</h1>
+        <p>業者から届いた回答ファイルを登録し、商品ごとに内容を確認したうえで、4番のクライアント返送へ振り分けます。</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>回答ファイルを登録する</h3>
+          <p class="section-note">ファイルを登録したあと、そのまま新しいタブで内容を開いて商品ごとに確認できるようにしています。</p>
+        </div>
+      </div>
+
+      <div class="upload-form">
+        <div class="upload-row">
+          <div class="file-wrap">
+            <label>回答ファイル</label>
+            <input id="vendor-file" type="file">
+          </div>
+          <div class="field">
+            <label>受領月</label>
+            <select id="vendor-file-month">
+              <option>2026年4月</option>
+              <option>2026年3月</option>
+              <option>2026年2月</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
+          </div>
+        </div>
+        <div id="vendor-file-notice" class="inline-notice" hidden></div>
+      </div>
+
+      <div class="upload-list" style="margin-top:18px;">
+        <div class="upload-card">
+          <div class="upload-head">
+            <div>
+              <div class="upload-title">2026年4月の回答ファイル</div>
+              <div class="upload-meta">東京業者センター / 山田 太郎 / ルイヴィトン アルマ、シャネル マトラッセ 長財布</div>
+            </div>
+            <span class="pill ready">確認済み</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">売却内容</div><div class="field-value">ルイヴィトン アルマ 82,000円 / シャネル 長財布 56,000円</div></div>
+            <div class="field-block"><div class="field-label">受領月</div><div class="field-value">2026年4月</div></div>
+            <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">4番で山田 太郎さんへ返送書類を作成</div></div>
+            <div class="field-block"><div class="field-label">月別ファイル</div><div class="field-value"><a href="documents_v2_vendor_response_file_apr2026.html" target="_blank" rel="noopener noreferrer">4月分を開く</a></div></div>
+          </div>
+          <div class="upload-item-list">
+            <a class="file-item-link" href="documents_v2_vendor_response_file_yamada_alma.html" target="_blank" rel="noopener noreferrer">
+              <strong>山田 太郎 / ルイヴィトン アルマ</strong>
+              <span>売却額 82,000円 / 商品ごとの回答ファイルを確認</span>
+            </a>
+            <a class="file-item-link" href="documents_v2_vendor_response_file_yamada_wallet.html" target="_blank" rel="noopener noreferrer">
+              <strong>山田 太郎 / シャネル マトラッセ 長財布</strong>
+              <span>売却額 56,000円 / 商品ごとの回答ファイルを確認</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-head">
+            <div>
+              <div class="upload-title">2026年3月の回答ファイル</div>
+              <div class="upload-meta">ブランド市場 / 佐藤 花子 / エルメス スカーフ</div>
+            </div>
+            <span class="pill ready">確認済み</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">売却内容</div><div class="field-value">エルメス スカーフ 24,000円</div></div>
+            <div class="field-block"><div class="field-label">受領月</div><div class="field-value">2026年3月</div></div>
+            <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">4番で返送対象にするか判断</div></div>
+            <div class="field-block"><div class="field-label">月別ファイル</div><div class="field-value"><a href="documents_v2_vendor_response_file_mar2026.html" target="_blank" rel="noopener noreferrer">3月分を開く</a></div></div>
+          </div>
+          <div class="upload-item-list">
+            <a class="file-item-link" href="documents_v2_vendor_response_file_sato_scarf.html" target="_blank" rel="noopener noreferrer">
+              <strong>佐藤 花子 / エルメス スカーフ</strong>
+              <span>売却額 24,000円 / 商品ごとの回答ファイルを確認</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="routing-list" style="margin-top:18px;">
+        <div class="routing-card">
+          <div class="upload-title">4番への振り分け</div>
+          <div class="origin-meta">回答ファイルの内容を見ながら、どのクライアントの返送書類へ載せるかをここで確認できます。</div>
+          <div class="routing-actions">
+            <a class="btn btn-primary" href="documents_v2_client_delivery_yamada.html">山田 太郎さんの返送内容を開く</a>
+            <a class="btn btn-outline" href="documents_v2_client_delivery_suzuki.html">鈴木 一郎さんの返送内容を開く</a>
+            <a class="btn btn-outline" href="documents_v2_client_delivery_takahashi.html">高橋 愛さんの返送内容を開く</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/preview_v2.js"></script>
+</body>
+</html>
