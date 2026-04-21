@@ -854,59 +854,6 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None):
         'history_auctions': history_auctions,
     }
 
-
-def fetch_proxy_service_settings_rows(conn):
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT *
-            FROM proxy_service_settings
-            ORDER BY id DESC
-        """)
-        rows = [dict(row) for row in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT *
-            FROM proxy_service_settings
-            ORDER BY id DESC
-        """)
-        rows = [dict(row) for row in cur.fetchall()]
-    cur.close()
-    return rows
-
-
-def count_active_proxy_service_slots(auctions, now=None):
-    now = now or get_jst_now()
-    return sum(
-        1
-        for auction in auctions
-        if get_proxy_service_auction_state(auction, now=now).get('status') in {'open', 'scheduled'}
-    )
-
-
-def count_active_proxy_service_slots_with_candidate(conn, candidate_auction, auction_id=None, now=None):
-    now = now or get_jst_now()
-    auctions = fetch_proxy_service_settings_rows(conn)
-    candidate = dict(candidate_auction or {})
-    replaced = False
-
-    if auction_id is not None:
-        for index, auction in enumerate(auctions):
-            if auction.get('id') == auction_id:
-                merged_auction = dict(auction)
-                merged_auction.update(candidate)
-                auctions[index] = merged_auction
-                replaced = True
-                break
-        if not replaced:
-            candidate['id'] = auction_id
-
-    if auction_id is None or not replaced:
-        auctions.append(candidate)
-
-    return count_active_proxy_service_slots(auctions, now=now)
-
 # グローバルエラーハンドラー（エラーをブラウザに詳細表示）
 
 @app.errorhandler(500)
@@ -3708,13 +3655,6 @@ def derive_appraisal_status(item_status):
     return 'none'
 
 
-def db_boolean_param(value):
-    normalized = bool(value)
-    if DATABASE_URL:
-        return normalized
-    return 1 if normalized else 0
-
-
 def calculate_kaika_marketplace_fee(sale_type, sale_price, commission_rate=None, manual_commission=None):
     normalized_type = normalize_kaika_sale_type(sale_type)
     sale_price_value = max(int(sale_price or 0), 0)
@@ -4632,10 +4572,7 @@ migrate_add_scope_column()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    next_page = get_internal_redirect_target(request.values.get('next'), '')
     if current_user.is_authenticated:
-        if next_page:
-            return redirect(next_page)
         # 管理者/オーナーの場合は管理者ホームへ
         if current_user.is_admin() or current_user.is_owner():
             return redirect(url_for('admin_dashboard'))
@@ -4703,12 +4640,7 @@ def login():
                             cur.close()
                             conn.close()
                             flash('月謝の未納が3ヶ月を超えているため、ログインできません。管理者にお問い合わせください。', 'error')
-                            return render_template(
-                                'login.html',
-                                remembered_username=remembered_username,
-                                remember_me=remember_me,
-                                next_page=next_page
-                            )
+                            return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
             
             # ログイン日時更新
             if DATABASE_URL:
@@ -4729,6 +4661,7 @@ def login():
             
             flash(f'ようこそ、{user_obj.display_name}さん！', 'success')
             
+            next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
             
@@ -4743,12 +4676,7 @@ def login():
         cur.close()
         conn.close()
     
-    return render_template(
-        'login.html',
-        remembered_username=remembered_username,
-        remember_me=remember_me,
-        next_page=next_page
-    )
+    return render_template('login.html', remembered_username=remembered_username, remember_me=remember_me)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -5267,56 +5195,927 @@ def index():
 # レポート機能
 # ===================
 
+REPORT_V2_CARD_DEFINITIONS = [
+    {
+        'type': 'sales_ledger',
+        'title': '売上一覧',
+        'description': '売却日、販売先、売上、仕入、利益をそのままExcelに落とせます。',
+        'badge': 'CSV',
+        'category': 'export',
+        'filters': ['year', 'month'],
+    },
+    {
+        'type': 'purchase_ledger',
+        'title': '仕入一覧',
+        'description': '仕入日、仕入先、支払方法、仕入額を一覧で落とせます。',
+        'badge': 'CSV',
+        'category': 'export',
+        'filters': ['year', 'month'],
+    },
+    {
+        'type': 'inventory_snapshot',
+        'title': '在庫一覧',
+        'description': '現時点の在庫件数、在庫原価、出品状況を一覧で出力します。',
+        'badge': 'CSV',
+        'category': 'export',
+        'filters': ['year'],
+    },
+    {
+        'type': 'expense_ledger',
+        'title': '手数料・送料',
+        'description': '販売にひも付く手数料と送料をまとめて出力できます。',
+        'badge': 'CSV',
+        'category': 'export',
+        'filters': ['year', 'month'],
+    },
+    {
+        'type': 'management_summary',
+        'title': '売上推移・分析',
+        'description': '月ごとの売上、仕入、手数料、利益、在庫推移をまとめて確認できます。',
+        'badge': '分析',
+        'category': 'management',
+        'filters': ['year'],
+    },
+    {
+        'type': 'inventory_turnover',
+        'title': '在庫回転分析',
+        'description': '平均販売日数、在庫回転率、消化率を月ごとに確認できます。',
+        'badge': '分析',
+        'category': 'management',
+        'filters': ['year'],
+    },
+]
+
+
+def can_view_all_reports():
+    return current_user.is_admin() or current_user.is_owner()
+
+
+def format_report_currency(value):
+    return f"¥{safe_int(value):,}"
+
+
+def format_report_count(value, suffix='件'):
+    return f"{safe_int(value):,}{suffix}"
+
+
+def format_report_rate(value, suffix='回'):
+    return f"{float(value or 0):.2f}{suffix}"
+
+
+def format_report_percent(value):
+    return f"{float(value or 0):.1f}%"
+
+
+def format_report_date(value):
+    normalized = normalize_date_value(value)
+    return normalized.strftime('%Y-%m-%d') if normalized else '-'
+
+
+def get_report_period_label(year, month=0):
+    return f'{year}年通年' if not month else f'{year}年{month}月'
+
+
+def is_value_in_report_period(value, year, month=0):
+    if not value:
+        return False
+    if value.year != year:
+        return False
+    if month in (None, 0):
+        return True
+    return value.month == month
+
+
+def get_report_month_end(year, month):
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def build_report_merchandise_row(row):
+    purchase_date_value = normalize_date_value(row.get('purchase_date') or row.get('created_at'))
+    sale_date_value = normalize_date_value(row.get('sale_date'))
+    purchase_price = safe_int(row.get('purchase_price'))
+    listing_price = safe_int(row.get('listing_price'))
+    sale_price = safe_int(row.get('sale_price'))
+    shipping_cost = safe_int(row.get('shipping_cost'))
+    commission = safe_int(row.get('commission'))
+    sale_type_label = ' / '.join(get_sale_type_labels(row.get('sale_type'))) or '-'
+    supplier_name = (row.get('store_name') or row.get('supplier_detail') or '').strip() or '-'
+    sales_destination = (row.get('sales_destination') or '').strip() or '-'
+    notes_text = ' '.join((row.get('notes') or '').split())
+    if len(notes_text) > 60:
+        notes_text = notes_text[:57] + '...'
+    days_to_sell = None
+    if purchase_date_value and sale_date_value:
+        days_to_sell = max((sale_date_value - purchase_date_value).days, 0)
+
+    item = dict(row)
+    item.update({
+        'purchase_date_value': purchase_date_value,
+        'sale_date_value': sale_date_value,
+        'purchase_price': purchase_price,
+        'listing_price': listing_price,
+        'sale_price': sale_price,
+        'shipping_cost': shipping_cost,
+        'commission': commission,
+        'expense_total': shipping_cost + commission,
+        'profit': sale_price - purchase_price - shipping_cost - commission,
+        'sale_type_label': sale_type_label,
+        'supplier_name': supplier_name,
+        'sales_destination': sales_destination,
+        'purchase_date_display': format_report_date(purchase_date_value),
+        'sale_date_display': format_report_date(sale_date_value),
+        'status_label': '出品中' if row.get('is_listed') else '未出品',
+        'notes_preview': notes_text,
+        'days_to_sell': days_to_sell,
+    })
+    return item
+
+
+def fetch_report_merchandise_rows(include_all=False):
+    conn = get_db()
+    cur = None
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            user_filter = 'TRUE' if include_all else 'user_id = %s'
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            user_filter = '1=1' if include_all else 'user_id = ?'
+
+        params = () if include_all else (current_user.id,)
+        cur.execute(f"""
+            SELECT id, user_id, purchase_date, sale_date, product_name, brand_name, store_name,
+                   supplier_detail, item_condition, purchase_price, listing_price, sale_price,
+                   shipping_cost, commission, sale_type, sales_destination, payment_method,
+                   is_listed, notes, wholesale_price, wholesale_fee_rate, created_at
+            FROM merchandise
+            WHERE {user_filter}
+            ORDER BY COALESCE(sale_date, purchase_date, created_at) DESC, id DESC
+        """, params)
+        rows = [dict(row) for row in cur.fetchall()]
+    finally:
+        if cur is not None:
+            cur.close()
+        conn.close()
+
+    return [build_report_merchandise_row(row) for row in rows]
+
+
+def build_report_overview(rows):
+    today = datetime.now().date()
+    current_year = today.year
+    current_inventory = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and row['purchase_date_value'] <= today
+        and (not row.get('sale_date_value') or row['sale_date_value'] > today)
+    ]
+    current_year_sales = [
+        row for row in rows
+        if is_value_in_report_period(row.get('sale_date_value'), current_year, 0)
+    ]
+    current_year_turnover = build_inventory_turnover_metrics(
+        rows,
+        date(current_year, 1, 1),
+        today,
+    )
+
+    return {
+        'inventory_count': len(current_inventory),
+        'inventory_total': sum(row['purchase_price'] for row in current_inventory),
+        'sales_total': sum(row['sale_price'] for row in current_year_sales),
+        'profit_total': sum(row['profit'] for row in current_year_sales),
+        'fees_total': sum(row['expense_total'] for row in current_year_sales),
+        'avg_days_to_sell': current_year_turnover['avg_days_to_sell'],
+        'turnover_ratio': current_year_turnover['turnover_ratio'],
+    }
+
+
+def get_inventory_snapshot_rows(rows, snapshot_date):
+    return [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and row['purchase_date_value'] <= snapshot_date
+        and (not row.get('sale_date_value') or row['sale_date_value'] > snapshot_date)
+    ]
+
+
+def calculate_average_days_to_sell(sold_rows):
+    day_values = [row['days_to_sell'] for row in sold_rows if row.get('days_to_sell') is not None]
+    if not day_values:
+        return 0.0
+    return round(sum(day_values) / len(day_values), 1)
+
+
+def calculate_turnover_ratio(opening_value, closing_value, sold_purchase_total):
+    average_inventory_value = (safe_int(opening_value) + safe_int(closing_value)) / 2
+    if average_inventory_value <= 0:
+        return 0.0
+    return round(sold_purchase_total / average_inventory_value, 2)
+
+
+def build_inventory_turnover_metrics(rows, period_start, period_end):
+    sold_rows = [
+        row for row in rows
+        if row.get('sale_date_value')
+        and period_start <= row['sale_date_value'] <= period_end
+    ]
+    purchased_rows = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and period_start <= row['purchase_date_value'] <= period_end
+    ]
+    opening_rows = get_inventory_snapshot_rows(rows, period_start - timedelta(days=1))
+    closing_rows = get_inventory_snapshot_rows(rows, period_end)
+
+    opening_value = sum(row['purchase_price'] for row in opening_rows)
+    closing_value = sum(row['purchase_price'] for row in closing_rows)
+    sold_purchase_total = sum(row['purchase_price'] for row in sold_rows)
+    sold_count = len(sold_rows)
+    available_count = len(opening_rows) + len(purchased_rows)
+    sell_through_rate = round((sold_count / available_count) * 100, 1) if available_count else 0.0
+
+    return {
+        'sold_rows': sold_rows,
+        'purchased_rows': purchased_rows,
+        'opening_count': len(opening_rows),
+        'opening_value': opening_value,
+        'closing_count': len(closing_rows),
+        'closing_value': closing_value,
+        'sold_count': sold_count,
+        'sold_purchase_total': sold_purchase_total,
+        'avg_days_to_sell': calculate_average_days_to_sell(sold_rows),
+        'turnover_ratio': calculate_turnover_ratio(opening_value, closing_value, sold_purchase_total),
+        'sell_through_rate': sell_through_rate,
+    }
+
+
+def build_tax_summary_report(rows, year):
+    today = datetime.now().date()
+    year_start = date(year, 1, 1)
+    current_year = today.year
+    snapshot_date = date(year, 12, 31) if year < current_year else today
+    snapshot_label = '期末在庫' if year < current_year else '基準日在庫'
+
+    sales_items = [row for row in rows if is_value_in_report_period(row.get('sale_date_value'), year, 0)]
+    purchase_items = [row for row in rows if is_value_in_report_period(row.get('purchase_date_value'), year, 0)]
+    opening_inventory_items = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and row['purchase_date_value'] < year_start
+        and (not row.get('sale_date_value') or row['sale_date_value'] >= year_start)
+    ]
+    closing_inventory_items = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and row['purchase_date_value'] <= snapshot_date
+        and (not row.get('sale_date_value') or row['sale_date_value'] > snapshot_date)
+    ]
+
+    total_sales = sum(row['sale_price'] for row in sales_items)
+    total_purchase = sum(row['purchase_price'] for row in purchase_items)
+    opening_inventory = sum(row['purchase_price'] for row in opening_inventory_items)
+    closing_inventory = sum(row['purchase_price'] for row in closing_inventory_items)
+    total_shipping = sum(row['shipping_cost'] for row in sales_items)
+    total_commission = sum(row['commission'] for row in sales_items)
+    total_expenses = total_shipping + total_commission
+    cost_of_goods_sold = opening_inventory + total_purchase - closing_inventory
+    gross_profit = total_sales - cost_of_goods_sold
+    tracked_profit = gross_profit - total_expenses
+
+    monthly_rows = []
+    monthly_csv_rows = []
+    for month_number in range(1, 13):
+        month_sales_items = [
+            row for row in sales_items
+            if row.get('sale_date_value') and row['sale_date_value'].month == month_number
+        ]
+        month_purchase_items = [
+            row for row in purchase_items
+            if row.get('purchase_date_value') and row['purchase_date_value'].month == month_number
+        ]
+        month_sales = sum(row['sale_price'] for row in month_sales_items)
+        month_purchases = sum(row['purchase_price'] for row in month_purchase_items)
+        month_expenses = sum(row['expense_total'] for row in month_sales_items)
+        month_profit = sum(row['profit'] for row in month_sales_items)
+        month_label = f'{month_number}月'
+        monthly_rows.append([
+            month_label,
+            format_report_currency(month_sales),
+            format_report_currency(month_purchases),
+            format_report_currency(month_expenses),
+            format_report_currency(month_profit),
+        ])
+        monthly_csv_rows.append([
+            month_label,
+            month_sales,
+            month_purchases,
+            month_expenses,
+            month_profit,
+        ])
+
+    summary_items = [
+        {'label': '対象年', 'value': f'{year}年', 'csv_value': year},
+        {'label': '売上合計', 'value': format_report_currency(total_sales), 'csv_value': total_sales},
+        {'label': '期首在庫', 'value': format_report_currency(opening_inventory), 'csv_value': opening_inventory},
+        {'label': '当年仕入', 'value': format_report_currency(total_purchase), 'csv_value': total_purchase},
+        {'label': snapshot_label, 'value': format_report_currency(closing_inventory), 'csv_value': closing_inventory},
+        {'label': '売上原価', 'value': format_report_currency(cost_of_goods_sold), 'csv_value': cost_of_goods_sold},
+        {'label': '送料・手数料', 'value': format_report_currency(total_expenses), 'csv_value': total_expenses},
+        {'label': '概算利益', 'value': format_report_currency(tracked_profit), 'csv_value': tracked_profit},
+    ]
+
+    notes = [
+        '国税庁の記帳・帳簿保存と青色申告決算書 / 収支内訳書で整理が必要になる、売上・仕入・棚卸・必要経費の観点に合わせて構成しています。',
+        'この画面に含まれる必要経費は、このシステムで管理している送料と手数料のみです。家賃、通信費、水道光熱費、減価償却費などは別管理が必要です。',
+    ]
+    if year >= current_year:
+        notes.append(f'{snapshot_date.strftime("%Y-%m-%d")} 時点の暫定集計です。年末確定後は棚卸額が変わる可能性があります。')
+
+    return {
+        'title': '確定申告サマリー',
+        'description': f'{year}年の申告準備用サマリーです。',
+        'summary': [{'label': item['label'], 'value': item['value']} for item in summary_items],
+        'notes': notes,
+        'columns': [
+            {'label': '月', 'align': 'center'},
+            {'label': '売上', 'align': 'right'},
+            {'label': '仕入', 'align': 'right'},
+            {'label': '送料・手数料', 'align': 'right'},
+            {'label': '販売ベース利益', 'align': 'right'},
+        ],
+        'rows': monthly_rows,
+        'empty_message': '対象年の集計データはありません。',
+        'filename': f'tax_summary_{year}.csv',
+        'csv_sections': [
+            {
+                'title': 'サマリー',
+                'columns': ['項目', '値'],
+                'rows': [[item['label'], item['csv_value']] for item in summary_items],
+            },
+            {
+                'title': '月次推移',
+                'columns': ['月', '売上', '仕入', '送料・手数料', '販売ベース利益'],
+                'rows': monthly_csv_rows,
+            },
+        ],
+    }
+
+
+def build_sales_ledger_report(rows, year, month):
+    filtered_rows = sorted(
+        [row for row in rows if is_value_in_report_period(row.get('sale_date_value'), year, month)],
+        key=lambda row: (row.get('sale_date_value') or date.min, row.get('id') or 0)
+    )
+
+    total_sales = sum(row['sale_price'] for row in filtered_rows)
+    total_expenses = sum(row['expense_total'] for row in filtered_rows)
+    total_profit = sum(row['profit'] for row in filtered_rows)
+
+    return {
+        'title': '売上一覧',
+        'description': f'{get_report_period_label(year, month)} の売上一覧です。',
+        'summary': [
+            {'label': '件数', 'value': format_report_count(len(filtered_rows))},
+            {'label': '売上合計', 'value': format_report_currency(total_sales)},
+            {'label': '送料・手数料', 'value': format_report_currency(total_expenses)},
+            {'label': '販売ベース利益', 'value': format_report_currency(total_profit)},
+        ],
+        'notes': ['利益は 売上 - 仕入 - 送料 - 手数料 で計算しています。'],
+        'columns': [
+            {'label': '売却日', 'align': 'center'},
+            {'label': '商品ID', 'align': 'center'},
+            {'label': '商品名', 'align': 'left'},
+            {'label': 'ブランド', 'align': 'left'},
+            {'label': '販売先', 'align': 'left'},
+            {'label': '売却区分', 'align': 'left'},
+            {'label': '売上', 'align': 'right'},
+            {'label': '仕入', 'align': 'right'},
+            {'label': '送料', 'align': 'right'},
+            {'label': '手数料', 'align': 'right'},
+            {'label': '利益', 'align': 'right'},
+        ],
+        'rows': [[
+            row['sale_date_display'],
+            str(row.get('id') or ''),
+            row.get('product_name') or '-',
+            row.get('brand_name') or '-',
+            row['sales_destination'],
+            row['sale_type_label'],
+            format_report_currency(row['sale_price']),
+            format_report_currency(row['purchase_price']),
+            format_report_currency(row['shipping_cost']),
+            format_report_currency(row['commission']),
+            format_report_currency(row['profit']),
+        ] for row in filtered_rows],
+        'empty_message': '対象期間の売上データはありません。',
+        'filename': f'sales_ledger_{year}_{"all" if month == 0 else str(month).zfill(2)}.csv',
+        'csv_sections': [
+            {
+                'title': '売上一覧',
+                'columns': ['売却日', '商品ID', '商品名', 'ブランド', '販売先', '売却区分', '売上', '仕入', '送料', '手数料', '利益'],
+                'rows': [[
+                    row['sale_date_display'],
+                    row.get('id') or '',
+                    row.get('product_name') or '',
+                    row.get('brand_name') or '',
+                    row['sales_destination'],
+                    row['sale_type_label'],
+                    row['sale_price'],
+                    row['purchase_price'],
+                    row['shipping_cost'],
+                    row['commission'],
+                    row['profit'],
+                ] for row in filtered_rows],
+            }
+        ],
+    }
+
+
+def build_purchase_ledger_report(rows, year, month):
+    filtered_rows = sorted(
+        [row for row in rows if is_value_in_report_period(row.get('purchase_date_value'), year, month)],
+        key=lambda row: (row.get('purchase_date_value') or date.min, row.get('id') or 0)
+    )
+
+    total_purchase = sum(row['purchase_price'] for row in filtered_rows)
+    total_listing = sum(row['listing_price'] for row in filtered_rows)
+
+    return {
+        'title': '仕入一覧',
+        'description': f'{get_report_period_label(year, month)} の仕入一覧です。',
+        'summary': [
+            {'label': '件数', 'value': format_report_count(len(filtered_rows))},
+            {'label': '仕入合計', 'value': format_report_currency(total_purchase)},
+            {'label': '出品価格合計', 'value': format_report_currency(total_listing)},
+        ],
+        'notes': ['日付、仕入先、支払方法、金額をまとめて確認できます。'],
+        'columns': [
+            {'label': '仕入日', 'align': 'center'},
+            {'label': '商品ID', 'align': 'center'},
+            {'label': '商品名', 'align': 'left'},
+            {'label': 'ブランド', 'align': 'left'},
+            {'label': '仕入先', 'align': 'left'},
+            {'label': '支払方法', 'align': 'left'},
+            {'label': '状態', 'align': 'left'},
+            {'label': '仕入額', 'align': 'right'},
+            {'label': '出品価格', 'align': 'right'},
+        ],
+        'rows': [[
+            row['purchase_date_display'],
+            str(row.get('id') or ''),
+            row.get('product_name') or '-',
+            row.get('brand_name') or '-',
+            row['supplier_name'],
+            row.get('payment_method') or '-',
+            row.get('item_condition') or '-',
+            format_report_currency(row['purchase_price']),
+            format_report_currency(row['listing_price']),
+        ] for row in filtered_rows],
+        'empty_message': '対象期間の仕入データはありません。',
+        'filename': f'purchase_ledger_{year}_{"all" if month == 0 else str(month).zfill(2)}.csv',
+        'csv_sections': [
+            {
+                'title': '仕入一覧',
+                'columns': ['仕入日', '商品ID', '商品名', 'ブランド', '仕入先', '支払方法', '状態', '仕入額', '出品価格'],
+                'rows': [[
+                    row['purchase_date_display'],
+                    row.get('id') or '',
+                    row.get('product_name') or '',
+                    row.get('brand_name') or '',
+                    row['supplier_name'],
+                    row.get('payment_method') or '',
+                    row.get('item_condition') or '',
+                    row['purchase_price'],
+                    row['listing_price'],
+                ] for row in filtered_rows],
+            }
+        ],
+    }
+
+
+def build_inventory_snapshot_report(rows, year):
+    today = datetime.now().date()
+    snapshot_date = date(year, 12, 31) if year < today.year else today
+    filtered_rows = sorted(
+        [
+            row for row in rows
+            if row.get('purchase_date_value')
+            and row['purchase_date_value'] <= snapshot_date
+            and (not row.get('sale_date_value') or row['sale_date_value'] > snapshot_date)
+        ],
+        key=lambda row: (row.get('purchase_date_value') or date.min, row.get('id') or 0)
+    )
+
+    total_purchase = sum(row['purchase_price'] for row in filtered_rows)
+    total_listing = sum(row['listing_price'] for row in filtered_rows)
+
+    note = f'{snapshot_date.strftime("%Y-%m-%d")} 時点の在庫です。'
+    if year >= today.year:
+        note += ' 当年分は現時点の暫定棚卸として扱ってください。'
+
+    return {
+        'title': '在庫一覧',
+        'description': f'{snapshot_date.strftime("%Y-%m-%d")} 時点の在庫一覧です。',
+        'summary': [
+            {'label': '基準日', 'value': snapshot_date.strftime('%Y-%m-%d')},
+            {'label': '在庫件数', 'value': format_report_count(len(filtered_rows))},
+            {'label': '在庫原価', 'value': format_report_currency(total_purchase)},
+            {'label': '出品価格合計', 'value': format_report_currency(total_listing)},
+        ],
+        'notes': [note],
+        'columns': [
+            {'label': '仕入日', 'align': 'center'},
+            {'label': '商品ID', 'align': 'center'},
+            {'label': '商品名', 'align': 'left'},
+            {'label': 'ブランド', 'align': 'left'},
+            {'label': '仕入先', 'align': 'left'},
+            {'label': '状態', 'align': 'left'},
+            {'label': '仕入額', 'align': 'right'},
+            {'label': '出品価格', 'align': 'right'},
+            {'label': '出品状況', 'align': 'center'},
+        ],
+        'rows': [[
+            row['purchase_date_display'],
+            str(row.get('id') or ''),
+            row.get('product_name') or '-',
+            row.get('brand_name') or '-',
+            row['supplier_name'],
+            row.get('item_condition') or '-',
+            format_report_currency(row['purchase_price']),
+            format_report_currency(row['listing_price']),
+            row['status_label'],
+        ] for row in filtered_rows],
+        'empty_message': '基準日時点の在庫データはありません。',
+        'filename': f'inventory_snapshot_{year}.csv',
+        'csv_sections': [
+            {
+                'title': '在庫一覧',
+                'columns': ['仕入日', '商品ID', '商品名', 'ブランド', '仕入先', '状態', '仕入額', '出品価格', '出品状況'],
+                'rows': [[
+                    row['purchase_date_display'],
+                    row.get('id') or '',
+                    row.get('product_name') or '',
+                    row.get('brand_name') or '',
+                    row['supplier_name'],
+                    row.get('item_condition') or '',
+                    row['purchase_price'],
+                    row['listing_price'],
+                    row['status_label'],
+                ] for row in filtered_rows],
+            }
+        ],
+    }
+
+
+def build_expense_ledger_report(rows, year, month):
+    filtered_rows = sorted(
+        [
+            row for row in rows
+            if is_value_in_report_period(row.get('sale_date_value'), year, month)
+            and row['expense_total'] > 0
+        ],
+        key=lambda row: (row.get('sale_date_value') or date.min, row.get('id') or 0)
+    )
+
+    total_shipping = sum(row['shipping_cost'] for row in filtered_rows)
+    total_commission = sum(row['commission'] for row in filtered_rows)
+    total_expense = total_shipping + total_commission
+
+    return {
+        'title': '手数料・送料',
+        'description': f'{get_report_period_label(year, month)} の手数料・送料一覧です。',
+        'summary': [
+            {'label': '件数', 'value': format_report_count(len(filtered_rows))},
+            {'label': '送料合計', 'value': format_report_currency(total_shipping)},
+            {'label': '手数料合計', 'value': format_report_currency(total_commission)},
+            {'label': '必要経費合計', 'value': format_report_currency(total_expense)},
+        ],
+        'notes': ['この画面では、商品ごとに登録されている送料と手数料のみを必要経費として集計しています。'],
+        'columns': [
+            {'label': '売却日', 'align': 'center'},
+            {'label': '商品ID', 'align': 'center'},
+            {'label': '商品名', 'align': 'left'},
+            {'label': '販売先', 'align': 'left'},
+            {'label': '売却区分', 'align': 'left'},
+            {'label': '送料', 'align': 'right'},
+            {'label': '手数料', 'align': 'right'},
+            {'label': '経費計', 'align': 'right'},
+        ],
+        'rows': [[
+            row['sale_date_display'],
+            str(row.get('id') or ''),
+            row.get('product_name') or '-',
+            row['sales_destination'],
+            row['sale_type_label'],
+            format_report_currency(row['shipping_cost']),
+            format_report_currency(row['commission']),
+            format_report_currency(row['expense_total']),
+        ] for row in filtered_rows],
+        'empty_message': '対象期間の経費データはありません。',
+        'filename': f'expense_ledger_{year}_{"all" if month == 0 else str(month).zfill(2)}.csv',
+        'csv_sections': [
+            {
+                'title': '手数料・送料一覧',
+                'columns': ['売却日', '商品ID', '商品名', '販売先', '売却区分', '送料', '手数料', '経費計'],
+                'rows': [[
+                    row['sale_date_display'],
+                    row.get('id') or '',
+                    row.get('product_name') or '',
+                    row['sales_destination'],
+                    row['sale_type_label'],
+                    row['shipping_cost'],
+                    row['commission'],
+                    row['expense_total'],
+                ] for row in filtered_rows],
+            }
+        ],
+    }
+
+
+def build_inventory_turnover_report(rows, year):
+    today = datetime.now().date()
+    month_limit = 12 if year < today.year else today.month
+
+    visible_months = []
+    for month_number in range(1, month_limit + 1):
+        month_end = get_report_month_end(year, month_number)
+        if year == today.year and month_end > today:
+            month_end = today
+        month_start = date(year, month_number, 1)
+        metrics = build_inventory_turnover_metrics(rows, month_start, month_end)
+
+        visible_months.append({
+            'month_label': f'{month_number}月',
+            'opening_count': metrics['opening_count'],
+            'sold_count': metrics['sold_count'],
+            'closing_count': metrics['closing_count'],
+            'closing_value': metrics['closing_value'],
+            'avg_days_to_sell': metrics['avg_days_to_sell'],
+            'turnover_ratio': metrics['turnover_ratio'],
+            'sell_through_rate': metrics['sell_through_rate'],
+        })
+
+    period_end = today if year == today.year else date(year, 12, 31)
+    year_metrics = build_inventory_turnover_metrics(rows, date(year, 1, 1), period_end)
+
+    return {
+        'title': '在庫回転分析',
+        'description': f'{year}年の在庫回転分析です。',
+        'summary': [
+            {'label': '販売件数', 'value': format_report_count(year_metrics['sold_count'])},
+            {'label': '平均販売日数', 'value': f"{year_metrics['avg_days_to_sell']:.1f}日"},
+            {'label': '在庫回転率', 'value': format_report_rate(year_metrics['turnover_ratio'])},
+            {'label': '消化率', 'value': format_report_percent(year_metrics['sell_through_rate'])},
+            {'label': '現在在庫数', 'value': format_report_count(year_metrics['closing_count'])},
+        ],
+        'notes': [
+            '在庫回転率は、売れた商品の仕入原価 ÷ 平均在庫原価で計算しています。',
+            '消化率は、販売件数 ÷（月初在庫件数 + 当月仕入件数）で計算しています。',
+        ],
+        'columns': [
+            {'label': '月', 'align': 'center'},
+            {'label': '月初在庫数', 'align': 'right'},
+            {'label': '販売件数', 'align': 'right'},
+            {'label': '月末在庫数', 'align': 'right'},
+            {'label': '月末在庫原価', 'align': 'right'},
+            {'label': '平均販売日数', 'align': 'right'},
+            {'label': '在庫回転率', 'align': 'right'},
+            {'label': '消化率', 'align': 'right'},
+        ],
+        'rows': [[
+            month['month_label'],
+            str(month['opening_count']),
+            str(month['sold_count']),
+            str(month['closing_count']),
+            format_report_currency(month['closing_value']),
+            f"{month['avg_days_to_sell']:.1f}日",
+            format_report_rate(month['turnover_ratio']),
+            format_report_percent(month['sell_through_rate']),
+        ] for month in visible_months],
+        'empty_message': '対象年の回転データはありません。',
+        'filename': f'inventory_turnover_{year}.csv',
+        'csv_sections': [
+            {
+                'title': '在庫回転分析',
+                'columns': ['月', '月初在庫数', '販売件数', '月末在庫数', '月末在庫原価', '平均販売日数', '在庫回転率', '消化率'],
+                'rows': [[
+                    month['month_label'],
+                    month['opening_count'],
+                    month['sold_count'],
+                    month['closing_count'],
+                    month['closing_value'],
+                    month['avg_days_to_sell'],
+                    month['turnover_ratio'],
+                    month['sell_through_rate'],
+                ] for month in visible_months],
+            }
+        ],
+    }
+
+
+def build_management_summary_report(rows, year):
+    today = datetime.now().date()
+    month_limit = 12 if year < today.year else today.month
+
+    visible_months = []
+    for month_number in range(1, month_limit + 1):
+        month_end = get_report_month_end(year, month_number)
+        if year == today.year and month_end > today:
+            month_end = today
+        month_start = date(year, month_number, 1)
+
+        month_sales_items = [
+            row for row in rows
+            if is_value_in_report_period(row.get('sale_date_value'), year, month_number)
+        ]
+        month_purchase_items = [
+            row for row in rows
+            if is_value_in_report_period(row.get('purchase_date_value'), year, month_number)
+        ]
+        turnover_metrics = build_inventory_turnover_metrics(rows, month_start, month_end)
+
+        total_sales = sum(row['sale_price'] for row in month_sales_items)
+        total_purchase = sum(row['purchase_price'] for row in month_purchase_items)
+        total_expenses = sum(row['expense_total'] for row in month_sales_items)
+        total_profit = sum(row['profit'] for row in month_sales_items)
+        sold_count = len(month_sales_items)
+        avg_sale = int(round(total_sales / sold_count)) if sold_count else 0
+        avg_profit = int(round(total_profit / sold_count)) if sold_count else 0
+
+        visible_months.append({
+            'month_label': f'{month_number}月',
+            'sold_count': sold_count,
+            'total_sales': total_sales,
+            'total_purchase': total_purchase,
+            'total_expenses': total_expenses,
+            'total_profit': total_profit,
+            'avg_sale': avg_sale,
+            'avg_profit': avg_profit,
+            'avg_days_to_sell': turnover_metrics['avg_days_to_sell'],
+            'turnover_ratio': turnover_metrics['turnover_ratio'],
+            'inventory_count': turnover_metrics['closing_count'],
+            'inventory_total': turnover_metrics['closing_value'],
+        })
+
+    total_sales = sum(month['total_sales'] for month in visible_months)
+    total_purchase = sum(month['total_purchase'] for month in visible_months)
+    total_expenses = sum(month['total_expenses'] for month in visible_months)
+    total_profit = sum(month['total_profit'] for month in visible_months)
+    current_inventory_total = visible_months[-1]['inventory_total'] if visible_months else 0
+    avg_days = round(sum(month['avg_days_to_sell'] for month in visible_months) / len(visible_months), 1) if visible_months else 0.0
+    avg_turnover = round(sum(month['turnover_ratio'] for month in visible_months) / len(visible_months), 2) if visible_months else 0.0
+
+    return {
+        'title': '売上推移・分析',
+        'description': f'{year}年の売上推移と分析一覧です。',
+        'summary': [
+            {'label': '売上合計', 'value': format_report_currency(total_sales)},
+            {'label': '仕入合計', 'value': format_report_currency(total_purchase)},
+            {'label': '手数料・送料合計', 'value': format_report_currency(total_expenses)},
+            {'label': '利益合計', 'value': format_report_currency(total_profit)},
+            {'label': '平均販売日数', 'value': f'{avg_days:.1f}日'},
+            {'label': '平均在庫回転率', 'value': format_report_rate(avg_turnover)},
+            {'label': '最新在庫原価', 'value': format_report_currency(current_inventory_total)},
+        ],
+        'notes': ['売上、仕入、手数料、利益、在庫、回転を月ごとに並べた分析用のCSVです。'],
+        'columns': [
+            {'label': '月', 'align': 'center'},
+            {'label': '販売件数', 'align': 'right'},
+            {'label': '売上', 'align': 'right'},
+            {'label': '仕入', 'align': 'right'},
+            {'label': '手数料・送料', 'align': 'right'},
+            {'label': '利益', 'align': 'right'},
+            {'label': '平均売上', 'align': 'right'},
+            {'label': '平均利益', 'align': 'right'},
+            {'label': '平均販売日数', 'align': 'right'},
+            {'label': '在庫回転率', 'align': 'right'},
+            {'label': '月末在庫数', 'align': 'right'},
+            {'label': '月末在庫原価', 'align': 'right'},
+        ],
+        'rows': [[
+            month['month_label'],
+            str(month['sold_count']),
+            format_report_currency(month['total_sales']),
+            format_report_currency(month['total_purchase']),
+            format_report_currency(month['total_expenses']),
+            format_report_currency(month['total_profit']),
+            format_report_currency(month['avg_sale']),
+            format_report_currency(month['avg_profit']),
+            f"{month['avg_days_to_sell']:.1f}日",
+            format_report_rate(month['turnover_ratio']),
+            str(month['inventory_count']),
+            format_report_currency(month['inventory_total']),
+        ] for month in visible_months],
+        'empty_message': '対象年の経営データはありません。',
+        'filename': f'management_summary_{year}.csv',
+        'csv_sections': [
+            {
+                'title': '売上推移・分析',
+                'columns': ['月', '販売件数', '売上', '仕入', '手数料・送料', '利益', '平均売上', '平均利益', '平均販売日数', '在庫回転率', '月末在庫数', '月末在庫原価'],
+                'rows': [[
+                    month['month_label'],
+                    month['sold_count'],
+                    month['total_sales'],
+                    month['total_purchase'],
+                    month['total_expenses'],
+                    month['total_profit'],
+                    month['avg_sale'],
+                    month['avg_profit'],
+                    month['avg_days_to_sell'],
+                    month['turnover_ratio'],
+                    month['inventory_count'],
+                    month['inventory_total'],
+                ] for month in visible_months],
+            }
+        ],
+    }
+
+
+def build_report_v2_payload(report_type, year, month=0):
+    rows = fetch_report_merchandise_rows(include_all=can_view_all_reports())
+
+    if report_type == 'sales_ledger':
+        return build_sales_ledger_report(rows, year, month)
+    if report_type == 'purchase_ledger':
+        return build_purchase_ledger_report(rows, year, month)
+    if report_type == 'inventory_snapshot':
+        return build_inventory_snapshot_report(rows, year)
+    if report_type == 'expense_ledger':
+        return build_expense_ledger_report(rows, year, month)
+    if report_type == 'management_summary':
+        return build_management_summary_report(rows, year)
+    if report_type == 'inventory_turnover':
+        return build_inventory_turnover_report(rows, year)
+
+    raise ValueError('unsupported report type')
+
 @app.route('/reports')
 @login_required
 def reports():
     """レポートページ"""
     from datetime import datetime
     ensure_line_multi_account_schema()
-    
-    conn = get_db()
+
     current_year = datetime.now().year
     current_month = datetime.now().month
     years = list(range(current_year - 5, current_year + 1))
-    
-    is_admin_user = current_user.is_admin()
-    
-    # 在庫数と在庫総額を取得
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
-            FROM merchandise 
-            WHERE sale_date IS NULL
-              AND ({user_filter})
-        """.format(user_filter='TRUE' if is_admin_user else 'user_id = %s'),
-        () if is_admin_user else (current_user.id,))
-        result = cur.fetchone()
 
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT COUNT(*) as count, COALESCE(SUM(purchase_price), 0) as total
-            FROM merchandise 
-            WHERE sale_date IS NULL
-              AND ({user_filter})
-        """.format(user_filter='1=1' if is_admin_user else 'user_id = ?'),
-        () if is_admin_user else (current_user.id,))
-        result = dict(cur.fetchone())
+    export_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'export']
+    management_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'management']
 
-    
-    inventory_count = result['count'] if result else 0
-    inventory_total = result['total'] if result else 0
-    
-    cur.close()
-    conn.close()
-    
     return render_template('reports.html',
                           years=years,
                           current_year=current_year,
                           current_month=current_month,
-                          inventory_count=inventory_count,
-                          inventory_total=inventory_total)
+                          export_cards=export_cards,
+                          management_cards=management_cards)
+
+
+@app.route('/api/report-v2/<report_type>')
+@login_required
+def api_report_v2(report_type):
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', 0, type=int)
+
+    try:
+        payload = build_report_v2_payload(report_type, year, month)
+    except ValueError:
+        return jsonify({'error': 'unsupported report type'}), 404
+
+    return jsonify(payload)
+
+
+@app.route('/api/report-v2/<report_type>/download')
+@login_required
+def api_report_v2_download(report_type):
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', 0, type=int)
+
+    try:
+        payload = build_report_v2_payload(report_type, year, month)
+    except ValueError:
+        return redirect(url_for('reports'))
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    for section_index, section in enumerate(payload.get('csv_sections') or []):
+        title = section.get('title')
+        if title:
+            writer.writerow([title])
+        writer.writerow(section.get('columns') or [])
+        for row in section.get('rows') or []:
+            writer.writerow(row)
+        if section_index != len(payload.get('csv_sections') or []) - 1:
+            writer.writerow([])
+
+    response = make_response('\ufeff' + output.getvalue())
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = f'attachment; filename={payload.get("filename", "report.csv")}'
+    return response
 
 
 @app.route('/api/user-announcements')
@@ -7325,7 +8124,6 @@ def edit_item(id):
             if not can_edit_basic_fields:
                 item_status = 'sold' if item_dict.get('sale_date') else ('listed' if item_dict.get('is_listed') else 'unlisted')
             appraisal_status = derive_appraisal_status(item_status)
-            is_listed_db_value = db_boolean_param(item_status in ['listed', 'sold'])
 
             is_kaika_scope = is_kaika_inventory_item(item_dict)
             listing_price_value = int(request.form.get('listing_price') or 0) if can_edit_basic_fields else int(item_dict.get('listing_price') or 0)
@@ -7353,7 +8151,6 @@ def edit_item(id):
                 else (parse_money_value(request.form.get('commission'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('commission'), 0))
             )
             is_shipped_value = bool(item_dict.get('is_shipped'))
-            is_shipped_db_value = db_boolean_param(is_shipped_value)
             if not can_edit_basic_fields:
                 photo_path = item_dict.get('photo_path')
                 additional_photos_json = item_dict.get('additional_photos')
@@ -7394,7 +8191,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        is_listed_db_value,
+                        item_status in ['listed', 'sold'],
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7402,7 +8199,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_db_value,
+                        is_shipped_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7440,7 +8237,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        is_listed_db_value,
+                        item_status in ['listed', 'sold'],
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7448,7 +8245,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_db_value,
+                        is_shipped_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7487,7 +8284,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        is_listed_db_value,
+                        1 if item_status in ['listed', 'sold'] else 0,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7495,7 +8292,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_db_value,
+                        1 if is_shipped_value else 0,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7533,7 +8330,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        is_listed_db_value,
+                        1 if item_status in ['listed', 'sold'] else 0,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7541,7 +8338,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_db_value,
+                        1 if is_shipped_value else 0,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7638,7 +8435,6 @@ def view_item(id):
             cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
     
     item = cur.fetchone()
-    long_term_request = get_long_term_request_map(conn, [id]).get(id) if item else None
     cur.close()
     conn.close()
     
@@ -7685,47 +8481,12 @@ def view_item(id):
             item_dict.get('expected_shipping', 0) or 0,
             item_dict.get('expected_commission', 0) or 0
         )
-
-    item_dict['long_term_request'] = None
-    if long_term_request:
-        status_context = get_long_term_request_status_context(
-            long_term_request.get('disposal_type'),
-            long_term_request.get('status'),
-            sale_date=item_dict.get('sale_date')
-        )
-        action_context = get_long_term_request_action_context(
-            long_term_request.get('disposal_type'),
-            long_term_request.get('status'),
-            sale_date=item_dict.get('sale_date')
-        )
-        item_dict['storage_started_at_display'] = format_storage_started_date(item_dict)
-        item_dict['days_since_purchase'] = calculate_days_in_storage(item_dict)
-        item_dict['long_term_request'] = {
-            'id': long_term_request.get('id'),
-            'type_label': LONG_TERM_DISPOSAL_TYPE_LABELS.get(long_term_request.get('disposal_type'), '未申請'),
-            'status_stage': status_context['status_stage'],
-            'status_label': status_context['status_label'],
-            'next_action_label': status_context['next_action_label'],
-            'requested_at_display': format_optional_datetime(long_term_request.get('created_at')),
-            'processed_at_display': format_optional_datetime(long_term_request.get('processed_at'), fallback=''),
-            'shipping_name': long_term_request.get('shipping_name'),
-            'shipping_phone': long_term_request.get('shipping_phone'),
-            'shipping_address': long_term_request.get('shipping_address'),
-            'admin_note': long_term_request.get('admin_note'),
-            'show_sale_entry': action_context['show_sale_entry'],
-            'sale_entry_label': action_context['sale_entry_label'],
-            'finish_action': action_context['finish_action'],
-            'finish_action_label': action_context['finish_action_label'],
-            'finish_confirm_message': action_context['finish_confirm_message'],
-        }
     
     # リファラーから戻り先URLを判定
-    referrer = get_internal_redirect_target(
-        request.referrer,
-        '',
-        allowed_prefixes=('/admin/user-products', '/admin/disposal-requests', '/admin/users/', '/long-term-items')
-    )
-    if referrer:
+    referrer = request.referrer or ''
+    if 'admin/user-products' in referrer:
+        back_url = url_for('admin_user_products')
+    elif '/admin/users/' in referrer and '/items' in referrer:
         back_url = referrer
     elif current_user.is_admin() or current_user.is_owner():
         back_url = url_for('admin_items')
@@ -10768,85 +11529,6 @@ def admin_proxy_service():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("""
-                SELECT ps.*, 
-                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
-                       (SELECT COUNT(*) FROM proxy_service_bids b 
-                        JOIN merchandise m ON b.merchandise_id = m.id 
-                        WHERE m.auction_id = ps.id) as bid_count
-                FROM proxy_service_settings ps
-                ORDER BY ps.id DESC
-            """)
-            auctions = [dict(a) for a in cur.fetchall()]
-            cur.execute("""
-                SELECT u.id, u.username, u.display_name, u.role,
-                       CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
-                FROM users u
-                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-                ORDER BY 
-                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                    u.id
-            """)
-            users = [dict(u) for u in cur.fetchall()]
-        else:
-            import sqlite3
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT ps.*, 
-                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
-                       (SELECT COUNT(*) FROM proxy_service_bids b 
-                        JOIN merchandise m ON b.merchandise_id = m.id 
-                        WHERE m.auction_id = ps.id) as bid_count
-                FROM proxy_service_settings ps
-                ORDER BY ps.id DESC
-            """)
-            auctions = [dict(a) for a in cur.fetchall()]
-            cur.execute("""
-                SELECT u.id, u.username, u.display_name, u.role,
-                       CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
-                FROM users u
-                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-                ORDER BY 
-                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                    u.id
-            """)
-            users = [dict(u) for u in cur.fetchall()]
-
-        cur.close()
-        conn.close()
-
-        now = get_jst_now()
-        visible_auctions = []
-        active_auction_count = 0
-        for auction in auctions:
-            auction_state = get_proxy_service_auction_state(auction, now=now)
-            auction['is_ended'] = auction_state.get('is_ended')
-            auction['is_not_started'] = auction_state.get('is_not_started')
-            auction['is_public'] = auction_state.get('is_public')
-            auction['status'] = auction_state.get('status')
-            auction['status_label'] = auction_state.get('status_label')
-
-            if auction_state.get('status') in {'open', 'scheduled'}:
-                active_auction_count += 1
-
-            if auction_state.get('status') == 'ended':
-                continue
-
-            visible_auctions.append(auction)
-
-        return render_template(
-            'admin/proxy_service_list.html',
-            auctions=visible_auctions,
-            users=users,
-            max_auctions=5,
-            active_auction_count=active_auction_count,
-            can_create_more_auctions=active_auction_count < 5,
-        )
-
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
             # 全オークションを取得（最大5個まで）
             cur.execute("""
                 SELECT ps.*, 
@@ -10956,72 +11638,63 @@ def admin_proxy_service_create():
 
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response()
-
+    
+    conn = get_db()
+    
+    # オークション数チェック（最大5個まで）
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM proxy_service_settings")
+        count = cur.fetchone()[0]
+        if count >= 5:
+            flash('オークションは最大5個までです', 'error')
+            return redirect(url_for('admin_proxy_service'))
+        cur.close()
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM proxy_service_settings")
+        count = cur.fetchone()[0]
+        if count >= 5:
+            flash('オークションは最大5個までです', 'error')
+            return redirect(url_for('admin_proxy_service'))
+        cur.close()
+    
     if request.method == 'POST':
-        conn = get_db()
-        try:
-            auction_name = (request.form.get('auction_name') or '').strip() or 'オークション'
-            page_title = (request.form.get('page_title') or '').strip() or '代行仕入れサービス'
-            page_description = (request.form.get('page_description') or '').strip()
-            start_datetime = normalize_proxy_service_datetime_input(request.form.get('start_datetime'))
-            end_datetime = normalize_proxy_service_datetime_input(request.form.get('end_datetime'))
-            sale_mode = request.form.get('sale_mode', 'auction')
-            if sale_mode not in {'auction', 'fixed'}:
-                sale_mode = 'auction'
-            is_public = request.form.get('is_public') == 'on'
-            now = get_jst_now()
-
-            start_dt = parse_proxy_service_datetime(start_datetime)
-            end_dt = parse_proxy_service_datetime(end_datetime)
-            if start_dt and end_dt and start_dt >= end_dt:
-                flash('終了日時は開始日時より後に設定してください', 'error')
-                return redirect(url_for('admin_proxy_service_create'))
-
-            projected_active_count = count_active_proxy_service_slots_with_candidate(
-                conn,
-                {
-                    'is_public': is_public,
-                    'start_datetime': start_datetime,
-                    'end_datetime': end_datetime,
-                },
-                now=now,
-            )
-            if projected_active_count > 5:
-                flash('公開中または公開前のオークションは最大5件までです。公開枠を空けてから開始してください。', 'error')
-                return redirect(url_for('admin_proxy_service_create'))
-
-            if DATABASE_URL:
-                cur = conn.cursor()
-                cur.execute("""
-                    INSERT INTO proxy_service_settings
-                    (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id
-                """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
-                new_id = cur.fetchone()[0]
-            else:
-                cur = conn.cursor()
-                cur.execute("""
-                    INSERT INTO proxy_service_settings
-                    (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
-                new_id = cur.lastrowid
-
+        auction_name = request.form.get('auction_name', 'オークション')
+        page_title = request.form.get('page_title', '代行仕入れサービス')
+        page_description = request.form.get('page_description', '')
+        start_datetime = request.form.get('start_datetime', '') or None
+        end_datetime = request.form.get('end_datetime', '') or None
+        sale_mode = request.form.get('sale_mode', 'auction')
+        is_public = request.form.get('is_public') == 'on'
+        
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
+            new_id = cur.fetchone()[0]
             conn.commit()
-            cur.close()
-            flash(f'オークション「{auction_name}」を作成しました', 'success')
-            return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
-        except Exception as e:
-            conn.rollback()
-            import traceback
-            print(f"Proxy service create error: {e}")
-            traceback.print_exc()
-            flash('オークション作成中にエラーが発生しました。入力内容を確認してもう一度お試しください。', 'error')
-            return redirect(url_for('admin_proxy_service_create'))
-        finally:
-            conn.close()
-
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
+            new_id = cur.lastrowid
+            conn.commit()
+        
+        cur.close()
+        conn.close()
+        
+        flash(f'オークション「{auction_name}」を作成しました', 'success')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
+    
+    conn.close()
     return render_template('admin/proxy_service_create.html')
 
 @app.route('/admin/proxy-service/<int:auction_id>')
@@ -11036,19 +11709,24 @@ def admin_proxy_service_detail(auction_id):
         return get_proxy_publish_denied_response()
     
     try:
+        summary = {
+            'active_count': 0,
+            'sold_count': 0,
+            'bid_entry_count': 0,
+            'participated_item_count': 0,
+            'fixed_purchase_count': 0,
+        }
         conn = get_db()
-        now = get_jst_now()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            # オークション設定取得
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
             settings = cur.fetchone()
             if not settings:
-                cur.close()
-                conn.close()
                 flash('オークションが見つかりません', 'error')
                 return redirect(url_for('admin_proxy_service'))
-
-            settings_dict = dict(settings)
+            
+            # 全ユーザーを取得
             cur.execute("""
                 SELECT u.id, u.username, u.display_name, u.role,
                        CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
@@ -11058,22 +11736,37 @@ def admin_proxy_service_detail(auction_id):
                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
                     u.id
             """)
-            users = [dict(row) for row in cur.fetchall()]
-
+            users = cur.fetchall()
+            
+            # このオークションに掲載中の商品を取得
             cur.execute("""
-                SELECT b.*, m.product_name, u.display_name as user_display_name
+                SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       COALESCE(up.display_name, up.username, '未設定') as published_by_name,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                       (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                       (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                LEFT JOIN users up ON m.updated_by = up.id
+                WHERE m.auction_id = %s AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+            """, (auction_id,))
+            items = cur.fetchall()
+            
+            # 入札履歴を取得
+            cur.execute("""
+                SELECT b.*, m.product_name
                 FROM proxy_service_bids b
                 JOIN merchandise m ON b.merchandise_id = m.id
-                LEFT JOIN users u ON b.user_id = u.id
                 WHERE m.auction_id = %s
                 ORDER BY b.created_at DESC
                 LIMIT 50
             """, (auction_id,))
-            bids = [dict(row) for row in cur.fetchall()]
-
+            bids = cur.fetchall()
+            
+            # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.photo_path,
-                       m.proxy_auction_max_price,
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.wholesale_price, m.photo_path, 
                        COALESCE(u.display_name, '不明') as owner_name,
                        m.auction_id
                 FROM merchandise m
@@ -11083,18 +11776,47 @@ def admin_proxy_service_detail(auction_id):
                 ORDER BY m.id DESC
                 LIMIT 100
             """, (auction_id,))
-            available_items = [dict(row) for row in cur.fetchall()]
+            available_items = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END), 0) as active_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END), 0) as sold_count
+                FROM merchandise
+                WHERE auction_id = %s
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as bid_entry_count,
+                       COUNT(DISTINCT merchandise_id) as participated_item_count
+                FROM proxy_service_bids
+                WHERE merchandise_id IN (
+                    SELECT id FROM merchandise WHERE auction_id = %s
+                )
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as fixed_purchase_count
+                FROM merchandise
+                WHERE auction_id = %s
+                  AND sale_date IS NOT NULL
+                  AND sales_destination LIKE %s
+            """, (auction_id, '即決購入:%'))
+            summary.update(dict(cur.fetchone() or {}))
         else:
+            import sqlite3
             cur = conn.cursor()
+            conn.row_factory = sqlite3.Row
+            # オークション設定取得
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
             settings = cur.fetchone()
             if not settings:
-                cur.close()
-                conn.close()
                 flash('オークションが見つかりません', 'error')
                 return redirect(url_for('admin_proxy_service'))
-
-            settings_dict = dict(settings)
+            
+            # 全ユーザーを取得
             cur.execute("""
                 SELECT u.id, u.username, u.display_name, u.role,
                        CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
@@ -11104,22 +11826,37 @@ def admin_proxy_service_detail(auction_id):
                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
                     u.id
             """)
-            users = [dict(row) for row in cur.fetchall()]
-
+            users = cur.fetchall()
+            
+            # このオークションに掲載中の商品を取得
             cur.execute("""
-                SELECT b.*, m.product_name, u.display_name as user_display_name
+                SELECT m.*, COALESCE(u.display_name, '不明') as owner_name,
+                       COALESCE(up.display_name, up.username, '未設定') as published_by_name,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
+                       (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder,
+                       (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                LEFT JOIN users up ON m.updated_by = up.id
+                WHERE m.auction_id = ? AND m.sale_date IS NULL
+                ORDER BY m.id DESC
+            """, (auction_id,))
+            items = cur.fetchall()
+            
+            # 入札履歴を取得
+            cur.execute("""
+                SELECT b.*, m.product_name
                 FROM proxy_service_bids b
                 JOIN merchandise m ON b.merchandise_id = m.id
-                LEFT JOIN users u ON b.user_id = u.id
                 WHERE m.auction_id = ?
                 ORDER BY b.created_at DESC
                 LIMIT 50
             """, (auction_id,))
-            bids = [dict(row) for row in cur.fetchall()]
-
+            bids = cur.fetchall()
+            
+            # 選択可能な商品（未販売商品で、他のオークションに属していないもの）
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.photo_path,
-                       m.proxy_auction_max_price,
+                SELECT m.id, m.product_name, m.brand_name, m.listing_price, m.wholesale_price, m.photo_path, 
                        COALESCE(u.display_name, '不明') as owner_name,
                        m.auction_id
                 FROM merchandise m
@@ -11129,166 +11866,60 @@ def admin_proxy_service_detail(auction_id):
                 ORDER BY m.id DESC
                 LIMIT 100
             """, (auction_id,))
-            available_items = [dict(row) for row in cur.fetchall()]
+            available_items = cur.fetchall()
 
-        for item in available_items:
-            purchase_price = normalize_proxy_service_price_value(item.get('purchase_price'))
-            listing_price = normalize_proxy_service_price_value(item.get('listing_price'))
-            if item.get('auction_id') == auction_id and listing_price:
-                default_listing_price = listing_price
-            else:
-                default_listing_price = purchase_price or listing_price
-            item['purchase_price'] = purchase_price
-            item['minimum_listing_price'] = purchase_price
-            item['default_listing_price'] = default_listing_price
-            item['proxy_auction_max_price'] = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
-            item['has_proxy_auction_max_price'] = bool(item['proxy_auction_max_price'])
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN sale_date IS NULL THEN 1 ELSE 0 END), 0) as active_count,
+                    COALESCE(SUM(CASE WHEN sale_date IS NOT NULL THEN 1 ELSE 0 END), 0) as sold_count
+                FROM merchandise
+                WHERE auction_id = ?
+            """, (auction_id,))
+            summary = dict(cur.fetchone() or {})
 
-        all_items = fetch_proxy_service_items(conn, auction_id)
-        result_items, result_summary, _ = annotate_proxy_service_items(
-            all_items,
-            settings_dict,
-            now=now,
-            current_user_id=current_user.id,
-        )
-        items = [item for item in result_items if not item.get('is_sold')]
-        auction_state = get_proxy_service_auction_state(settings_dict, now=now)
+            cur.execute("""
+                SELECT COUNT(*) as bid_entry_count,
+                       COUNT(DISTINCT merchandise_id) as participated_item_count
+                FROM proxy_service_bids
+                WHERE merchandise_id IN (
+                    SELECT id FROM merchandise WHERE auction_id = ?
+                )
+            """, (auction_id,))
+            summary.update(dict(cur.fetchone() or {}))
+
+            cur.execute("""
+                SELECT COUNT(*) as fixed_purchase_count
+                FROM merchandise
+                WHERE auction_id = ?
+                  AND sale_date IS NOT NULL
+                  AND sales_destination LIKE ?
+            """, (auction_id, '即決購入:%'))
+            summary.update(dict(cur.fetchone() or {}))
+        
+        item_dicts = [dict(i) for i in items]
+        available_item_dicts = [dict(i) for i in available_items]
+        for item_dict in item_dicts:
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+        for item_dict in available_item_dicts:
+            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
 
         cur.close()
         conn.close()
         
         return render_template('admin/proxy_service.html',
-                             settings=settings_dict,
-                             users=users,
-                             items=items,
-                             bids=bids,
-                             available_items=available_items,
-                             auction_id=auction_id,
-                             auction_state=auction_state,
-                             result_items=result_items,
-                             result_summary=result_summary)
+                             settings=dict(settings) if settings else {},
+                             users=[dict(u) for u in users],
+                             items=item_dicts,
+                             bids=[dict(b) for b in bids],
+                             available_items=available_item_dicts,
+                             summary=summary,
+                             auction_id=auction_id)
     except Exception as e:
         import traceback
         print(f"Proxy service detail error: {e}")
         traceback.print_exc()
         flash(f'エラーが発生しました: {str(e)}', 'error')
         return redirect(url_for('admin_proxy_service'))
-
-@app.route('/admin/proxy-service/<int:auction_id>/start', methods=['POST'])
-@login_required
-def admin_proxy_service_start(auction_id):
-    """オークションを現在時刻で公開開始"""
-    if not (current_user.is_owner() or current_user.is_admin()):
-        return jsonify({'success': False, 'error': '権限がありません'}), 403
-
-    if not current_user.can_manage_proxy_service():
-        return get_proxy_publish_denied_response(json_response=True)
-
-    conn = get_db()
-    now = get_jst_now()
-    start_datetime = normalize_proxy_service_datetime_input(now)
-    try:
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
-            settings = cur.fetchone()
-            if not settings:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
-
-            settings_dict = dict(settings)
-            auction_state = get_proxy_service_auction_state(settings_dict, now=now)
-            if auction_state['status'] == 'ended':
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': '終了済みのため公開できません'}), 400
-            if auction_state['is_open']:
-                cur.close()
-                conn.close()
-                return jsonify({'success': True, 'message': 'すでに公開中です'})
-
-            projected_active_count = count_active_proxy_service_slots_with_candidate(
-                conn,
-                {
-                    'is_public': True,
-                    'start_datetime': start_datetime,
-                    'end_datetime': settings_dict.get('end_datetime'),
-                },
-                auction_id=auction_id,
-                now=now,
-            )
-            if projected_active_count > 5:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': '公開中または公開前のオークションは最大5件までです'}), 400
-
-            cur.execute("""
-                UPDATE proxy_service_settings
-                SET is_public = %s,
-                    start_datetime = %s,
-                    updated_by = %s,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            """, (True, start_datetime, current_user.id, auction_id))
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
-            settings = cur.fetchone()
-            if not settings:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
-
-            settings_dict = dict(settings)
-            auction_state = get_proxy_service_auction_state(settings_dict, now=now)
-            if auction_state['status'] == 'ended':
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': '終了済みのため公開できません'}), 400
-            if auction_state['is_open']:
-                cur.close()
-                conn.close()
-                return jsonify({'success': True, 'message': 'すでに公開中です'})
-
-            projected_active_count = count_active_proxy_service_slots_with_candidate(
-                conn,
-                {
-                    'is_public': True,
-                    'start_datetime': start_datetime,
-                    'end_datetime': settings_dict.get('end_datetime'),
-                },
-                auction_id=auction_id,
-                now=now,
-            )
-            if projected_active_count > 5:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': '公開中または公開前のオークションは最大5件までです'}), 400
-
-            cur.execute("""
-                UPDATE proxy_service_settings
-                SET is_public = ?,
-                    start_datetime = ?,
-                    updated_by = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """, (1, start_datetime, current_user.id, auction_id))
-
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'message': 'オークションを公開しました'})
-    except Exception as e:
-        conn.rollback()
-        import traceback
-        print(f"Proxy service start error: {e}")
-        traceback.print_exc()
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return jsonify({'success': False, 'error': '公開処理に失敗しました'}), 500
 
 @app.route('/admin/proxy-service/<int:auction_id>/delete', methods=['POST'])
 @login_required
@@ -11343,66 +11974,18 @@ def admin_proxy_service_settings(auction_id):
         return get_proxy_publish_denied_response()
     
     is_public = request.form.get('is_public') == 'on'
-    auction_name = (request.form.get('auction_name') or '').strip() or 'オークション'
-    page_title = (request.form.get('page_title') or '').strip() or '代行仕入れサービス'
-    page_description = (request.form.get('page_description') or '').strip()
-    start_datetime = normalize_proxy_service_datetime_input(request.form.get('start_datetime'))
-    end_datetime = normalize_proxy_service_datetime_input(request.form.get('end_datetime'))
-    sale_mode = request.form.get('sale_mode', 'auction')
-    if sale_mode not in {'auction', 'fixed'}:
-        sale_mode = 'auction'
+    auction_name = request.form.get('auction_name', 'オークション')
+    page_title = request.form.get('page_title', '代行仕入れサービス')
+    page_description = request.form.get('page_description', '')
+    start_datetime = request.form.get('start_datetime', '') or None
+    end_datetime = request.form.get('end_datetime', '') or None
+    sale_mode = request.form.get('sale_mode', 'auction')  # auction or fixed
     selected_users = request.form.getlist('selected_users')
-    now = get_jst_now()
-
-    start_dt = parse_proxy_service_datetime(start_datetime)
-    end_dt = parse_proxy_service_datetime(end_datetime)
-    if start_dt and end_dt and start_dt >= end_dt:
-        flash('終了日時は開始日時より後に設定してください', 'error')
-        return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
-
+    
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
-        cur.execute("SELECT sale_mode FROM proxy_service_settings WHERE id = %s", (auction_id,))
-        current_settings = cur.fetchone()
-        current_sale_mode = current_settings[0] if current_settings else 'auction'
-        if current_sale_mode != sale_mode:
-            cur.execute("""
-                SELECT COUNT(*)
-                FROM merchandise m
-                WHERE m.auction_id = %s
-                  AND (
-                      m.sale_date IS NOT NULL
-                      OR EXISTS (
-                          SELECT 1
-                          FROM proxy_service_bids b
-                          WHERE b.merchandise_id = m.id
-                      )
-                  )
-            """, (auction_id,))
-            active_records = cur.fetchone()[0]
-            if active_records:
-                cur.close()
-                conn.close()
-                flash('入札履歴または成立済み商品があるため、公開形式は変更できません。必要な場合は新しい公開枠を作成してください。', 'error')
-                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
-
-        projected_active_count = count_active_proxy_service_slots_with_candidate(
-            conn,
-            {
-                'is_public': is_public,
-                'start_datetime': start_datetime,
-                'end_datetime': end_datetime,
-            },
-            auction_id=auction_id,
-            now=now,
-        )
-        if projected_active_count > 5:
-            cur.close()
-            conn.close()
-            flash('公開中または公開前のオークションは最大5件までです。公開枠を空けてから保存してください。', 'error')
-            return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
-
+        # 設定更新
         cur.execute("""
             UPDATE proxy_service_settings 
             SET is_public = %s, auction_name = %s, page_title = %s, page_description = %s,
@@ -11410,52 +11993,13 @@ def admin_proxy_service_settings(auction_id):
                 updated_by = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """, (is_public, auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, current_user.id, auction_id))
-
+        
+        # ユーザー選択を更新（共通）
         cur.execute("DELETE FROM proxy_service_users")
         for user_id in selected_users:
             cur.execute("INSERT INTO proxy_service_users (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (int(user_id),))
     else:
         cur = conn.cursor()
-        cur.execute("SELECT sale_mode FROM proxy_service_settings WHERE id = ?", (auction_id,))
-        current_settings = cur.fetchone()
-        current_sale_mode = current_settings[0] if current_settings else 'auction'
-        if current_sale_mode != sale_mode:
-            cur.execute("""
-                SELECT COUNT(*)
-                FROM merchandise m
-                WHERE m.auction_id = ?
-                  AND (
-                      m.sale_date IS NOT NULL
-                      OR EXISTS (
-                          SELECT 1
-                          FROM proxy_service_bids b
-                          WHERE b.merchandise_id = m.id
-                      )
-                  )
-            """, (auction_id,))
-            active_records = cur.fetchone()[0]
-            if active_records:
-                cur.close()
-                conn.close()
-                flash('入札履歴または成立済み商品があるため、公開形式は変更できません。必要な場合は新しい公開枠を作成してください。', 'error')
-                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
-
-        projected_active_count = count_active_proxy_service_slots_with_candidate(
-            conn,
-            {
-                'is_public': is_public,
-                'start_datetime': start_datetime,
-                'end_datetime': end_datetime,
-            },
-            auction_id=auction_id,
-            now=now,
-        )
-        if projected_active_count > 5:
-            cur.close()
-            conn.close()
-            flash('公開中または公開前のオークションは最大5件までです。公開枠を空けてから保存してください。', 'error')
-            return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
-
         cur.execute("""
             UPDATE proxy_service_settings 
             SET is_public = ?, auction_name = ?, page_title = ?, page_description = ?,
@@ -16832,7 +17376,6 @@ def admin_add_item():
         # ステータス処理
         item_status = request.form.get('item_status', 'unlisted')
         is_listed = item_status in ['listed', 'sold']
-        is_listed_db_value = db_boolean_param(is_listed)
         appraisal_status = derive_appraisal_status(item_status)
         sale_date = request.form.get('sale_date') if item_status == 'sold' else None
         sale_type_value = request.form.get('sale_type') or ('normal' if form_mode == 'admin' else 'photo_packing,normal')
@@ -16847,7 +17390,6 @@ def admin_add_item():
             )
         else:
             commission_value = parse_money_value(request.form.get('commission'), 0)
-        is_shipped_db_value = db_boolean_param('is_shipped' in request.form)
         target_scope = 'user' if form_mode == 'user' else 'admin'
         
         try:
@@ -16881,7 +17423,7 @@ def admin_add_item():
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                is_listed_db_value,
+                is_listed,
                 request.form.get('listing_date') or None,
                 sale_date or None,
                 sale_type_value,
@@ -16889,7 +17431,7 @@ def admin_add_item():
                 parse_money_value(request.form.get('shipping_cost'), 0),
                 request.form.get('sales_destination'),
                 commission_value,
-                is_shipped_db_value,
+                'is_shipped' in request.form,
                 request.form.get('notes'),
                 target_scope,
                 appraisal_status

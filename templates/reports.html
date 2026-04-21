@@ -1,140 +1,113 @@
 {% extends "base.html" %}
-{% block title %}レポート - 管理画面{% endblock %}
+{% block title %}レポート・CSV - 物販管理{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>レポート</h1>
-    <p class="page-desc">必要な帳票を一覧から選び、プレビュー確認またはCSV出力できます。</p>
-</div>
-
-<div class="report-info-card">
-    <strong>年間収支報告書について</strong>
-    <p>独立した入力・作成項目としては廃止し、月次売上データから自動参照する運用に変更しています。</p>
-</div>
-
-<div class="report-grid">
-    <div class="report-card">
-        <div class="report-icon">仕</div>
-        <div class="report-content">
-            <h3>仕入れ一覧表</h3>
-            <p>指定した年・月の仕入れ商品を一覧化します。</p>
-            <div class="report-options">
-                <select id="purchase-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="purchase-month" class="form-control">
-                    <option value="0">全年</option>
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button type="button" class="btn btn-info" onclick="generateReport('purchase', 'preview')">プレビュー</button>
-                <button type="button" class="btn btn-secondary" onclick="generateReport('purchase', 'csv')">CSV</button>
-            </div>
+<div class="reports-page">
+    <div class="page-header">
+        <div>
+            <h1>レポート・CSV</h1>
+            <p class="page-desc">売上推移や在庫回転の分析と、売上・仕入・手数料・在庫のCSV出力をまとめています。</p>
         </div>
+        <a href="{{ url_for('user_analytics') }}" class="report-link-button">My分析を見る</a>
     </div>
 
-    <div class="report-card">
-        <div class="report-icon">在</div>
-        <div class="report-content">
-            <h3>在庫一覧表</h3>
-            <p>現在の在庫状況を一覧で確認できます。</p>
-            <div class="report-stats">
-                <span class="stat-item">在庫数 {{ inventory_count }}点</span>
-                <span class="stat-item">仕入総額 ¥{{ "{:,}".format(inventory_total) }}</span>
-            </div>
-            <div class="report-actions">
-                <button type="button" class="btn btn-info" onclick="generateReport('inventory', 'preview')">プレビュー</button>
-                <button type="button" class="btn btn-secondary" onclick="generateReport('inventory', 'csv')">CSV</button>
-            </div>
+    <section class="report-section">
+        <div class="section-header">
+            <h2>売上推移・分析</h2>
+            <p>売上推移、利益、在庫回転など、今の状況を分析しやすい一覧です。</p>
         </div>
-    </div>
+        <div class="report-grid">
+            {% for card in management_cards %}
+            <article class="report-card" data-report-type="{{ card.type }}">
+                <div class="report-card-head">
+                    <h3>{{ card.title }}</h3>
+                    <p>{{ card.description }}</p>
+                </div>
+                <div class="report-controls">
+                    {% if 'year' in card.filters %}
+                    <label class="report-control">
+                        <span>年</span>
+                        <select class="report-select" data-filter="year">
+                            {% for y in years %}
+                            <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endif %}
+                    {% if 'month' in card.filters %}
+                    <label class="report-control">
+                        <span>月</span>
+                        <select class="report-select" data-filter="month">
+                            <option value="0">通年</option>
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endif %}
+                </div>
+                <div class="report-actions">
+                    <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                    <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
 
-    <div class="report-card">
-        <div class="report-icon">販</div>
-        <div class="report-content">
-            <h3>販売一覧表</h3>
-            <p>指定期間の販売実績を一覧で確認できます。</p>
-            <div class="report-options">
-                <select id="sales-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="sales-month" class="form-control">
-                    <option value="0">全年</option>
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button type="button" class="btn btn-info" onclick="generateReport('sales', 'preview')">プレビュー</button>
-                <button type="button" class="btn btn-secondary" onclick="generateReport('sales', 'csv')">CSV</button>
-            </div>
+    <section class="report-section">
+        <div class="section-header">
+            <h2>各項目ごと</h2>
+            <p>売上、仕入、手数料、在庫を項目ごとにプレビューして、そのままCSV出力できます。</p>
         </div>
-    </div>
-
-    <div class="report-card">
-        <div class="report-icon">利</div>
-        <div class="report-content">
-            <h3>利益一覧表</h3>
-            <p>売上、仕入、手数料を含めた利益を確認できます。</p>
-            <div class="report-options">
-                <select id="profit-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="profit-month" class="form-control">
-                    <option value="0">全年</option>
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button type="button" class="btn btn-info" onclick="generateReport('profit', 'preview')">プレビュー</button>
-                <button type="button" class="btn btn-secondary" onclick="generateReport('profit', 'csv')">CSV</button>
-            </div>
+        <div class="report-grid">
+            {% for card in export_cards %}
+            <article class="report-card" data-report-type="{{ card.type }}">
+                <div class="report-card-head">
+                    <h3>{{ card.title }}</h3>
+                    <p>{{ card.description }}</p>
+                </div>
+                <div class="report-controls">
+                    {% if 'year' in card.filters %}
+                    <label class="report-control">
+                        <span>年</span>
+                        <select class="report-select" data-filter="year">
+                            {% for y in years %}
+                            <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endif %}
+                    {% if 'month' in card.filters %}
+                    <label class="report-control">
+                        <span>月</span>
+                        <select class="report-select" data-filter="month">
+                            <option value="0">通年</option>
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endif %}
+                </div>
+                <div class="report-actions">
+                    <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                    <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                </div>
+            </article>
+            {% endfor %}
         </div>
-    </div>
-
-    <div class="report-card">
-        <div class="report-icon">手</div>
-        <div class="report-content">
-            <h3>手数料一覧表</h3>
-            <p>送料、販売手数料、卸販売手数料をまとめて確認できます。</p>
-            <div class="report-options">
-                <select id="fee-year" class="form-control">
-                    {% for y in years %}
-                    <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                    {% endfor %}
-                </select>
-                <select id="fee-month" class="form-control">
-                    <option value="0">全年</option>
-                    {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="report-actions">
-                <button type="button" class="btn btn-info" onclick="generateReport('fee', 'preview')">プレビュー</button>
-                <button type="button" class="btn btn-secondary" onclick="generateReport('fee', 'csv')">CSV</button>
-            </div>
-        </div>
-    </div>
+    </section>
 </div>
 
 <div class="report-modal" id="reportModal">
     <div class="report-modal-overlay" onclick="closeReportModal()"></div>
     <div class="report-modal-content">
         <div class="report-modal-header">
-            <h2 id="modalTitle">レポートプレビュー</h2>
+            <div>
+                <h2 id="modalTitle">レポートプレビュー</h2>
+                <p id="modalDescription" class="modal-description"></p>
+            </div>
             <button type="button" class="report-modal-close" onclick="closeReportModal()">×</button>
         </div>
         <div class="report-modal-body" id="modalBody">
@@ -148,145 +121,145 @@
 </div>
 
 <style>
+.reports-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
 .page-header {
-    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0;
 }
 
 .page-header h1 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.75rem;
-    color: #1e293b;
+    margin: 0 0 0.45rem;
+    color: #0f172a;
+    font-size: 1.8rem;
 }
 
 .page-desc {
+    margin: 0;
     color: #64748b;
-    margin: 0;
-}
-
-.report-info-card {
-    margin-bottom: 1.5rem;
-    padding: 1rem 1.2rem;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
-    border: 1px solid #bfdbfe;
-    color: #1e3a8a;
-}
-
-.report-info-card strong {
-    display: block;
-    margin-bottom: 0.35rem;
-}
-
-.report-info-card p {
-    margin: 0;
     line-height: 1.7;
-    color: #334155;
+}
+
+.report-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.8rem 1rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.report-section {
+    display: grid;
+    gap: 1rem;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.section-header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
 }
 
 .report-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1.5rem;
-}
-
-.report-card {
-    background: #fff;
-    border-radius: 14px;
-    padding: 1.5rem;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
-    border: 1px solid #e2e8f0;
-    display: flex;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
 }
 
-.report-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    color: #1d4ed8;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.1rem;
-    font-weight: 700;
-    flex-shrink: 0;
+.report-card {
+    padding: 1.2rem;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    display: grid;
+    gap: 1rem;
 }
 
-.report-content {
-    flex: 1;
-}
-
-.report-content h3 {
-    margin: 0 0 0.45rem 0;
-    font-size: 1.08rem;
+.report-card-head h3 {
+    margin: 0 0 0.5rem;
     color: #0f172a;
+    font-size: 1.05rem;
 }
 
-.report-content p {
-    margin: 0 0 1rem 0;
-    font-size: 0.9rem;
+.report-card-head p {
+    margin: 0;
     color: #64748b;
     line-height: 1.65;
+    min-height: 3.2rem;
 }
 
-.report-options {
+.report-controls {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-}
-
-.report-options .form-control {
-    padding: 0.55rem 0.65rem;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    flex: 1;
-}
-
-.report-stats {
-    display: flex;
-    flex-wrap: wrap;
     gap: 0.75rem;
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    border-radius: 10px;
-    background: #f8fafc;
+    flex-wrap: wrap;
 }
 
-.stat-item {
-    font-size: 0.88rem;
-    color: #475569;
-    font-weight: 600;
+.report-control {
+    display: grid;
+    gap: 0.35rem;
+    flex: 1 1 120px;
+}
+
+.report-control span {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.report-select {
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.92rem;
 }
 
 .report-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.6rem;
     flex-wrap: wrap;
 }
 
 .btn {
-    padding: 0.55rem 1rem;
-    font-size: 0.85rem;
+    padding: 0.7rem 1rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 700;
 }
 
 .btn-primary {
     background: #2563eb;
-    color: white;
+    color: #fff;
 }
 
 .btn-secondary {
     background: #64748b;
-    color: white;
+    color: #fff;
 }
 
 .btn-info {
-    background: #0891b2;
-    color: white;
+    background: #0f766e;
+    color: #fff;
 }
 
 .report-modal {
@@ -303,7 +276,7 @@
 .report-modal-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(15, 23, 42, 0.6);
 }
 
 .report-modal-content {
@@ -311,14 +284,14 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(960px, 92%);
-    max-height: 90vh;
+    width: min(1100px, 94vw);
+    max-height: 92vh;
     display: flex;
     flex-direction: column;
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26);
+    background: #fff;
+    border-radius: 18px;
     overflow: hidden;
+    box-shadow: 0 26px 60px rgba(15, 23, 42, 0.24);
 }
 
 .report-modal-header,
@@ -328,39 +301,48 @@
     justify-content: space-between;
     gap: 1rem;
     padding: 1rem 1.25rem;
+}
+
+.report-modal-header {
     border-bottom: 1px solid #e2e8f0;
 }
 
 .report-modal-footer {
     justify-content: flex-end;
     border-top: 1px solid #e2e8f0;
-    border-bottom: none;
 }
 
 .report-modal-header h2 {
     margin: 0;
-    font-size: 1.15rem;
     color: #0f172a;
+    font-size: 1.15rem;
+}
+
+.modal-description {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
 }
 
 .report-modal-close {
     border: none;
-    background: none;
-    font-size: 1.4rem;
+    background: transparent;
     color: #64748b;
+    font-size: 1.5rem;
     cursor: pointer;
 }
 
 .report-modal-body {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
     padding: 1.25rem;
+    background: #f8fafc;
 }
 
 .loading,
 .empty-state,
 .error-state {
-    padding: 2rem;
+    padding: 2.25rem 1rem;
     text-align: center;
     color: #64748b;
 }
@@ -369,162 +351,244 @@
     color: #b91c1c;
 }
 
+.report-preview {
+    display: grid;
+    gap: 1rem;
+}
+
+.report-notes {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.report-notes summary {
+    list-style: none;
+}
+
+.report-notes summary::-webkit-details-marker {
+    display: none;
+}
+
+.report-notes-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.report-notes-toggle::after {
+    content: '＋';
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.report-notes[open] .report-notes-toggle::after {
+    content: '－';
+}
+
+.report-notes-content {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #fff;
+}
+
+.report-notes-content ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #334155;
+    line-height: 1.7;
+}
+
 .report-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
 }
 
 .summary-item {
-    padding: 0.9rem;
-    border-radius: 12px;
-    background: #f8fafc;
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
     border: 1px solid #e2e8f0;
-    text-align: center;
+    background: #fff;
 }
 
-.summary-item .label {
+.summary-label {
     display: block;
     margin-bottom: 0.35rem;
-    font-size: 0.78rem;
     color: #64748b;
+    font-size: 0.8rem;
 }
 
-.summary-item .value {
+.summary-value {
+    color: #0f172a;
     font-size: 1.05rem;
     font-weight: 700;
-    color: #0f172a;
 }
 
 .report-table-wrapper {
     overflow-x: auto;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: grab;
+    padding-right: 0.2rem;
+    scrollbar-gutter: stable both-edges;
+    -webkit-overflow-scrolling: touch;
+}
+
+.report-table-track {
+    min-width: 100%;
+    padding-right: 1rem;
+    box-sizing: content-box;
 }
 
 .report-table {
     width: 100%;
-    min-width: 680px;
+    min-width: 760px;
     border-collapse: collapse;
-    font-size: 0.9rem;
 }
 
 .report-table th,
 .report-table td {
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    text-align: center;
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.9rem;
     vertical-align: middle;
     white-space: nowrap;
 }
 
-.report-table th {
+.report-table thead th {
+    position: sticky;
+    top: 0;
     background: #f8fafc;
     color: #475569;
     font-weight: 700;
+    z-index: 1;
 }
 
-.report-table .text-right {
+.report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.report-table-shell {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.report-table-scroll-note {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.report-table-wrapper.dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.text-right {
     text-align: right;
 }
 
-.profit-positive {
-    color: #059669;
-    font-weight: 700;
+.text-center {
+    text-align: center;
 }
 
-.profit-negative {
-    color: #dc2626;
-    font-weight: 700;
+@media (max-width: 900px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .report-link-button {
+        width: fit-content;
+    }
 }
 
 @media (max-width: 768px) {
-    .report-grid {
+    .report-summary {
         grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-
-    .report-card {
-        flex-direction: column;
-        padding: 1.15rem;
-    }
-
-    .report-options {
-        flex-direction: column;
     }
 
     .report-modal-content {
-        width: 95%;
+        width: 96vw;
         max-height: 94vh;
     }
 
-    .report-summary {
-        grid-template-columns: repeat(2, 1fr);
+    .report-modal-header,
+    .report-modal-footer {
+        padding: 0.9rem 1rem;
+    }
+
+    .report-modal-body {
+        padding: 1rem;
     }
 }
 </style>
 
 <script>
-const reportTitles = {
-    purchase: '仕入れ一覧表',
-    inventory: '在庫一覧表',
-    sales: '販売一覧表',
-    profit: '利益一覧表',
-    fee: '手数料一覧表'
-};
-
-const saleTypeLabels = {
-    normal: '通常販売',
-    wholesale: '業者卸販売',
-    auction: '業者オークション',
-    simultaneous: '同時出品',
-    multi_listing: '同時出品',
-    photo_packing: '撮影・梱包代行',
-    disposal: '在庫処分'
-};
-
 let currentReportType = '';
-let currentParams = {};
+let currentReportParams = {};
 
-function generateReport(type, format) {
-    currentReportType = type;
-    currentParams = collectParams(type);
-    if (format === 'preview') {
-        openReportModal(type);
-    } else {
-        downloadReport(type);
-    }
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
-function collectParams(type) {
+function collectCardParams(card) {
     const params = {};
-    const year = document.getElementById(`${type}-year`);
-    const month = document.getElementById(`${type}-month`);
-    if (year) params.year = year.value;
-    if (month) params.month = month.value;
+    card.querySelectorAll('[data-filter]').forEach((input) => {
+        params[input.dataset.filter] = input.value;
+    });
     return params;
 }
 
-function openReportModal(type) {
+function getQueryString(params) {
+    return new URLSearchParams(params).toString();
+}
+
+function openReportModal(type, params) {
+    currentReportType = type;
+    currentReportParams = params;
+
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
+    const modalDescription = document.getElementById('modalDescription');
     const modalBody = document.getElementById('modalBody');
     const downloadBtn = document.getElementById('downloadCsvBtn');
 
-    modalTitle.textContent = `${reportTitles[type] || 'レポート'} プレビュー`;
+    modalTitle.textContent = 'レポートプレビュー';
+    modalDescription.textContent = '';
     modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
-    downloadBtn.onclick = () => downloadReport(type);
+    downloadBtn.onclick = () => downloadReport(type, params);
     modal.classList.add('open');
 
-    const query = new URLSearchParams(currentParams).toString();
-    fetch(`/api/report-v2/${type}?${query}`)
-        .then(response => {
-            if (!response.ok) throw new Error('レポートの取得に失敗しました');
+    fetch(`/api/report-v2/${type}?${getQueryString(params)}`)
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error('レポートの取得に失敗しました。');
+            }
             return response.json();
         })
-        .then(data => {
-            modalBody.innerHTML = renderReportPreview(type, data);
+        .then((data) => {
+            modalTitle.textContent = data.title || 'レポートプレビュー';
+            modalDescription.textContent = data.description || '';
+            modalBody.innerHTML = renderReportPreview(data);
+            setupReportTableInteractions(modalBody);
         })
-        .catch(error => {
+        .catch((error) => {
             modalBody.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
         });
 }
@@ -533,212 +597,164 @@ function closeReportModal() {
     document.getElementById('reportModal').classList.remove('open');
 }
 
-function downloadReport(type) {
-    const query = new URLSearchParams({ ...currentParams, format: 'csv' }).toString();
-    window.location.href = `/api/report-v2/${type}/download?${query}`;
+function downloadReport(type, params) {
+    window.location.href = `/api/report-v2/${type}/download?${getQueryString(params)}`;
 }
 
-function renderReportPreview(type, data) {
-    switch (type) {
-        case 'purchase':
-            return renderPurchaseReport(data);
-        case 'inventory':
-            return renderInventoryReport(data);
-        case 'sales':
-            return renderSalesReport(data);
-        case 'profit':
-            return renderProfitReport(data);
-        case 'fee':
-            return renderFeeReport(data);
-        default:
-            return '<div class="empty-state">対象のレポート形式に対応していません。</div>';
-    }
-}
+function renderReportPreview(report) {
+    const summaryHtml = Array.isArray(report.summary) && report.summary.length
+        ? `
+            <div class="report-summary">
+                ${report.summary.map((item) => `
+                    <div class="summary-item">
+                        <span class="summary-label">${escapeHtml(item.label)}</span>
+                        <span class="summary-value">${escapeHtml(item.value)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `
+        : '';
 
-function renderSummary(items) {
-    if (!items.length) return '';
-    return `
-        <div class="report-summary">
-            ${items.map(item => `
-                <div class="summary-item">
-                    <span class="label">${escapeHtml(item.label)}</span>
-                    <span class="value">${escapeHtml(item.value)}</span>
+    const notesHtml = Array.isArray(report.notes) && report.notes.length
+        ? `
+            <details class="report-notes">
+                <summary class="report-notes-toggle">確認ポイント</summary>
+                <div class="report-notes-content">
+                    <ul>
+                        ${report.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}
+                    </ul>
                 </div>
-            `).join('')}
-        </div>
-    `;
-}
+            </details>
+        `
+        : '';
 
-function renderTable(headers, rows, emptyText) {
-    if (!rows.length) return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    const tableHtml = renderReportTable(report.columns || [], report.rows || [], report.empty_message || 'データがありません。');
+
     return `
-        <div class="report-table-wrapper">
-            <table class="report-table">
-                <thead>
-                    <tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
-                </thead>
-                <tbody>${rows.join('')}</tbody>
-            </table>
+        <div class="report-preview">
+            ${summaryHtml}
+            ${notesHtml}
+            ${tableHtml}
         </div>
     `;
 }
 
-function renderPurchaseReport(data) {
-    const summary = renderSummary([
-        { label: '件数', value: `${Number(data.summary.count || 0).toLocaleString('ja-JP')}件` },
-        { label: '仕入総額', value: formatCurrency(data.summary.total_purchase) }
-    ]);
+function renderReportTable(columns, rows, emptyText) {
+    if (!columns.length) {
+        return rows.length ? '' : `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    }
 
-    const rows = (data.items || []).map(item => `
-        <tr>
-            <td>${formatText(item.purchase_date)}</td>
-            <td>${formatText(item.product_name)}</td>
-            <td>${formatText(item.brand_name)}</td>
-            <td>${formatText(item.store_name)}</td>
-            <td>${formatText(item.item_condition)}</td>
-            <td class="text-right">${formatCurrency(item.purchase_price)}</td>
-            <td>${formatText(item.appraisal_label)}</td>
-        </tr>
-    `);
+    if (!rows.length) {
+        return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    }
 
-    return summary + renderTable(
-        ['仕入日', '商品名', 'ブランド', '仕入先', '状態', '仕入額', '査定状態'],
-        rows,
-        '対象の仕入れデータはありません。'
-    );
+    const minWidth = Math.max(columns.length * 150, 820);
+
+    return `
+        <div class="report-table-shell">
+            <div class="report-table-scroll-note">表は左右にスライドして確認できます。</div>
+            <div class="report-table-wrapper" data-draggable-scroll="true">
+                <div class="report-table-track" style="min-width: ${minWidth}px;">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                ${columns.map((column) => `
+                                    <th class="${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : ''}">
+                                        ${escapeHtml(column.label)}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row) => `
+                                <tr>
+                                    ${row.map((cell, index) => {
+                                        const align = columns[index] && columns[index].align ? columns[index].align : 'left';
+                                        const className = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : '';
+                                        return `<td class="${className}">${escapeHtml(cell)}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
-function renderInventoryReport(data) {
-    const summary = renderSummary([
-        { label: '在庫数', value: `${Number(data.summary.count || 0).toLocaleString('ja-JP')}件` },
-        { label: '仕入総額', value: formatCurrency(data.summary.total_purchase) },
-        { label: '出品総額', value: formatCurrency(data.summary.total_listing) }
-    ]);
+function enableDraggableTable(wrapper) {
+    if (!wrapper || wrapper.dataset.dragReady === '1') {
+        return;
+    }
 
-    const rows = (data.items || []).map(item => `
-        <tr>
-            <td>${formatText(item.purchase_date)}</td>
-            <td>${formatText(item.product_name)}</td>
-            <td>${formatText(item.brand_name)}</td>
-            <td>${formatText(item.item_condition)}</td>
-            <td class="text-right">${formatCurrency(item.purchase_price)}</td>
-            <td class="text-right">${formatCurrency(item.listing_price)}</td>
-            <td>${formatText(item.display_status)}</td>
-        </tr>
-    `);
+    wrapper.dataset.dragReady = '1';
 
-    return summary + renderTable(
-        ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス'],
-        rows,
-        '在庫データはありません。'
-    );
-}
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
 
-function renderSalesReport(data) {
-    const summary = renderSummary([
-        { label: '件数', value: `${Number(data.summary.count || 0).toLocaleString('ja-JP')}件` },
-        { label: '売上総額', value: formatCurrency(data.summary.total_sales) }
-    ]);
-
-    const rows = (data.items || []).map(item => `
-        <tr>
-            <td>${formatText(item.sale_date)}</td>
-            <td>${formatText(item.product_name)}</td>
-            <td>${formatText(item.brand_name)}</td>
-            <td>${formatText(item.sales_destination)}</td>
-            <td>${formatText(formatSaleType(item.sale_type_label || item.sale_type))}</td>
-            <td class="text-right">${formatCurrency(item.sale_price)}</td>
-        </tr>
-    `);
-
-    return summary + renderTable(
-        ['売却日', '商品名', 'ブランド', '販売先', 'サービス', '売上額'],
-        rows,
-        '対象の販売データはありません。'
-    );
-}
-
-function renderProfitReport(data) {
-    const summary = renderSummary([
-        { label: '件数', value: `${Number(data.summary.count || 0).toLocaleString('ja-JP')}件` },
-        { label: '売上総額', value: formatCurrency(data.summary.total_sales) },
-        { label: '仕入総額', value: formatCurrency(data.summary.total_purchase) },
-        { label: '手数料総額', value: formatCurrency(data.summary.total_fees) },
-        { label: '利益総額', value: formatCurrency(data.summary.total_profit) }
-    ]);
-
-    const rows = (data.items || []).map(item => {
-        const profit = Number(item.profit || 0);
-        const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
-        return `
-            <tr>
-                <td>${formatText(item.sale_date)}</td>
-                <td>${formatText(item.product_name)}</td>
-                <td>${formatText(item.brand_name)}</td>
-                <td>${formatText(item.sales_destination)}</td>
-                <td class="text-right">${formatCurrency(item.sale_price)}</td>
-                <td class="text-right">${formatCurrency(item.purchase_price)}</td>
-                <td class="text-right">${formatCurrency(item.total_fee)}</td>
-                <td class="text-right ${profitClass}">${formatCurrency(profit)}</td>
-            </tr>
-        `;
+    wrapper.addEventListener('pointerdown', (event) => {
+        if (wrapper.scrollWidth <= wrapper.clientWidth) {
+            return;
+        }
+        isDragging = true;
+        startX = event.clientX;
+        startScrollLeft = wrapper.scrollLeft;
+        wrapper.classList.add('dragging');
+        if (wrapper.setPointerCapture) {
+            wrapper.setPointerCapture(event.pointerId);
+        }
     });
 
-    return summary + renderTable(
-        ['売却日', '商品名', 'ブランド', '販売先', '売上額', '仕入額', '手数料合計', '利益'],
-        rows,
-        '対象の利益データはありません。'
-    );
+    wrapper.addEventListener('pointermove', (event) => {
+        if (!isDragging) {
+            return;
+        }
+        wrapper.scrollLeft = startScrollLeft - (event.clientX - startX);
+    });
+
+    const stopDragging = (event) => {
+        if (!isDragging) {
+            return;
+        }
+        isDragging = false;
+        wrapper.classList.remove('dragging');
+        if (event && wrapper.releasePointerCapture && wrapper.hasPointerCapture && wrapper.hasPointerCapture(event.pointerId)) {
+            wrapper.releasePointerCapture(event.pointerId);
+        }
+    };
+
+    wrapper.addEventListener('pointerup', stopDragging);
+    wrapper.addEventListener('pointercancel', stopDragging);
+    wrapper.addEventListener('pointerleave', stopDragging);
+    wrapper.addEventListener('wheel', (event) => {
+        if (wrapper.scrollWidth <= wrapper.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+            return;
+        }
+        event.preventDefault();
+        wrapper.scrollLeft += event.deltaY;
+    }, { passive: false });
 }
 
-function renderFeeReport(data) {
-    const summary = renderSummary([
-        { label: '件数', value: `${Number(data.summary.count || 0).toLocaleString('ja-JP')}件` },
-        { label: '送料合計', value: formatCurrency(data.summary.total_shipping) },
-        { label: '販売手数料合計', value: formatCurrency(data.summary.total_commission) },
-        { label: '卸販売手数料合計', value: formatCurrency(data.summary.total_wholesale_fee) },
-        { label: '手数料総額', value: formatCurrency(data.summary.total_fees) }
-    ]);
-
-    const rows = (data.items || []).map(item => `
-        <tr>
-            <td>${formatText(item.sale_date)}</td>
-            <td>${formatText(item.product_name)}</td>
-            <td>${formatText(item.brand_name)}</td>
-            <td class="text-right">${formatCurrency(item.shipping_fee)}</td>
-            <td class="text-right">${formatCurrency(item.commission_fee)}</td>
-            <td class="text-right">${formatCurrency(item.wholesale_fee)}</td>
-            <td class="text-right">${formatCurrency(item.total_fee)}</td>
-        </tr>
-    `);
-
-    return summary + renderTable(
-        ['売却日', '商品名', 'ブランド', '送料', '販売手数料', '卸販売手数料', '手数料合計'],
-        rows,
-        '対象の手数料データはありません。'
-    );
+function setupReportTableInteractions(scope) {
+    scope.querySelectorAll('[data-draggable-scroll="true"]').forEach((wrapper) => {
+        enableDraggableTable(wrapper);
+    });
 }
 
-function formatCurrency(value) {
-    return `¥${Number(value || 0).toLocaleString('ja-JP')}`;
-}
+document.querySelectorAll('.report-card').forEach((card) => {
+    const type = card.dataset.reportType;
+    const previewButton = card.querySelector('[data-action="preview"]');
+    const csvButton = card.querySelector('[data-action="csv"]');
 
-function formatText(value) {
-    return escapeHtml(value == null || value === '' ? '-' : String(value));
-}
+    previewButton.addEventListener('click', () => {
+        openReportModal(type, collectCardParams(card));
+    });
 
-function formatSaleType(value) {
-    if (!value) return '-';
-    return saleTypeLabels[value] || value;
-}
-
-function escapeHtml(value) {
-    return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
+    csvButton.addEventListener('click', () => {
+        downloadReport(type, collectCardParams(card));
+    });
+});
 </script>
 {% endblock %}
