@@ -79,11 +79,12 @@
         
         <div class="form-section">
             <h2>公開設定</h2>
-            
+
             <div class="form-group toggle-group">
                 <div class="toggle-info">
                     <span class="toggle-text">ページを公開する</span>
                     <p class="form-hint">オフにするとページは非公開になります</p>
+                    <p class="form-hint">作成後の詳細画面から「今すぐ開始する」を押せば、すぐ公開できます。</p>
                 </div>
                 <div class="toggle-buttons">
                     <button type="button" class="toggle-btn off active" onclick="setPublic(false)">非公開</button>
@@ -92,10 +93,10 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="form-actions">
             <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" class="btn btn-primary">オークションを作成</button>
+            <button type="submit" class="btn btn-primary">オークションを作成して設定へ進む</button>
         </div>
     </form>
 </div>
