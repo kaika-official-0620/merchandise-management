@@ -2324,7 +2324,8 @@ def apply(module: Any) -> None:
     module.fetch_admin_document_history_rows = fetch_admin_document_history_rows
     module.apply_admin_document_history_filters = apply_admin_document_history_filters
 
-    app.view_functions["admin_documents_dashboard"] = login_required(admin_documents_dashboard_v2)
+    if "admin_documents_dashboard" not in app.view_functions:
+        app.view_functions["admin_documents_dashboard"] = login_required(admin_documents_dashboard_v2)
     app.view_functions["sales_agency_my_requests"] = login_required(sales_agency_my_requests_v2)
     app.view_functions["admin_sales_agency_requests"] = login_required(admin_sales_agency_requests_v3)
     app.view_functions["admin_sales_agency_process"] = login_required(admin_sales_agency_process_v3)

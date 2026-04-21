@@ -64,36 +64,6 @@
     gap: 1rem;
 }
 
-.request-filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-    padding: 0.9rem 1rem;
-    background: #fff7ed;
-    border: 1px solid #fdba74;
-    border-radius: 12px;
-}
-
-.request-filter-label {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #9a3412;
-}
-
-.request-filter-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.35rem 0.7rem;
-    border-radius: 999px;
-    background: white;
-    border: 1px solid #fdba74;
-    color: #9a3412;
-    font-size: 0.82rem;
-    font-weight: 600;
-}
-
 .request-card {
     background: white;
     border-radius: 12px;
@@ -382,16 +352,16 @@
     .stats-cards {
         grid-template-columns: 1fr;
     }
-
+    
     .request-body {
         grid-template-columns: 1fr;
     }
-
+    
     .request-image {
         width: 100%;
         height: 200px;
     }
-
+    
     .request-actions {
         flex-direction: row;
         min-width: auto;
@@ -419,37 +389,38 @@
             <div class="stat-value">{{ completed_count }}</div>
         </div>
     </div>
-
+    
     <!-- 申請一覧 -->
-    {% if filter_tags %}
-    <div class="request-filter-bar">
-        <span class="request-filter-label">絞り込み中</span>
-        {% for tag in filter_tags %}
-        <span class="request-filter-chip">{{ tag }}</span>
-        {% endfor %}
-        <a href="{{ url_for('admin_disposal_requests') }}" class="btn btn-secondary">申請一覧に戻る</a>
-    </div>
-    {% endif %}
-
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}
-        <div class="request-card {{ req.status_stage }}">
+        <div class="request-card {{ req.status }}">
             <div class="request-header">
                 <div>
-                    <span class="request-status {{ req.status_stage }}">{{ req.status_label }}</span>
+                    <span class="request-status {{ req.status }}">
+                        {% if req.status == 'pending' %}⏳ 未処理
+                        {% elif req.status == 'processing' %}🔄 処理中
+                        {% elif req.status == 'completed' %}✅ 完了
+                        {% else %}❌ 却下
+                        {% endif %}
+                    </span>
                     <span class="reason-badge {% if req.reason == 'long_term' %}long-term{% else %}overdue{% endif %}">
                         {% if req.reason == 'long_term' %}📦 長期在庫
                         {% else %}💳 月謝未払い
                         {% endif %}
                     </span>
-                    <span class="disposal-type-badge {{ req.disposal_type }}">{{ req.disposal_type_label }}</span>
+                    <span class="disposal-type-badge {{ req.disposal_type }}">
+                        {% if req.disposal_type == 'auction' %}🏷️ オークション販売
+                        {% elif req.disposal_type == 'liquidation' %}📦 在庫処分
+                        {% else %}🚚 受け取り郵送
+                        {% endif %}
+                    </span>
                 </div>
                 <span style="font-size: 0.85rem; color: #64748b;">
-                    申請日: {{ req.requested_at_display }}
+                    申請日: {{ req.created_at.strftime('%Y/%m/%d %H:%M') if req.created_at else '-' }}
                 </span>
             </div>
-
+            
             <div class="request-body">
                 <div class="request-image">
                     {% if req.photo_path %}
@@ -458,20 +429,17 @@
                     <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #94a3b8;">📷</div>
                     {% endif %}
                 </div>
-
+                
                 <div class="request-info">
                     <h4>{{ req.product_name or '商品名なし' }}</h4>
                     <p>ブランド: {{ req.brand_name or '-' }}</p>
                     <p>仕入価格: ¥{{ "{:,}".format(req.purchase_price or 0) }}</p>
-                    <p><strong>お客様申請:</strong> {{ req.disposal_type_label }}</p>
-                    <p><strong>現在の対応:</strong> {{ req.status_label }}</p>
-                    <p><strong>次の対応:</strong> {{ req.next_action_label }}</p>
-
+                    
                     <div class="user-info">
                         <p><strong>申請者:</strong> {{ req.display_name or req.username }}</p>
                         <p><strong>メール:</strong> {{ req.email }}</p>
                     </div>
-
+                    
                     {% if req.disposal_type == 'shipping' and req.shipping_address %}
                     <div class="shipping-info">
                         <strong>📬 郵送先情報</strong><br>
@@ -480,40 +448,31 @@
                         住所: {{ req.shipping_address }}
                     </div>
                     {% endif %}
-
+                    
                     {% if req.admin_note %}
                     <div style="margin-top: 0.75rem; padding: 0.5rem; background: #fef3c7; border-radius: 6px; font-size: 0.85rem;">
                         <strong>管理者メモ:</strong> {{ req.admin_note }}
                     </div>
                     {% endif %}
                 </div>
-
+                
+                {% if req.status == 'pending' or req.status == 'processing' %}
                 <div class="request-actions">
-                    {% if req.primary_action %}
-                    <button class="btn-process processing" onclick='processRequest({{ req.id }}, {{ req.primary_action|tojson }}, {{ req.primary_confirm_message|default("", true)|tojson }})'>
-                        {{ req.primary_action_label }}
+                    {% if req.status == 'pending' %}
+                    <button class="btn-process processing" onclick="processRequest({{ req.id }}, 'processing')">
+                        処理開始
                     </button>
                     {% endif %}
-                    {% if req.secondary_action %}
-                    <button class="btn-process completed" onclick='processRequest({{ req.id }}, {{ req.secondary_action|tojson }}, {{ req.secondary_confirm_message|default("", true)|tojson }})'>
-                        {{ req.secondary_action_label }}
+                    {% if req.status == 'processing' %}
+                    <button class="btn-process completed" onclick="processRequest({{ req.id }}, 'completed')">
+                        完了
                     </button>
                     {% endif %}
-                    {% if req.show_sale_entry %}
-                    <a href="{{ url_for('edit_item', id=req.merchandise_id) }}" class="btn-process processing" style="text-decoration: none;">{{ req.sale_entry_label }}</a>
-                    {% endif %}
-                    {% if req.finish_action %}
-                    <button class="btn-process completed" onclick='processRequest({{ req.id }}, {{ req.finish_action|tojson }}, {{ req.finish_confirm_message|default("", true)|tojson }})'>
-                        {{ req.finish_action_label }}
-                    </button>
-                    {% endif %}
-                    <a href="{{ url_for('view_item', id=req.merchandise_id) }}" class="btn-process processing" style="text-decoration: none;">商品詳細</a>
-                    {% if req.allow_reject %}
                     <button class="btn-process rejected" onclick="openRejectModal({{ req.id }})">
                         却下
                     </button>
-                    {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -550,18 +509,18 @@
 </div>
 
 <script>
-function processRequest(requestId, action, confirmMessage) {
-    if (confirm(confirmMessage || 'この申請を更新しますか？')) {
+function processRequest(requestId, action) {
+    if (confirm(action === 'completed' ? '処理を完了しますか？' : '処理を開始しますか？')) {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = `/admin/disposal-request/${requestId}/process`;
-
+        
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'action';
         input.value = action;
         form.appendChild(input);
-
+        
         document.body.appendChild(form);
         form.submit();
     }

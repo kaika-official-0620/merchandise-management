@@ -17,47 +17,6 @@
 .condition-AB { background: #fed7aa; color: #c2410c; }
 .condition-B { background: #fecaca; color: #dc2626; }
 
-.request-pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.28rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.82rem;
-    font-weight: 700;
-}
-
-.request-pill.type {
-    background: #e0f2fe;
-    color: #0f766e;
-}
-
-.request-pill.status {
-    background: #fff7ed;
-    color: #c2410c;
-}
-
-.request-pill.status.processing {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.request-pill.status.completed {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.request-pill.status.rejected {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-.long-term-detail-actions {
-    margin-top: 1rem;
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-
 /* コピーボタン */
 .copy-btn {
     display: inline-flex;
@@ -413,71 +372,71 @@
         display: flex;
         flex-direction: column;
     }
-
+    
     .view-image {
         order: 1;
         margin-bottom: 15px;
         margin-top: 10px;
     }
-
+    
     .view-details {
         order: 2;
     }
-
+    
     .gallery-container {
         margin-bottom: 10px;
     }
-
+    
     .main-photo-scroll {
         max-width: 250px;
         margin: 0 auto 10px;
     }
-
+    
     .main-photo-scroll-container {
         border-radius: 8px;
     }
-
+    
     .photo-counter {
         padding: 2px 8px;
         font-size: 0.7rem;
         bottom: 5px;
         right: 5px;
     }
-
+    
     .thumbnail-strip {
         gap: 6px;
         padding: 8px 0;
         justify-content: center;
     }
-
+    
     .thumbnail-item {
         width: 45px;
         height: 45px;
         border-radius: 6px;
     }
-
+    
     .no-image-large {
         height: 120px;
         font-size: 1.2rem;
         max-width: 200px;
         margin: 0 auto;
     }
-
+    
     /* ライトボックス調整 */
     .lightbox-nav {
         width: 40px;
         height: 40px;
         font-size: 1.2rem;
     }
-
+    
     .lightbox-prev {
         left: 10px;
     }
-
+    
     .lightbox-next {
         right: 10px;
     }
-
+    
     .lightbox-close {
         width: 36px;
         height: 36px;
@@ -492,7 +451,7 @@
     .main-photo-scroll {
         max-width: 200px;
     }
-
+    
     .thumbnail-item {
         width: 40px;
         height: 40px;
@@ -542,7 +501,7 @@
         <div class="no-image-large">写真なし</div>
         {% endif %}
     </div>
-
+    
     <div class="view-details">
         <div class="product-title-wrapper">
         <h2>{{ item.product_name }}</h2>
@@ -551,7 +510,7 @@
                 コピー
             </button>
         </div>
-
+        
         <div class="detail-section">
             <h3>基本情報</h3>
             <dl class="detail-list">
@@ -625,67 +584,9 @@
                 <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
                 <dt>支払方法</dt>
                 <dd>{{ item.payment_method or '-' }}</dd>
-                <dt>メモ</dt>
-                <dd style="white-space: pre-wrap;">{{ item.notes or '-' }}</dd>
             </dl>
         </div>
-
-        {% if item.long_term_request %}
-        <div class="detail-section">
-            <h3>長期保存申請</h3>
-            <dl class="detail-list">
-                <dt>申請内容</dt>
-                <dd><span class="request-pill type">{{ item.long_term_request.type_label }}</span></dd>
-                <dt>処理状況</dt>
-                <dd><span class="request-pill status {{ item.long_term_request.status_stage or 'pending' }}">{{ item.long_term_request.status_label }}</span></dd>
-                <dt>次の対応</dt>
-                <dd>{{ item.long_term_request.next_action_label }}</dd>
-                <dt>申請日</dt>
-                <dd>{{ item.long_term_request.requested_at_display }}</dd>
-                {% if item.long_term_request.processed_at_display %}
-                <dt>更新日</dt>
-                <dd>{{ item.long_term_request.processed_at_display }}</dd>
-                {% endif %}
-                {% if item.storage_started_at_display %}
-                <dt>長期保存開始日</dt>
-                <dd>{{ item.storage_started_at_display }}</dd>
-                <dt>保管日数</dt>
-                <dd>{{ item.days_since_purchase or 0 }}日</dd>
-                {% endif %}
-                {% if item.long_term_request.shipping_name %}
-                <dt>宛名</dt>
-                <dd>{{ item.long_term_request.shipping_name }}</dd>
-                {% endif %}
-                {% if item.long_term_request.shipping_phone %}
-                <dt>電話番号</dt>
-                <dd>{{ item.long_term_request.shipping_phone }}</dd>
-                {% endif %}
-                {% if item.long_term_request.shipping_address %}
-                <dt>返送先住所</dt>
-                <dd style="white-space: pre-wrap;">{{ item.long_term_request.shipping_address }}</dd>
-                {% endif %}
-                {% if item.long_term_request.admin_note %}
-                <dt>管理メモ</dt>
-                <dd style="white-space: pre-wrap;">{{ item.long_term_request.admin_note }}</dd>
-                {% endif %}
-            </dl>
-            {% if current_user.is_admin() %}
-            <div class="long-term-detail-actions">
-                {% if item.long_term_request.show_sale_entry %}
-                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-edit">{{ item.long_term_request.sale_entry_label }}</a>
-                {% endif %}
-                {% if item.long_term_request.finish_action %}
-                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.long_term_request.id) }}" style="display:inline-flex; margin: 0;">
-                    <input type="hidden" name="action" value="{{ item.long_term_request.finish_action }}">
-                    <button type="submit" class="btn btn-secondary" onclick='return confirm({{ item.long_term_request.finish_confirm_message|default("", true)|tojson }})'>{{ item.long_term_request.finish_action_label }}</button>
-                </form>
-                {% endif %}
-                <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-secondary">申請一覧で確認</a>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-
+        
         <div class="detail-section">
             <h3>出品情報</h3>
             <dl class="detail-list">
@@ -725,7 +626,7 @@
                 {% endif %}
             </dl>
         </div>
-
+        
         {% if item.sale_date %}
         <div class="detail-section">
             <h3>売却情報</h3>
@@ -846,18 +747,18 @@ function openLightbox(index) {
     const lightbox = document.getElementById('lightbox');
     const scrollContainer = document.getElementById('lightboxScrollContainer');
     const lightboxCounter = document.getElementById('lightboxCounter');
-
+    
     // 指定インデックスにスクロール
     const slideWidth = scrollContainer.offsetWidth;
     scrollContainer.scrollTo({ left: slideWidth * index, behavior: 'instant' });
-
+    
     if (lightboxCounter) {
         lightboxCounter.textContent = (index + 1) + ' / ' + photos.length;
     }
-
+    
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
-
+    
     // 表示後にスクロール位置を再調整
     setTimeout(() => {
         const containerWidth = scrollContainer.offsetWidth;
@@ -926,7 +827,7 @@ if (lightboxScrollContainer) {
 document.addEventListener('keydown', function(e) {
     const lightbox = document.getElementById('lightbox');
     if (!lightbox.classList.contains('active')) return;
-
+    
     if (e.key === 'Escape') closeLightbox();
     if (e.key === 'ArrowLeft') lightboxPrev();
     if (e.key === 'ArrowRight') lightboxNext();
@@ -972,11 +873,11 @@ function showCopyFeedback(button) {
     button.classList.add('copied');
     const originalText = button.innerHTML;
     button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> コピー済';
-
+    
     // トースト表示
     const toast = document.getElementById('copyToast');
     toast.classList.add('show');
-
+    
     // 1.5秒後に元に戻す
     setTimeout(() => {
         button.classList.remove('copied');
@@ -1002,13 +903,13 @@ function downloadCurrentImage(event) {
     const button = event.target;
     button.classList.add('downloading');
     button.textContent = 'ダウンロード中...';
-
+    
     {% if item.all_photos and item.all_photos|length > 0 %}
     // currentPhotoIndexはライトボックス用の変数（存在すれば使用）
     const index = typeof currentPhotoIndex !== 'undefined' ? currentPhotoIndex : downloadCurrentIndex;
     const photoPath = downloadPhotos[index];
     const filename = photoPath.split('/').pop();
-
+    
     downloadImage('{{ url_for("static", filename="") }}' + photoPath, filename, button);
     {% endif %}
 }
@@ -1019,20 +920,20 @@ function downloadAllImages(event) {
     event.stopPropagation();
     const button = event.target;
     const originalText = button.textContent;
-
+    
     // ボタンを一時的に無効化
     button.disabled = true;
     button.classList.add('downloading');
     button.textContent = '準備中...';
-
+    
     // ZIPダウンロードURLへ遷移
     // iOSなどのスマホでも確実にダウンロードさせるため、直接遷移またはiframeを使用
     const downloadUrl = "{{ url_for('download_all_images', id=item.id) }}";
-
+    
     // 新しいタブで開くのではなく、現在のウィンドウで遷移させることでダウンロードダイアログを出す
     // （iOS Safariでは window.location.href が最も安定している）
     window.location.href = downloadUrl;
-
+    
     // ダウンロード開始を検知できないため、タイマーでボタンを戻す
     setTimeout(() => {
         button.disabled = false;
@@ -1053,7 +954,7 @@ function downloadImage(url, filename, button) {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(link.href);
-
+            
             if (button) {
                 button.classList.remove('downloading');
                 button.textContent = '保存完了！';
@@ -1075,3 +976,4 @@ function downloadImage(url, filename, button) {
 }
 </script>
 {% endblock %}
+

@@ -305,7 +305,7 @@
     {% if current_user.is_owner() %}
     <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 代行サービス管理に戻る</a>
     {% endif %}
-
+    
     <div class="stats-summary">
         <div class="stat-card">
             <div class="stat-label">結果表示中</div>
@@ -328,12 +328,12 @@
             <div class="stat-value">{{ history_summary.bid_count }}</div>
         </div>
     </div>
-
+    
     <div class="history-tabs">
         <button class="history-tab active" onclick="showTab(event, 'results')">終了結果</button>
         <button class="history-tab" onclick="showTab(event, 'bids')">入札履歴</button>
     </div>
-
+    
     <div id="results-section" class="history-section active">
         {% if result_items %}
         <div class="result-grid">
@@ -379,7 +379,7 @@
         </div>
         {% endif %}
     </div>
-
+    
     <div id="bids-section" class="history-section">
         {% if bid_history %}
         <div class="bid-history-table">

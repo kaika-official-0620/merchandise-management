@@ -3,11 +3,9 @@
 {% block title %}買取明細書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
-{% if current_user.is_admin() %}
 <div class="page-actions">
     <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
 </div>
-{% endif %}
 
 {% if invoices %}
 <div class="invoice-cards">
@@ -41,7 +39,7 @@
         </div>
         <div class="card-actions">
             <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
-            {% if current_user.is_admin() and inv.status == 'draft' %}
+            {% if inv.status == 'draft' %}
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
                 <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この買取明細書を削除しますか？')">削除</a>
@@ -56,9 +54,7 @@
 <div class="empty-state">
     <div class="empty-icon"></div>
     <p>買取明細書がありません</p>
-    {% if current_user.is_admin() %}
     <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">新規作成</a>
-    {% endif %}
 </div>
 {% endif %}
 

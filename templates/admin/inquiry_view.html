@@ -30,21 +30,38 @@
                     {{ inquiry.content | replace('\n', '<br>') | safe }}
                 </div>
                 
-{% if image_paths %}
+                {% if inquiry.image_path %}
                 <div class="inquiry-attachment">
                     <h4>📷 添付画像</h4>
                     <div class="attachment-images">
-                        {% for image_path in image_paths %}
-                        <div class="attachment-image-item">
-                            <a href="{{ url_for('static', filename=image_path) }}" target="_blank" class="image-link">
-                                <img src="{{ url_for('static', filename=image_path) }}" alt="添付画像 {{ loop.index }}">
-                            </a>
-                            <div class="image-actions">
-                                <a href="{{ url_for('static', filename=image_path) }}" download class="btn btn-sm">💾</a>
-                                <a href="{{ url_for('static', filename=image_path) }}" target="_blank" class="btn btn-sm">🔍</a>
+                        {% set image_paths = inquiry.image_path %}
+                        {% if image_paths.startswith('[') %}
+                            {% set paths = image_paths | replace('[', '') | replace(']', '') | replace('"', '') | replace("'", "") | split(',') %}
+                            {% for path in paths %}
+                                {% set clean_path = path | trim %}
+                                {% if clean_path %}
+                                <div class="attachment-image-item">
+                                    <a href="{{ url_for('static', filename=clean_path) }}" target="_blank" class="image-link">
+                                        <img src="{{ url_for('static', filename=clean_path) }}" alt="添付画像 {{ loop.index }}">
+                                    </a>
+                                    <div class="image-actions">
+                                        <a href="{{ url_for('static', filename=clean_path) }}" download class="btn btn-sm">💾</a>
+                                        <a href="{{ url_for('static', filename=clean_path) }}" target="_blank" class="btn btn-sm">🔍</a>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <div class="attachment-image-item">
+                                <a href="{{ url_for('static', filename=image_paths) }}" target="_blank" class="image-link">
+                                    <img src="{{ url_for('static', filename=image_paths) }}" alt="添付画像">
+                                </a>
+                                <div class="image-actions">
+                                    <a href="{{ url_for('static', filename=image_paths) }}" download class="btn btn-sm">💾</a>
+                                    <a href="{{ url_for('static', filename=image_paths) }}" target="_blank" class="btn btn-sm">🔍</a>
+                                </div>
                             </div>
-                        </div>
-                        {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}計算書編集 - 株式会社 開花{% endblock %}
+{% block title %}計算書編集 - 物販管理システム{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -97,8 +97,7 @@
 
         <div class="form-actions">
             <a href="{{ url_for('admin_auction_keisan_view', id=keisan.id) }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-            <button type="submit" name="status" value="completed" class="btn btn-primary">送信待機にする</button>
+            <button type="submit" class="btn btn-primary">保存</button>
         </div>
     </form>
 </div>

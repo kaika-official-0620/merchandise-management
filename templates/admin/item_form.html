@@ -1,8 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ 'ユーザー商品登録' if mode == 'user' else '開花商品登録' }} - 株式会社 開花{% endblock %}
+{% block title %}管理者商品登録 - 株式会社 開花{% endblock %}
 
 {% block content %}
-{% set is_kaika_scope = mode != 'user' %}
 <style>
 /* ブランド名コンボボックス */
 .brand-combobox {
@@ -81,13 +80,6 @@
     color: #94a3b8;
     font-size: 0.85rem;
 }
-.brand-dropdown .dropdown-meta {
-    display: block;
-    margin-top: 0.2rem;
-    font-size: 0.75rem;
-    color: #64748b;
-    line-height: 1.4;
-}
 .brand-auto-detected {
     background-color: #d1fae5 !important;
     transition: background-color 0.3s;
@@ -119,15 +111,6 @@
     margin-top: 4px;
 }
 
-.target-user-search-input {
-    margin-top: 0.5rem;
-    margin-bottom: 0.75rem;
-}
-
-.target-user-search-status {
-    color: #065f46;
-}
-
 </style>
 
 <div class="page-header">
@@ -135,8 +118,8 @@
     <h1>👤 ユーザー商品登録</h1>
     <a href="{{ url_for('admin_user_products') }}" class="btn btn-secondary">← ユーザー商品一覧に戻る</a>
     {% else %}
-    <h1>🏢 開花商品登録</h1>
-    <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">← 開花商品管理に戻る</a>
+    <h1>🏢 管理者商品登録</h1>
+    <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">← 管理者商品一覧に戻る</a>
     {% endif %}
 </div>
 
@@ -154,106 +137,66 @@
 
 <form method="POST" enctype="multipart/form-data" class="item-form" id="item-form">
     <input type="hidden" name="mode" value="{{ mode or 'admin' }}">
-
+    
     <div class="form-grid">
         <!-- 左カラム: 基本情報 -->
         <div class="form-section">
             <h2>基本情報</h2>
-
+            
             {% if mode == 'user' %}
             <!-- ユーザーモード：ユーザー選択必須 -->
             <div class="form-group" style="background: #ecfdf5; padding: 1rem; border-radius: 8px; border: 2px solid #10b981; margin-bottom: 1.5rem;">
                 <label for="target_user_id" style="color: #065f46; font-weight: 600;">👤 登録先ユーザー <span style="color: #ef4444;">*必須</span></label>
-                <input
-                    type="search"
-                    id="target_user_search"
-                    class="target-user-search-input"
-                    placeholder="名前・会員番号で検索"
-                    autocomplete="off"
-                    spellcheck="false"
-                >
                 <select id="target_user_id" name="target_user_id" required style="margin-top: 0.5rem;">
                     <option value="">-- ユーザーを選択してください --</option>
                     {% for user in users %}
-                    {% set target_user_name = user.display_name or '' %}
-                    {% set target_user_member_code = user.username or '' %}
-                    {% set target_user_label = target_user_name or ('会員番号: ' ~ target_user_member_code) %}
-                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}
-                            data-display-name="{{ target_user_name }}"
-                            data-member-code="{{ target_user_member_code }}"
-                            data-search-text="{{ target_user_name }} {{ target_user_member_code }}">
-                        {{ target_user_label }}{% if target_user_name and target_user_member_code %} / 会員番号: {{ target_user_member_code }}{% endif %}
+                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}>
+                        {{ user.display_name or user.username }}
                     </option>
                     {% endfor %}
                 </select>
-                <small id="target_user_search_status" class="form-help target-user-search-status">
-                    全{{ users|length }}件から選択できます。名前または会員番号で絞り込めます。
-                </small>
                 <small class="form-help" style="color: #065f46;">この商品は選択したユーザーの商品として登録されます</small>
             </div>
             {% else %}
             <!-- 管理者モード：お知らせ表示 -->
             <div class="form-group" style="background: #fef3c7; padding: 1rem; border-radius: 8px; border: 1px solid #f59e0b; margin-bottom: 1.5rem;">
                 <p style="color: #92400e; margin: 0; font-weight: 500;">
-                    🏢 この商品は<strong>開花商品</strong>として登録されます
+                    🏢 この商品は<strong>管理者商品</strong>として登録されます
                 </p>
-                <small style="color: #92400e;">この画面では開花商品のみを登録します。お客様向けの商品は「ユーザー商品一覧」から登録してください。</small>
+                <small style="color: #92400e;">ユーザーの商品を登録する場合は「ユーザー商品一覧」から行ってください</small>
             </div>
             {% endif %}
-
+            
             <div class="form-group">
                 <label for="purchase_date">仕入日</label>
                 <input type="date" id="purchase_date" name="purchase_date">
             </div>
-
+            
             <div class="form-group">
                 <label for="product_name">商品名</label>
-                <div class="brand-combobox">
-                    <input type="text" id="product_name" name="product_name" required autocomplete="off">
-                    <div class="brand-dropdown" id="product-suggestion-dropdown"></div>
-                </div>
-                <small class="form-help">ブランド名・検索名・名称候補から候補を表示します。候補がなくてもそのまま入力できます。</small>
+                <input type="text" id="product_name" name="product_name" required>
             </div>
-
-            <div class="form-group">
-                <label for="notes">メモ</label>
-                <textarea id="notes" name="notes" rows="4" placeholder="送料や注意事項などの共有メモを入力"></textarea>
-                <small class="form-help">登録後は管理画面と商品詳細から確認できます。</small>
-            </div>
-
+            
             <div class="form-group">
                 <label for="kaika_product_code">開花商品番号</label>
                 <input type="text" id="kaika_product_code" name="kaika_product_code" placeholder="開花独自の管理番号">
             </div>
-
+            
             <div class="form-group">
                 <label for="brand_name">ブランド名</label>
                 <div class="brand-combobox">
-                    <input type="text" id="brand_name" name="brand_name"
+                    <input type="text" id="brand_name" name="brand_name" 
                            autocomplete="off" placeholder="選択または入力してください">
                     <button type="button" class="combobox-toggle" id="brand-toggle">▼</button>
                     <div class="brand-dropdown" id="brand-dropdown"></div>
                 </div>
-                <input type="hidden" id="master_brand_id" name="master_brand_id">
-                <small class="form-help">ブランド名・検索名・キーワードから候補を表示します。</small>
             </div>
-            <div class="form-group">
-                <label for="brand_category_name">ブランドカテゴリ</label>
-                <div class="brand-combobox">
-                    <input type="text" id="brand_category_name" name="brand_category_name"
-                           autocomplete="off" placeholder="カテゴリで候補を絞り込めます">
-                    <button type="button" class="combobox-toggle" id="category-toggle">▼</button>
-                    <div class="brand-dropdown" id="category-dropdown"></div>
-                </div>
-                <input type="hidden" id="master_category_id" name="master_category_id">
-                <small class="form-help">任意です。カテゴリでブランド候補と商品候補を絞り込めます。</small>
-            </div>
-
+            
             <div class="form-group">
                 <label for="model_number">型番</label>
                 <input type="text" id="model_number" name="model_number" placeholder="例: M44874, 116500LN">
             </div>
-
+            
             <div class="form-group">
                 <label for="item_condition">商品状態</label>
                 <select id="item_condition" name="item_condition">
@@ -261,7 +204,7 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-
+            
             <div class="form-group">
                 <label for="store_name">仕入先</label>
                 <select id="store_name" name="store_name" onchange="toggleSupplierDetail()">
@@ -269,7 +212,7 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-
+            
             <!-- 個人選択時の追加フィールド -->
             <div id="supplier-detail-section" style="display: none; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
                 <div class="form-group">
@@ -279,20 +222,20 @@
                         <!-- マスターデータから動的に生成 -->
                     </select>
                 </div>
-
+                
                 <div class="form-group">
                     <label for="id_document">身分証</label>
                     <input type="file" id="id_document" name="id_document" accept="image/*,.pdf">
                     <small class="form-help">画像またはPDF</small>
                 </div>
-
+                
                 <div class="form-group">
                     <label for="consent_form">同意書</label>
                     <input type="file" id="consent_form" name="consent_form" accept="image/*,.pdf">
                     <small class="form-help">画像またはPDF</small>
                 </div>
             </div>
-
+            
             <div class="form-group">
                 <label for="purchase_price">仕入額</label>
                 <input type="number" id="purchase_price" name="purchase_price" value="0" min="0"
@@ -311,7 +254,7 @@
                        oninput="if(typeof recalculateWholesalePrice==='function'){document.getElementById('wholesale_price_hint').textContent='手動入力中（仕入額・卸手数料を変更すると自動計算に戻ります）';calculateProfit()}">
                 <small class="form-help" id="wholesale_price_hint">手動入力がなければ自動計算します（手動変更可）</small>
             </div>
-
+            
             <div class="form-group">
                 <label for="payment_method">支払方法</label>
                 <select id="payment_method" name="payment_method">
@@ -319,33 +262,32 @@
                     <!-- マスターデータから動的に生成 -->
                 </select>
             </div>
-
+            
             <div class="form-group">
                 <label for="photo">メイン写真（1枚目）</label>
                 <input type="file" id="photo" name="photo" accept="image/*">
             </div>
-
+            
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
                 <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
             </div>
         </div>
-
+        
         <!-- 右カラム: 売却情報 -->
         <div class="form-section">
             <h2>売却情報</h2>
-
+            
             <div class="form-group">
                 <label for="item_status">ステータス</label>
                 <select id="item_status" name="item_status" onchange="updateStatusFields()">
                     <option value="unlisted">未出品</option>
-                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="sold">売却済み</option>
                 </select>
             </div>
-
+            
             <!-- 出品中・売却済み時のみ表示 -->
             <div id="listing-date-group" class="form-group" style="display: none;">
                 <label for="listing_date">出品日</label>
@@ -357,123 +299,73 @@
                 <label for="listing_price">出品価格</label>
                 <input type="number" id="listing_price" name="listing_price" value="0" min="0">
             </div>
-
+            
             <!-- 売却済み時のみ表示 -->
             <div id="sale-date-group" class="form-group" style="display: none;">
                 <label for="sale_date">売却日</label>
                 <input type="date" id="sale_date" name="sale_date">
             </div>
-
+            
             <!-- 売却済み時のみ表示するフィールド -->
             <div id="sold-fields" style="display: none;">
                 <div class="form-group">
-                    <label>販売タイプ</label>
-                    <div class="sale-type-layout">
+                    <label>販売タイプ（複数選択可）</label>
                     <div class="sale-type-checkboxes">
-                        {% if is_kaika_scope %}
-                        <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="normal" checked>
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">通常販売</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="wholesale">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">業者販売</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="auction">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">オークション販売</span>
-                        </label>
-                        <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice" value="live_commerce">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">ライブコマース</span>
-                        </label>
-                        {% else %}
+                        <!-- 撮影梱包等代行は固定（常にチェック、変更不可） -->
                         <label class="sale-type-option fixed-option">
-                            <input class="sale-type-control" type="radio" checked disabled tabindex="-1" aria-hidden="true">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">撮影梱包発送代行<button type="button" class="sale-type-detail-link" data-fee-detail="photo_packing" onclick="event.stopPropagation()">詳細</button><span class="fixed-badge">固定</span></span>
+                            <input type="checkbox" name="sale_type[]" value="photo_packing" checked disabled>
+                            <input type="hidden" name="sale_type[]" value="photo_packing">
+                            <span class="sale-type-label">撮影梱包等代行（25,000円以上:2%、未満:500円）<span class="fixed-badge">固定</span></span>
                         </label>
                         <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="normal" checked>
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">通常販売<button type="button" class="sale-type-detail-link" data-fee-detail="normal" onclick="event.stopPropagation()">詳細</button></span>
+                            <input type="checkbox" name="sale_type[]" value="normal">
+                            <span class="sale-type-label">通常（手数料10%）<span class="sale-type-note">※メルカリ・ラクマ・ヤフオクなど</span></span>
                         </label>
                         <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="wholesale">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">業者販売<button type="button" class="sale-type-detail-link" data-fee-detail="wholesale" onclick="event.stopPropagation()">詳細</button></span>
+                            <input type="checkbox" name="sale_type[]" value="wholesale">
+                            <span class="sale-type-label">業者卸販売（10%、30,000円以上で送料無料）</span>
                         </label>
                         <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="multi_listing">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">同時出品サービス<button type="button" class="sale-type-detail-link" data-fee-detail="multi_listing" onclick="event.stopPropagation()">詳細</button></span>
+                            <input type="checkbox" name="sale_type[]" value="multi_listing">
+                            <span class="sale-type-label">同時出品サービス（手数料3%）</span>
                         </label>
                         <label class="sale-type-option">
-                            <input class="sale-type-control" type="radio" name="sale_type_choice_user" value="auction">
-                            <span class="sale-type-indicator" aria-hidden="true"></span>
-                            <span class="sale-type-label">オークション販売<button type="button" class="sale-type-detail-link" data-fee-detail="auction" onclick="event.stopPropagation()">詳細</button></span>
+                            <input type="checkbox" name="sale_type[]" value="auction">
+                            <span class="sale-type-label">オークション流し（手数料5%）</span>
                         </label>
-                        {% endif %}
                     </div>
-                    </div>
-                    <small class="form-help">
-                        {% if is_kaika_scope %}
-                        開花商品の販売タイプを1つ選択してください。
-                        {% else %}
-                        ユーザー商品は撮影梱包発送代行を固定にしたうえで、販売方法を1つ選択してください。
-                        {% endif %}
-                    </small>
-                    <input type="hidden" id="sale_type" name="sale_type" value="{{ 'normal' if is_kaika_scope else 'photo_packing,normal' }}">
+                    <small class="form-help">販売タイプを選択してください。撮影梱包等代行は必須です。</small>
+                    <input type="hidden" id="sale_type" name="sale_type" value="photo_packing">
                 </div>
-
+                
                 <div class="form-group">
                     <label for="sale_price">売上金（税込販売価格）</label>
                     <input type="number" id="sale_price" name="sale_price" value="0" min="0">
                 </div>
-
+                
                 <div class="form-group">
                     <label for="shipping_cost">送料</label>
                     <input type="number" id="shipping_cost" name="shipping_cost" value="0" min="0">
                 </div>
-
-                <div class="form-group" id="sales-destination-group">
-                    <label for="sales_destination_choice">販売先</label>
-                    <div class="sales-destination-stack">
-                        <select id="sales_destination_choice"></select>
-                        <input type="text" id="sales_destination_other" placeholder="販売先を入力" style="display: none;">
-                    </div>
-                    <input type="hidden" id="sales_destination" name="sales_destination" value="">
-                    <small class="form-help" id="sales_destination_hint"></small>
+                
+                <div class="form-group">
+                    <label for="sales_destination">販売先（メモ）</label>
+                    <input type="text" id="sales_destination" name="sales_destination" placeholder="販売先を入力">
                 </div>
-
-                <div class="form-group" id="commission-rate-group">
-                    <label for="commission_rate">販売媒体手数料率（%）</label>
-                    <input type="number" id="commission_rate" name="commission_rate" value="10" min="0" step="0.1">
-                    <small class="form-help" id="commission_rate_hint">通常販売のときだけ、販売媒体ごとの手数料率を入力できます。</small>
-                </div>
-
-                <div class="form-group" id="commission-group">
-                    <label for="{{ 'commission' if is_kaika_scope else 'commission_display' }}">手数料</label>
-                    {% if is_kaika_scope %}
+                
+                <div class="form-group">
+                    <label for="commission">手数料</label>
                     <input type="number" id="commission" name="commission" value="0" min="0">
-                    {% else %}
-                    <input type="hidden" id="commission" name="commission" value="0">
-                    <input type="text" id="commission_display" value="" readonly class="readonly-money-field">
-                    {% endif %}
-                    <small class="form-help" id="commission_hint">
-                        {% if is_kaika_scope %}
-                        通常販売のみ販売媒体手数料を自動計算します。
-                        {% else %}
-                        販売タイプに応じて自動計算されます。開花手数料と販売媒体手数料の内訳を表示します。
-                        {% endif %}
-                    </small>
-                    <div id="commission_breakdown" class="sale-type-breakdown"></div>
+                    <small class="form-help" id="commission_hint">販売タイプに応じて自動計算されます（手動変更可）</small>
                 </div>
-
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" name="is_shipped">
+                        発送済み
+                    </label>
+                </div>
+                
                 <div class="form-group result-field">
                     <label>実際の利益</label>
                     <div class="calculated-value" id="actual_profit">¥0</div>
@@ -481,7 +373,7 @@
             </div>
         </div>
     </div>
-
+    
     <div class="form-actions">
         <a href="{{ url_for('admin_items') }}" class="btn btn-secondary">キャンセル</a>
         <button type="submit" class="btn btn-primary" id="submit-btn">
@@ -490,29 +382,6 @@
         </button>
     </div>
 </form>
-
-<div id="fee-detail-modal" class="fee-detail-modal" hidden>
-    <div class="fee-detail-modal__backdrop" data-fee-detail-close></div>
-    <div class="fee-detail-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="fee-detail-title">
-        <div class="fee-detail-modal__header">
-            <h3 id="fee-detail-title">手数料詳細</h3>
-            <button type="button" class="fee-detail-modal__close" data-fee-detail-close>&times;</button>
-        </div>
-        <p id="fee-detail-summary" class="fee-detail-modal__summary"></p>
-        <div class="fee-detail-modal__table-wrap">
-            <table class="fee-detail-modal__table">
-                <thead>
-                    <tr>
-                        <th>対象</th>
-                        <th>手数料</th>
-                    </tr>
-                </thead>
-                <tbody id="fee-detail-body"></tbody>
-            </table>
-        </div>
-        <ul id="fee-detail-notes" class="fee-detail-modal__notes"></ul>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -528,77 +397,37 @@
     border: 1px solid #e2e8f0;
 }
 
-.sale-type-layout {
-    display: block;
-}
-
-.form-group .sale-type-option {
-    position: relative;
-    display: grid !important;
-    grid-template-columns: 18px minmax(0, 1fr);
-    align-items: center !important;
-    column-gap: 10px !important;
+.sale-type-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 8px 12px;
     background: white;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s;
     border: 1px solid transparent;
-    margin: 0;
-    margin-bottom: 0 !important;
 }
 
-.form-group .sale-type-option:hover {
+.sale-type-option:hover {
     border-color: #3b82f6;
     background: #eff6ff;
 }
 
-.form-group .sale-type-option .sale-type-control {
-    display: block !important;
-    position: static !important;
-    opacity: 1 !important;
-    pointer-events: auto;
-    width: 16px !important;
-    height: 16px !important;
-    min-width: 16px !important;
-    min-height: 16px !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible;
-    clip: auto;
-    clip-path: none;
-    white-space: normal;
-    border: 0;
-    accent-color: #2563eb;
-    justify-self: start;
-    align-self: center;
-    cursor: pointer;
-    appearance: auto;
-    -webkit-appearance: radio;
+.sale-type-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
 }
 
-.form-group .sale-type-option .sale-type-indicator {
-    display: none !important;
-}
-
-.form-group .sale-type-option .sale-type-label {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px 8px;
-    min-width: 0;
-    align-self: center;
-    font-size: 0.9rem;
-    color: #374151;
-    line-height: 1.45;
-    margin: 0 !important;
-}
-
-.form-group .sale-type-option .sale-type-control:checked ~ .sale-type-label {
+.sale-type-option input[type="checkbox"]:checked + .sale-type-label {
     color: #1d4ed8;
     font-weight: 600;
+}
+
+.sale-type-label {
+    font-size: 0.9rem;
+    color: #374151;
 }
 
 .sale-type-note {
@@ -610,23 +439,20 @@
 }
 
 /* 固定項目のスタイル */
-.form-group .sale-type-option.fixed-option {
+.sale-type-option.fixed-option {
     background: #ecfdf5;
     border: 1px solid #a7f3d0;
     cursor: default;
 }
 
-.form-group .sale-type-option.fixed-option .sale-type-indicator {
-    display: none !important;
+.sale-type-option.fixed-option input[type="checkbox"]:disabled {
+    accent-color: #10b981;
+    opacity: 1;
 }
 
-.form-group .sale-type-option.fixed-option .sale-type-label {
+.sale-type-option.fixed-option .sale-type-label {
     color: #065f46;
     font-weight: 600;
-}
-
-.form-group .sale-type-option.fixed-option .sale-type-control {
-    accent-color: #10b981;
 }
 
 .fixed-badge {
@@ -639,247 +465,11 @@
     margin-left: 8px;
     vertical-align: middle;
 }
-
-.sale-type-detail-link {
-    display: inline-flex;
-    align-items: center;
-    margin-left: 8px;
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #2563eb;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-decoration: none;
-    vertical-align: middle;
-    border: none;
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.sale-type-detail-link:hover {
-    background: #dbeafe;
-}
-
-.sales-destination-stack {
-    display: grid;
-    gap: 8px;
-}
-
-.readonly-money-field {
-    background: #f8fafc;
-    color: #0f172a;
-    font-weight: 600;
-}
-
-.sale-type-breakdown {
-    margin-top: 10px;
-    padding: 10px 12px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    display: grid;
-    gap: 6px;
-}
-
-.sale-type-breakdown[hidden] {
-    display: none;
-}
-
-.sale-type-breakdown__item {
-    font-size: 0.83rem;
-    color: #475569;
-    line-height: 1.6;
-}
-
-.fee-detail-modal[hidden] {
-    display: none;
-}
-
-.fee-detail-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 2500;
-}
-
-.fee-detail-modal__backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.58);
-}
-
-.fee-detail-modal__dialog {
-    position: relative;
-    width: min(720px, calc(100vw - 32px));
-    max-height: calc(100vh - 48px);
-    overflow: auto;
-    margin: 24px auto;
-    background: #fff;
-    border-radius: 18px;
-    padding: 20px;
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
-}
-
-.fee-detail-modal__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.fee-detail-modal__header h3 {
-    margin: 0;
-    font-size: 1.15rem;
-    color: #0f172a;
-}
-
-.fee-detail-modal__close {
-    border: none;
-    background: transparent;
-    color: #64748b;
-    font-size: 1.6rem;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.fee-detail-modal__summary {
-    margin: 0 0 14px;
-    color: #475569;
-    line-height: 1.7;
-}
-
-.fee-detail-modal__table-wrap {
-    border: 1px solid #dbeafe;
-    border-radius: 14px;
-    overflow: hidden;
-}
-
-.fee-detail-modal__table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.fee-detail-modal__table th,
-.fee-detail-modal__table td {
-    padding: 12px 14px;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.fee-detail-modal__table th {
-    background: #eff6ff;
-    color: #1e3a8a;
-    font-size: 0.83rem;
-}
-
-.fee-detail-modal__table tr:last-child td {
-    border-bottom: none;
-}
-
-.fee-detail-modal__notes {
-    margin: 14px 0 0;
-    padding-left: 18px;
-    color: #475569;
-}
-
-.fee-detail-modal__notes li + li {
-    margin-top: 6px;
-}
 </style>
 
-<script src="{{ url_for('static', filename='js/master_suggestions.js') }}?v=20260407-brand-master-search"></script>
 <script>
 (function() {
-const isKaikaScope = {{ (mode != 'user') | tojson }};
 let autoCalculateCommission = true;
-
-function normalizeKaikaSaleTypeValue(value) {
-    const rawValue = (value || '').split(',').map(part => part.trim()).find(Boolean) || '';
-    if (!rawValue || rawValue === 'photo_packing') return 'normal';
-    if (rawValue === 'multi_listing') return 'live_commerce';
-    if (['normal', 'wholesale', 'auction', 'live_commerce'].includes(rawValue)) return rawValue;
-    return 'normal';
-}
-
-function normalizeTargetUserSearchValue(value) {
-    return (value || '')
-        .normalize('NFKC')
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
-function initializeTargetUserSearch() {
-    const searchInput = document.getElementById('target_user_search');
-    const targetUserSelect = document.getElementById('target_user_id');
-    const searchStatus = document.getElementById('target_user_search_status');
-
-    if (!searchInput || !targetUserSelect) {
-        return;
-    }
-
-    const userOptions = Array.from(targetUserSelect.options)
-        .filter((option) => option.value)
-        .map((option) => ({
-            value: option.value,
-            label: option.textContent.trim(),
-            displayName: option.dataset.displayName || '',
-            memberCode: option.dataset.memberCode || '',
-            searchText: normalizeTargetUserSearchValue(
-                option.dataset.searchText || `${option.textContent} ${option.value}`
-            ),
-            initiallySelected: option.selected
-        }));
-    const initialSelectedValue = targetUserSelect.value || (userOptions.find((option) => option.initiallySelected) || {}).value || '';
-
-    function renderTargetUserOptions(query) {
-        const normalizedQuery = normalizeTargetUserSearchValue(query);
-        const previousValue = targetUserSelect.value || initialSelectedValue;
-        const matchedOptions = normalizedQuery
-            ? userOptions.filter((option) => option.searchText.includes(normalizedQuery))
-            : userOptions;
-        const selectedValue = matchedOptions.some((option) => option.value === previousValue)
-            ? previousValue
-            : '';
-
-        targetUserSelect.innerHTML = '';
-
-        const placeholderOption = document.createElement('option');
-        placeholderOption.value = '';
-        placeholderOption.textContent = matchedOptions.length === 0 && normalizedQuery
-            ? '-- 該当するユーザーがいません --'
-            : '-- ユーザーを選択してください --';
-        placeholderOption.selected = !selectedValue;
-        targetUserSelect.appendChild(placeholderOption);
-
-        matchedOptions.forEach((optionData) => {
-            const option = document.createElement('option');
-            option.value = optionData.value;
-            option.textContent = optionData.label;
-            option.dataset.displayName = optionData.displayName;
-            option.dataset.memberCode = optionData.memberCode;
-            option.dataset.searchText = optionData.searchText;
-            option.selected = optionData.value === selectedValue;
-            targetUserSelect.appendChild(option);
-        });
-
-        if (searchStatus) {
-            if (!normalizedQuery) {
-                searchStatus.textContent = `全${userOptions.length}件から選択できます。名前または会員番号で絞り込めます。`;
-            } else if (matchedOptions.length === 0) {
-                searchStatus.textContent = '一致するユーザーがいません。名前や会員番号を変えてお試しください。';
-            } else {
-                searchStatus.textContent = `${matchedOptions.length}件に絞り込みました。名前または会員番号で続けて検索できます。`;
-            }
-        }
-    }
-
-    searchInput.addEventListener('input', function() {
-        renderTargetUserOptions(this.value);
-    });
-
-    renderTargetUserOptions(searchInput.value);
-}
 
 // DB設定から動的に手数料計算ルール（段階別固定額）を反映
 const _fs = {{ fee_settings | default({}) | tojson }};
@@ -924,82 +514,6 @@ const _aucTiers = [
     {max: null, fee: parseInt(_fs.auction_t4_fee)||700}
 ];
 
-function formatCurrency(value) {
-    return `¥${Number(value || 0).toLocaleString()}`;
-}
-
-function buildTierRows(tiers) {
-    let min = 0;
-    return tiers.map((tier) => {
-        const label = tier.max === null
-            ? `売上 ¥${min.toLocaleString()}以上`
-            : (min === 0
-                ? `売上 ¥0〜¥${tier.max.toLocaleString()}`
-                : `売上 ¥${min.toLocaleString()}〜¥${tier.max.toLocaleString()}`);
-        const row = { range: label, fee: formatCurrency(tier.fee) };
-        min = (tier.max || min) + 1;
-        return row;
-    });
-}
-
-const feeDetailMap = {
-    photo_packing: {
-        title: '撮影梱包発送代行の詳細',
-        summary: '撮影・梱包・発送代行の現在設定です。売上帯ごとの固定手数料を確認できます。',
-        rows: buildTierRows(_ppTiers),
-        notes: []
-    },
-    normal: {
-        title: '通常販売の詳細',
-        summary: '通常販売は販売媒体手数料のみを自動計算します。',
-        rows: [
-            {
-                range: 'メルカリ・ラクマ・ヤフオク等の販売媒体',
-                fee: `売上の${parseFloat(_fs.commission_normal) || 10}%`
-            }
-        ],
-        notes: ['販売媒体手数料率はマスター設定に連動しています。']
-    },
-    wholesale: {
-        title: '業者販売の詳細',
-        summary: '業者販売で適用される現在の固定手数料です。',
-        rows: buildTierRows(_wsTiers),
-        notes: []
-    },
-    multi_listing: {
-        title: '同時出品サービスの詳細',
-        summary: '同時出品サービスで適用される現在の固定手数料です。',
-        rows: buildTierRows(_mlTiers),
-        notes: []
-    },
-    auction: {
-        title: 'オークション販売の詳細',
-        summary: 'オークション販売で適用される現在の固定手数料です。',
-        rows: buildTierRows(_aucTiers),
-        notes: []
-    }
-};
-const kaikaSaleTypeLabels = {
-    normal: '通常販売',
-    wholesale: '業者販売',
-    auction: 'オークション販売',
-    live_commerce: 'ライブコマース'
-};
-
-function getKaikaSaleTypeMeta(saleType, salePrice) {
-    const normalizedType = normalizeKaikaSaleTypeValue(saleType);
-    if (normalizedType === 'normal') {
-        return {
-            commission: Math.floor(salePrice * _commNormal),
-            hint: `通常販売: 売上の${(_commNormal * 100)}%`
-        };
-    }
-    return {
-        commission: 0,
-        hint: `${kaikaSaleTypeLabels[normalizedType] || 'この販売タイプ'}: 手数料は自動で0円です`
-    };
-}
-
 const saleTypeRules = {
     'normal': {
         name: '通常',
@@ -1008,8 +522,8 @@ const saleTypeRules = {
     },
     'photo_packing': {
         name: '撮影梱包発送',
-        calculate: () => 0,
-        hint: ''
+        calculate: (price) => _tierCalc(_ppTiers, price),
+        hint: (price) => _tierHint('撮影梱包', _ppTiers, price)
     },
     'wholesale': {
         name: '業者販売',
@@ -1025,24 +539,11 @@ const saleTypeRules = {
         name: 'オークション出品代行',
         calculate: (price) => _tierCalc(_aucTiers, price),
         hint: (price) => _tierHint('オークション', _aucTiers, price)
-    },
-    'live_commerce': {
-        name: 'ライブコマース',
-        calculate: () => 0,
-        hint: 'ライブコマース: 手数料は自動で0円です'
     }
 };
 
 // チェックボックスの選択状況をhiddenフィールドに反映
 function updateSaleTypeValue() {
-    if (isKaikaScope) {
-        const selected = document.querySelector('input[name="sale_type_choice"]:checked');
-        document.getElementById('sale_type').value = selected ? selected.value : 'normal';
-        if (autoCalculateCommission) {
-            calculateCommission();
-        }
-        return;
-    }
     const checkboxes = document.querySelectorAll('input[name="sale_type[]"]:checked:not(:disabled)');
     const values = Array.from(checkboxes).map(cb => cb.value);
     // photo_packingは常に含める（固定）
@@ -1050,7 +551,7 @@ function updateSaleTypeValue() {
         values.unshift('photo_packing');
     }
     document.getElementById('sale_type').value = values.join(',') || 'photo_packing';
-
+    
     if (autoCalculateCommission) {
         calculateCommission();
     }
@@ -1061,7 +562,7 @@ function calculateProfit() {
     const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
     const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
     const commission = parseInt(document.getElementById('commission').value) || 0;
-
+    
     const actualProfit = salePrice - purchasePrice - shippingCost - commission;
     const actualEl = document.getElementById('actual_profit');
     actualEl.textContent = '¥' + actualProfit.toLocaleString();
@@ -1079,45 +580,31 @@ function recalculateWholesalePrice() {
 
 function calculateCommission() {
     if (!autoCalculateCommission) return;
-
+    
     const saleTypeValue = document.getElementById('sale_type').value;
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-
-    if (isKaikaScope) {
-        const kaikaMeta = getKaikaSaleTypeMeta(saleTypeValue, salePrice);
-        document.getElementById('commission').value = kaikaMeta.commission;
-        document.getElementById('commission_hint').textContent = kaikaMeta.hint;
-        calculateProfit();
-        return;
-    }
-
     const selectedTypes = saleTypeValue ? saleTypeValue.split(',') : ['photo_packing'];
-
+    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
+    
     let totalCommission = 0;
     let hints = [];
-
+    
     selectedTypes.forEach(saleType => {
         const rule = saleTypeRules[saleType];
         if (rule) {
             totalCommission += rule.calculate(salePrice);
             if (typeof rule.hint === 'function') {
-                const hint = rule.hint(salePrice);
-                if (hint) {
-                    hints.push(hint);
-                }
+                hints.push(rule.hint(salePrice));
             } else {
-                if (rule.hint) {
-                    hints.push(rule.hint);
-                }
+                hints.push(rule.hint);
             }
         }
     });
-
+    
     document.getElementById('commission').value = totalCommission;
-
+    
     const hintEl = document.getElementById('commission_hint');
     hintEl.textContent = hints.length > 0 ? hints.join(' + ') : '販売タイプに応じて自動計算されます';
-
+    
     calculateProfit();
 }
 
@@ -1129,70 +616,14 @@ document.querySelectorAll('input[name="sale_type[]"]').forEach(checkbox => {
     });
 });
 
-document.querySelectorAll('input[name="sale_type_choice"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        autoCalculateCommission = true;
-        updateSaleTypeValue();
-    });
-});
-
-const feeDetailModal = document.getElementById('fee-detail-modal');
-const feeDetailTitle = document.getElementById('fee-detail-title');
-const feeDetailSummary = document.getElementById('fee-detail-summary');
-const feeDetailBody = document.getElementById('fee-detail-body');
-const feeDetailNotes = document.getElementById('fee-detail-notes');
-
-function openFeeDetailModal(serviceType) {
-    const detail = feeDetailMap[serviceType];
-    if (!detail || !feeDetailModal) return;
-    feeDetailTitle.textContent = detail.title;
-    feeDetailSummary.textContent = detail.summary || '';
-    feeDetailBody.innerHTML = (detail.rows || []).map((row) => `
-        <tr>
-            <td>${row.range}</td>
-            <td>${row.fee}</td>
-        </tr>
-    `).join('');
-    feeDetailNotes.innerHTML = (detail.notes || []).map((note) => `<li>${note}</li>`).join('');
-    feeDetailNotes.style.display = (detail.notes && detail.notes.length) ? 'block' : 'none';
-    feeDetailModal.hidden = false;
-    document.body.style.overflow = 'hidden';
-}
-
-function closeFeeDetailModal() {
-    if (!feeDetailModal) return;
-    feeDetailModal.hidden = true;
-    document.body.style.overflow = '';
-}
-
-document.querySelectorAll('[data-fee-detail]').forEach((button) => {
-    button.addEventListener('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        openFeeDetailModal(this.dataset.feeDetail);
-    });
-});
-
-document.querySelectorAll('[data-fee-detail-close]').forEach((button) => {
-    button.addEventListener('click', closeFeeDetailModal);
-});
-
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape' && feeDetailModal && !feeDetailModal.hidden) {
-        closeFeeDetailModal();
-    }
-});
-
 document.getElementById('sale_price').addEventListener('input', function() {
     calculateCommission();
 });
 
-if (!isKaikaScope) {
-    document.getElementById('commission').addEventListener('input', function() {
-        autoCalculateCommission = false;
-        calculateProfit();
-    });
-}
+document.getElementById('commission').addEventListener('input', function() {
+    autoCalculateCommission = false;
+    calculateProfit();
+});
 
 // 卸価格を手動変更した場合も利益を再計算
 document.getElementById('wholesale_price').addEventListener('input', function() {
@@ -1218,7 +649,7 @@ function updateStatusFields() {
     const listingPriceGroup = document.getElementById('listing-price-group');
     const saleDateGroup = document.getElementById('sale-date-group');
     const soldFields = document.getElementById('sold-fields');
-
+    
     if (status === 'listed' || status === 'sold') {
         listingDateGroup.style.display = 'block';
         listingPriceGroup.style.display = 'block';
@@ -1226,7 +657,7 @@ function updateStatusFields() {
         listingDateGroup.style.display = 'none';
         listingPriceGroup.style.display = 'none';
     }
-
+    
     if (status === 'sold') {
         saleDateGroup.style.display = 'block';
         soldFields.style.display = 'block';
@@ -1239,55 +670,12 @@ function updateStatusFields() {
 function toggleSupplierDetail() {
     const storeType = document.getElementById('store_name').value;
     const detailSection = document.getElementById('supplier-detail-section');
-    const detailTargetSuppliers = [
-        '個人',
-        '個人買取',
-        '個人からの仕入れ',
-        '個人業者仕入れ',
-        'クライアントからの買取'
-    ];
-
-    if (detailTargetSuppliers.includes(storeType)) {
+    
+    if (storeType === '個人') {
         detailSection.style.display = 'block';
     } else {
         detailSection.style.display = 'none';
     }
-}
-
-function getScopedSupplierOptions(mode) {
-    if (mode === 'admin') {
-        return [
-            { value: 'オークション', label: 'オークション' },
-            { value: '他社取引先からの仕入れ', label: '他社取引先からの仕入れ' },
-            { value: '個人買取', label: '個人買取' },
-            { value: 'クライアントからの買取', label: 'クライアントからの買取' }
-        ];
-    }
-
-    return [
-        { value: '個人からの仕入れ', label: '個人からの仕入れ' },
-        { value: '個人業者仕入れ', label: '個人業者仕入れ' },
-        { value: '開花からの仕入れ（代行サービスなど）', label: '開花からの仕入れ（代行サービスなど）' }
-    ];
-}
-
-function populateSupplierSelectOptions(selectElement, mode, currentValue = '') {
-    const options = [...getScopedSupplierOptions(mode)];
-    const hasCurrentValue = currentValue && options.some(option => option.value === currentValue);
-    if (currentValue && !hasCurrentValue) {
-        options.push({ value: currentValue, label: currentValue });
-    }
-
-    selectElement.innerHTML = '<option value="">選択してください</option>';
-    options.forEach(optionData => {
-        const option = document.createElement('option');
-        option.value = optionData.value;
-        option.textContent = optionData.label;
-        if (optionData.value === currentValue) {
-            option.selected = true;
-        }
-        selectElement.appendChild(option);
-    });
 }
 
 // マスターデータをロードしてセレクトボックスを生成
@@ -1298,10 +686,10 @@ async function loadMasterData() {
         const scope = mode === 'user' ? 'user' : 'admin';
         const response = await fetch(`/api/master-data?scope=${scope}`);
         const data = await response.json();
-
+        
         // ブランド名コンボボックスのドロップダウンを生成
         window.brandMasterList = data.brands || [];
-
+        
         // カテゴリごとにグループ化
         const brandsByCategory = {};
         data.brands.forEach(brand => {
@@ -1311,64 +699,66 @@ async function loadMasterData() {
             }
             brandsByCategory[categoryId].push(brand);
         });
-
+        
         // カテゴリ情報をマッピング
         const categoryMap = {};
         data.brand_categories.forEach(cat => {
             categoryMap[cat.id] = cat.name;
         });
-
+        
         // ドロップダウンデータを保存
         window.brandCategoryData = { brandsByCategory, categoryMap };
-
+        
+        // 初回ドロップダウン構築
+        buildBrandDropdown('');
+        
         // 商品状態セレクトボックスを生成
         const conditionSelect = document.getElementById('item_condition');
         conditionSelect.innerHTML = '<option value="">選択してください</option>';
-
+        
         data.conditions.forEach(condition => {
             const option = document.createElement('option');
             option.value = condition.value;
             option.textContent = condition.display_name || condition.value;
             conditionSelect.appendChild(option);
         });
-
+        
         // 仕入先セレクトボックスを生成
         const supplierSelect = document.getElementById('store_name');
-        populateSupplierSelectOptions(supplierSelect, scope);
-
+        supplierSelect.innerHTML = '<option value="">選択してください</option>';
+        
+        data.suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.value;
+            option.textContent = supplier.display_name || supplier.value;
+            supplierSelect.appendChild(option);
+        });
+        
         // 仕入先詳細セレクトボックスを生成
         const supplierDetailSelect = document.getElementById('supplier_detail');
         supplierDetailSelect.innerHTML = '<option value="">選択してください</option>';
-
+        
         data.supplier_details.forEach(detail => {
             const option = document.createElement('option');
             option.value = detail.value;
             option.textContent = detail.display_name || detail.value;
             supplierDetailSelect.appendChild(option);
         });
-
+        
         // 支払方法セレクトボックスを生成
         const paymentSelect = document.getElementById('payment_method');
         paymentSelect.innerHTML = '<option value="">選択してください</option>';
-
+        
         data.payment_methods.forEach(method => {
             const option = document.createElement('option');
             option.value = method.value;
             option.textContent = method.display_name || method.value;
             paymentSelect.appendChild(option);
         });
-
+        
         // 仕入先詳細の表示状態を更新
         toggleSupplierDetail();
-
-        if (window.MasterSuggestionHelper) {
-            window.MasterSuggestionHelper.init({
-                scope: scope,
-                data: data,
-                formSelector: '#item-form'
-            });
-        }
-
+        
     } catch (error) {
         console.error('マスターデータの読み込みに失敗しました:', error);
     }
@@ -1378,28 +768,28 @@ async function loadMasterData() {
 function buildBrandDropdown(filter) {
     const dropdown = document.getElementById('brand-dropdown');
     if (!dropdown || !window.brandCategoryData) return;
-
+    
     const { brandsByCategory, categoryMap } = window.brandCategoryData;
     dropdown.innerHTML = '';
     const filterLower = filter.toLowerCase();
     let hasMatch = false;
-
+    
     for (const [catId, brands] of Object.entries(brandsByCategory)) {
         const filteredBrands = brands.filter(b => {
             const name = (b.display_name || b.value).toLowerCase();
             const val = b.value.toLowerCase();
             return !filterLower || name.includes(filterLower) || val.includes(filterLower);
         });
-
+        
         if (filteredBrands.length === 0) continue;
         hasMatch = true;
-
+        
         const categoryName = categoryMap[catId] || 'その他';
         const catDiv = document.createElement('div');
         catDiv.className = 'dropdown-category';
         catDiv.textContent = categoryName;
         dropdown.appendChild(catDiv);
-
+        
         filteredBrands.forEach(brand => {
             const item = document.createElement('div');
             item.className = 'dropdown-item';
@@ -1414,7 +804,7 @@ function buildBrandDropdown(filter) {
             dropdown.appendChild(item);
         });
     }
-
+    
     if (!hasMatch && filter) {
         const noMatch = document.createElement('div');
         noMatch.className = 'dropdown-no-match';
@@ -1429,20 +819,20 @@ function setupBrandCombobox() {
     const brandToggle = document.getElementById('brand-toggle');
     const dropdown = document.getElementById('brand-dropdown');
     if (!brandInput || !dropdown) return;
-
+    
     // 入力時にフィルタ
     brandInput.addEventListener('input', function() {
         this.dataset.autoDetected = 'false';
         buildBrandDropdown(this.value);
         dropdown.classList.add('open');
     });
-
+    
     // フォーカス時にドロップダウン表示
     brandInput.addEventListener('focus', function() {
         buildBrandDropdown(this.value);
         dropdown.classList.add('open');
     });
-
+    
     // トグルボタン
     if (brandToggle) {
         brandToggle.addEventListener('click', function(e) {
@@ -1457,7 +847,7 @@ function setupBrandCombobox() {
             }
         });
     }
-
+    
     // 外側クリックで閉じる
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.brand-combobox')) {
@@ -1514,7 +904,7 @@ const brandKeywords = {
 // 商品名からブランド名を自動判定
 function detectBrandFromProductName(productName) {
     const input = productName.toLowerCase();
-
+    
     for (const [brand, keywords] of Object.entries(brandKeywords)) {
         for (const keyword of keywords) {
             if (input.includes(keyword.toLowerCase())) {
@@ -1529,16 +919,16 @@ function detectBrandFromProductName(productName) {
 function setupBrandAutoDetect() {
     const productNameInput = document.getElementById('product_name');
     const brandInput = document.getElementById('brand_name');
-
+    
     if (productNameInput && brandInput) {
         productNameInput.addEventListener('input', function() {
             const detectedBrand = detectBrandFromProductName(this.value);
-
+            
             if (detectedBrand) {
                 if (brandInput.value === '' || brandInput.dataset.autoDetected === 'true') {
                     brandInput.value = detectedBrand;
                     brandInput.dataset.autoDetected = 'true';
-
+                    
                     brandInput.classList.add('brand-auto-detected');
                     setTimeout(() => {
                         brandInput.classList.remove('brand-auto-detected');
@@ -1552,39 +942,39 @@ function setupBrandAutoDetect() {
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
-    initializeTargetUserSearch();
-
+    
+    // ブランド名コンボボックスの初期化
+    setupBrandCombobox();
+    
+    // ブランド名自動判定の初期化
+    setupBrandAutoDetect();
+    
     updateStatusFields();
     toggleSupplierDetail();
-
+    
     // ステータス変更イベントリスナー（onchange属性のバックアップ）
     var statusSelect = document.getElementById('item_status');
     if (statusSelect) {
         statusSelect.addEventListener('change', updateStatusFields);
     }
-
+    
     // 初期表示時に卸価格を計算（管理者フォームは新規登録のみなので常に自動計算）
     recalculateWholesalePrice();
-    updateSaleTypeValue();
     // 非同期ロード後にも再計算を確保
-    setTimeout(function() { recalculateWholesalePrice(); updateSaleTypeValue(); updateStatusFields(); }, 500);
-    if (isKaikaScope) {
-        const initialSaleType = document.getElementById('sale_type').value || 'normal';
-        document.getElementById('commission_hint').textContent = getKaikaSaleTypeMeta(initialSaleType, parseInt(document.getElementById('sale_price').value) || 0).hint;
-    }
-
+    setTimeout(function() { recalculateWholesalePrice(); updateStatusFields(); }, 500);
+    
     // 画像リサイズ処理
     const MAX_WIDTH = 1200;
     const MAX_HEIGHT = 1200;
     const QUALITY = 0.85;
-
+    
     async function resizeImage(file) {
         return new Promise((resolve) => {
             if (!file.type.startsWith('image/')) {
                 resolve(file);
                 return;
             }
-
+            
             const reader = new FileReader();
             reader.onload = function(e) {
                 const img = new Image();
@@ -1593,10 +983,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         resolve(file);
                         return;
                     }
-
+                    
                     let width = img.width;
                     let height = img.height;
-
+                    
                     if (width > height) {
                         if (width > MAX_WIDTH) {
                             height = Math.round(height * MAX_WIDTH / width);
@@ -1608,13 +998,13 @@ document.addEventListener('DOMContentLoaded', function() {
                             height = MAX_HEIGHT;
                         }
                     }
-
+                    
                     const canvas = document.createElement('canvas');
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-
+                    
                     canvas.toBlob(function(blob) {
                         const resizedFile = new File([blob], file.name, {
                             type: 'image/jpeg',
@@ -1628,32 +1018,32 @@ document.addEventListener('DOMContentLoaded', function() {
             reader.readAsDataURL(file);
         });
     }
-
+    
     const form = document.getElementById('item-form');
     const submitBtn = document.getElementById('submit-btn');
     const btnText = submitBtn.querySelector('.btn-text');
     const btnLoading = submitBtn.querySelector('.btn-loading');
-
+    
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-
+        
         if (submitBtn.disabled) return;
-
+        
         submitBtn.disabled = true;
         submitBtn.style.opacity = '0.7';
         btnText.style.display = 'none';
         btnLoading.style.display = 'inline';
-
+        
         try {
             const formData = new FormData(form);
-
+            
             const photoInput = document.getElementById('photo');
             if (photoInput.files.length > 0) {
                 formData.delete('photo');
                 const resizedPhoto = await resizeImage(photoInput.files[0]);
                 formData.append('photo', resizedPhoto);
             }
-
+            
             const additionalInput = document.getElementById('additional_photos');
             if (additionalInput.files.length > 0) {
                 formData.delete('additional_photos');
@@ -1662,12 +1052,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     formData.append('additional_photos', resizedPhoto);
                 }
             }
-
+            
             const response = await fetch(form.action || window.location.href, {
                 method: 'POST',
                 body: formData
             });
-
+            
             if (response.redirected) {
                 window.location.href = response.url;
             } else if (response.ok) {
@@ -1687,561 +1077,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // HTML属性(onchange/oninput)から呼べるようグローバルに公開
-const salesDestinationPresets = {
-    kaika: {
-        normal: ['メルカリ', 'ヤフオク', 'ラクマ', 'ebay', 'ショッピー', 'その他'],
-        wholesale: ['業者販売'],
-        auction: ['オークション販売'],
-        live_commerce: ['ライブコマース']
-    },
-    user: {
-        normal: ['メルカリ', 'ヤフオク', 'ラクマ', 'その他'],
-        wholesale: ['業者販売'],
-        multi_listing: ['同時出品サービス'],
-        auction: ['オークション販売']
-    }
-};
-
-function getSelectedUserSaleTypeOverride() {
-    const selected = document.querySelector('input[name="sale_type_choice_user"]:checked');
-    return selected ? selected.value : 'normal';
-}
-
-function getActiveSaleTypeOverride() {
-    if (isKaikaScope) {
-        const selected = document.querySelector('input[name="sale_type_choice"]:checked');
-        return selected ? selected.value : 'normal';
-    }
-    return getSelectedUserSaleTypeOverride();
-}
-
-function getFixedSalesDestinationOverride(scopeKey, activeType) {
-    if (activeType === 'normal') return '';
-    const options = (salesDestinationPresets[scopeKey] && salesDestinationPresets[scopeKey][activeType]) || [];
-    return options.length ? options[0] : '';
-}
-
-function getKaikaFeeComponentOverride() {
-    if (isKaikaScope) return 0;
-    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
-    const wholesalePrice = parseInt(document.getElementById('wholesale_price').value) || 0;
-    if (!purchasePrice || !wholesalePrice) return 0;
-    return Math.max(wholesalePrice - purchasePrice, 0);
-}
-
-function syncSalesDestinationFieldOverride() {
-    const hidden = document.getElementById('sales_destination');
-    const select = document.getElementById('sales_destination_choice');
-    const other = document.getElementById('sales_destination_other');
-    if (!hidden || !select || !other) return;
-    hidden.value = select.value === 'その他' ? (other.value || '').trim() : (select.value || '');
-}
-
-function updateSalesDestinationOptionsOverride() {
-    const hidden = document.getElementById('sales_destination');
-    const select = document.getElementById('sales_destination_choice');
-    const other = document.getElementById('sales_destination_other');
-    const hint = document.getElementById('sales_destination_hint');
-    const group = document.getElementById('sales-destination-group');
-    if (!hidden || !select || !other) return;
-
-    const scopeKey = isKaikaScope ? 'kaika' : 'user';
-    const activeType = getActiveSaleTypeOverride();
-    const options = salesDestinationPresets[scopeKey][activeType] || ['その他'];
-    const currentValue = (hidden.value || '').trim();
-    const allowOther = options.includes('その他');
-    const isFixedDestination = activeType !== 'normal';
-
-    if (group) {
-        group.style.display = 'block';
-    }
-    select.disabled = isFixedDestination;
-
-    if (isFixedDestination) {
-        const fixedValue = getFixedSalesDestinationOverride(scopeKey, activeType);
-        select.innerHTML = '';
-        select.appendChild(new Option(fixedValue || '選択してください', fixedValue || ''));
-        select.value = fixedValue;
-        other.value = '';
-        other.style.display = 'none';
-        hidden.value = fixedValue;
-        if (hint) {
-            hint.textContent = 'この販売タイプでは、販売先は自動で固定されます。';
-        }
-        return;
-    }
-
-    select.disabled = false;
-    select.innerHTML = '';
-    select.appendChild(new Option('選択してください', ''));
-    options.forEach((value) => select.appendChild(new Option(value, value)));
-
-    if (currentValue && options.includes(currentValue)) {
-        select.value = currentValue;
-        other.value = '';
-        other.style.display = 'none';
-    } else if (allowOther && currentValue) {
-        select.value = 'その他';
-        other.value = currentValue;
-        other.style.display = 'block';
-    } else if (!allowOther && options.length === 1) {
-        select.value = options[0];
-        other.value = '';
-        other.style.display = 'none';
-        hidden.value = options[0];
-    } else {
-        select.value = '';
-        other.value = '';
-        other.style.display = 'none';
-        hidden.value = '';
-    }
-
-    if (select.value === 'その他') {
-        other.style.display = 'block';
-    }
-
-    if (hint) {
-        hint.textContent = allowOther
-            ? '販売先を選択し、その他の場合のみ自由入力してください。'
-            : '販売タイプに応じて販売先を固定しています。';
-    }
-    syncSalesDestinationFieldOverride();
-}
-
-function renderCommissionBreakdownOverride(lines) {
-    const container = document.getElementById('commission_breakdown');
-    if (!container) return;
-    if (!lines.length) {
-        container.hidden = true;
-        container.innerHTML = '';
-        return;
-    }
-    container.hidden = false;
-    container.innerHTML = lines.map((line) => `<div class="sale-type-breakdown__item">${line}</div>`).join('');
-}
-
-updateSaleTypeValue = function() {
-    const hidden = document.getElementById('sale_type');
-    if (!hidden) return;
-    if (isKaikaScope) {
-        hidden.value = getActiveSaleTypeOverride();
-    } else {
-        hidden.value = `photo_packing,${getSelectedUserSaleTypeOverride()}`;
-    }
-    updateSalesDestinationOptionsOverride();
-    if (autoCalculateCommission) {
-        calculateCommission();
-    }
-};
-
-calculateProfit = function() {
-    const purchasePrice = parseInt(document.getElementById('purchase_price').value) || 0;
-    const wholesalePrice = parseInt(document.getElementById('wholesale_price').value) || 0;
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const shippingCost = parseInt(document.getElementById('shipping_cost').value) || 0;
-    const commission = parseInt(document.getElementById('commission').value) || 0;
-    const baseCost = isKaikaScope ? purchasePrice : (wholesalePrice || purchasePrice);
-    const actualProfit = salePrice - baseCost - shippingCost - commission;
-    const actualEl = document.getElementById('actual_profit');
-    actualEl.textContent = '¥' + actualProfit.toLocaleString();
-    actualEl.className = 'calculated-value ' + (actualProfit >= 0 ? 'profit-positive' : 'profit-negative');
-};
-
-calculateCommission = function() {
-    if (!autoCalculateCommission) return;
-
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const hiddenCommission = document.getElementById('commission');
-    const hintEl = document.getElementById('commission_hint');
-
-    if (isKaikaScope) {
-        const meta = getKaikaSaleTypeMeta(getActiveSaleTypeOverride(), salePrice);
-        hiddenCommission.value = meta.commission;
-        hintEl.textContent = meta.hint;
-        renderCommissionBreakdownOverride([]);
-        calculateProfit();
-        return;
-    }
-
-    const selectedType = getSelectedUserSaleTypeOverride();
-    const platformFee = selectedType === 'normal'
-        ? Math.floor(salePrice * _commNormal)
-        : ((saleTypeRules[selectedType] && typeof saleTypeRules[selectedType].calculate === 'function')
-            ? saleTypeRules[selectedType].calculate(salePrice)
-            : 0);
-    const kaikaFee = getKaikaFeeComponentOverride();
-    const totalFee = platformFee + kaikaFee;
-    const commissionDisplay = document.getElementById('commission_display');
-    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
-    const breakdownLines = [];
-
-    hiddenCommission.value = platformFee;
-    if (commissionDisplay) {
-        commissionDisplay.value = `¥${totalFee.toLocaleString()}`;
-    }
-
-    if (platformFee > 0) {
-        if (selectedType === 'normal') {
-            breakdownLines.push(`${salesDestinationValue || '通常販売'} 手数料: ¥${platformFee.toLocaleString()}（売上の${_commNormal * 100}%）`);
-        } else if (saleTypeRules[selectedType]) {
-            breakdownLines.push(`${saleTypeRules[selectedType].name} 手数料: ¥${platformFee.toLocaleString()}`);
-        }
-    }
-    if (kaikaFee > 0) {
-        breakdownLines.push(`開花手数料: ¥${kaikaFee.toLocaleString()}`);
-    }
-    if (!breakdownLines.length) {
-        breakdownLines.push('手数料は0円です。');
-    }
-
-    hintEl.textContent = `手数料合計 ¥${totalFee.toLocaleString()}`;
-    renderCommissionBreakdownOverride(breakdownLines);
-    calculateProfit();
-};
-
-function initializeSoldFieldsOverride() {
-    if (isKaikaScope) {
-        const target = document.querySelector('input[name="sale_type_choice"][value="normal"]');
-        if (target) target.checked = true;
-    } else {
-        const target = document.querySelector('input[name="sale_type_choice_user"][value="normal"]');
-        if (target) target.checked = true;
-    }
-    autoCalculateCommission = true;
-    updateSalesDestinationOptionsOverride();
-    calculateCommission();
-    calculateProfit();
-}
-
-document.querySelectorAll('input[name="sale_type_choice"]').forEach((radio) => {
-    radio.addEventListener('change', function() {
-        autoCalculateCommission = true;
-        updateSaleTypeValue();
-    });
-});
-
-document.querySelectorAll('input[name="sale_type_choice_user"]').forEach((radio) => {
-    radio.addEventListener('change', function() {
-        autoCalculateCommission = true;
-        updateSaleTypeValue();
-    });
-});
-
-const salesDestinationChoiceOverride = document.getElementById('sales_destination_choice');
-if (salesDestinationChoiceOverride) {
-    salesDestinationChoiceOverride.addEventListener('change', function() {
-        const other = document.getElementById('sales_destination_other');
-        if (other) {
-            other.style.display = this.value === 'その他' ? 'block' : 'none';
-            if (this.value !== 'その他') {
-                other.value = '';
-            }
-        }
-        syncSalesDestinationFieldOverride();
-        calculateCommission();
-    });
-}
-
-const salesDestinationOtherOverride = document.getElementById('sales_destination_other');
-if (salesDestinationOtherOverride) {
-    salesDestinationOtherOverride.addEventListener('input', function() {
-        syncSalesDestinationFieldOverride();
-        calculateCommission();
-    });
-}
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeSoldFieldsOverride);
-} else {
-    initializeSoldFieldsOverride();
-}
-
-let lastActiveSaleTypeV2 = '';
-
-function getManualFeeRateV2() {
-    const rateInput = document.getElementById('commission_rate');
-    return Math.max(parseFloat(rateInput ? rateInput.value : 0) || 0, 0);
-}
-
-function updateCommissionRateVisibilityV2() {
-    const rateGroup = document.getElementById('commission-rate-group');
-    const rateInput = document.getElementById('commission_rate');
-    const rateHint = document.getElementById('commission_rate_hint');
-    const commissionInput = document.getElementById('commission');
-    if (!rateGroup || !rateInput) return;
-
-    const activeType = getActiveSaleTypeOverride();
-    const isNormal = activeType === 'normal';
-    rateGroup.style.display = isNormal ? 'block' : 'none';
-
-    if (isKaikaScope) {
-        if (commissionInput) {
-            commissionInput.readOnly = false;
-        }
-        if (rateHint) {
-            rateHint.textContent = isNormal
-                ? '通常販売のときだけ、販売媒体ごとの手数料率を入力できます。'
-                : 'この販売タイプは手数料を直接入力してください。';
-        }
-        if (!isNormal && lastActiveSaleTypeV2 === 'normal' && autoCalculateCommission && commissionInput && !commissionInput.dataset.manualFilled) {
-            commissionInput.value = '0';
-        }
-    } else if (rateHint) {
-        rateHint.textContent = isNormal
-            ? '通常販売では、販売媒体ごとの手数料率を入力できます。'
-            : '通常販売以外は、設定済みのサービス手数料をもとに自動計算します。';
-    }
-
-    lastActiveSaleTypeV2 = activeType;
-}
-
-calculateCommission = function() {
-    if (!autoCalculateCommission) return;
-
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const commissionInput = document.getElementById('commission');
-    const rateInput = document.getElementById('commission_rate');
-    const hintEl = document.getElementById('commission_hint');
-    const activeType = getActiveSaleTypeOverride();
-    const feeRate = Math.max(parseFloat(rateInput ? rateInput.value : 0) || 0, 0);
-
-    updateCommissionRateVisibilityV2();
-
-    if (isKaikaScope) {
-        if (activeType === 'normal') {
-            const calculated = Math.floor(salePrice * (feeRate / 100));
-            commissionInput.value = calculated;
-            hintEl.textContent = `通常販売: ${feeRate}% を反映しています`;
-            renderCommissionBreakdownOverride([
-                `${(document.getElementById('sales_destination').value || '通常販売')} 手数料: ¥${calculated.toLocaleString()}（${feeRate}%）`
-            ]);
-        } else {
-            const currentValue = parseInt(commissionInput.value) || 0;
-            hintEl.textContent = 'この販売タイプは手数料を直接入力してください。';
-            renderCommissionBreakdownOverride(currentValue > 0 ? [`手数料入力額: ¥${currentValue.toLocaleString()}`] : []);
-        }
-        calculateProfit();
-        return;
-    }
-
-    const photoPackingFee = _tierCalc(_ppTiers, salePrice);
-    let selectedFee = 0;
-    let selectedLabel = '';
-    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
-
-    if (activeType === 'normal') {
-        selectedFee = Math.floor(salePrice * (feeRate / 100));
-        selectedLabel = `${salesDestinationValue || '通常販売'} 手数料`;
-    } else {
-        selectedFee = (saleTypeRules[activeType] && typeof saleTypeRules[activeType].calculate === 'function')
-            ? saleTypeRules[activeType].calculate(salePrice)
-            : 0;
-        selectedLabel = saleTypeRules[activeType] ? `${saleTypeRules[activeType].name} 手数料` : '販売手数料';
-    }
-
-    const kaikaFee = getKaikaFeeComponentOverride();
-    const visibleTotal = selectedFee + photoPackingFee + kaikaFee;
-    const commissionDisplay = document.getElementById('commission_display');
-    const lines = [
-        `${selectedLabel}: ¥${selectedFee.toLocaleString()}${activeType === 'normal' ? `（${feeRate}%）` : ''}`,
-        `撮影梱包発送代行 手数料: ¥${photoPackingFee.toLocaleString()}`
-    ];
-
-    if (kaikaFee > 0) {
-        lines.push(`開花手数料: ¥${kaikaFee.toLocaleString()}`);
-    }
-
-    commissionInput.value = selectedFee;
-    if (commissionDisplay) {
-        commissionDisplay.value = `¥${visibleTotal.toLocaleString()}`;
-    }
-    hintEl.textContent = `手数料合計 ¥${visibleTotal.toLocaleString()}`;
-    renderCommissionBreakdownOverride(lines);
-    calculateProfit();
-};
-
-const commissionRateInputV2 = document.getElementById('commission_rate');
-if (commissionRateInputV2) {
-    commissionRateInputV2.addEventListener('input', function() {
-        autoCalculateCommission = true;
-        calculateCommission();
-    });
-}
-
-if (isKaikaScope) {
-    const commissionInputV2 = document.getElementById('commission');
-    if (commissionInputV2) {
-        commissionInputV2.addEventListener('input', function() {
-            this.dataset.manualFilled = this.value ? 'true' : '';
-            if (getActiveSaleTypeOverride() !== 'normal') {
-                calculateProfit();
-                renderCommissionBreakdownOverride(this.value ? [`手数料入力額: ¥${(parseInt(this.value) || 0).toLocaleString()}`] : []);
-                const hintEl = document.getElementById('commission_hint');
-                if (hintEl) {
-                    hintEl.textContent = 'この販売タイプは手数料を直接入力してください。';
-                }
-            }
-        });
-    }
-}
-
-const initializeSoldFieldsOverrideOriginal = initializeSoldFieldsOverride;
-initializeSoldFieldsOverride = function() {
-    if (typeof initializeSoldFieldsOverrideOriginal === 'function') {
-        initializeSoldFieldsOverrideOriginal();
-    }
-    const rateInput = document.getElementById('commission_rate');
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const commissionValue = parseInt(document.getElementById('commission').value) || 0;
-    if (rateInput && salePrice > 0 && getActiveSaleTypeOverride() === 'normal' && commissionValue > 0) {
-        rateInput.value = ((commissionValue / salePrice) * 100).toFixed(1).replace(/\.0$/, '');
-    }
-    updateCommissionRateVisibilityV2();
-    calculateCommission();
-};
-
-updateCommissionRateVisibilityV2 = function() {
-    const rateGroup = document.getElementById('commission-rate-group');
-    const rateInput = document.getElementById('commission_rate');
-    const rateHint = document.getElementById('commission_rate_hint');
-    const commissionInput = document.getElementById('commission');
-    const commissionGroup = document.getElementById('commission-group');
-    if (!rateGroup || !rateInput) return;
-
-    const activeType = getActiveSaleTypeOverride();
-    const isNormal = activeType === 'normal';
-    rateGroup.style.display = isNormal ? 'block' : 'none';
-    if (commissionGroup) {
-        commissionGroup.style.display = isKaikaScope && !isNormal ? 'none' : 'block';
-    }
-
-    if (isKaikaScope && commissionInput) {
-        commissionInput.readOnly = true;
-        if (!isNormal) {
-            commissionInput.value = '0';
-            commissionInput.dataset.manualFilled = '';
-        }
-    }
-
-    if (rateHint) {
-        rateHint.textContent = isNormal
-            ? '通常販売のときだけ、販売媒体ごとの手数料率を入力できます。'
-            : (isKaikaScope
-                ? '通常販売以外では販売媒体手数料は使用しません。'
-                : 'この販売タイプでは、サービス手数料と撮影梱包発送代行手数料を合計して表示します。');
-    }
-
-    lastActiveSaleTypeV2 = activeType;
-};
-
-calculateCommission = function() {
-    if (!autoCalculateCommission) return;
-
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const commissionInput = document.getElementById('commission');
-    const commissionDisplay = document.getElementById('commission_display');
-    const hintEl = document.getElementById('commission_hint');
-    const salesDestinationValue = (document.getElementById('sales_destination').value || '').trim();
-    const activeType = getActiveSaleTypeOverride();
-    const feeRate = getManualFeeRateV2();
-
-    updateCommissionRateVisibilityV2();
-
-    if (isKaikaScope) {
-        if (activeType === 'normal') {
-            const calculated = Math.floor(salePrice * (feeRate / 100));
-            commissionInput.value = calculated;
-            commissionInput.dataset.manualFilled = '';
-            if (hintEl) {
-                hintEl.textContent = `販売媒体手数料率 ${feeRate}% を反映しています。`;
-            }
-            renderCommissionBreakdownOverride(
-                (calculated > 0 || salePrice > 0)
-                    ? [`${(salesDestinationValue || '通常販売')} 手数料: ¥${calculated.toLocaleString()}（${feeRate}%）`]
-                    : []
-            );
-        } else {
-            commissionInput.value = '';
-            commissionInput.dataset.manualFilled = '';
-            if (hintEl) {
-                hintEl.textContent = '通常販売以外では販売媒体手数料は表示しません。';
-            }
-            renderCommissionBreakdownOverride([]);
-        }
-        calculateProfit();
-        return;
-    }
-
-    const photoPackingFee = _tierCalc(_ppTiers, salePrice);
-    const selectedFee = activeType === 'normal'
-        ? Math.floor(salePrice * (feeRate / 100))
-        : ((saleTypeRules[activeType] && typeof saleTypeRules[activeType].calculate === 'function')
-            ? saleTypeRules[activeType].calculate(salePrice)
-            : 0);
-    const selectedLabel = activeType === 'normal'
-        ? `${salesDestinationValue || '通常販売'} 手数料`
-        : `${saleTypeRules[activeType] ? saleTypeRules[activeType].name : '販売'} 手数料`;
-    const totalFee = selectedFee + photoPackingFee;
-    const lines = [
-        `${selectedLabel}: ¥${selectedFee.toLocaleString()}${activeType === 'normal' ? `（${feeRate}%）` : ''}`,
-        `撮影梱包発送代行 手数料: ¥${photoPackingFee.toLocaleString()}`
-    ];
-
-    commissionInput.value = totalFee;
-    if (commissionDisplay) {
-        commissionDisplay.value = `¥${totalFee.toLocaleString()}`;
-    }
-    if (hintEl) {
-        hintEl.textContent = `手数料合計 ¥${totalFee.toLocaleString()}`;
-    }
-    renderCommissionBreakdownOverride(lines);
-    calculateProfit();
-};
-
-const commissionRateInputFinal = document.getElementById('commission_rate');
-if (commissionRateInputFinal) {
-    commissionRateInputFinal.addEventListener('input', function() {
-        autoCalculateCommission = true;
-        calculateCommission();
-    });
-}
-
-if (isKaikaScope) {
-    const commissionInputFinal = document.getElementById('commission');
-    if (commissionInputFinal) {
-        commissionInputFinal.addEventListener('input', function() {
-            if (getActiveSaleTypeOverride() !== 'normal') {
-                this.dataset.manualFilled = this.value ? 'true' : '';
-                autoCalculateCommission = true;
-                calculateCommission();
-            }
-        });
-    }
-}
-
-const initializeSoldFieldsFinalOriginal = initializeSoldFieldsOverride;
-initializeSoldFieldsOverride = function() {
-    if (typeof initializeSoldFieldsFinalOriginal === 'function') {
-        initializeSoldFieldsFinalOriginal();
-    }
-    const rateInput = document.getElementById('commission_rate');
-    const salePrice = parseInt(document.getElementById('sale_price').value) || 0;
-    const commissionValue = parseInt(document.getElementById('commission').value) || 0;
-    const activeType = getActiveSaleTypeOverride();
-    if (rateInput && salePrice > 0 && activeType === 'normal' && commissionValue > 0) {
-        const baseCommission = isKaikaScope
-            ? commissionValue
-            : Math.max(commissionValue - _tierCalc(_ppTiers, salePrice), 0);
-        if (baseCommission > 0) {
-            rateInput.value = ((baseCommission / salePrice) * 100).toFixed(1).replace(/\.0$/, '');
-        }
-    }
-    updateCommissionRateVisibilityV2();
-    calculateCommission();
-};
-
-initializeSoldFieldsOverride();
-
 window.updateStatusFields = updateStatusFields;
 window.toggleSupplierDetail = toggleSupplierDetail;
 window.recalculateWholesalePrice = recalculateWholesalePrice;
@@ -2249,3 +1084,4 @@ window.calculateProfit = calculateProfit;
 })();
 </script>
 {% endblock %}
+

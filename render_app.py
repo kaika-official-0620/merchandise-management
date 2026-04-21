@@ -289,6 +289,12 @@ if "admin_line_account_delete" not in app.view_functions:
         return redirect_line_dashboard_with_notice("LINEアカウント削除は現行画面では未対応です。")
 
 
+if "public_proxy_service_history" not in app.view_functions and "public_proxy_service_list" in app.view_functions:
+    @app.route("/proxy-service/history", endpoint="public_proxy_service_history", methods=["GET"])
+    def public_proxy_service_history():
+        return redirect(url_for("public_proxy_service_list"), code=302)
+
+
 def ensure_template_helper(name: str, func):
     setattr(module, name, func)
     app.jinja_env.globals[name] = func

@@ -1,17 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}精算書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
+{% block title %}仕切押し書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>精算書詳細</h1>
+    <h1>仕切押し書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if shikiriosho.status == 'draft' %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
-        {% elif shikiriosho.status == 'completed' %}
-        <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-secondary">再確認</a>
-        <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この完成書類を送信しますか？')">個別送信</a>
+        <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この仕切押し書を送信しますか？')">送信</a>
         {% endif %}
         <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
     </div>
@@ -42,16 +40,14 @@
                     <th>ステータス</th>
                     <td>
                         {% if shikiriosho.status == 'sent' %}
-                            <span class="status-badge status-sent">送信済み</span>
+                            <span class="status-badge status-sent">送信済</span>
                             {% if shikiriosho.is_read %}
                                 <span class="read-badge read">既読</span>
                             {% else %}
                                 <span class="read-badge unread">未読</span>
                             {% endif %}
-                        {% elif shikiriosho.status == 'completed' %}
-                            <span class="status-badge status-completed">送信待機</span>
                         {% else %}
-                            <span class="status-badge status-draft">下書き確認中</span>
+                            <span class="status-badge status-draft">下書き</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -271,11 +267,6 @@
 .status-sent {
     background: #d4edda;
     color: #155724;
-}
-
-.status-completed {
-    background: #d1fae5;
-    color: #065f46;
 }
 
 .status-draft {

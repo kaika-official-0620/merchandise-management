@@ -59,13 +59,13 @@
             <!-- 管理者権限の詳細設定 -->
             <div class="form-group permissions-section" id="permissions-section" style="display: none;">
                 <label>管理者権限の範囲</label>
-                <small class="mb-2 permission-help" style="display: block; margin-bottom: 8px;">管理者は最初から全権限が有効です。外した項目だけ利用不可になります。</small>
+                <small class="mb-2" style="display: block; margin-bottom: 8px;">チェックなしの場合は全権限が付与されます</small>
                 <div class="permissions-grid">
                     {% if permission_options %}
                     {% for key, label in permission_options.items() %}
                     <label class="checkbox-label">
-                        <input type="checkbox" name="admin_permissions" value="{{ key }}" class="admin-permission-checkbox"
-                               {% if user and user.role == 'admin' and ((user.admin_permissions_list and key in user.admin_permissions_list) or (not user.admin_permissions_list)) %}checked{% endif %}>
+                        <input type="checkbox" name="admin_permissions" value="{{ key }}"
+                               {% if user and user.admin_permissions_list and key in user.admin_permissions_list %}checked{% endif %}>
                         <span>{{ label }}</span>
                     </label>
                     {% endfor %}
@@ -100,7 +100,7 @@
             <div class="budget-adjustment">
                 <div class="form-group adjustment-group">
                     <label for="budget_increase">増額</label>
-                    <div class="budget-input-group increase">
+                    <div class="budget-input-group">
                         <span class="budget-prefix increase">+¥</span>
                         <input type="number" id="budget_increase" name="budget_increase" 
                                value="0" min="0" step="1000" class="form-control budget-input"
@@ -110,7 +110,7 @@
                 
                 <div class="form-group adjustment-group">
                     <label for="budget_decrease">減額</label>
-                    <div class="budget-input-group decrease">
+                    <div class="budget-input-group">
                         <span class="budget-prefix decrease">-¥</span>
                         <input type="number" id="budget_decrease" name="budget_decrease" 
                                value="0" min="0" step="1000" class="form-control budget-input"
@@ -218,60 +218,26 @@
     border-top: 1px solid #e2e8f0;
 }
 
-.permission-help {
-    color: #64748b;
-    line-height: 1.5;
-}
-
 .budget-input-group {
     display: flex;
-    align-items: stretch;
-    width: 100%;
-    min-height: 52px;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    overflow: hidden;
-    background: #fff;
-    box-sizing: border-box;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.budget-input-group:focus-within {
-    border-color: #94a3b8;
-    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.15);
+    align-items: center;
+    gap: 0;
 }
 
 .budget-prefix {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 76px;
-    min-width: 68px;
-    white-space: nowrap;
-    padding: 0 14px;
+    background: #f1f5f9;
+    border: 1px solid #d1d5db;
+    border-right: none;
+    padding: 10px 12px;
+    border-radius: 6px 0 0 6px;
     color: #64748b;
     font-weight: 600;
-    line-height: 1;
-    border-right: 1px solid #d1d5db;
 }
 
 .budget-input {
-    flex: 1;
-    width: 100%;
-    min-width: 0;
-    min-height: 50px;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    background: transparent !important;
-    padding: 12px 14px !important;
+    border-radius: 0 6px 6px 0 !important;
     font-size: 1.1rem;
     font-weight: 600;
-}
-
-.budget-input:focus {
-    outline: none;
-    box-shadow: none !important;
 }
 
 .tuition-exempt-label {
@@ -317,34 +283,14 @@
 
 .budget-prefix.increase {
     background: #ecfdf5;
+    border-color: #10b981;
     color: #059669;
-    border-right-color: rgba(16, 185, 129, 0.35);
 }
 
 .budget-prefix.decrease {
     background: #fef2f2;
-    color: #dc2626;
-    border-right-color: rgba(239, 68, 68, 0.35);
-}
-
-.budget-input-group.increase {
-    border-color: #10b981;
-    background: #f0fdf4;
-}
-
-.budget-input-group.increase:focus-within {
-    border-color: #059669;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
-}
-
-.budget-input-group.decrease {
     border-color: #ef4444;
-    background: #fff5f5;
-}
-
-.budget-input-group.decrease:focus-within {
-    border-color: #dc2626;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+    color: #dc2626;
 }
 
 .new-budget {
@@ -371,16 +317,9 @@
 function togglePermissions() {
     const roleSelect = document.getElementById('role');
     const permissionsSection = document.getElementById('permissions-section');
-    const permissionCheckboxes = document.querySelectorAll('.admin-permission-checkbox');
     
     if (roleSelect.value === 'admin') {
         permissionsSection.style.display = 'block';
-        const hasChecked = Array.from(permissionCheckboxes).some((checkbox) => checkbox.checked);
-        if (!hasChecked) {
-            permissionCheckboxes.forEach((checkbox) => {
-                checkbox.checked = true;
-            });
-        }
     } else {
         permissionsSection.style.display = 'none';
     }
@@ -389,21 +328,6 @@ function togglePermissions() {
 // ページ読み込み時に実行
 document.addEventListener('DOMContentLoaded', function() {
     togglePermissions();
-
-    const permissionCheckboxes = document.querySelectorAll('.admin-permission-checkbox');
-    permissionCheckboxes.forEach((checkbox) => {
-        checkbox.addEventListener('change', function () {
-            const roleSelect = document.getElementById('role');
-            if (!roleSelect || roleSelect.value !== 'admin') {
-                return;
-            }
-
-            const checkedCount = Array.from(permissionCheckboxes).filter((item) => item.checked).length;
-            if (checkedCount === 0) {
-                this.checked = true;
-            }
-        });
-    });
 });
 </script>
 {% endblock %}

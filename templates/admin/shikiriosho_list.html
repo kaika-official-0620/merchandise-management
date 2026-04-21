@@ -1,162 +1,155 @@
 {% extends "base.html" %}
 
-{% block title %}精算書送信待機 - 株式会社 開花{% endblock %}
+{% block title %}精算書管理 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<style>
-.queue-page { max-width: 1280px; margin: 0 auto; }
-.queue-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; }
-.queue-header h1 { margin: 0; }
-.queue-note { margin: .4rem 0 0; color: #64748b; line-height: 1.7; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
-.stat-card, .table-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
-.stat-card { padding: 1rem 1.1rem; }
-.stat-label { color: #64748b; font-size: .84rem; }
-.stat-value { margin-top: .3rem; font-size: 1.9rem; font-weight: 800; color: #0f172a; }
-.queue-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: .55rem .9rem; border-radius: 10px; text-decoration: none; font-weight: 700; border: none; cursor: pointer; }
-.btn-primary { background: #0f172a; color: #fff; }
-.btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
-.btn-success { background: #10b981; color: #fff; }
-.btn-danger { background: #dc2626; color: #fff; }
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; min-width: 1020px; }
-.data-table th, .data-table td { padding: .9rem 1rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-.data-table th { background: #f8fafc; color: #334155; text-align: left; white-space: nowrap; }
-.data-table tbody tr:hover { background: #f8fafc; }
-.doc-no { font-family: monospace; font-weight: 700; color: #1d4ed8; }
-.amount { font-weight: 800; color: #047857; white-space: nowrap; }
-.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
-.status-draft { background: #fef3c7; color: #92400e; }
-.status-ready { background: #d1fae5; color: #065f46; }
-.status-sent { background: #dbeafe; color: #1d4ed8; }
-.checkbox-col { width: 44px; text-align: center; }
-.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
-@media (max-width: 768px) { .stats { grid-template-columns: 1fr; } .queue-header { flex-direction: column; } }
-</style>
-
-<div class="queue-page">
-    <div class="queue-header">
-        <div>
-            <h1>精算書送信待機</h1>
-            <p class="queue-note">代行仕入れで購入された内容から自動反映された精算書です。管理側で確認して送信待機にし、完成した書類だけ個別送信または一括送信できます。</p>
-        </div>
-        <div class="queue-actions">
-            <form action="{{ url_for('admin_shikiriosho_send_bulk') }}" method="POST">
-                <input type="hidden" name="send_scope" value="all">
-                <button type="submit" class="btn btn-success" onclick="return confirm('送信待機中の完成書類をまとめて送信しますか？')">完成書類を一括送信</button>
-            </form>
-        </div>
+<div class="admin-header">
+    <h1>精算書管理</h1>
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
     </div>
-
-    <div class="stats">
-        <div class="stat-card">
-            <div class="stat-label">下書き確認中</div>
-            <div class="stat-value">{{ shikiriosho_list|selectattr('status', 'equalto', 'draft')|list|length }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">送信待機</div>
-            <div class="stat-value">{{ shikiriosho_list|selectattr('status', 'equalto', 'completed')|list|length }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">送信済み</div>
-            <div class="stat-value">{{ shikiriosho_list|selectattr('status', 'equalto', 'sent')|list|length }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">書類総数</div>
-            <div class="stat-value">{{ shikiriosho_list|length }}</div>
-        </div>
-    </div>
-
-    <form action="{{ url_for('admin_shikiriosho_send_bulk') }}" method="POST">
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th class="checkbox-col"><input type="checkbox" id="check-all-shikiri"></th>
-                        <th>精算書番号</th>
-                        <th>宛先</th>
-                        <th>発行日</th>
-                        <th>請求金額</th>
-                        <th>状態</th>
-                        <th>既読</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for doc in shikiriosho_list %}
-                    <tr>
-                        <td class="checkbox-col">
-                            {% if doc.status == 'completed' %}
-                            <input type="checkbox" name="document_ids" value="{{ doc.id }}" class="queue-checkbox">
-                            {% endif %}
-                        </td>
-                        <td class="doc-no">{{ doc.document_no }}</td>
-                        <td>
-                            {% if doc.recipient_display_name %}
-                                {{ doc.recipient_display_name }}
-                            {% elif doc.recipient_name %}
-                                {{ doc.recipient_name }}
-                            {% else %}
-                                <span class="text-muted">未設定</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ doc.issue_date }}</td>
-                        <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
-                        <td>
-                            {% if doc.status == 'sent' %}
-                                <span class="status-chip status-sent">送信済み</span>
-                            {% elif doc.status == 'completed' %}
-                                <span class="status-chip status-ready">送信待機</span>
-                            {% else %}
-                                <span class="status-chip status-draft">下書き確認中</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if doc.status == 'sent' %}
-                                {% if doc.is_read %}既読{% else %}未読{% endif %}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="actions">
-                                <a href="{{ url_for('admin_shikiriosho_view', id=doc.id) }}" class="btn btn-primary">詳細</a>
-                                {% if doc.status == 'draft' %}
-                                    <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
-                                {% elif doc.status == 'completed' %}
-                                    <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-secondary">再確認</a>
-                                    <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-success" onclick="return confirm('この完成書類を送信しますか？')">個別送信</a>
-                                {% endif %}
-                                <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="8" class="empty-state">対象の精算書はまだありません。</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% if shikiriosho_list %}
-        <div class="queue-actions" style="margin-top: 1rem;">
-            <button type="submit" class="btn btn-success" onclick="return confirm('選択した完成書類を送信しますか？')">選択した完成書類を送信</button>
-        </div>
-        {% endif %}
-    </form>
 </div>
 
-<script>
-const checkAllShikiri = document.getElementById('check-all-shikiri');
-if (checkAllShikiri) {
-    checkAllShikiri.addEventListener('change', function () {
-        document.querySelectorAll('.queue-checkbox').forEach((checkbox) => {
-            checkbox.checked = this.checked;
-        });
-    });
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>精算書番号</th>
+                <th>宛先</th>
+                <th>発行日</th>
+                <th>税込合計</th>
+                <th>ステータス</th>
+                <th>既読</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in shikiriosho_list %}
+            <tr>
+                <td class="doc-no">{{ doc.document_no }}</td>
+                <td>
+                    {% if doc.recipient_display_name %}
+                        {{ doc.recipient_display_name }}
+                    {% elif doc.recipient_name %}
+                        {{ doc.recipient_name }}
+                    {% else %}
+                        <span class="text-muted">未設定</span>
+                    {% endif %}
+                </td>
+                <td>{{ doc.issue_date }}</td>
+                <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        <span class="status-badge status-sent">送信済</span>
+                    {% else %}
+                        <span class="status-badge status-draft">下書き</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if doc.status == 'sent' %}
+                        {% if doc.is_read %}
+                            <span class="read-badge read">既読</span>
+                        {% else %}
+                            <span class="read-badge unread">未読</span>
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="actions">
+                    <a href="{{ url_for('admin_shikiriosho_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
+                    {% if doc.status == 'draft' %}
+                        <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                        <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center text-muted">精算書がありません</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.doc-no {
+    font-family: monospace;
+    font-weight: 500;
 }
-</script>
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-sent {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-draft {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.read-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.read-badge.read {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.read-badge.unread {
+    background: #007bff;
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin: 2px;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+/* スマホ対応 - 横スクロール */
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .data-table {
+        min-width: 700px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+</style>
 {% endblock %}
+
+

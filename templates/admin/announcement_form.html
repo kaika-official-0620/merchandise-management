@@ -1,213 +1,162 @@
 {% extends "base.html" %}
-{% block title %}{{ 'お知らせを編集' if announcement else 'お知らせを追加' }} - 株式会社 開花{% endblock %}
+{% block title %}{{ 'お知らせ編集' if announcement else 'お知らせ作成' }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>{{ 'お知らせを編集' if announcement else 'お知らせを追加' }}</h1>
+    <h1>{{ 'お知らせ編集' if announcement else 'お知らせ作成' }}</h1>
 </div>
 
-<div class="announcement-page">
-    <form method="POST" class="announcement-form">
-        <section class="form-section">
-            <h2>基本情報</h2>
 
+<div class="form-container">
+    <form method="POST" class="announcement-form">
+        <div class="form-section">
+            <h2>基本情報</h2>
+            
             <div class="form-group">
                 <label for="title">タイトル <span class="required">*</span></label>
-                <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    value="{{ announcement.title if announcement else '' }}"
-                    maxlength="200"
-                    required
-                    placeholder="クライアントへ表示するタイトルを入力"
-                >
+                <input type="text" id="title" name="title" 
+                       value="{{ announcement.title if announcement else '' }}" 
+                       required maxlength="200" placeholder="お知らせのタイトルを入力">
             </div>
-
+            
             <div class="form-group">
-                <label for="content">本文 <span class="required">*</span></label>
-                <textarea
-                    id="content"
-                    name="content"
-                    rows="5"
-                    required
-                    placeholder="お知らせ本文を入力してください"
-                >{{ announcement.content if announcement else '' }}</textarea>
+                <label for="content">内容 <span class="required">*</span></label>
+                <textarea id="content" name="content" rows="4" required 
+                          placeholder="お知らせの内容を入力">{{ announcement.content if announcement else '' }}</textarea>
             </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="announcement_type">種類</label>
-                    <select id="announcement_type" name="announcement_type">
-                        <option value="info" {% if not announcement or announcement.announcement_type == 'info' %}selected{% endif %}>通常</option>
-                        <option value="important" {% if announcement and announcement.announcement_type == 'important' %}selected{% endif %}>重要</option>
-                        <option value="warning" {% if announcement and announcement.announcement_type == 'warning' %}selected{% endif %}>注意</option>
-                        <option value="success" {% if announcement and announcement.announcement_type == 'success' %}selected{% endif %}>完了・更新</option>
-                    </select>
-                </div>
-
-                <div class="form-group checkbox-group checkbox-single">
-                    <label>
-                        <input type="checkbox" name="is_active" {% if not announcement or announcement.is_active %}checked{% endif %}>
-                        公開する
-                    </label>
-                </div>
+            
+            <div class="form-group">
+                <label for="announcement_type">種類</label>
+                <select id="announcement_type" name="announcement_type">
+                    <option value="info" {% if announcement and announcement.announcement_type == 'info' %}selected{% endif %}>
+                        通常のお知らせ
+                    </option>
+                    <option value="important" {% if announcement and announcement.announcement_type == 'important' %}selected{% endif %}>
+                        重要なお知らせ
+                    </option>
+                    <option value="warning" {% if announcement and announcement.announcement_type == 'warning' %}selected{% endif %}>
+                        注意喚起
+                    </option>
+                    <option value="success" {% if announcement and announcement.announcement_type == 'success' %}selected{% endif %}>
+                        完了・達成報告
+                    </option>
+                </select>
             </div>
-        </section>
-
-        <section class="form-section">
-            <h2>公開設定</h2>
-
+            
+            <div class="form-group checkbox-group">
+                <label>
+                    <input type="checkbox" name="is_active" 
+                           {% if not announcement or announcement.is_active %}checked{% endif %}>
+                    有効にする
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h2>公開スケジュール（予約投稿）</h2>
+            
             <div class="form-row">
                 <div class="form-group">
                     <label for="publish_at">公開開始日時</label>
-                    <input
-                        type="datetime-local"
-                        id="publish_at"
-                        name="publish_at"
-                        value="{{ ((announcement.publish_at|string).replace(' ', 'T'))[:16] if announcement and announcement.publish_at else '' }}"
-                    >
-                    <small>空欄の場合は保存後すぐに公開します。</small>
+                    <input type="datetime-local" id="publish_at" name="publish_at" 
+                           value="{{ (announcement.publish_at|string)[:16] if announcement and announcement.publish_at else '' }}">
+                    <small>空欄の場合は即時公開</small>
                 </div>
-
+                
                 <div class="form-group">
                     <label for="expire_at">公開終了日時</label>
-                    <input
-                        type="datetime-local"
-                        id="expire_at"
-                        name="expire_at"
-                        value="{{ ((announcement.expire_at|string).replace(' ', 'T'))[:16] if announcement and announcement.expire_at else '' }}"
-                    >
-                    <small>空欄の場合は終了日時なしで公開します。</small>
+                    <input type="datetime-local" id="expire_at" name="expire_at" 
+                           value="{{ (announcement.expire_at|string)[:16] if announcement and announcement.expire_at else '' }}">
+                    <small>空欄の場合は無期限</small>
                 </div>
             </div>
-        </section>
-
-        <section class="form-section">
-            <h2>通知先</h2>
-
-            <div class="form-group">
-                <label for="recipient_scope">通知する相手</label>
-                <select id="recipient_scope" name="recipient_scope">
-                    <option value="all" {% if not announcement or announcement.recipient_scope != 'selected' %}selected{% endif %}>全クライアント</option>
-                    <option value="selected" {% if announcement and announcement.recipient_scope == 'selected' %}selected{% endif %}>選択したクライアントのみ</option>
-                </select>
-            </div>
-
-            <div class="form-group recipient-picker" id="recipientPicker">
-                <label>クライアントを選択</label>
-                <div class="recipient-toolbar">
-                    <button type="button" class="btn btn-secondary btn-sm" id="selectAllRecipients">全選択</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="clearRecipients">選択解除</button>
-                </div>
-                <div class="recipient-list">
-                    {% for user in recipient_users %}
-                    {% set display_name = user.display_name or user.username %}
-                    <label class="recipient-item">
-                        <input
-                            type="checkbox"
-                            name="recipient_user_ids"
-                            value="{{ user.id }}"
-                            {% if user.id in selected_recipient_ids %}checked{% endif %}
-                        >
-                        <span class="recipient-name">{{ display_name }}</span>
-                        <span class="recipient-meta">ID {{ user.id }}{% if user.username and user.username != display_name %} / {{ user.username }}{% endif %}</span>
-                    </label>
-                    {% else %}
-                    <div class="empty-recipient">通知対象にできるクライアントがまだ登録されていません。</div>
-                    {% endfor %}
-                </div>
-                <small>「選択したクライアントのみ」を選ぶと、ここでチェックした相手だけに表示・通知します。</small>
-            </div>
-
-            <div class="form-group checkbox-group">
-                <label>
-                    <input type="checkbox" name="line_notify_now" {% if announcement and announcement.line_notify_now %}checked{% endif %}>
-                    保存と同時にLINE通知も送る
-                </label>
-                <small>LINE連携済みのクライアントにのみ送信されます。</small>
-            </div>
-        </section>
-
-        <section class="form-section preview-section">
+        </div>
+        
+        <div class="form-section preview-section">
             <h2>プレビュー</h2>
-            <div class="announcement-preview" id="announcementPreview">
-                <span class="preview-badge" id="previewBadge">通常</span>
-                <div class="preview-text">
-                    <div class="preview-title" id="previewTitle">タイトルがここに表示されます</div>
-                    <div class="preview-content" id="previewContent">本文がここに表示されます</div>
-                </div>
+            <div class="announcement-preview" id="preview">
+                <div class="preview-badge" id="previewBadge">お知らせ</div>
+                <div class="preview-title" id="previewTitle">タイトルがここに表示されます</div>
+                <div class="preview-content" id="previewContent">内容がここに表示されます</div>
             </div>
-        </section>
-
+        </div>
+        
         <div class="form-actions">
             <a href="{{ url_for('admin_announcements') }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" class="btn btn-primary">{{ '更新する' if announcement else '追加する' }}</button>
+            <button type="submit" class="btn btn-primary">{{ '更新' if announcement else '作成' }}</button>
         </div>
     </form>
 </div>
 
 <style>
-.announcement-page {
-    max-width: 920px;
+.form-container {
+    max-width: 800px;
     margin: 0 auto;
 }
 
-.announcement-form {
-    display: grid;
-    gap: 1.25rem;
+.announcement-form .form-section {
+    background: white;
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
-.form-section {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 1.4rem;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-
-.form-section h2 {
-    margin: 0 0 1rem;
-    color: #0f172a;
-    font-size: 1.06rem;
+.announcement-form .form-section h2 {
+    font-size: 1.1rem;
+    color: #1e293b;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .form-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .form-group {
-    display: grid;
-    gap: 0.45rem;
+    margin-bottom: 20px;
 }
 
 .form-group label {
-    color: #334155;
-    font-weight: 700;
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #475569;
 }
 
-.form-group input[type="text"],
-.form-group input[type="datetime-local"],
+.form-group input,
 .form-group textarea,
 .form-group select {
     width: 100%;
-    padding: 0.75rem 0.9rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
     font-size: 0.95rem;
-    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.form-group textarea {
-    resize: vertical;
-    min-height: 140px;
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .form-group small {
-    color: #64748b;
-    line-height: 1.6;
+    display: block;
+    margin-top: 5px;
+    color: #94a3b8;
+    font-size: 0.8rem;
 }
 
 .required {
@@ -215,182 +164,107 @@
 }
 
 .checkbox-group label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-}
-
-.checkbox-single {
-    align-content: end;
-}
-
-.recipient-picker {
-    gap: 0.8rem;
-}
-
-.recipient-toolbar {
     display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
 }
 
-.recipient-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.75rem;
-    padding: 0.2rem 0;
+.checkbox-group input[type="checkbox"] {
+    width: auto;
 }
 
-.recipient-item {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.35rem 0.7rem;
-    align-items: start;
-    padding: 0.85rem 0.9rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #f8fafc;
-}
-
-.recipient-item input {
-    margin-top: 0.15rem;
-}
-
-.recipient-name {
-    color: #0f172a;
-    font-weight: 700;
-}
-
-.recipient-meta {
-    grid-column: 2;
-    color: #64748b;
-    font-size: 0.82rem;
-}
-
-.empty-recipient {
-    border: 1px dashed #cbd5e1;
-    border-radius: 12px;
-    padding: 1rem;
-    color: #64748b;
-    background: #f8fafc;
-}
-
+/* プレビュー */
 .preview-section {
-    background: linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%);
-    color: #fff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white;
 }
 
 .preview-section h2 {
-    color: #fff;
+    color: white !important;
+    border-bottom-color: rgba(255,255,255,0.2) !important;
 }
 
 .announcement-preview {
     display: flex;
     align-items: center;
-    gap: 0.9rem;
-    padding: 1rem 1.1rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.12);
+    gap: 12px;
+    padding: 15px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
 }
 
 .preview-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 72px;
-    padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.2);
-    font-size: 0.8rem;
-    font-weight: 700;
+    background: rgba(255,255,255,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .preview-badge.important { background: #ef4444; }
 .preview-badge.warning { background: #f59e0b; }
 .preview-badge.success { background: #10b981; }
 
-.preview-text {
-    display: grid;
-    gap: 0.3rem;
-}
-
 .preview-title {
-    font-weight: 700;
-    font-size: 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .preview-content {
-    font-size: 0.92rem;
-    line-height: 1.7;
-    opacity: 0.95;
+    font-size: 0.85rem;
+    opacity: 0.9;
 }
 
 .form-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-
-    .announcement-preview {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+    gap: 10px;
+    margin-top: 20px;
 }
 </style>
 
 <script>
+// リアルタイムプレビュー
 const titleInput = document.getElementById('title');
 const contentInput = document.getElementById('content');
-const typeInput = document.getElementById('announcement_type');
-const scopeInput = document.getElementById('recipient_scope');
+const typeSelect = document.getElementById('announcement_type');
 const previewTitle = document.getElementById('previewTitle');
 const previewContent = document.getElementById('previewContent');
 const previewBadge = document.getElementById('previewBadge');
-const recipientPicker = document.getElementById('recipientPicker');
 
 function updatePreview() {
-    const typeLabels = {
-        info: '通常',
-        important: '重要',
-        warning: '注意',
-        success: '完了・更新',
-    };
-    const badgeClass = typeInput.value || 'info';
-    previewBadge.textContent = typeLabels[badgeClass] || '通常';
-    previewBadge.className = `preview-badge ${badgeClass}`;
-    previewTitle.textContent = titleInput.value.trim() || 'タイトルがここに表示されます';
-    previewContent.textContent = contentInput.value.trim() || '本文がここに表示されます';
+    previewTitle.textContent = titleInput.value || 'タイトルがここに表示されます';
+    previewContent.textContent = contentInput.value || '内容がここに表示されます';
+    
+    const type = typeSelect.value;
+    previewBadge.className = 'preview-badge';
+    
+    switch(type) {
+        case 'important':
+            previewBadge.textContent = '重要';
+            previewBadge.classList.add('important');
+            break;
+        case 'warning':
+            previewBadge.textContent = '注意';
+            previewBadge.classList.add('warning');
+            break;
+        case 'success':
+            previewBadge.textContent = '完了';
+            previewBadge.classList.add('success');
+            break;
+        default:
+            previewBadge.textContent = 'お知らせ';
+    }
 }
 
-function toggleRecipientPicker() {
-    const showSelectedOnly = scopeInput.value === 'selected';
-    recipientPicker.style.display = showSelectedOnly ? 'grid' : 'none';
-}
+titleInput.addEventListener('input', updatePreview);
+contentInput.addEventListener('input', updatePreview);
+typeSelect.addEventListener('change', updatePreview);
 
-titleInput?.addEventListener('input', updatePreview);
-contentInput?.addEventListener('input', updatePreview);
-typeInput?.addEventListener('change', updatePreview);
-scopeInput?.addEventListener('change', toggleRecipientPicker);
-
-document.getElementById('selectAllRecipients')?.addEventListener('click', () => {
-    document.querySelectorAll('.recipient-item input[type=\"checkbox\"]').forEach((checkbox) => {
-        checkbox.checked = true;
-    });
-});
-
-document.getElementById('clearRecipients')?.addEventListener('click', () => {
-    document.querySelectorAll('.recipient-item input[type=\"checkbox\"]').forEach((checkbox) => {
-        checkbox.checked = false;
-    });
-});
-
+// 初期表示
 updatePreview();
-toggleRecipientPicker();
 </script>
 {% endblock %}
+

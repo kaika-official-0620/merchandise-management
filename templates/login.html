@@ -8,7 +8,7 @@
             <h1 class="company-name">株式会社 開花</h1>
             <p>ログインしてください</p>
         </div>
-
+        
         <style>
         .company-name {
             font-size: 1.5rem;
@@ -18,67 +18,36 @@
             letter-spacing: 0.05em;
             white-space: nowrap;
         }
-
-        .remember-login {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.65rem;
-            margin: 0.35rem 0 0.9rem;
-            color: #475569;
-            font-size: 0.92rem;
-            line-height: 1.7;
-        }
-
-        .remember-login input {
-            width: 1rem;
-            height: 1rem;
-            margin-top: 0.15rem;
-            accent-color: #667eea;
-            flex: 0 0 auto;
-        }
-
-        .remember-login-note {
-            display: block;
-            color: #64748b;
-            font-size: 0.82rem;
-        }
-
+        
         @media (max-width: 400px) {
             .company-name {
                 font-size: 1.3rem;
             }
-
+            
             .auth-card {
                 padding: 2rem 1.5rem;
             }
         }
         </style>
-
+        
         <form method="POST" class="auth-form">
             <div class="form-group">
                 <label for="username">ユーザー名</label>
-                <input type="text" id="username" name="username" value="{{ remembered_username|default('') }}" required autofocus>
+                <input type="text" id="username" name="username" required autofocus>
             </div>
-
+            
             <div class="form-group">
                 <label for="password">パスワード</label>
                 <input type="password" id="password" name="password" required>
             </div>
-
-            <label class="remember-login" for="remember_me">
-                <input type="checkbox" id="remember_me" name="remember_me" {% if remember_me %}checked{% endif %}>
-                <span>
-                    次回から自動でログインする
-                    <span class="remember-login-note">チェック時は14日間ログイン状態を保持し、期限後は自動で解除されます。</span>
-                </span>
-            </label>
-
+            
             <button type="submit" class="btn btn-primary btn-block">ログイン</button>
         </form>
-
+        
         <div class="auth-footer">
             <p style="color: #64748b; font-size: 0.9rem;">アカウントは管理者にお問い合わせください</p>
         </div>
     </div>
 </div>
 {% endblock %}
+

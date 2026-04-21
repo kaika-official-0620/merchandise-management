@@ -1,34 +1,79 @@
 {% extends "base.html" %}
-{% block title %}{{ box_title }} - 株式会社 開花{% endblock %}
+{% block title %}販売代行サービス受信BOX - 株式会社 開花{% endblock %}
 
 {% block content %}
 <style>
 .sales-agency-container {
-    max-width: 1240px;
+    max-width: 1200px;
     margin: 0 auto;
-    display: grid;
-    gap: 1.25rem;
 }
 
-.filter-tabs,
-.service-tabs {
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    text-align: center;
+}
+
+.stat-card.pending {
+    border-left: 4px solid #f59e0b;
+}
+
+.stat-card.approved {
+    border-left: 4px solid #10b981;
+}
+
+.stat-card.rejected {
+    border-left: 4px solid #ef4444;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.stat-card.pending .stat-value {
+    color: #f59e0b;
+}
+
+.stat-card.approved .stat-value {
+    color: #10b981;
+}
+
+.stat-card.rejected .stat-value {
+    color: #ef4444;
+}
+
+.filter-tabs {
     display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
     flex-wrap: wrap;
-    gap: 0.55rem;
 }
 
 .filter-tab {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.52rem 0.95rem;
-    border-radius: 999px;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
     text-decoration: none;
-    background: #f1f5f9;
-    color: #475569;
     font-size: 0.9rem;
-    font-weight: 600;
-    transition: all 0.2s ease;
+    font-weight: 500;
+    transition: all 0.2s;
+    background: #f1f5f9;
+    color: #64748b;
 }
 
 .filter-tab:hover {
@@ -36,46 +81,8 @@
 }
 
 .filter-tab.active {
-    background: #0f172a;
+    background: #059669;
     color: white;
-}
-
-.filter-tab.service-wholesale.active {
-    background: #0f766e;
-}
-
-.filter-tab.service-auction.active {
-    background: #7c3aed;
-}
-
-.filter-tab.service-simultaneous.active {
-    background: #c2410c;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 0.9rem;
-}
-
-.stat-card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 1rem 1.1rem;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-
-.stat-card-label {
-    color: #64748b;
-    font-size: 0.84rem;
-    margin-bottom: 0.45rem;
-}
-
-.stat-card-value {
-    color: #0f172a;
-    font-size: 1.8rem;
-    font-weight: 700;
 }
 
 .requests-list {
@@ -85,501 +92,309 @@
 }
 
 .request-card {
-    background: #fff;
-    border-radius: 18px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     overflow: hidden;
-    border-top: 4px solid #cbd5e1;
 }
 
-.request-card.service-wholesale {
-    border-top-color: #0f766e;
+.request-card.pending {
+    border-left: 4px solid #f59e0b;
 }
 
-.request-card.service-auction {
-    border-top-color: #7c3aed;
+.request-card.approved {
+    border-left: 4px solid #10b981;
 }
 
-.request-card.service-simultaneous {
-    border-top-color: #c2410c;
+.request-card.rejected {
+    border-left: 4px solid #ef4444;
 }
 
 .request-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 1rem 1.2rem;
+    align-items: center;
+    padding: 1rem 1.25rem;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
 .request-info {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem 0.85rem;
     align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .request-user {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #0f172a;
+    font-weight: 600;
+    color: #1e293b;
 }
 
-.request-date,
-.processed-info {
-    font-size: 0.84rem;
+.request-service {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.request-date {
+    font-size: 0.85rem;
     color: #64748b;
 }
 
-.service-badge,
-.status-badge,
-.mini-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    padding: 0.28rem 0.72rem;
-    font-size: 0.78rem;
-    font-weight: 700;
+.request-status {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
-.service-badge.wholesale {
-    background: #ccfbf1;
-    color: #115e59;
-}
-
-.service-badge.auction {
-    background: #ede9fe;
-    color: #6d28d9;
-}
-
-.service-badge.simultaneous {
-    background: #ffedd5;
-    color: #c2410c;
-}
-
-.status-badge.pending {
+.request-status.pending {
     background: #fef3c7;
     color: #b45309;
 }
 
-.status-badge.approved {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.status-badge.appraising {
-    background: #ede9fe;
-    color: #6d28d9;
-}
-
-.status-badge.inspecting {
-    background: #fce7f3;
-    color: #be185d;
-}
-
-.status-badge.completed {
+.request-status.approved {
     background: #d1fae5;
-    color: #047857;
+    color: #059669;
 }
 
-.status-badge.rejected {
+.request-status.rejected {
     background: #fee2e2;
     color: #dc2626;
 }
 
 .request-body {
-    padding: 1.2rem;
-    display: grid;
-    gap: 1rem;
-}
-
-.request-open-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.48rem 0.85rem;
-    border-radius: 999px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #0f172a;
-    text-decoration: none;
-    font-size: 0.85rem;
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.request-open-link:hover {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #1d4ed8;
+    padding: 1.25rem;
 }
 
 .request-items {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .request-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border-radius: 12px;
+    gap: 0.5rem;
+    padding: 0.5rem;
     background: #f8fafc;
+    border-radius: 8px;
     border: 1px solid #e2e8f0;
 }
 
-.request-item img,
-.request-item .placeholder {
-    width: 46px;
-    height: 46px;
+.request-item img {
+    width: 40px;
+    height: 40px;
     object-fit: cover;
-    border-radius: 8px;
-    background: #e2e8f0;
+    border-radius: 4px;
+}
+
+.request-item-info {
+    font-size: 0.85rem;
 }
 
 .request-item-name {
-    font-weight: 600;
-    color: #0f172a;
-    line-height: 1.5;
+    font-weight: 500;
+    color: #1e293b;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .request-item-brand {
     color: #64748b;
+    font-size: 0.75rem;
+}
+
+.admin-note-display {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #f1f5f9;
+    border-radius: 8px;
+}
+
+.admin-note-display label {
     font-size: 0.8rem;
-}
-
-.request-item-status {
-    margin-top: 0.22rem;
-    color: #2563eb;
-    font-size: 0.78rem;
-    font-weight: 700;
-}
-
-.request-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-}
-
-.mini-badge {
-    background: #eff6ff;
-    color: #1d4ed8;
-}
-
-.request-note {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 0.85rem 0.95rem;
-}
-
-.request-note-label {
     color: #64748b;
-    font-size: 0.8rem;
+    display: block;
     margin-bottom: 0.25rem;
 }
 
-.request-note p {
+.admin-note-display p {
     margin: 0;
-    color: #0f172a;
-    line-height: 1.7;
-}
-
-.request-status-panel {
-    display: grid;
-    gap: 0.75rem;
-    padding: 0.95rem 1rem;
-    border-radius: 14px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-}
-
-.request-status-panel-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.65rem;
-}
-
-.request-status-panel-title {
-    color: #0f172a;
-    font-size: 0.96rem;
-    font-weight: 800;
-}
-
-.request-status-panel-subtitle {
-    color: #64748b;
-    font-size: 0.82rem;
-}
-
-.client-status-preview {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    width: fit-content;
-    padding: 0.4rem 0.75rem;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    font-size: 0.82rem;
-    font-weight: 700;
-}
-
-.request-progress {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.55rem;
-}
-
-.progress-step {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 36px;
-    padding: 0.48rem 0.72rem;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-    color: #64748b;
-    font-size: 0.8rem;
-    font-weight: 700;
-    transition: all 0.2s ease;
-}
-
-.progress-step.is-done {
-    border-color: #bbf7d0;
-    background: #f0fdf4;
-    color: #15803d;
-}
-
-.progress-step.is-current {
-    border-color: #93c5fd;
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.progress-step.is-rejected {
-    border-color: #fecaca;
-    background: #fef2f2;
-    color: #dc2626;
+    color: #1e293b;
 }
 
 .request-actions {
     display: flex;
+    gap: 0.75rem;
     flex-wrap: wrap;
-    gap: 0.8rem;
-    align-items: flex-end;
-    padding-top: 0.95rem;
+    padding-top: 1rem;
     border-top: 1px solid #e2e8f0;
-}
-
-.request-actions-header {
-    width: 100%;
-    display: grid;
-    gap: 0.25rem;
-}
-
-.request-actions-title {
-    color: #0f172a;
-    font-size: 0.96rem;
-    font-weight: 800;
-}
-
-.request-actions-subtitle {
-    color: #64748b;
-    font-size: 0.82rem;
+    margin-top: 1rem;
 }
 
 .admin-note-input {
-    flex: 1 1 320px;
+    flex: 1;
+    min-width: 200px;
 }
 
 .admin-note-input textarea {
     width: 100%;
-    min-height: 74px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
     resize: vertical;
-    padding: 0.8rem 0.9rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    font-size: 0.92rem;
+    min-height: 60px;
 }
 
-.action-buttons,
-.request-doc-links {
+.admin-note-input textarea:focus {
+    outline: none;
+    border-color: #059669;
+}
+
+.action-buttons {
     display: flex;
-    gap: 0.55rem;
-    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-end;
 }
 
-.request-feedback {
-    width: 100%;
-    display: none;
-    padding: 0.78rem 0.9rem;
-    border-radius: 12px;
-    font-size: 0.85rem;
-    font-weight: 700;
-}
-
-.request-feedback.is-visible {
-    display: block;
-}
-
-.request-feedback.is-success {
-    background: #ecfdf5;
-    color: #047857;
-    border: 1px solid #bbf7d0;
-}
-
-.request-feedback.is-error {
-    background: #fef2f2;
-    color: #dc2626;
-    border: 1px solid #fecaca;
-}
-
-.btn-outline {
-    background: #fff;
-    border: 1px solid #93c5fd;
-    color: #2563eb;
-}
-
-.service-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.8rem;
-}
-
-.service-legend-item {
+.btn {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.42rem 0.8rem;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    color: #475569;
-    font-size: 0.84rem;
+    transition: all 0.2s;
+    border: none;
+    font-size: 0.9rem;
 }
 
-.legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
+.btn-approve {
+    background: #10b981;
+    color: white;
 }
 
-.legend-dot.wholesale {
-    background: #0f766e;
+.btn-approve:hover {
+    background: #059669;
 }
 
-.legend-dot.auction {
-    background: #7c3aed;
+.btn-reject {
+    background: #ef4444;
+    color: white;
 }
 
-.legend-dot.simultaneous {
-    background: #c2410c;
+.btn-reject:hover {
+    background: #dc2626;
 }
 
-.empty-state {
-    border: 1px dashed #cbd5e1;
-    border-radius: 14px;
-    padding: 2.4rem 1rem;
+.no-requests {
     text-align: center;
+    padding: 3rem;
+    background: white;
+    border-radius: 12px;
     color: #64748b;
-    background: #fff;
+}
+
+.processed-info {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 0.5rem;
 }
 
 @media (max-width: 768px) {
-    .request-header,
+    .stats-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .request-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .request-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
     .request-actions {
         flex-direction: column;
-        align-items: stretch;
     }
-
-    .action-buttons .btn,
-    .request-doc-links .btn {
-        flex: 1 1 auto;
+    
+    .admin-note-input {
+        width: 100%;
+    }
+    
+    .action-buttons {
+        width: 100%;
+    }
+    
+    .action-buttons .btn {
+        flex: 1;
         justify-content: center;
     }
 }
 </style>
 
 <div class="page-header">
-    <h1>{{ box_title }}</h1>
+    <h1>販売代行サービス受信BOX</h1>
 </div>
 
 <div class="sales-agency-container">
-    <div class="service-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab {% if service_filter == 'all' %}active{% endif %}">すべての申請</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-wholesale {% if service_filter == 'wholesale' %}active{% endif %}">業者卸販売</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='auction', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-auction {% if service_filter == 'auction' %}active{% endif %}">業者オークション</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-simultaneous {% if service_filter == 'simultaneous' %}active{% endif %}">同時出品</a>
-    </div>
-
-    <div class="service-legend">
-        <span class="service-legend-item"><span class="legend-dot wholesale"></span>業者卸販売サービス</span>
-        <span class="service-legend-item"><span class="legend-dot auction"></span>業者オークション出品</span>
-        <span class="service-legend-item"><span class="legend-dot simultaneous"></span>同時出品サービス</span>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-card-label">承認待ち</div>
-            <div class="stat-card-value">{{ stats.pending }}</div>
+    <!-- 統計カード -->
+    <div class="stats-cards">
+        <div class="stat-card pending">
+            <div class="stat-label">審査中</div>
+            <div class="stat-value">{{ stats.pending }}</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-card-label">認証済み</div>
-            <div class="stat-card-value">{{ stats.approved }}</div>
+        <div class="stat-card approved">
+            <div class="stat-label">承認済み</div>
+            <div class="stat-value">{{ stats.approved }}</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-card-label">査定中</div>
-            <div class="stat-card-value">{{ stats.appraising }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-label">検品中</div>
-            <div class="stat-card-value">{{ stats.inspecting }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-label">処理完了</div>
-            <div class="stat-card-value">{{ stats.completed }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-label">却下申請</div>
-            <div class="stat-card-value">{{ stats.rejected }}</div>
+        <div class="stat-card rejected">
+            <div class="stat-label">却下</div>
+            <div class="stat-value">{{ stats.rejected }}</div>
         </div>
     </div>
-
+    
+    <!-- フィルタータブ -->
     <div class="filter-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">査定中</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting') }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed') }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
+        <a href="{{ url_for('admin_sales_agency_requests') }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
+        <a href="{{ url_for('admin_sales_agency_requests', status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">審査中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', status='processed') }}" class="filter-tab {% if status_filter == 'processed' %}active{% endif %}">処理済み</a>
+        <a href="{{ url_for('admin_sales_agency_requests', status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">承認済み</a>
+        <a href="{{ url_for('admin_sales_agency_requests', status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下</a>
     </div>
-
+    
+    <!-- 申請リスト -->
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}
-        <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}">
-                <div class="request-header">
+        <div class="request-card {{ req.status }}" id="request-{{ req.id }}">
+            <div class="request-header">
                 <div class="request-info">
-                    <span class="request-user">{{ req.client_name }}</span>
-                    <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
-                    <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
+                    <span class="request-user">{{ req.user_name or req.username }}</span>
+                    <span class="request-service">{{ service_types.get(req.service_type, req.service_type) }}</span>
+                    <span class="request-date">{{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; justify-content: flex-end;">
-                    <span class="status-badge {{ req.status }}" id="status-badge-{{ req.id }}">{{ req.status_label }}</span>
-                    <a href="{{ req.detail_url }}" class="request-open-link">申請詳細を開く</a>
-                </div>
+                <span class="request-status {{ req.status }}">{{ statuses.get(req.status, req.status) }}</span>
             </div>
-
             <div class="request-body">
                 <div class="request-items">
                     {% for item in req.merchandise_items %}
@@ -587,243 +402,61 @@
                         {% if item.photo_path %}
                         <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
                         {% else %}
-                        <div class="placeholder"></div>
+                        <div style="width: 40px; height: 40px; background: #e2e8f0; border-radius: 4px;"></div>
                         {% endif %}
-                        <div>
+                        <div class="request-item-info">
                             <div class="request-item-name">{{ item.product_name }}</div>
                             {% if item.brand_name %}
                             <div class="request-item-brand">{{ item.brand_name }}</div>
-                            {% endif %}
-                            {% if item.appraisal_status_label %}
-                            <div class="request-item-status">{{ item.appraisal_status_label }}</div>
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
                 </div>
-
-                <div class="request-meta">
-                    <span class="mini-badge">申請ID {{ req.id }}</span>
-                    <span class="mini-badge">商品 {{ req.merchandise_items|length }} 点</span>
-                    {% if req.service_type == 'wholesale' %}
-                    <span class="mini-badge">査定待ち {{ req.pending_appraisal_count }} 点</span>
-                    {% endif %}
+                
+                {% if req.status != 'pending' %}
+                <div class="processed-info">
+                    処理日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
+                    {% if req.processor_name %}| 処理者: {{ req.processor_name }}{% endif %}
                 </div>
-
-                <div class="request-status-panel">
-                    <div class="request-status-panel-header">
-                        <div>
-                            <div class="request-status-panel-title">クライアントへ反映する現在の状況</div>
-                            <div class="request-status-panel-subtitle">この画面で進行状況を更新すると、クライアント側の申請状態も切り替わります。</div>
-                        </div>
-                        <div class="client-status-preview" id="client-status-{{ req.id }}">{{ req.client_status_label }}</div>
-                    </div>
-                    {% set timeline_statuses = [
-                        ('pending', '承認待ち'),
-                        ('approved', '認証済み'),
-                        ('appraising', '査定中'),
-                        ('inspecting', '検品中'),
-                        ('completed', '処理完了')
-                    ] %}
-                    {% set current_index = {'pending': 0, 'approved': 1, 'appraising': 2, 'inspecting': 3, 'completed': 4, 'rejected': -1}.get(req.status, -1) %}
-                    <div class="request-progress" id="progress-{{ req.id }}" data-status="{{ req.status }}">
-                        {% for timeline_key, timeline_label in timeline_statuses %}
-                        {% set timeline_index = loop.index0 %}
-                        <div
-                            class="progress-step {% if req.status == timeline_key %}is-current{% elif current_index > timeline_index %}is-done{% endif %}"
-                            data-step="{{ timeline_key }}"
-                        >
-                            {{ timeline_label }}
-                        </div>
-                        {% endfor %}
-                        <div
-                            class="progress-step {% if req.status == 'rejected' %}is-current is-rejected{% endif %}"
-                            data-step="rejected"
-                        >
-                            却下申請
-                        </div>
-                    </div>
-                </div>
-
-                <div class="request-note" id="note-display-{{ req.id }}" {% if not req.admin_note %}style="display: none;"{% endif %}>
-                    <div class="request-note-label">備考</div>
-                    <p id="note-display-text-{{ req.id }}">{{ req.admin_note }}</p>
-                </div>
-
-                <div class="processed-info" id="processed-info-{{ req.id }}" {% if req.status == 'pending' and not req.processed_at %}style="display: none;"{% endif %}>
-                    更新日時: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
-                    {% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}
-                </div>
-
-                {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id %}
-                <div class="request-doc-links">
-                    <span class="meta-sub">書類進行: {{ req.document_flow_label }}</span>
-                    {% if req.request_can_create_vendor_estimate %}
-                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">業者向け見積依頼書</a>
-                    {% endif %}
-                    {% if req.vendor_mitsumori_id %}
-                    <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-outline">業者見積を見る</a>
-                    {% endif %}
-                    {% if req.request_can_register_vendor_kaitori %}
-                    <a href="{{ url_for('admin_kaitori_shoudaku_add', request_id=req.id) }}" class="btn btn-outline">業者買取明細書</a>
-                    {% endif %}
-                    {% if req.vendor_kaitori_shoudaku_id %}
-                    <a href="{{ url_for('admin_kaitori_shoudaku_view', id=req.vendor_kaitori_shoudaku_id) }}" class="btn btn-outline">業者明細を見る</a>
-                    {% endif %}
-                    {% if req.request_can_create_client_invoice %}
-                    <a href="{{ url_for('admin_kaitori_add', request_id=req.id) }}" class="btn btn-outline">ユーザー向け買取明細書</a>
-                    {% endif %}
-                    {% if req.client_invoice_id %}
-                    <a href="{{ url_for('admin_kaitori_view', id=req.client_invoice_id) }}" class="btn btn-outline">ユーザー明細を見る</a>
-                    {% endif %}
+                {% if req.admin_note %}
+                <div class="admin-note-display">
+                    <label>備考</label>
+                    <p>{{ req.admin_note }}</p>
                 </div>
                 {% endif %}
-
+                {% else %}
                 <div class="request-actions">
-                    <div class="request-actions-header">
-                        <div class="request-actions-title">申請の進行状況をこの画面で更新</div>
-                        <div class="request-actions-subtitle">受け取った申請を確認しながら、そのままクライアントへ現在の状況を共有できます。</div>
-                    </div>
                     <div class="admin-note-input">
-                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください">{{ req.admin_note or '' }}</textarea>
+                        <textarea id="note-{{ req.id }}" placeholder="備考（任意）"></textarea>
                     </div>
-                    <div class="action-buttons" id="action-buttons-{{ req.id }}">
-                        {% if req.available_actions %}
-                            {% if 'approve' in req.available_actions %}
-                            <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">認証済みにする</button>
-                            {% endif %}
-                            {% if 'appraising' in req.available_actions %}
-                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">査定中にする</button>
-                            {% endif %}
-                            {% if 'inspect' in req.available_actions %}
-                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'inspect')">検品中にする</button>
-                            {% endif %}
-                            {% if 'complete' in req.available_actions %}
-                            <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'complete')">処理完了にする</button>
-                            {% endif %}
-                            {% if 'reject' in req.available_actions %}
-                            <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下申請</button>
-                            {% endif %}
-                        {% else %}
-                        <span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>
-                        {% endif %}
+                    <div class="action-buttons">
+                        <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">承認</button>
+                        <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下</button>
                     </div>
-                    <div class="request-feedback" id="feedback-{{ req.id }}"></div>
                 </div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">該当する申請はありません。</div>
+    <div class="no-requests">
+        <p>申請はありません</p>
+    </div>
     {% endif %}
 </div>
 
 <script>
-const salesAgencyActionLabels = {
-    approve: '認証済み',
-    appraising: '査定中',
-    inspect: '検品中',
-    complete: '処理完了',
-    reject: '却下申請'
-};
-
-const salesAgencyActionButtons = {
-    approve: { label: '認証済みにする', className: 'btn btn-approve' },
-    appraising: { label: '査定中にする', className: 'btn btn-primary' },
-    inspect: { label: '検品中にする', className: 'btn btn-primary' },
-    complete: { label: '処理完了にする', className: 'btn btn-approve' },
-    reject: { label: '却下申請', className: 'btn btn-reject' }
-};
-
-const progressStatusOrder = ['pending', 'approved', 'appraising', 'inspecting', 'completed'];
-
-function escapeHtml(value) {
-    return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-function setFeedback(requestId, message, kind) {
-    const feedbackEl = document.getElementById(`feedback-${requestId}`);
-    if (!feedbackEl) {
-        return;
-    }
-
-    feedbackEl.textContent = message || '';
-    feedbackEl.className = 'request-feedback';
-    if (message) {
-        feedbackEl.classList.add('is-visible');
-        feedbackEl.classList.add(kind === 'error' ? 'is-error' : 'is-success');
-    }
-}
-
-function renderActionButtons(requestId, availableActions) {
-    const actionButtonsEl = document.getElementById(`action-buttons-${requestId}`);
-    if (!actionButtonsEl) {
-        return;
-    }
-
-    if (!availableActions || !availableActions.length) {
-        actionButtonsEl.innerHTML = '<span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>';
-        return;
-    }
-
-    actionButtonsEl.innerHTML = availableActions.map((action) => {
-        const button = salesAgencyActionButtons[action];
-        if (!button) {
-            return '';
-        }
-        return `<button type="button" class="${button.className}" onclick="processRequest(${requestId}, '${action}')">${button.label}</button>`;
-    }).join('');
-}
-
-function updateProgress(requestId, status) {
-    const progressEl = document.getElementById(`progress-${requestId}`);
-    if (!progressEl) {
-        return;
-    }
-
-    const currentIndex = progressStatusOrder.indexOf(status);
-    progressEl.dataset.status = status;
-
-    progressEl.querySelectorAll('.progress-step').forEach((stepEl) => {
-        const stepKey = stepEl.dataset.step;
-        stepEl.classList.remove('is-current', 'is-done', 'is-rejected');
-
-        if (status === 'rejected') {
-            if (stepKey === 'rejected') {
-                stepEl.classList.add('is-current', 'is-rejected');
-            }
-            return;
-        }
-
-        const stepIndex = progressStatusOrder.indexOf(stepKey);
-        if (stepIndex === -1) {
-            return;
-        }
-        if (stepKey === status) {
-            stepEl.classList.add('is-current');
-        } else if (currentIndex > stepIndex) {
-            stepEl.classList.add('is-done');
-        }
-    });
-}
-
 function processRequest(requestId, action) {
-    const noteEl = document.getElementById(`note-${requestId}`);
+    const noteEl = document.getElementById('note-' + requestId);
     const adminNote = noteEl ? noteEl.value : '';
-    const actionText = salesAgencyActionLabels[action] || action;
-
-    if (!confirm(`この申請を「${actionText}」へ変更しますか？`)) {
+    const actionText = action === 'approve' ? '承認' : '却下';
+    
+    if (!confirm(`この申請を${actionText}しますか？`)) {
         return;
     }
-
-    setFeedback(requestId, '状態を更新しています…', 'success');
-
+    
     fetch(`/admin/sales-agency-requests/${requestId}/process`, {
         method: 'POST',
         headers: {
@@ -837,43 +470,15 @@ function processRequest(requestId, action) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            const statusBadgeEl = document.getElementById(`status-badge-${requestId}`);
-            const clientStatusEl = document.getElementById(`client-status-${requestId}`);
-            const processedInfoEl = document.getElementById(`processed-info-${requestId}`);
-            const noteDisplayEl = document.getElementById(`note-display-${requestId}`);
-            const noteDisplayTextEl = document.getElementById(`note-display-text-${requestId}`);
-
-            if (statusBadgeEl) {
-                statusBadgeEl.className = `status-badge ${data.status}`;
-                statusBadgeEl.textContent = data.status_label || actionText;
-            }
-            if (clientStatusEl) {
-                clientStatusEl.textContent = data.client_status_label || data.status_label || actionText;
-            }
-            if (processedInfoEl) {
-                processedInfoEl.style.display = '';
-                processedInfoEl.textContent = `更新日時: ${data.processed_at || '反映済み'}`;
-            }
-            if (noteDisplayEl && noteDisplayTextEl) {
-                if (adminNote) {
-                    noteDisplayEl.style.display = '';
-                    noteDisplayTextEl.textContent = adminNote;
-                } else {
-                    noteDisplayEl.style.display = 'none';
-                    noteDisplayTextEl.textContent = '';
-                }
-            }
-
-            updateProgress(requestId, data.status);
-            renderActionButtons(requestId, data.available_actions || []);
-            setFeedback(requestId, `「${data.client_status_label || actionText}」へ更新しました。クライアント側にも反映されます。`, 'success');
-            return;
+            alert(`${actionText}しました`);
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '処理に失敗しました'));
         }
-        setFeedback(requestId, data.error || '処理に失敗しました', 'error');
     })
     .catch(error => {
         console.error('Error:', error);
-        setFeedback(requestId, '通信エラーが発生しました', 'error');
+        alert('エラーが発生しました');
     });
 }
 </script>
