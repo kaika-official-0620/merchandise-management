@@ -6,6 +6,10 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+from flask import has_request_context, jsonify, redirect, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 REPO_DIR = Path(__file__).resolve().parent
@@ -78,6 +82,90 @@ except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
 
 app = module.app
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+PRIMARY_DOMAIN = (os.environ.get("PRIMARY_DOMAIN") or os.environ.get("APP_DOMAIN") or "").strip().lower()
+PRIMARY_SCHEME = (os.environ.get("PRIMARY_SCHEME") or "https").strip().lower() or "https"
+PRIMARY_DOMAIN_REDIRECT = (os.environ.get("PRIMARY_DOMAIN_REDIRECT") or "1").strip().lower() in {"1", "true", "yes", "on"}
+RENDER_EXTERNAL_HOSTNAME = (os.environ.get("RENDER_EXTERNAL_HOSTNAME") or "").strip().lower()
+
+if PRIMARY_DOMAIN:
+    app.config["PREFERRED_URL_SCHEME"] = PRIMARY_SCHEME
+
+
+def normalize_request_host(hostname: str) -> str:
+    return (hostname or "").split(":", 1)[0].strip().lower()
+
+
+def build_primary_domain_url() -> str:
+    parsed = urlsplit(request.url)
+    return urlunsplit((PRIMARY_SCHEME, PRIMARY_DOMAIN, parsed.path, parsed.query, ""))
+
+
+def should_redirect_to_primary_domain() -> bool:
+    if not PRIMARY_DOMAIN or not PRIMARY_DOMAIN_REDIRECT or not has_request_context():
+        return False
+
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        return False
+
+    if request.path == "/healthz":
+        return False
+
+    current_host = normalize_request_host(request.host)
+    if not current_host or current_host == PRIMARY_DOMAIN:
+        return False
+
+    if current_host in {"localhost", "127.0.0.1"}:
+        return False
+
+    trusted_hosts = {normalize_request_host(RENDER_EXTERNAL_HOSTNAME)}
+    trusted_hosts.discard("")
+    return current_host.endswith(".onrender.com") or current_host in trusted_hosts
+
+
+@app.before_request
+def render_enforce_primary_domain():
+    if should_redirect_to_primary_domain():
+        return redirect(build_primary_domain_url(), code=301)
+    return None
+
+
+if "healthz" not in app.view_functions:
+    @app.route("/healthz")
+    def healthz():
+        try:
+            if getattr(module, "DATABASE_URL", None):
+                conn = module.get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                finally:
+                    conn.close()
+                database_backend = "postgres"
+            else:
+                import sqlite3
+
+                conn = sqlite3.connect(module.DATABASE)
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                finally:
+                    conn.close()
+                database_backend = "sqlite"
+
+            return jsonify(
+                {
+                    "status": "ok",
+                    "database": database_backend,
+                    "primary_domain": PRIMARY_DOMAIN or None,
+                }
+            ), 200
+        except Exception as exc:
+            print(f"[HEALTH] health check failed: {exc}", flush=True)
+            return jsonify({"status": "error"}), 503
 
 def add_endpoint_fallback(endpoint: str, rule: str, target_endpoint: str, methods):
     if endpoint in app.view_functions or target_endpoint not in app.view_functions:
