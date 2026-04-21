@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. クライアントから受付</title>
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="home.html">書類一覧</a>
+      <a class="btn btn-soft" href="home.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>1. クライアントから受付</h2>
+          <p>受付商品を確認し、詳細画面で認証済み・査定中・入金待ちを切り替える想定です。</p>
+        </div>
+        <div class="toggle-row">
+          <details class="detail-box">
+            <summary>確認ポイント</summary>
+            <ul>
+              <li>依頼が届いたサービスごとに受付内容を確認する</li>
+              <li>商品画像と商品詳細を見て受付可否を判断する</li>
+              <li>受付不可の場合はキャンセルではなく通知を送る</li>
+            </ul>
+          </details>
+          <details class="detail-box">
+            <summary>現在の状況</summary>
+            <ul>
+              <li>認証待ちが初期状態です</li>
+              <li>詳細画面で認証済み / 査定中 / 入金待ちへ更新します</li>
+              <li>更新結果はクライアントへ通知される想定です</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+
+      <div class="service-tabs">
+        <a class="service-tab is-active" href="stage1.html">すべて</a>
+        <a class="service-tab" href="stage1_wholesale.html">業者卸販売</a>
+        <a class="service-tab" href="stage1_auction.html">業者オークション</a>
+        <a class="service-tab" href="stage1_simultaneous.html">同時出品</a>
+      </div>
+    </div>
+
+    <div class="record-list">
+      <div class="record-card" id="request-yamada">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">山田 太郎</h3>
+            <p class="record-sub">業者卸販売 / 受付日 2026-04-21 / 依頼書: 受付内容確認</p>
+          </div>
+          <span class="status-pill status-pending">認証待ち</span>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-card"><span class="meta-label">次の流れ</span><span class="meta-value">詳細画面で状態更新後、2番へ進める商品を確認します。</span></div>
+          <div class="meta-card"><span class="meta-label">受付商品数</span><span class="meta-value">2 商品</span></div>
+          <div class="meta-card"><span class="meta-label">通知導線</span><span class="meta-value">受付不可時はクライアントへ通知</span></div>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ"></div>
+            <div>
+              <h4><a href="#product-yamada-alma">ルイヴィトン アルマ</a></h4>
+              <p>ブランド: Louis Vuitton / 状態: 良好 / 受付方法: 業者卸販売</p>
+            </div>
+          </div>
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="シャネル 長財布"></div>
+            <div>
+              <h4><a href="#product-yamada-wallet">シャネル マトラッセ 長財布 ロングウォレット ブラック</a></h4>
+              <p>ブランド: CHANEL / 状態: 良好 / 受付方法: 業者卸販売</p>
+            </div>
+          </div>
+        </div>
+        <details class="detail-box">
+          <summary>詳細確認</summary>
+          <div class="field-grid">
+            <div class="field">
+              <label>クライアント表示ステータス</label>
+              <select class="select">
+                <option>認証待ち</option>
+                <option>認証済み</option>
+                <option>査定中</option>
+                <option>入金待ち</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>受付不可通知</label>
+              <input class="input" value="この商品は受付できません">
+            </div>
+          </div>
+          <div class="action-row" style="margin-top:12px;">
+            <a class="btn btn-primary" href="#product-yamada-alma">商品詳細を見る</a>
+            <a class="btn btn-soft" href="#product-yamada-wallet">商品詳細を見る</a>
+            <button class="btn btn-danger" type="button">受付不可を通知する</button>
+          </div>
+        </details>
+      </div>
+
+      <div class="record-card" id="request-sato">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">佐藤 花子</h3>
+            <p class="record-sub">業者卸販売 / 受付日 2026-04-18 / 依頼書: 受付内容確認</p>
+          </div>
+          <span class="status-pill status-approved">認証済み</span>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-card"><span class="meta-label">次の流れ</span><span class="meta-value">業者へ流す候補として2番へ進めるか確認します。</span></div>
+          <div class="meta-card"><span class="meta-label">受付商品数</span><span class="meta-value">1 商品</span></div>
+          <div class="meta-card"><span class="meta-label">通知導線</span><span class="meta-value">通知不要 / 受付済み</span></div>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="エルメス スカーフ"></div>
+            <div>
+              <h4><a href="#product-sato-scarf">エルメス スカーフ カレ90</a></h4>
+              <p>ブランド: HERMES / 状態: 美品 / 受付方法: 業者卸販売</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="record-card" id="request-suzuki">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">鈴木 一郎</h3>
+            <p class="record-sub">業者オークション / 受付日 2026-04-17 / 依頼書: 受付内容確認</p>
+          </div>
+          <span class="status-pill status-pending">認証待ち</span>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_rolex_dj.svg" alt="ロレックス"></div>
+            <div>
+              <h4><a href="#product-suzuki-rolex">ロレックス デイトジャスト 16234</a></h4>
+              <p>ブランド: ROLEX / 状態: 稼働品 / 受付方法: 業者オークション</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="record-card" id="request-takahashi">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">高橋 美咲</h3>
+            <p class="record-sub">同時出品 / 受付日 2026-04-16 / 依頼書: 受付内容確認</p>
+          </div>
+          <span class="status-pill status-appraising">査定中</span>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ"></div>
+            <div>
+              <h4><a href="#product-takahashi-celine">セリーヌ ラゲージ マイクロショッパー</a></h4>
+              <p>ブランド: CELINE / 状態: 良好 / 受付方法: 同時出品</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="product-yamada-alma">
+      <div class="section-head">
+        <div>
+          <h3>商品詳細: ルイヴィトン アルマ</h3>
+          <p>クライアント申請時の画像と商品情報を、そのまま受付側で確認する想定です。</p>
+        </div>
+      </div>
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ"></div>
+        <div>
+          <h4>ルイヴィトン アルマ</h4>
+          <p>ブランド: Louis Vuitton / カテゴリ: ハンドバッグ / 状態: 良好 / カラー: モノグラム</p>
+          <p>付属品: なし / 傷: 持ち手に軽い使用感あり / コメント: 型崩れは少なく、金具もきれいです。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="product-yamada-wallet">
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="シャネル長財布"></div>
+        <div>
+          <h4>シャネル マトラッセ 長財布 ロングウォレット ブラック</h4>
+          <p>ブランド: CHANEL / カテゴリ: 財布 / 状態: 良好 / カラー: ブラック</p>
+          <p>付属品: ギャランティなし / コメント: 角擦れは軽微、内装も良好です。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="product-sato-scarf">
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="エルメス スカーフ"></div>
+        <div>
+          <h4>エルメス スカーフ カレ90</h4>
+          <p>ブランド: HERMES / カテゴリ: スカーフ / 状態: 美品</p>
+          <p>コメント: 箱あり。シミや糸つれは見当たりません。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="product-suzuki-rolex">
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_rolex_dj.svg" alt="ロレックス"></div>
+        <div>
+          <h4>ロレックス デイトジャスト 16234</h4>
+          <p>ブランド: ROLEX / カテゴリ: 時計 / 状態: 稼働品</p>
+          <p>コメント: 余りコマあり。査定資料と一緒にオークションへ流す想定です。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="product-takahashi-celine">
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ"></div>
+        <div>
+          <h4>セリーヌ ラゲージ マイクロショッパー</h4>
+          <p>ブランド: CELINE / カテゴリ: バッグ / 状態: 良好</p>
+          <p>コメント: 同時出品のため、売れた時点で4番から明細作成へ進みます。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

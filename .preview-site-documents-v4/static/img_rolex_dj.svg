@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360">
+  <rect width="480" height="360" fill="#e2e8f0"/>
+  <rect x="200" y="24" width="80" height="96" rx="18" fill="#94a3b8"/>
+  <rect x="200" y="240" width="80" height="96" rx="18" fill="#94a3b8"/>
+  <circle cx="240" cy="180" r="88" fill="#f8fafc" stroke="#64748b" stroke-width="16"/>
+  <circle cx="240" cy="180" r="12" fill="#334155"/>
+  <path d="M240 180v-44" stroke="#334155" stroke-width="10" stroke-linecap="round"/>
+  <path d="M240 180l36 24" stroke="#334155" stroke-width="10" stroke-linecap="round"/>
+  <text x="240" y="320" font-family="Segoe UI, sans-serif" font-size="28" text-anchor="middle" fill="#0f172a">ROLEX Datejust</text>
+</svg>

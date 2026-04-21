@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2. 開花から業者へ依頼</title>
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="home.html">書類一覧</a>
+      <a class="btn btn-soft" href="stage1.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>2. 開花から業者へ依頼</h2>
+          <p>業者卸販売の商品のみをまとめて確認し、業者向け見積依頼書を作成します。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>業者へ依頼する商品</h3>
+          <p>誰の商品かを確認しながら、業者向け見積依頼書に差し込む商品を選ぶ想定です。</p>
+        </div>
+        <a class="btn btn-primary" href="#vendor-template">見積依頼書を作成</a>
+      </div>
+
+      <div class="record-list">
+        <div class="record-card">
+          <div class="record-head">
+            <div>
+              <h3 class="record-title">山田 太郎 / ブランドセンター向け</h3>
+              <p class="record-sub">送付候補商品 2 点 / 受付ルート: 業者卸販売</p>
+            </div>
+            <span class="status-pill status-approved">送付準備中</span>
+          </div>
+          <div class="item-grid">
+            <div class="item-row">
+              <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="アルマ"></div>
+              <div>
+                <h4>ルイヴィトン アルマ</h4>
+                <p>クライアント: 山田 太郎 / 状態: 良好 / 業者卸販売</p>
+              </div>
+            </div>
+            <div class="item-row">
+              <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="シャネル財布"></div>
+              <div>
+                <h4>シャネル マトラッセ 長財布 ロングウォレット ブラック</h4>
+                <p>クライアント: 山田 太郎 / 状態: 良好 / 業者卸販売</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="record-card">
+          <div class="record-head">
+            <div>
+              <h3 class="record-title">佐藤 花子 / ブランド市場向け</h3>
+              <p class="record-sub">送付候補商品 1 点 / 受付ルート: 業者卸販売</p>
+            </div>
+            <span class="status-pill status-approved">送付準備中</span>
+          </div>
+          <div class="item-grid">
+            <div class="item-row">
+              <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="エルメススカーフ"></div>
+              <div>
+                <h4>エルメス スカーフ カレ90</h4>
+                <p>クライアント: 佐藤 花子 / 状態: 美品 / 業者卸販売</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="vendor-template">
+      <div class="section-head">
+        <div>
+          <h3>業者向け見積依頼書</h3>
+          <p>送付先業者・商品名・金額はテンプレート本体に差し込まれる想定です。</p>
+        </div>
+      </div>
+
+      <div class="sheet">
+        <div class="sheet-head">
+          <div>
+            <h2 class="sheet-title">見積依頼書</h2>
+            <p>送付先業者: ブランドセンター</p>
+            <p>差出人: 株式会社 開花</p>
+          </div>
+          <div class="sheet-meta">
+            <p>発行日: 2026年4月22日</p>
+            <p>書類種別: 業者向け見積依頼書</p>
+            <p>案件: 山田 太郎 / 佐藤 花子</p>
+          </div>
+        </div>
+
+        <table class="sheet-table">
+          <thead>
+            <tr>
+              <th class="sheet-no">No.</th>
+              <th class="sheet-name">商品名</th>
+              <th class="sheet-brand">ブランド</th>
+              <th class="sheet-state">状態</th>
+              <th class="sheet-qty">数量</th>
+              <th class="sheet-unit">参考単価</th>
+              <th class="sheet-total">依頼金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="sheet-no">1</td><td class="sheet-name"><div class="sheet-product"><span class="line1">ルイヴィトン アルマ</span><span class="line2">モノグラム</span></div></td><td>Louis Vuitton</td><td>良好</td><td class="sheet-qty">1</td><td class="sheet-unit">¥82,000</td><td class="sheet-total">¥82,000</td></tr>
+            <tr><td class="sheet-no">2</td><td class="sheet-name"><div class="sheet-product"><span class="line1">シャネル マトラッセ 長財布</span><span class="line2">ロングウォレット ブラック</span></div></td><td>CHANEL</td><td>良好</td><td class="sheet-qty">1</td><td class="sheet-unit">¥56,000</td><td class="sheet-total">¥56,000</td></tr>
+            <tr><td class="sheet-no">3</td><td class="sheet-name"><div class="sheet-product"><span class="line1">エルメス スカーフ カレ90</span><span class="line2"></span></div></td><td>HERMES</td><td>美品</td><td class="sheet-qty">1</td><td class="sheet-unit">¥24,000</td><td class="sheet-total">¥24,000</td></tr>
+            <tr><td class="sheet-no">4</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">5</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">6</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">7</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">8</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">9</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">10</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">11</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">12</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">13</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">14</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">15</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+          </tbody>
+        </table>
+
+        <div class="sheet-sum">
+          <div class="sum-box">
+            <div class="sum-line"><span>小計</span><span>¥162,000</span></div>
+            <div class="sum-line total"><span>合計金額</span><span>¥162,000</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

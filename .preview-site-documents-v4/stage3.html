@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. 業者から回答受領</title>
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="home.html">書類一覧</a>
+      <a class="btn btn-soft" href="stage2.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>3. 業者から回答受領</h2>
+          <p>業者から届いたスキャンファイルを月別に確認し、4番で返送する商品を整理します。</p>
+        </div>
+      </div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label>対象月</label>
+          <select class="select">
+            <option>2026年4月</option>
+            <option>2026年3月</option>
+            <option>2026年2月</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>回答ファイル</label>
+          <input class="input" type="file">
+        </div>
+      </div>
+      <div class="action-row" style="margin-top:12px;">
+        <button class="btn btn-primary" type="button">ファイルを登録</button>
+        <a class="btn btn-outline" href="#file-apr-main">4月の回答ファイルを確認</a>
+      </div>
+    </div>
+
+    <div class="upload-list">
+      <div class="upload-card" id="file-apr-main">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">2026年4月 回答ファイル</h3>
+            <p class="record-sub">山田 太郎 / 受付商品 2 点 / ブランドセンターから受領</p>
+          </div>
+          <a class="btn btn-soft" href="#preview-apr-main">書類を確認</a>
+        </div>
+      </div>
+      <div class="upload-card">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">2026年3月 回答ファイル</h3>
+            <p class="record-sub">佐藤 花子 / 受付商品 1 点 / ブランド市場から受領</p>
+          </div>
+          <a class="btn btn-soft" href="#preview-mar-main">書類を確認</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="section file-preview" id="preview-apr-main">
+      <div class="section-head">
+        <div>
+          <h3>4月の回答ファイル内容</h3>
+          <p>書類を確認しながら、どの商品を4番へ振り分けるかを整理するイメージです。</p>
+        </div>
+      </div>
+      <div class="preview-canvas">
+        <img src="static/img_lv_alma.svg" alt="回答ファイルプレビュー">
+      </div>
+      <div class="item-grid">
+        <div class="item-row">
+          <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="アルマ"></div>
+          <div>
+            <h4>ルイヴィトン アルマ</h4>
+            <p>クライアント: 山田 太郎 / 売却額メモ: ¥82,000</p>
+            <div class="mini-links">
+              <a class="btn btn-soft" href="stage4.html#client-yamada">4番で返送書類に反映</a>
+            </div>
+          </div>
+        </div>
+        <div class="item-row">
+          <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="シャネル財布"></div>
+          <div>
+            <h4>シャネル マトラッセ 長財布 ロングウォレット ブラック</h4>
+            <p>クライアント: 山田 太郎 / 売却額メモ: ¥56,000</p>
+            <div class="mini-links">
+              <a class="btn btn-soft" href="stage4.html#client-yamada">4番で返送書類に反映</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section file-preview" id="preview-mar-main">
+      <div class="preview-canvas">
+        <img src="static/img_hermes_scarf.svg" alt="回答ファイルプレビュー">
+      </div>
+      <div class="item-row">
+        <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="エルメススカーフ"></div>
+        <div>
+          <h4>エルメス スカーフ カレ90</h4>
+          <p>クライアント: 佐藤 花子 / 売却額メモ: ¥24,000</p>
+          <div class="mini-links">
+            <a class="btn btn-soft" href="stage4.html#client-sato">4番で返送書類に反映</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

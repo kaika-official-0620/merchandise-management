@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4. クライアントへ返送</title>
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="home.html">書類一覧</a>
+      <a class="btn btn-soft" href="stage3.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>4. クライアントへ返送</h2>
+          <p>3番で確認した売却済み商品を、クライアントごとにまとめて買取明細書へ反映する段階です。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="client-list">
+      <div class="client-card" id="client-yamada">
+        <div class="client-head">
+          <div>
+            <h3>山田 太郎</h3>
+            <p class="record-sub">返送対象 2 商品 / 3番から振り分け済み</p>
+          </div>
+          <a class="btn btn-primary" href="#statement-yamada">買取明細書を作成</a>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="アルマ"></div>
+            <div>
+              <h4>ルイヴィトン アルマ</h4>
+              <p>売却額: ¥82,000 / ステータス: 売却済み</p>
+            </div>
+          </div>
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="シャネル財布"></div>
+            <div>
+              <h4>シャネル マトラッセ 長財布 ロングウォレット ブラック</h4>
+              <p>売却額: ¥56,000 / ステータス: 売却済み</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="client-card" id="client-sato">
+        <div class="client-head">
+          <div>
+            <h3>佐藤 花子</h3>
+            <p class="record-sub">返送対象 1 商品 / 3番から振り分け済み</p>
+          </div>
+          <a class="btn btn-primary" href="#statement-sato">買取明細書を作成</a>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="エルメススカーフ"></div>
+            <div>
+              <h4>エルメス スカーフ カレ90</h4>
+              <p>売却額: ¥24,000 / ステータス: 売却済み</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="statement-yamada">
+      <div class="section-head">
+        <div>
+          <h3>山田 太郎さん向け買取明細書</h3>
+          <p>3番で確認した売却額をもとに、既存テンプレートへ差し込むイメージです。</p>
+        </div>
+      </div>
+      <div class="sheet">
+        <div class="sheet-head">
+          <div>
+            <h2 class="sheet-title">買取明細書</h2>
+            <p>宛先: 山田 太郎 様</p>
+            <p>発行元: 株式会社 開花</p>
+          </div>
+          <div class="sheet-meta">
+            <p>発行日: 2026年4月22日</p>
+            <p>案件区分: 業者卸販売</p>
+          </div>
+        </div>
+        <table class="sheet-table">
+          <thead>
+            <tr>
+              <th class="sheet-no">No.</th>
+              <th class="sheet-name">商品名</th>
+              <th class="sheet-brand">ブランド</th>
+              <th class="sheet-state">状態</th>
+              <th class="sheet-qty">数量</th>
+              <th class="sheet-unit">単価</th>
+              <th class="sheet-total">金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="sheet-no">1</td><td class="sheet-name"><div class="sheet-product"><span class="line1">ルイヴィトン アルマ</span><span class="line2">モノグラム</span></div></td><td>Louis Vuitton</td><td>良好</td><td class="sheet-qty">1</td><td class="sheet-unit">¥82,000</td><td class="sheet-total">¥82,000</td></tr>
+            <tr><td class="sheet-no">2</td><td class="sheet-name"><div class="sheet-product"><span class="line1">シャネル マトラッセ 長財布</span><span class="line2">ロングウォレット ブラック</span></div></td><td>CHANEL</td><td>良好</td><td class="sheet-qty">1</td><td class="sheet-unit">¥56,000</td><td class="sheet-total">¥56,000</td></tr>
+            <tr><td class="sheet-no">3</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">4</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">5</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">6</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">7</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">8</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">9</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">10</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">11</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">12</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">13</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">14</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">15</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+          </tbody>
+        </table>
+        <div class="sheet-sum">
+          <div class="sum-box">
+            <div class="sum-line"><span>小計</span><span>¥138,000</span></div>
+            <div class="sum-line total"><span>合計金額</span><span>¥138,000</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="statement-sato">
+      <div class="section-head">
+        <div>
+          <h3>佐藤 花子さん向け買取明細書</h3>
+        </div>
+      </div>
+      <div class="sheet">
+        <div class="sheet-head">
+          <div>
+            <h2 class="sheet-title">買取明細書</h2>
+            <p>宛先: 佐藤 花子 様</p>
+            <p>発行元: 株式会社 開花</p>
+          </div>
+          <div class="sheet-meta">
+            <p>発行日: 2026年4月22日</p>
+            <p>案件区分: 業者卸販売</p>
+          </div>
+        </div>
+        <table class="sheet-table">
+          <thead>
+            <tr>
+              <th class="sheet-no">No.</th>
+              <th class="sheet-name">商品名</th>
+              <th class="sheet-brand">ブランド</th>
+              <th class="sheet-state">状態</th>
+              <th class="sheet-qty">数量</th>
+              <th class="sheet-unit">単価</th>
+              <th class="sheet-total">金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="sheet-no">1</td><td class="sheet-name"><div class="sheet-product"><span class="line1">エルメス スカーフ カレ90</span><span class="line2"></span></div></td><td>HERMES</td><td>美品</td><td class="sheet-qty">1</td><td class="sheet-unit">¥24,000</td><td class="sheet-total">¥24,000</td></tr>
+            <tr><td class="sheet-no">2</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">3</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">4</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">5</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">6</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">7</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">8</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">9</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">10</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">11</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">12</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">13</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">14</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+            <tr><td class="sheet-no">15</td><td></td><td></td><td></td><td class="sheet-qty"></td><td class="sheet-unit"></td><td class="sheet-total"></td></tr>
+          </tbody>
+        </table>
+        <div class="sheet-sum">
+          <div class="sum-box">
+            <div class="sum-line"><span>小計</span><span>¥24,000</span></div>
+            <div class="sum-line total"><span>合計金額</span><span>¥24,000</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

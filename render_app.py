@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import flash, has_request_context, jsonify, redirect, request, url_for
+from flask import abort, flash, has_request_context, jsonify, redirect, request, send_from_directory, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 
@@ -82,6 +82,7 @@ except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
 
 app = module.app
+PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 login_required_decorator = getattr(module, "login_required", None)
@@ -407,3 +408,53 @@ def inject_render_sidebar_helpers():
         for name in helper_names
         if callable(getattr(module, name, None))
     }
+
+
+def _preview_login_wrapped(view_func):
+    wrapped = view_func
+    login_required = getattr(module, "login_required", None)
+    admin_required = getattr(module, "admin_required", None)
+    if callable(login_required):
+        wrapped = login_required(wrapped)
+    if callable(admin_required):
+        wrapped = admin_required(wrapped)
+    return wrapped
+
+
+def _safe_preview_target(page: str) -> Path:
+    target = (PREVIEW_V4_DIR / page).resolve()
+    root = PREVIEW_V4_DIR.resolve()
+    if root not in target.parents and target != root:
+        raise FileNotFoundError(page)
+    if not target.exists() or not target.is_file():
+        raise FileNotFoundError(page)
+    return target
+
+
+if PREVIEW_V4_DIR.exists():
+    @_preview_login_wrapped
+    def admin_documents_v4_preview():
+        return send_from_directory(str(PREVIEW_V4_DIR), "home.html")
+
+    @_preview_login_wrapped
+    def admin_documents_v4_preview_page(page: str):
+        try:
+            target = _safe_preview_target(page)
+        except FileNotFoundError:
+            abort(404)
+        return send_from_directory(str(target.parent), target.name)
+
+    if "admin_documents_v4_preview" not in app.view_functions:
+        app.add_url_rule(
+            "/admin/documents-v4-preview",
+            endpoint="admin_documents_v4_preview",
+            view_func=admin_documents_v4_preview,
+            methods=["GET"],
+        )
+    if "admin_documents_v4_preview_page" not in app.view_functions:
+        app.add_url_rule(
+            "/admin/documents-v4-preview/<path:page>",
+            endpoint="admin_documents_v4_preview_page",
+            view_func=admin_documents_v4_preview_page,
+            methods=["GET"],
+        )

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360">
+  <rect width="480" height="360" fill="#ecfccb"/>
+  <path d="M165 82l-46 38 26 46 38-22v136h114V144l38 22 26-46-46-38-38 28-37-28-37 28z" fill="#65a30d"/>
+  <path d="M225 82h30l20 28h-70z" fill="#4d7c0f"/>
+  <text x="240" y="320" font-family="Segoe UI, sans-serif" font-size="28" text-anchor="middle" fill="#365314">Apparel Set</text>
+</svg>

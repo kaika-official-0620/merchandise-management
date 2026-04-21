@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. クライアントから受付 - 業者卸販売</title>
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <div class="page">
+    <div class="back-bar">
+      <a class="btn btn-outline" href="home.html">書類一覧</a>
+      <a class="btn btn-soft" href="stage1.html">1個前に戻る</a>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h2>1. クライアントから受付</h2>
+          <p>業者卸販売で届いた受付だけを確認する画面です。</p>
+        </div>
+      </div>
+      <div class="service-tabs">
+        <a class="service-tab" href="stage1.html">すべて</a>
+        <a class="service-tab is-active" href="stage1_wholesale.html">業者卸販売</a>
+        <a class="service-tab" href="stage1_auction.html">業者オークション</a>
+        <a class="service-tab" href="stage1_simultaneous.html">同時出品</a>
+      </div>
+    </div>
+
+    <div class="record-list">
+      <div class="record-card">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">山田 太郎</h3>
+            <p class="record-sub">依頼書: 受付内容確認 / 次の流れ: 詳細画面で状態更新後、2番へ進めます。</p>
+          </div>
+          <span class="status-pill status-pending">認証待ち</span>
+        </div>
+        <div class="item-grid">
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_lv_alma.svg" alt="アルマ"></div>
+            <div>
+              <h4>ルイヴィトン アルマ</h4>
+              <p>Louis Vuitton / 良好</p>
+            </div>
+          </div>
+          <div class="item-row">
+            <div class="item-thumb"><img src="static/img_chanel_wallet.svg" alt="財布"></div>
+            <div>
+              <h4>シャネル マトラッセ 長財布 ロングウォレット ブラック</h4>
+              <p>CHANEL / 良好</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="record-card">
+        <div class="record-head">
+          <div>
+            <h3 class="record-title">佐藤 花子</h3>
+            <p class="record-sub">依頼書: 受付内容確認 / 次の流れ: 2番の業者向け見積依頼書候補へ進みます。</p>
+          </div>
+          <span class="status-pill status-approved">認証済み</span>
+        </div>
+        <div class="item-row">
+          <div class="item-thumb"><img src="static/img_hermes_scarf.svg" alt="スカーフ"></div>
+          <div>
+            <h4>エルメス スカーフ カレ90</h4>
+            <p>HERMES / 美品</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
