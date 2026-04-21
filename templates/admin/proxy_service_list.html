@@ -5,7 +5,8 @@
 <div class="page-header">
     <h1>代行仕入れサービス管理</h1>
     <div class="header-actions">
-        {% if auctions|length < max_auctions %}
+        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">履歴を見る</a>
+        {% if can_create_more_auctions %}
         <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary">+ 新規オークション作成</a>
         {% else %}
         <button class="btn btn-secondary" disabled title="オークションは最大{{ max_auctions }}個までです">上限到達（{{ max_auctions }}個）</button>

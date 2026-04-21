@@ -854,6 +854,36 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None):
         'history_auctions': history_auctions,
     }
 
+
+def fetch_proxy_service_settings_rows(conn):
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT *
+            FROM proxy_service_settings
+            ORDER BY id DESC
+        """)
+        rows = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT *
+            FROM proxy_service_settings
+            ORDER BY id DESC
+        """)
+        rows = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    return rows
+
+
+def count_active_proxy_service_slots(auctions, now=None):
+    now = now or get_jst_now()
+    return sum(
+        1
+        for auction in auctions
+        if get_proxy_service_auction_state(auction, now=now).get('status') in {'open', 'scheduled'}
+    )
+
 # グローバルエラーハンドラー（エラーをブラウザに詳細表示）
 
 @app.errorhandler(500)
@@ -3513,6 +3543,70 @@ def resolve_default_proxy_auction_id(item_id=None):
                 pass
         print(f"[WARN] resolve_default_proxy_auction_id failed: {e}")
         return None, '掲載先オークションの判定中にエラーが発生しました'
+
+def get_user_record_by_username(username):
+    conn = get_db()
+    active_auction_count = count_active_proxy_service_slots(fetch_proxy_service_settings_rows(conn), now=get_jst_now())
+    if active_auction_count >= 5:
+        conn.close()
+        flash('公開中または公開前のオークションは最大5件までです', 'error')
+        return redirect(url_for('admin_proxy_service'))
+
+    if request.method == 'POST':
+        auction_name = request.form.get('auction_name', 'オークション')
+        page_title = request.form.get('page_title', '代行仕入れサービス')
+        page_description = request.form.get('page_description', '')
+        start_datetime = normalize_proxy_service_datetime_input(request.form.get('start_datetime'))
+        end_datetime = normalize_proxy_service_datetime_input(request.form.get('end_datetime'))
+        sale_mode = request.form.get('sale_mode', 'auction')
+        is_public = request.form.get('is_public') == 'on'
+
+        start_dt = parse_proxy_service_datetime(start_datetime)
+        end_dt = parse_proxy_service_datetime(end_datetime)
+        if start_dt and end_dt and start_dt >= end_dt:
+            conn.close()
+            flash('終了日時は開始日時より後に設定してください', 'error')
+            return redirect(url_for('admin_proxy_service_create'))
+
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
+            new_id = cur.fetchone()[0]
+            conn.commit()
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
+            new_id = cur.lastrowid
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+        flash(f'オークション「{auction_name}」を作成しました', 'success')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
+
+    conn.close()
+    return render_template('admin/proxy_service_create.html')
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    return user
+
 
 def get_user_record_by_username(username):
     conn = get_db()
@@ -10667,6 +10761,85 @@ def admin_proxy_service():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT ps.*, 
+                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
+                       (SELECT COUNT(*) FROM proxy_service_bids b 
+                        JOIN merchandise m ON b.merchandise_id = m.id 
+                        WHERE m.auction_id = ps.id) as bid_count
+                FROM proxy_service_settings ps
+                ORDER BY ps.id DESC
+            """)
+            auctions = [dict(a) for a in cur.fetchall()]
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY 
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+            """)
+            users = [dict(u) for u in cur.fetchall()]
+        else:
+            import sqlite3
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT ps.*, 
+                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
+                       (SELECT COUNT(*) FROM proxy_service_bids b 
+                        JOIN merchandise m ON b.merchandise_id = m.id 
+                        WHERE m.auction_id = ps.id) as bid_count
+                FROM proxy_service_settings ps
+                ORDER BY ps.id DESC
+            """)
+            auctions = [dict(a) for a in cur.fetchall()]
+            cur.execute("""
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY 
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+            """)
+            users = [dict(u) for u in cur.fetchall()]
+
+        cur.close()
+        conn.close()
+
+        now = get_jst_now()
+        visible_auctions = []
+        active_auction_count = 0
+        for auction in auctions:
+            auction_state = get_proxy_service_auction_state(auction, now=now)
+            auction['is_ended'] = auction_state.get('is_ended')
+            auction['is_not_started'] = auction_state.get('is_not_started')
+            auction['is_public'] = auction_state.get('is_public')
+            auction['status'] = auction_state.get('status')
+            auction['status_label'] = auction_state.get('status_label')
+
+            if auction_state.get('status') in {'open', 'scheduled'}:
+                active_auction_count += 1
+
+            if auction_state.get('status') == 'ended':
+                continue
+
+            visible_auctions.append(auction)
+
+        return render_template(
+            'admin/proxy_service_list.html',
+            auctions=visible_auctions,
+            users=users,
+            max_auctions=5,
+            active_auction_count=active_auction_count,
+            can_create_more_auctions=active_auction_count < 5,
+        )
+
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             # 全オークションを取得（最大5個まで）
             cur.execute("""
                 SELECT ps.*, 
@@ -10778,6 +10951,56 @@ def admin_proxy_service_create():
         return get_proxy_publish_denied_response()
     
     conn = get_db()
+    active_auction_count = count_active_proxy_service_slots(fetch_proxy_service_settings_rows(conn), now=get_jst_now())
+    if active_auction_count >= 5:
+        conn.close()
+        flash('公開中または公開前のオークションは最大5件までです', 'error')
+        return redirect(url_for('admin_proxy_service'))
+
+    if request.method == 'POST':
+        auction_name = request.form.get('auction_name', 'オークション')
+        page_title = request.form.get('page_title', '代行仕入れサービス')
+        page_description = request.form.get('page_description', '')
+        start_datetime = normalize_proxy_service_datetime_input(request.form.get('start_datetime'))
+        end_datetime = normalize_proxy_service_datetime_input(request.form.get('end_datetime'))
+        sale_mode = request.form.get('sale_mode', 'auction')
+        is_public = request.form.get('is_public') == 'on'
+
+        start_dt = parse_proxy_service_datetime(start_datetime)
+        end_dt = parse_proxy_service_datetime(end_datetime)
+        if start_dt and end_dt and start_dt >= end_dt:
+            conn.close()
+            flash('終了日時は開始日時より後に設定してください', 'error')
+            return redirect(url_for('admin_proxy_service_create'))
+
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
+            new_id = cur.fetchone()[0]
+            conn.commit()
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO proxy_service_settings 
+                (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
+            new_id = cur.lastrowid
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+        flash(f'オークション「{auction_name}」を作成しました', 'success')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
+
+    conn.close()
+    return render_template('admin/proxy_service_create.html')
     
     # オークション数チェック（最大5個まで）
     if DATABASE_URL:
