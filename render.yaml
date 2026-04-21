@@ -14,5 +14,9 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: PRIMARY_DOMAIN
+        value: stock.kaika-potential.co.jp
+      - key: PRIMARY_SCHEME
+        value: https
 
 # Configure DATABASE_URL and SECRET_KEY in the Render dashboard.

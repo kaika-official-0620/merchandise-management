@@ -84,7 +84,8 @@ except Exception as patch_exc:
 app = module.app
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
-PRIMARY_DOMAIN = (os.environ.get("PRIMARY_DOMAIN") or os.environ.get("APP_DOMAIN") or "").strip().lower()
+DEFAULT_PRIMARY_DOMAIN = "stock.kaika-potential.co.jp"
+PRIMARY_DOMAIN = (os.environ.get("PRIMARY_DOMAIN") or os.environ.get("APP_DOMAIN") or DEFAULT_PRIMARY_DOMAIN).strip().lower()
 PRIMARY_SCHEME = (os.environ.get("PRIMARY_SCHEME") or "https").strip().lower() or "https"
 PRIMARY_DOMAIN_REDIRECT = (os.environ.get("PRIMARY_DOMAIN_REDIRECT") or "1").strip().lower() in {"1", "true", "yes", "on"}
 RENDER_EXTERNAL_HOSTNAME = (os.environ.get("RENDER_EXTERNAL_HOSTNAME") or "").strip().lower()
