@@ -3655,6 +3655,13 @@ def derive_appraisal_status(item_status):
     return 'none'
 
 
+def db_boolean_param(value):
+    normalized = bool(value)
+    if DATABASE_URL:
+        return 'true' if normalized else 'false'
+    return 1 if normalized else 0
+
+
 def calculate_kaika_marketplace_fee(sale_type, sale_price, commission_rate=None, manual_commission=None):
     normalized_type = normalize_kaika_sale_type(sale_type)
     sale_price_value = max(int(sale_price or 0), 0)
@@ -7253,6 +7260,7 @@ def edit_item(id):
             if not can_edit_basic_fields:
                 item_status = 'sold' if item_dict.get('sale_date') else ('listed' if item_dict.get('is_listed') else 'unlisted')
             appraisal_status = derive_appraisal_status(item_status)
+            is_listed_db_value = db_boolean_param(item_status in ['listed', 'sold'])
 
             is_kaika_scope = is_kaika_inventory_item(item_dict)
             listing_price_value = int(request.form.get('listing_price') or 0) if can_edit_basic_fields else int(item_dict.get('listing_price') or 0)
@@ -7280,6 +7288,7 @@ def edit_item(id):
                 else (parse_money_value(request.form.get('commission'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('commission'), 0))
             )
             is_shipped_value = bool(item_dict.get('is_shipped'))
+            is_shipped_db_value = db_boolean_param(is_shipped_value)
             if not can_edit_basic_fields:
                 photo_path = item_dict.get('photo_path')
                 additional_photos_json = item_dict.get('additional_photos')
@@ -7320,7 +7329,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        item_status in ['listed', 'sold'],
+                        is_listed_db_value,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7328,7 +7337,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_value,
+                        is_shipped_db_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7366,7 +7375,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        item_status in ['listed', 'sold'],
+                        is_listed_db_value,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7374,7 +7383,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        is_shipped_value,
+                        is_shipped_db_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7413,7 +7422,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        1 if item_status in ['listed', 'sold'] else 0,
+                        is_listed_db_value,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7421,7 +7430,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        1 if is_shipped_value else 0,
+                        is_shipped_db_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -7459,7 +7468,7 @@ def edit_item(id):
                         listing_price_value,
                         expected_shipping_value,
                         expected_commission_value,
-                        1 if item_status in ['listed', 'sold'] else 0,
+                        is_listed_db_value,
                         listing_date_value if item_status in ['listed', 'sold'] else None,
                         sale_date_value if item_status == 'sold' else None,
                         sale_type_value,
@@ -7467,7 +7476,7 @@ def edit_item(id):
                         shipping_cost_value,
                         sales_destination_value,
                         commission_value,
-                        1 if is_shipped_value else 0,
+                        is_shipped_db_value,
                         new_notes,
                         appraisal_status,
                         current_user.id,
@@ -16505,6 +16514,7 @@ def admin_add_item():
         # ステータス処理
         item_status = request.form.get('item_status', 'unlisted')
         is_listed = item_status in ['listed', 'sold']
+        is_listed_db_value = db_boolean_param(is_listed)
         appraisal_status = derive_appraisal_status(item_status)
         sale_date = request.form.get('sale_date') if item_status == 'sold' else None
         sale_type_value = request.form.get('sale_type') or ('normal' if form_mode == 'admin' else 'photo_packing,normal')
@@ -16519,6 +16529,7 @@ def admin_add_item():
             )
         else:
             commission_value = parse_money_value(request.form.get('commission'), 0)
+        is_shipped_db_value = db_boolean_param('is_shipped' in request.form)
         target_scope = 'user' if form_mode == 'user' else 'admin'
         
         try:
@@ -16552,7 +16563,7 @@ def admin_add_item():
                 int(request.form.get('listing_price') or 0),
                 int(request.form.get('expected_shipping') or 0),
                 int(request.form.get('expected_commission') or 0),
-                is_listed,
+                is_listed_db_value,
                 request.form.get('listing_date') or None,
                 sale_date or None,
                 sale_type_value,
@@ -16560,7 +16571,7 @@ def admin_add_item():
                 parse_money_value(request.form.get('shipping_cost'), 0),
                 request.form.get('sales_destination'),
                 commission_value,
-                'is_shipped' in request.form,
+                is_shipped_db_value,
                 request.form.get('notes'),
                 target_scope,
                 appraisal_status
