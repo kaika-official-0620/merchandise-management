@@ -207,9 +207,8 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">サービス</div>
             {% if current_user.can_manage_proxy_service() %}
-            <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
+            <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history'] %}active{% endif %}">代行仕入れサービス</a>
             <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">オークション計算書</a>
-            <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行サービス履歴</a>
             {% else %}
             <span class="sidebar-item-disabled">サービス管理の権限がありません</span>
             {% endif %}

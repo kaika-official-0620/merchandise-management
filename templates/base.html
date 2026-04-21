@@ -655,12 +655,11 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}open{% endif %}">
                     {% if current_user.can_manage_proxy_service() %}
-                    <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
+                    <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history'] %}active{% endif %}">代行仕入れサービス</a>
                     <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">オークション計算書</a>
                     {% else %}
                     <span class="sidebar-item-disabled">代行仕入れオークション掲載権が付与されていません</span>
                     {% endif %}
-                    <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行サービス履歴</a>
                 </div>
             </div>
             {% endif %}

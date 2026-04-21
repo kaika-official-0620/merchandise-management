@@ -11529,7 +11529,6 @@ def admin_proxy_service():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 全オークションを取得（最大5個まで）
             cur.execute("""
                 SELECT ps.*, 
                        (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
@@ -11540,8 +11539,6 @@ def admin_proxy_service():
                 ORDER BY ps.id DESC
             """)
             auctions = [dict(a) for a in cur.fetchall()]
-            
-            # 全ユーザーを取得
             cur.execute("""
                 SELECT u.id, u.username, u.display_name, u.role,
                        CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
@@ -11551,12 +11548,11 @@ def admin_proxy_service():
                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
                     u.id
             """)
-            users = cur.fetchall()
+            users = [dict(u) for u in cur.fetchall()]
         else:
             import sqlite3
-            cur = conn.cursor()
             conn.row_factory = sqlite3.Row
-            # 全オークションを取得
+            cur = conn.cursor()
             cur.execute("""
                 SELECT ps.*, 
                        (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count,
@@ -11567,8 +11563,6 @@ def admin_proxy_service():
                 ORDER BY ps.id DESC
             """)
             auctions = [dict(a) for a in cur.fetchall()]
-            
-            # 全ユーザーを取得
             cur.execute("""
                 SELECT u.id, u.username, u.display_name, u.role,
                        CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
@@ -11578,49 +11572,56 @@ def admin_proxy_service():
                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
                     u.id
             """)
-            users = cur.fetchall()
-        
+            users = [dict(u) for u in cur.fetchall()]
+
         cur.close()
         conn.close()
-        
-        # 各オークションの状態を判定（終了/開始前/公開中）
-        now = datetime.now()
+
+        now = get_jst_now()
+        current_auctions = []
+        upcoming_auctions = []
+        draft_auctions = []
+        history_auctions = []
+        active_auction_count = 0
         for auction in auctions:
-            end_dt = auction.get('end_datetime')
-            start_dt = auction.get('start_datetime')
-            
-            # 終了判定
-            if end_dt:
-                if isinstance(end_dt, str):
-                    try:
-                        end_dt = datetime.fromisoformat(end_dt.replace('T', ' ').split('.')[0])
-                    except:
-                        end_dt = None
-                if end_dt and now > end_dt:
-                    auction['is_ended'] = True
-                else:
-                    auction['is_ended'] = False
+            auction_state = get_proxy_service_auction_state(auction, now=now)
+            auction['is_ended'] = auction_state.get('is_ended')
+            auction['is_not_started'] = auction_state.get('is_not_started')
+            auction['is_public'] = auction_state.get('is_public')
+            auction['status'] = auction_state.get('status')
+            auction['status_label'] = auction_state.get('status_label')
+            auction['start_display'] = format_optional_datetime(auction_state.get('start_datetime'), fallback='未設定')
+            auction['end_display'] = format_optional_datetime(auction_state.get('end_datetime'), fallback='未設定')
+
+            if auction_state.get('status') in {'open', 'scheduled'}:
+                active_auction_count += 1
+
+            if auction_state.get('status') == 'open':
+                current_auctions.append(auction)
+            elif auction_state.get('status') == 'scheduled':
+                upcoming_auctions.append(auction)
+            elif auction_state.get('status') == 'ended':
+                history_auctions.append(auction)
             else:
-                auction['is_ended'] = False
-            
-            # 開始前判定
-            if start_dt:
-                if isinstance(start_dt, str):
-                    try:
-                        start_dt = datetime.fromisoformat(start_dt.replace('T', ' ').split('.')[0])
-                    except:
-                        start_dt = None
-                if start_dt and now < start_dt:
-                    auction['is_not_started'] = True
-                else:
-                    auction['is_not_started'] = False
-            else:
-                auction['is_not_started'] = False
-        
-        return render_template('admin/proxy_service_list.html',
-                             auctions=auctions,
-                             users=[dict(u) for u in users],
-                             max_auctions=5)
+                draft_auctions.append(auction)
+
+        current_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0))
+        upcoming_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('start_datetime')) or now, auction.get('id') or 0))
+        draft_auctions.sort(key=lambda auction: auction.get('id') or 0, reverse=True)
+        history_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
+
+        return render_template(
+            'admin/proxy_service_list.html',
+            auctions=auctions,
+            users=users,
+            max_auctions=5,
+            active_auction_count=active_auction_count,
+            can_create_more_auctions=active_auction_count < 5,
+            current_auctions=current_auctions,
+            upcoming_auctions=upcoming_auctions,
+            draft_auctions=draft_auctions,
+            history_auctions=history_auctions,
+        )
     except Exception as e:
         import traceback
         print(f"Proxy service admin error: {e}")

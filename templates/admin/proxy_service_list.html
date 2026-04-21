@@ -1,185 +1,397 @@
 {% extends "base.html" %}
 {% block title %}代行仕入れサービス管理 - 株式会社 開花{% endblock %}
 
+{% macro render_auction_card(auction, public_label='ユーザー側ページ', show_public_link=True) -%}
+<article class="auction-card {{ auction.status }}">
+    <div class="auction-card-head">
+        <div class="auction-badges">
+            <span class="status-badge {{ auction.status }}">{{ auction.status_label }}</span>
+            <span class="mode-badge {{ auction.sale_mode or 'auction' }}">
+                {{ '早い者勝ち' if auction.sale_mode == 'fixed' else 'オークション' }}
+            </span>
+        </div>
+        <span class="auction-id">#{{ auction.id }}</span>
+    </div>
+    <div class="auction-card-body">
+        <h3>{{ auction.auction_name or 'オークション' }}</h3>
+        <p class="auction-title">{{ auction.page_title or '代行仕入れサービス' }}</p>
+        {% if auction.page_description %}
+        <p class="auction-description">{{ auction.page_description[:110] }}{% if auction.page_description|length > 110 %}...{% endif %}</p>
+        {% endif %}
+        <dl class="auction-meta">
+            <div>
+                <dt>商品数</dt>
+                <dd>{{ auction.item_count or 0 }}件</dd>
+            </div>
+            <div>
+                <dt>入札数</dt>
+                <dd>{{ auction.bid_count or 0 }}件</dd>
+            </div>
+            <div>
+                <dt>開始</dt>
+                <dd>{{ auction.start_display }}</dd>
+            </div>
+            <div>
+                <dt>終了</dt>
+                <dd>{{ auction.end_display }}</dd>
+            </div>
+        </dl>
+    </div>
+    <div class="auction-card-actions">
+        <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary btn-sm">管理・編集</a>
+        {% if show_public_link %}
+        <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="btn btn-secondary btn-sm" target="_blank">{{ public_label }}</a>
+        {% endif %}
+    </div>
+</article>
+{%- endmacro %}
+
+{% macro render_section(section_id, title, lead, auctions, empty_title, empty_copy, public_label='ユーザー側ページ', show_public_link=True) -%}
+<section class="management-section" id="{{ section_id }}">
+    <div class="section-header">
+        <div>
+            <h2>{{ title }}</h2>
+            <p>{{ lead }}</p>
+        </div>
+        <span class="section-count">{{ auctions|length }}件</span>
+    </div>
+    {% if auctions %}
+    <div class="auction-grid">
+        {% for auction in auctions %}
+        {{ render_auction_card(auction, public_label=public_label, show_public_link=show_public_link) }}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact">
+        <h3>{{ empty_title }}</h3>
+        <p>{{ empty_copy }}</p>
+    </div>
+    {% endif %}
+</section>
+{%- endmacro %}
+
 {% block content %}
 <div class="page-header">
-    <h1>代行仕入れサービス管理</h1>
+    <div>
+        <h1>代行仕入れサービス管理</h1>
+        <p class="page-lead">このページで、公開中・公開前・保存のみ・履歴をまとめて管理できます。ユーザー側に見える一覧もここから確認できます。</p>
+    </div>
     <div class="header-actions">
-        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">履歴を見る</a>
+        <a href="{{ url_for('public_proxy_service_list') }}" class="btn btn-secondary" target="_blank">ユーザー側の公開一覧を確認</a>
         {% if can_create_more_auctions %}
-        <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary">+ 新規オークション作成</a>
+        <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary">+ 新規ページを作成</a>
         {% else %}
-        <button class="btn btn-secondary" disabled title="オークションは最大{{ max_auctions }}個までです">上限到達（{{ max_auctions }}個）</button>
+        <button class="btn btn-secondary" disabled title="公開中または公開前の枠は最大{{ max_auctions }}件です">公開枠上限（{{ active_auction_count }}/{{ max_auctions }}）</button>
         {% endif %}
     </div>
 </div>
 
-<div class="auction-info-card">
-    <div class="info-icon">📢</div>
-    <div class="info-content">
-        <h3>複数オークション同時開催機能</h3>
-        <p>最大 <strong>{{ max_auctions }}個</strong> のオークションを同時に開催できます。各オークションに異なる商品を割り当て、独立して管理できます。</p>
+<div class="management-summary">
+    <div class="summary-card">
+        <span class="summary-label">公開中</span>
+        <strong>{{ current_auctions|length }}件</strong>
+        <small>いま参加できるページ</small>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">公開前</span>
+        <strong>{{ upcoming_auctions|length }}件</strong>
+        <small>開始日時待ち</small>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">保存のみ</span>
+        <strong>{{ draft_auctions|length }}件</strong>
+        <small>下書き・非公開</small>
+    </div>
+    <div class="summary-card">
+        <span class="summary-label">履歴</span>
+        <strong>{{ history_auctions|length }}件</strong>
+        <small>締切済みページ</small>
+    </div>
+    <div class="summary-card accent">
+        <span class="summary-label">公開枠</span>
+        <strong>{{ active_auction_count }}/{{ max_auctions }}</strong>
+        <small>公開中と公開前だけを集計</small>
     </div>
 </div>
 
-{% if auctions %}
-<div class="auction-grid">
-    {% for auction in auctions %}
-    <div class="auction-card {% if auction.is_ended %}ended{% elif auction.is_public %}active{% else %}inactive{% endif %}">
-        <div class="auction-header">
-            <div class="auction-status">
-                {% if auction.is_ended %}
-                <span class="status-badge ended">終了</span>
-                {% elif auction.is_not_started %}
-                <span class="status-badge waiting">開始前</span>
-                {% elif auction.is_public %}
-                <span class="status-badge public">公開中</span>
-                {% else %}
-                <span class="status-badge private">非公開</span>
-                {% endif %}
-            </div>
-            <div class="auction-mode">
-                {% if auction.sale_mode == 'fixed' %}
-                <span class="mode-badge fixed">即決</span>
-                {% else %}
-                <span class="mode-badge auction">オークション</span>
-                {% endif %}
-            </div>
+<div class="workflow-card">
+    <h2>使い方</h2>
+    <div class="workflow-steps">
+        <div class="workflow-step">
+            <strong>1. 新規ページを作成</strong>
+            <p>まず「新規ページを作成」からオークション枠を追加します。</p>
         </div>
-        
-        <div class="auction-body">
-            <h3 class="auction-name">{{ auction.auction_name or 'オークション' }}</h3>
-            <p class="auction-title">{{ auction.page_title or '代行仕入れサービス' }}</p>
-            
-            <div class="auction-stats">
-                <div class="stat">
-                    <span class="stat-value">{{ auction.item_count or 0 }}</span>
-                    <span class="stat-label">商品数</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-value">{{ auction.bid_count or 0 }}</span>
-                    <span class="stat-label">入札数</span>
-                </div>
-            </div>
-            
-            {% if auction.start_datetime or auction.end_datetime %}
-            <div class="auction-schedule">
-                {% if auction.start_datetime %}
-                <div class="schedule-item">
-                    <span class="schedule-label">開始:</span>
-                    <span class="schedule-value">{{ auction.start_datetime }}</span>
-                </div>
-                {% endif %}
-                {% if auction.end_datetime %}
-                <div class="schedule-item">
-                    <span class="schedule-label">終了:</span>
-                    <span class="schedule-value">{{ auction.end_datetime }}</span>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
+        <div class="workflow-step">
+            <strong>2. 商品を掲載</strong>
+            <p>各ページの「管理・編集」から商品を載せ、価格や方式を設定します。</p>
         </div>
-        
-        <div class="auction-actions">
-            <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary btn-sm">管理・編集</a>
-            <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="btn btn-secondary btn-sm" target="_blank">公開ページ</a>
+        <div class="workflow-step">
+            <strong>3. 公開または予約</strong>
+            <p>非公開のまま保存もでき、必要なタイミングで今すぐ公開または日時予約できます。</p>
+        </div>
+        <div class="workflow-step">
+            <strong>4. 締切後に結果確認</strong>
+            <p>履歴から結果を確認し、必要に応じてクライアント商品一覧へ反映します。</p>
         </div>
     </div>
-    {% endfor %}
 </div>
-{% else %}
-<div class="empty-state">
-    <div class="empty-icon">🛒</div>
-    <h3>オークションがありません</h3>
-    <p>「新規オークション作成」ボタンから最初のオークションを作成してください。</p>
-    <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary">+ 新規オークション作成</a>
+
+<div class="section-nav">
+    <a href="#current">公開中</a>
+    <a href="#upcoming">公開前</a>
+    <a href="#draft">保存のみ</a>
+    <a href="#history">履歴</a>
 </div>
-{% endif %}
+
+{{ render_section(
+    'current',
+    '公開中',
+    'ユーザー側に現在表示されているページです。',
+    current_auctions,
+    '公開中のページはありません',
+    '今すぐ公開済みのページがあると、ここに表示されます。',
+    public_label='ユーザー側ページ'
+) }}
+
+{{ render_section(
+    'upcoming',
+    '公開前',
+    '開始日時を設定してある予約ページです。',
+    upcoming_auctions,
+    '公開前のページはありません',
+    '開始日時を設定したページがあると、ここに表示されます。',
+    public_label='開始前ページを確認'
+) }}
+
+{{ render_section(
+    'draft',
+    '保存のみ',
+    'まだユーザーには出ていない、下書き状態のページです。',
+    draft_auctions,
+    '保存のみのページはありません',
+    '非公開で保存したページがあると、ここに表示されます。',
+    show_public_link=False
+) }}
+
+{{ render_section(
+    'history',
+    '履歴',
+    '締切済みのページです。結果確認や反映作業はここから進められます。',
+    history_auctions,
+    '履歴はまだありません',
+    '締切済みのページが出ると、ここにまとまって表示されます。',
+    public_label='結果ページを確認'
+) }}
 
 <style>
-.auction-info-card {
-    display: flex;
-    align-items: flex-start;
+.page-lead {
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.management-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1rem;
-    background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
-    border: 1px solid #c7d2fe;
+    margin-bottom: 1.5rem;
+}
+
+.summary-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+}
+
+.summary-card.accent {
+    background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+    border-color: #bfdbfe;
+}
+
+.summary-label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.summary-card strong {
+    display: block;
+    font-size: 1.65rem;
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.summary-card small {
+    display: block;
+    margin-top: 0.4rem;
+    color: var(--text-muted);
+}
+
+.workflow-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    border: 1px solid #dbeafe;
     border-radius: var(--radius);
     padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.workflow-card h2 {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+}
+
+.workflow-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.9rem;
+}
+
+.workflow-step {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 0.95rem;
+}
+
+.workflow-step strong {
+    display: block;
+    margin-bottom: 0.4rem;
+}
+
+.workflow-step p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.section-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.section-nav a {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.management-section {
     margin-bottom: 2rem;
 }
 
-.info-icon {
-    font-size: 2rem;
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-end;
+    margin-bottom: 1rem;
 }
 
-.info-content h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1rem;
-    color: #1e40af;
+.section-header h2 {
+    margin: 0 0 0.3rem;
 }
 
-.info-content p {
+.section-header p {
     margin: 0;
-    font-size: 0.9rem;
-    color: #3730a3;
+    color: var(--text-secondary);
+}
+
+.section-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 62px;
+    height: 36px;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-weight: 700;
 }
 
 .auction-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
 }
 
 .auction-card {
     background: var(--bg-card);
-    border: 2px solid var(--border);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-    transition: all 0.2s;
 }
 
-.auction-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+.auction-card.open {
+    border-color: #86efac;
 }
 
-.auction-card.active {
-    border-color: #10b981;
+.auction-card.scheduled {
+    border-color: #fcd34d;
 }
 
-.auction-card.inactive {
-    border-color: #e2e8f0;
-    opacity: 0.8;
+.auction-card.private {
+    border-color: #cbd5e1;
 }
 
 .auction-card.ended {
-    border-color: #fca5a5;
-    background: #fef2f2;
-    opacity: 0.9;
+    border-color: #fecaca;
+    background: #fff7f7;
 }
 
-.auction-header {
+.auction-card-head {
     display: flex;
     justify-content: space-between;
+    gap: 1rem;
     align-items: center;
-    padding: 0.75rem 1rem;
-    background: var(--bg-main);
+    padding: 0.9rem 1rem;
     border-bottom: 1px solid var(--border);
+    background: var(--bg-main);
 }
 
-.status-badge {
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
+.auction-badges {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
 }
 
-.status-badge.public {
+.auction-id {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.status-badge,
+.mode-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.status-badge.open {
     background: #10b981;
     color: white;
 }
 
+.status-badge.scheduled {
+    background: #f59e0b;
+    color: white;
+}
+
 .status-badge.private {
-    background: #94a3b8;
+    background: #64748b;
     color: white;
 }
 
@@ -188,130 +400,103 @@
     color: white;
 }
 
-.status-badge.waiting {
-    background: #f59e0b;
-    color: white;
-}
-
-.mode-badge {
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
 .mode-badge.auction {
-    background: #3b82f6;
+    background: #2563eb;
     color: white;
 }
 
 .mode-badge.fixed {
-    background: #f59e0b;
+    background: #ea580c;
     color: white;
 }
 
-.auction-body {
-    padding: 1.25rem;
+.auction-card-body {
+    padding: 1rem;
 }
 
-.auction-name {
-    margin: 0 0 0.25rem 0;
-    font-size: 1.25rem;
-    color: var(--text-primary);
+.auction-card-body h3 {
+    margin: 0;
+    font-size: 1.1rem;
 }
 
 .auction-title {
-    margin: 0 0 1rem 0;
-    font-size: 0.875rem;
+    margin: 0.25rem 0 0;
     color: var(--text-secondary);
 }
 
-.auction-stats {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 1rem;
+.auction-description {
+    margin: 0.75rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
-.auction-stats .stat {
-    display: flex;
-    flex-direction: column;
+.auction-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0 0;
 }
 
-.auction-stats .stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--primary);
+.auction-meta div {
+    background: var(--bg-main);
+    border-radius: 10px;
+    padding: 0.75rem;
 }
 
-.auction-stats .stat-label {
+.auction-meta dt {
     font-size: 0.75rem;
     color: var(--text-muted);
+    margin-bottom: 0.3rem;
 }
 
-.auction-schedule {
-    background: var(--bg-main);
-    border-radius: 6px;
-    padding: 0.75rem;
-    font-size: 0.8rem;
-}
-
-.schedule-item {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.schedule-label {
-    color: var(--text-muted);
-}
-
-.schedule-value {
+.auction-meta dd {
+    margin: 0;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
-.auction-actions {
+.auction-card-actions {
     display: flex;
-    gap: 0.5rem;
-    padding: 1rem;
-    background: var(--bg-main);
-    border-top: 1px solid var(--border);
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
 }
 
-.auction-actions .btn {
-    flex: 1;
-    text-align: center;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
+.compact {
+    padding: 1.4rem;
     background: var(--bg-card);
-    border: 2px dashed var(--border);
+    border: 1px dashed var(--border);
     border-radius: var(--radius);
 }
 
-.empty-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
+.compact h3 {
+    margin: 0 0 0.4rem;
 }
 
-.empty-state h3 {
-    margin: 0 0 0.5rem 0;
-    color: var(--text-primary);
-}
-
-.empty-state p {
+.compact p {
+    margin: 0;
     color: var(--text-secondary);
-    margin-bottom: 1.5rem;
 }
 
 @media (max-width: 768px) {
-    .auction-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .auction-info-card {
+    .section-header,
+    .page-header {
         flex-direction: column;
-        text-align: center;
+        align-items: flex-start;
+    }
+
+    .auction-card-actions,
+    .header-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .auction-card-actions .btn,
+    .header-actions .btn {
+        width: 100%;
+    }
+
+    .auction-meta {
+        grid-template-columns: 1fr;
     }
 }
 </style>
