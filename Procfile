@@ -1,1 +1,1 @@
-web: gunicorn render_app:app --bind 0.0.0.0:$PORT --preload --timeout 300
+web: gunicorn render_app:app --bind 0.0.0.0:$PORT --timeout 300
