@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}オークション計算書作成 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">← 書類管理へ戻る</a>
+    <h1>オークション計算書作成</h1>
+</div>
+
+<div class="form-container">
+    <form method="POST" id="keisan-form">
+        {% if source_request %}
+        <input type="hidden" name="request_id" value="{{ source_request.id }}">
+        <input type="hidden" name="user_id" value="{{ user_id_default or '' }}">
+        {% endif %}
+
+        <div class="form-section">
+            <h3>基本情報</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>書類No.</label>
+                    <input type="text" value="{{ document_no }}" readonly class="readonly-field">
+                </div>
+                <div class="form-group">
+                    <label for="issue_date">発行日 <span class="required">*</span></label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ today }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="recipient_name">宛名</label>
+                    <input type="text" id="recipient_name" name="recipient_name" value="{{ recipient_name_default or '' }}" placeholder="例: ○○様">
+                </div>
+                <div class="form-group">
+                    <label for="subject">件名</label>
+                    <input type="text" id="subject" name="subject" value="{{ subject_default or 'オークション計算書' }}" placeholder="例: オークション販売計算書">
+                </div>
+            </div>
+        </div>
+
+        {% if source_request %}
+        <div class="form-section">
+            <h3>案件情報</h3>
+            <div class="source-box">
+                <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+                <p>この案件に紐づく既存データを引用して、クライアントへ返送する計算書を作成します。</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="form-section">
+            <h3>明細</h3>
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">No.</th>
+                        <th>項目名</th>
+                        <th style="width: 90px;">数量</th>
+                        <th style="width: 90px;">単位</th>
+                        <th style="width: 140px;">単価</th>
+                        <th style="width: 140px;">金額</th>
+                        <th style="width: 50px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-tbody">
+                    {% if items %}
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td class="item-no">{{ loop.index }}</td>
+                            <td>
+                                <input type="text" name="item_name[]" value="{{ item.item_name or item.product_name or '' }}" class="item-name" required>
+                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="item-qty" min="1"></td>
+                            <td><input type="text" name="unit[]" value="{{ item.unit or '点' }}" class="item-unit" placeholder="点"></td>
+                            <td><input type="number" name="unit_price[]" value="{{ item.unit_price or item.amount or 0 }}" class="item-price" min="0"></td>
+                            <td class="item-amount">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr class="item-row">
+                            <td class="item-no">1</td>
+                            <td>
+                                <input type="text" name="item_name[]" class="item-name" required>
+                                <input type="hidden" name="merchandise_id[]" value="">
+                            </td>
+                            <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+                            <td><input type="text" name="unit[]" value="点" class="item-unit" placeholder="点"></td>
+                            <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+                            <td class="item-amount">¥0</td>
+                            <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="7">
+                            <button type="button" class="btn btn-add" onclick="addRow()">+ 明細を追加</button>
+                        </td>
+                    </tr>
+                    <tr class="total-row">
+                        <td colspan="5" class="text-right"><strong>合計金額</strong></td>
+                        <td id="total-amount" class="total-amount">¥0</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="form-section">
+            <h3>備考</h3>
+            <div class="form-group full-width">
+                <textarea name="notes" rows="4" placeholder="備考を入力">{{ notes_default or '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">キャンセル</a>
+            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+            <button type="submit" name="status" value="completed" class="btn btn-primary">送信待機にする</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.form-container {
+    max-width: 1000px;
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.form-section {
+    margin-bottom: 32px;
+}
+
+.form-section h3 {
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    width: 100%;
+}
+
+.form-group label {
+    font-weight: 600;
+}
+
+.required {
+    color: #dc2626;
+}
+
+.readonly-field,
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.readonly-field {
+    background: #f8fafc;
+}
+
+.source-box {
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 14px 16px;
+    line-height: 1.8;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+    border: 1px solid #e5e7eb;
+    padding: 10px;
+    vertical-align: middle;
+}
+
+.items-table th {
+    background: #f8fafc;
+}
+
+.items-table input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.item-no,
+.item-amount,
+.total-amount {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.btn-remove {
+    border: none;
+    background: #fee2e2;
+    color: #b91c1c;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+@media (max-width: 720px) {
+    .page-header,
+    .form-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+</style>
+
+<script>
+function formatCurrency(value) {
+    return '¥' + Number(value || 0).toLocaleString('ja-JP');
+}
+
+function recalculateTotals() {
+    let total = 0;
+    document.querySelectorAll('#items-tbody .item-row').forEach((row, index) => {
+        row.querySelector('.item-no').textContent = index + 1;
+        const qty = Number(row.querySelector('input[name=\"quantity[]\"]').value || 0);
+        const price = Number(row.querySelector('input[name=\"unit_price[]\"]').value || 0);
+        const amount = qty * price;
+        row.querySelector('.item-amount').textContent = formatCurrency(amount);
+        total += amount;
+    });
+    document.getElementById('total-amount').textContent = formatCurrency(total);
+}
+
+function addRow() {
+    const tbody = document.getElementById('items-tbody');
+    const row = document.createElement('tr');
+    row.className = 'item-row';
+    row.innerHTML = `
+        <td class="item-no"></td>
+        <td>
+            <input type="text" name="item_name[]" class="item-name" required>
+            <input type="hidden" name="merchandise_id[]" value="">
+        </td>
+        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
+        <td><input type="text" name="unit[]" value="点" class="item-unit" placeholder="点"></td>
+        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
+        <td class="item-amount">¥0</td>
+        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+    `;
+    tbody.appendChild(row);
+    attachRowEvents(row);
+    recalculateTotals();
+}
+
+function removeRow(button) {
+    const rows = document.querySelectorAll('#items-tbody .item-row');
+    if (rows.length <= 1) {
+        return;
+    }
+    button.closest('tr').remove();
+    recalculateTotals();
+}
+
+function attachRowEvents(row) {
+    row.querySelectorAll('input[name=\"quantity[]\"], input[name=\"unit_price[]\"]').forEach((input) => {
+        input.addEventListener('input', recalculateTotals);
+    });
+}
+
+document.querySelectorAll('#items-tbody .item-row').forEach(attachRowEvents);
+recalculateTotals();
+</script>
+{% endblock %}

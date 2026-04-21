@@ -1,12 +1,415 @@
 {% extends "base.html" %}
-{% block title %}{% if analytics.is_admin_view %}ユーザー全体の分析{% else %}マイ分析{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if analytics.is_admin_view %}ユーザー管理分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 
 {% if analytics.is_admin_view %}
+{% set analytics_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<style>
+.client-analysis-page {
+    display: grid;
+    gap: 1.2rem;
+}
+
+.client-analysis-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    padding: 1.2rem 1.25rem;
+    min-width: 0;
+}
+
+.client-analysis-header h1 {
+    margin: 0 0 0.35rem;
+}
+
+.client-analysis-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.85;
+    letter-spacing: 0.02em;
+}
+
+.client-analysis-toolbar {
+    display: grid;
+    gap: 1rem;
+}
+
+.period-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.period-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.period-chip.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.client-filter-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 170px 170px auto auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.client-filter-group {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.client-filter-group label {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #475569;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.client-filter-group input {
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 0.96rem;
+    line-height: 1.6;
+}
+
+.client-analysis-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.75;
+}
+
+.client-analysis-summary strong {
+    color: #0f172a;
+}
+
+.client-analysis-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.client-analysis-section-header h2 {
+    margin: 0;
+}
+
+.client-analysis-section-header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.94rem;
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+}
+
+.client-total-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.client-total-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+}
+
+.client-total-card__label {
+    font-size: 0.86rem;
+    color: #64748b;
+    line-height: 1.6;
+    letter-spacing: 0.03em;
+}
+
+.client-total-card__value {
+    margin-top: 0.35rem;
+    font-size: 1.26rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.4;
+}
+
+.client-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
+}
+
+.client-analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 980px;
+}
+
+.client-analysis-table th,
+.client-analysis-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.75;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.client-analysis-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.86rem;
+    white-space: nowrap;
+    letter-spacing: 0.045em;
+}
+
+.client-analysis-table td:first-child {
+    min-width: 180px;
+}
+
+.client-analysis-table td:nth-child(5),
+.client-analysis-table td:nth-child(6),
+.client-analysis-table td:nth-child(7),
+.client-analysis-table td:nth-child(8) {
+    min-width: 140px;
+}
+
+.client-analysis-link {
+    color: #2563eb;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.client-analysis-link:hover {
+    text-decoration: underline;
+}
+
+.metric-link {
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.metric-link:hover {
+    color: #2563eb;
+}
+
+.client-analysis-empty {
+    padding: 1rem 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+@media (max-width: 900px) {
+    .client-filter-form {
+        grid-template-columns: 1fr;
+    }
+
+    .client-total-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>
+
+<div class="client-analysis-page">
+    <section class="client-analysis-card client-analysis-header">
+        <h1>ユーザー管理分析</h1>
+        <p>クライアントごとの在庫・売上・手数料・利益を、当月ベースで確認できます。クライアント名を押すと各ユーザーの商品管理へ進みます。</p>
+    </section>
+
+    <section class="client-analysis-card client-analysis-toolbar">
+        <div class="period-chip-row">
+            <a class="period-chip {% if analytics.period_preset == 'month' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='month', client_keyword=analytics.client_keyword or None) }}">当月</a>
+            <a class="period-chip {% if analytics.period_preset == 'year' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='year', client_keyword=analytics.client_keyword or None) }}">今年</a>
+            <a class="period-chip {% if analytics.period_preset == 'all' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='all', client_keyword=analytics.client_keyword or None) }}">全期間</a>
+            <span class="period-chip active">表示期間: {{ analytics.period_label }}</span>
+        </div>
+
+        <form method="GET" action="{{ url_for('user_analytics') }}" class="client-filter-form">
+            <input type="hidden" name="period_preset" value="custom">
+            <div class="client-filter-group">
+                <label for="client_keyword">クライアント名で絞り込み</label>
+                <input id="client_keyword" type="text" name="client_keyword" value="{{ analytics.client_keyword or '' }}" placeholder="クライアント名を入力">
+            </div>
+            <div class="client-filter-group">
+                <label for="start_month">開始月</label>
+                <input id="start_month" type="month" name="start_month" value="{{ start_month }}">
+            </div>
+            <div class="client-filter-group">
+                <label for="end_month">終了月</label>
+                <input id="end_month" type="month" name="end_month" value="{{ end_month }}">
+            </div>
+            <button type="submit" class="btn btn-primary">適用</button>
+            <a href="{{ url_for('user_analytics', period_preset='month') }}" class="btn btn-secondary">リセット</a>
+        </form>
+
+        <div class="client-analysis-summary">
+            <span>対象クライアント数: <strong>{{ analytics.client_summaries|length }}</strong></span>
+            <span>対象期間: <strong>{{ analytics.period_label }}</strong></span>
+        </div>
+    </section>
+
+    <section class="client-analysis-card">
+        <div class="client-analysis-section-header">
+            <div>
+                <h2>ユーザートータル分析</h2>
+                <p>表示中のクライアント全体について、売上・利益・開花手数料・在庫の状況をまとめて確認できます。</p>
+            </div>
+        </div>
+        <div class="client-total-grid">
+            {% for metric in analytics.client_total_metrics or [] %}
+            <div class="client-total-card">
+                <div class="client-total-card__label">{{ metric.label }}</div>
+                <div class="client-total-card__value {{ metric.value_class or '' }}">{{ metric.display_value }}</div>
+                <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('client-total-{{ metric.id }}')">詳細</button>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="client-analysis-card">
+        <div class="client-analysis-section-header">
+            <div>
+                <h2>クライアント別分析</h2>
+                <p>クライアント名を押すと、そのクライアントの商品一覧と月次サマリーへ移動できます。</p>
+            </div>
+        </div>
+        {% if analytics.client_summaries %}
+        <div class="client-table-wrap js-edge-hover-scroll">
+            <table class="client-analysis-table">
+                <thead>
+                    <tr>
+                        <th>クライアント名</th>
+                        <th>商品登録数</th>
+                        <th>販売済み</th>
+                        <th>現正在庫数</th>
+                        <th>現正在庫金額</th>
+                        <th>対象期間売上</th>
+                        <th>開花手数料</th>
+                        <th>対象期間利益</th>
+                        <th>詳細</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in analytics.client_summaries %}
+                    <tr>
+                        <td>
+                            <a class="client-analysis-link" href="{{ url_for('admin_user_items', id=client.user_id, start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">
+                                {{ client.client_name }}
+                            </a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='all', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.total_items or 0 }}件</a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='sold', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.sold_count or 0 }}件</a>
+                        </td>
+                        <td>
+                            <a class="metric-link" href="{{ url_for('admin_user_items', id=client.user_id, status='unsold', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, back_url=analytics_back_url) }}">{{ client.inventory_count or 0 }}件</a>
+                        </td>
+                        <td>¥{{ "{:,}".format((client.inventory_value or 0)|int) }}</td>
+                        <td>¥{{ "{:,}".format((client.total_sales or 0)|int) }}</td>
+                        <td>¥{{ "{:,}".format((client.total_fees or 0)|int) }}</td>
+                        <td class="{% if client.total_profit and client.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format((client.total_profit or 0)|int) }}</td>
+                        <td>
+                            <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('client-row-{{ client.user_id }}')">詳細</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="client-analysis-empty">条件に一致するクライアントはありません。</p>
+        {% endif %}
+    </section>
+
+    {% for metric in analytics.client_total_metrics or [] %}
+    <div class="analytics-detail-modal" id="client-total-{{ metric.id }}">
+        <div class="analytics-detail-dialog">
+            <div class="analytics-detail-header">
+                <h3>{{ metric.title }}</h3>
+                <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('client-total-{{ metric.id }}')">×</button>
+            </div>
+            <div class="analytics-detail-body">
+                {% if metric.formula %}
+                <div class="analytics-detail-formula">{{ metric.formula }}</div>
+                {% endif %}
+                <div class="analytics-detail-lines">
+                    {% for line in metric.lines or [] %}
+                    <div class="analytics-detail-line">
+                        <span class="analytics-detail-line-label">{{ line.label }}</span>
+                        <span class="analytics-detail-line-value">{{ line.display }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if metric.note %}
+                <div class="analytics-detail-note">{{ metric.note }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% for client in analytics.client_summaries %}
+    <div class="analytics-detail-modal" id="client-row-{{ client.user_id }}">
+        <div class="analytics-detail-dialog">
+            <div class="analytics-detail-header">
+                <h3>{{ client.detail_title }}</h3>
+                <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('client-row-{{ client.user_id }}')">×</button>
+            </div>
+            <div class="analytics-detail-body">
+                <div class="analytics-detail-formula">{{ client.detail_formula }}</div>
+                <div class="analytics-detail-lines">
+                    {% for line in client.detail_lines or [] %}
+                    <div class="analytics-detail-line">
+                        <span class="analytics-detail-line-label">{{ line.label }}</span>
+                        <span class="analytics-detail-line-value">{{ line.display }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if client.detail_note %}
+                <div class="analytics-detail-note">{{ client.detail_note }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+
+{% if analytics.is_admin_view %}
 <div class="page-header">
-    <h1>ユーザー全体の分析</h1>
-    <p class="page-description">管理者以外のすべてのユーザーの商品データを集計</p>
+    <h1>ユーザー管理分析</h1>
+    <p class="page-description">
+        {% if analytics.selected_client_name %}
+        {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
+        {% else %}
+        クライアントごとの売上・利益・在庫状況を確認できます。
+        {% endif %}
+    </p>
 </div>
 {% endif %}
 
@@ -20,7 +423,7 @@
             <input type="month" name="end_month" value="{{ end_month }}" class="month-input" placeholder="終了月">
             <button type="submit" class="btn btn-primary btn-sm">適用</button>
             {% if start_month or end_month %}
-            <a href="{{ url_for('user_analytics') }}" class="btn btn-secondary btn-sm">クリア</a>
+            <a href="{{ url_for('user_analytics', client_id=analytics.selected_client_id if analytics.selected_client_id else None) }}" class="btn btn-secondary btn-sm">クリア</a>
             {% endif %}
         </div>
         {% if start_month or end_month %}
@@ -97,6 +500,44 @@
     font-weight: 500;
 }
 
+.client-filter-select {
+    min-width: 240px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+}
+
+.client-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.client-summary-table th,
+.client-summary-table td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.client-summary-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.client-summary-link {
+    color: #2563eb;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.client-summary-link:hover {
+    text-decoration: underline;
+}
+
 @media (max-width: 768px) {
     .period-filter-form {
         flex-direction: column;
@@ -113,6 +554,68 @@
     }
 }
 </style>
+
+{% if analytics.is_admin_view %}
+<div class="period-filter-card">
+    <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        <input type="hidden" name="start_month" value="{{ start_month }}">
+        <input type="hidden" name="end_month" value="{{ end_month }}">
+        <div class="filter-label">クライアントで絞り込み</div>
+        <div class="filter-inputs">
+            <select name="client_id" class="client-filter-select">
+                <option value="">すべてのクライアント</option>
+                {% for client in analytics.available_users or [] %}
+                <option value="{{ client.id }}" {% if analytics.selected_client_id == client.id %}selected{% endif %}>
+                    {{ client.display_name or client.username }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">絞り込む</button>
+            {% if analytics.selected_client_id %}
+            <a href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month) }}" class="btn btn-secondary btn-sm">全体へ戻す</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if analytics.client_summaries %}
+<div class="analytics-section">
+    <h2>クライアント別サマリー</h2>
+    <div class="admin-table-container js-edge-hover-scroll">
+        <table class="client-summary-table">
+            <thead>
+                <tr>
+                    <th>クライアント名</th>
+                    <th>商品数</th>
+                    <th>販売済み</th>
+                    <th>売上</th>
+                    <th>利益</th>
+                    <th>在庫評価</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client in analytics.client_summaries %}
+                <tr>
+                    <td>
+                        <a class="client-summary-link" href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, client_id=client.user_id) }}">
+                            {{ client.client_name }}
+                        </a>
+                    </td>
+                    <td>{{ client.total_items or 0 }}件</td>
+                    <td>{{ client.sold_count or 0 }}件</td>
+                    <td>¥{{ "{:,}".format((client.total_sales or 0)|int) }}</td>
+                    <td class="{% if client.total_profit and client.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format((client.total_profit or 0)|int) }}
+                    </td>
+                    <td>¥{{ "{:,}".format((client.inventory_value or 0)|int) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
 
 <!-- 総合サマリー -->
 {% if analytics.is_admin_view %}
@@ -284,7 +787,7 @@
 <div class="cashflow-section">
     <h2>キャッシュフロー表</h2>
     {% if analytics.cashflow %}
-    <div class="cashflow-table-container">
+    <div class="cashflow-table-container js-edge-hover-scroll">
         <table class="cashflow-table">
             <thead>
                 <tr>
@@ -749,7 +1252,7 @@
 
 .analytics-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
 }
 
@@ -758,6 +1261,7 @@
     border-radius: 8px;
     padding: 1.5rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    min-width: 0;
 }
 
 .analytics-section.full-width {
@@ -1210,11 +1714,11 @@
         gap: 0.4rem;
     }
     
-    .summary-card {
-        padding: 0.6rem;
-    }
-    
-    .summary-label {
+.summary-card {
+          padding: 0.6rem;
+      }
+
+      .summary-label {
         font-size: 0.6rem;
     }
     
@@ -1233,5 +1737,6 @@
 }
 </style>
 
+{% endif %}
 {% endblock %}
 

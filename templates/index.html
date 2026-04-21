@@ -2,6 +2,7 @@
 {% block title %}商品一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <style>
     /* 統計サマリー */
     .stats-summary {
@@ -464,11 +465,20 @@
     .owner-cell {
         font-size: 0.8rem;
         color: #64748b;
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow-wrap: normal;
     }
 
     .owner-name {
         color: #2563eb;
         font-weight: 500;
+    }
+
+    .store-cell {
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow-wrap: normal;
     }
 
     /* 代行サービスボタン */
@@ -487,6 +497,14 @@
     .btn-proxy.active {
         background: #0ea5e9;
         color: white;
+    }
+
+    .btn-proxy,
+    .btn-sale-request,
+    .btn-edit-request {
+        position: relative;
+        z-index: 2;
+        pointer-events: auto;
     }
 
     .status-badge.proxy {
@@ -604,7 +622,7 @@
 
     .data-table {
         width: 100%;
-        min-width: 1400px;
+        min-width: 1520px;
         border-collapse: collapse;
         font-size: 0.9rem;
         border: 1px solid #d1d5db;
@@ -668,8 +686,8 @@
 
     /* サムネイル */
     .table-thumb {
-        width: 50px;
-        height: 50px;
+        width: 68px;
+        height: 68px;
         object-fit: cover;
         border-radius: 6px;
         cursor: pointer;
@@ -678,12 +696,12 @@
 
     .table-thumb:hover {
         transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
     }
 
     .no-thumb {
-        width: 50px;
-        height: 50px;
+        width: 68px;
+        height: 68px;
         background: #f1f5f9;
         border-radius: 6px;
         display: flex;
@@ -787,18 +805,23 @@
     }
 
     .item-lightbox-close {
-        position: absolute;
-        top: -40px;
-        right: 0;
+        position: fixed;
+        top: 18px;
+        right: 18px;
         background: rgba(255, 255, 255, 0.2);
         border: none;
         color: white;
-        width: 36px;
-        height: 36px;
+        width: 42px;
+        height: 42px;
         border-radius: 50%;
-        font-size: 1.25rem;
+        font-size: 1.35rem;
         cursor: pointer;
         transition: background 0.2s;
+        z-index: 10002;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
     }
 
     .item-lightbox-close:hover {
@@ -806,18 +829,23 @@
     }
 
     .item-lightbox-nav {
-        position: absolute;
+        position: fixed;
         top: 50%;
         transform: translateY(-50%);
         background: rgba(255, 255, 255, 0.2);
         border: none;
         color: white;
-        width: 44px;
-        height: 44px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%;
-        font-size: 1.25rem;
+        font-size: 1.35rem;
         cursor: pointer;
         transition: background 0.2s;
+        z-index: 10002;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
     }
 
     .item-lightbox-nav:hover {
@@ -825,11 +853,11 @@
     }
 
     .item-lightbox-prev {
-        left: -60px;
+        left: 18px;
     }
 
     .item-lightbox-next {
-        right: -60px;
+        right: 18px;
     }
 
     .item-lightbox-counter {
@@ -850,6 +878,12 @@
 
     /* スマホ用ライトボックス調整 */
     @media (max-width: 768px) {
+        .table-thumb,
+        .no-thumb {
+            width: 50px;
+            height: 50px;
+        }
+
         .item-lightbox-nav {
             width: 36px;
             height: 36px;
@@ -931,6 +965,35 @@
 
     .amount.negative {
         color: #ef4444;
+    }
+
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        min-width: 220px;
+    }
+
+    .fee-breakdown-note {
+        color: #94a3b8;
+        font-size: 0.68rem;
     }
 
     /* コンディションバッジ */
@@ -1029,6 +1092,30 @@
     /* テーブルスクロール - PC用 */
     .table-scroll {
         /* PCではページ全体でスクロール */
+    }
+
+    .data-table th.store-col,
+    .data-table td.store-col {
+        min-width: 150px;
+    }
+
+    .data-table th.owner-col,
+    .data-table td.owner-col,
+    .data-table th.updater-col,
+    .data-table td.updater-col {
+        min-width: 120px;
+    }
+
+    .data-table th.fee-col,
+    .data-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .data-table th.shipping-col,
+    .data-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
     }
 
     /* ====================
@@ -1600,6 +1687,70 @@
         box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
     }
 
+    .sale-request-action-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        width: 100%;
+    }
+
+    .sale-request-complete-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 0.42rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        line-height: 1.2;
+        box-sizing: border-box;
+    }
+
+    .sale-request-complete-badge.shipping {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #c2410c;
+    }
+
+    .sale-request-complete-badge.completion {
+        background: #eff6ff;
+        border: 1px solid #93c5fd;
+        color: #1d4ed8;
+    }
+
+    .sale-request-complete-badge.approved {
+        background: #ecfeff;
+        border: 1px solid #67e8f9;
+        color: #0f766e;
+    }
+
+    .btn-shipping-request {
+        background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
+    }
+
+    .btn-shipping-request:hover {
+        background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+        box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
+    }
+
+    .btn-completion-request {
+        background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%) !important;
+    }
+
+    .btn-completion-request:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #1d4ed8 100%) !important;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-edit-shipping-request {
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+    }
+
+    .btn-edit-completion-request {
+        background: linear-gradient(135deg, #0f766e 0%, #0f766e 100%) !important;
+    }
+
     /* 売却申請モーダル */
     .sale-request-modal {
         display: none;
@@ -1665,6 +1816,32 @@
         margin-bottom: 1.5rem;
         font-weight: 600;
         color: #1e293b;
+    }
+
+    .sale-request-inline-message {
+        display: none;
+        margin: 0 0 1rem;
+        padding: 0.8rem 0.95rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        font-weight: 600;
+    }
+
+    .sale-request-inline-message.show {
+        display: block;
+    }
+
+    .sale-request-inline-message.error {
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        color: #b91c1c;
+    }
+
+    .sale-request-inline-message.success {
+        background: #ecfdf5;
+        border: 1px solid #6ee7b7;
+        color: #047857;
     }
 
     .sale-request-form .form-group {
@@ -1763,6 +1940,14 @@
 
     .sale-request-footer .btn-submit:hover {
         background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    }
+
+    .sale-request-footer .btn-submit.is-loading,
+    .sale-request-footer .btn-submit:disabled {
+        opacity: 0.72;
+        cursor: wait;
+        transform: none !important;
+        box-shadow: none !important;
     }
 
     /* スマホ用フィルター */
@@ -1988,6 +2173,7 @@
     <div class="action-buttons">
         <a href="{{ url_for('export_csv') }}" class="btn btn-export">CSV</a>
         {% if not current_user.is_admin() %}
+        <a href="{{ url_for('reports') }}" class="btn btn-export">レポート</a>
         <button type="button" class="btn btn-sales-agency" onclick="openSalesAgencyModal()">販売代行</button>
         {% endif %}
         {% if current_user.is_admin() %}
@@ -2047,9 +2233,10 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
-                    <option value="sold">売却済</option>
-                    <option value="listed">出品中</option>
-                    <option value="unlisted">未出品</option>
+                                    <option value="sold">売却済</option>
+                                    <option value="appraisal_pending">査定待ち</option>
+                                    <option value="listed">出品中</option>
+                                    <option value="unlisted">未出品</option>
                 </select>
             </div>
         </div>
@@ -2129,12 +2316,14 @@
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
                     <th>状態</th>
-                    <th class="sortable" data-sort="store_name">仕入先</th>
-                    {% if is_shared_view %}<th>登録者</th>{% endif %}
-                    <th>最終更新者</th>
+                    <th class="sortable store-col" data-sort="store_name">仕入先</th>
+                    {% if is_shared_view %}<th class="owner-col">登録者</th>{% endif %}
+                    <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
                     <th class="sortable" data-sort="purchase_price">卸価格</th>
                     <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable fee-col" data-sort="commission_total">手数料</th>
+                    <th class="shipping-col">送料</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
                     <th class="sortable" data-sort="profit">利益</th>
                     <th>販売状況</th>
@@ -2148,9 +2337,9 @@
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
                     data-purchase-price="{{ item.wholesale_price or 0 }}"
-                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-listing-price="{{ item.listing_price or 0 }}" data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}'
@@ -2174,9 +2363,9 @@
                             }}</span>
                         {% else %}-{% endif %}
                     </td>
-                    <td>{{ item.store_name or '-' }}</td>
-                    {% if is_shared_view %}<td class="owner-cell">{{ item.owner_name or '-' }}</td>{% endif %}
-                    <td class="owner-cell">{{ item.updated_by_name or '-' }}</td>
+                    <td class="store-cell store-col" title="{{ item.store_name or '-' }}">{{ item.store_name or '-' }}</td>
+                    {% if is_shared_view %}<td class="owner-cell owner-col" title="{{ item.owner_name or '-' }}">{{ item.owner_name or '-' }}</td>{% endif %}
+                    <td class="owner-cell updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
                     <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
                     <td class="amount">
@@ -2184,9 +2373,28 @@
                         ¥{{ "{:,}".format(item.listing_price) }}
                         {% else %}-{% endif %}
                     </td>
+                    <td class="amount fee-col">
+                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        <details class="fee-breakdown">
+                            <summary>¥{{ "{:,}".format(item.display_fee_total or 0) }}</summary>
+                            <div class="fee-breakdown-body">
+                                {% for fee_detail in item.fee_breakdown_details or [] %}
+                                {% if not fee_detail.startswith('送料:') %}
+                                <div>{{ fee_detail }}</div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount shipping-col">
+                        {% if item.sale_date or item.display_shipping_cost %}
+                        ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                        {% else %}-{% endif %}
+                    </td>
                     <td class="amount">
                         {% if item.sale_date %}
-                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td
@@ -2201,8 +2409,16 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
-                        {% elif item.pending_sale_request %}
-                        <span class="status-badge pending-sale">申請中</span>
+                        {% elif item.pending_completion_request %}
+                        <span class="status-badge pending-sale">完了報告確認中</span>
+                        {% elif item.pending_shipping_request %}
+                        <span class="status-badge pending-sale">発送依頼確認中</span>
+                        {% elif item.can_send_completion_report %}
+                        <span class="status-badge listed">発送されました</span>
+                        {% elif item.approved_shipping_request %}
+                        <span class="status-badge listed">発送準備中</span>
+                        {% elif item.appraisal_status == 'waiting' %}
+                        <span class="status-badge pending-sale">査定待ち</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -2213,12 +2429,12 @@
                         {% endif %}
                     </td>
                     <td class="action-cell">
-                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
                         {% if current_user.is_admin() %}
-                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
-                        {% if is_shared_view and not item.sale_date %}
-                        <button class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}"
-                            onclick="toggleProxyService({{ item.id }}, this)" title="代行サービスに掲載">
+                        <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                        {% if is_shared_view and not item.sale_date and current_user.can_manage_proxy_service() %}
+                        <button type="button" class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}"
+                            onclick="event.preventDefault(); event.stopPropagation(); toggleProxyService({{ item.id }}, this)" title="代行サービスに掲載">
                             {% if item.show_in_proxy_service %}掲載中{% else %}代行{% endif %}
                         </button>
                         {% endif %}
@@ -2239,17 +2455,58 @@
                         {% else %}
                         <span class="badge badge-waiting">承認待ち</span>
                         {% endif %}
-                        {% elif item.pending_sale_request %}
-                        {# 売却申請中の場合は修正ボタン #}
-                        <button class="btn btn-sm btn-edit-request"
-                            onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, {{ item.sale_request.shipping_cost or 0 }}, '{{ item.sale_request.qr_image_path or '' }}', '{{ item.sale_request.qr_image_path2 or '' }}')">
-                            申請修正
+                        {% elif item.pending_completion_request %}
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
+                            <button type="button" class="btn btn-sm btn-edit-request btn-edit-completion-request js-sale-request-trigger"
+                                data-action="edit"
+                                data-request-id="{{ item.completion_request.id }}"
+                                data-request-type="completion_report"
+                                data-product-name="{{ item.product_name or '' }}"
+                                data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                                data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                                data-commission="{{ item.completion_request.commission or 0 }}"
+                                data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                                data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
+                                取引完了報告を修正
+                            </button>
+                        </div>
+                        {% elif item.can_send_completion_report %}
+                        <button type="button" class="btn btn-sm btn-sale-request btn-completion-request js-sale-request-trigger"
+                            data-action="create-completion"
+                            data-item-id="{{ item.id }}"
+                            data-product-name="{{ item.product_name or '' }}"
+                            data-listing-price="{{ item.listing_price or 0 }}">
+                            取引完了報告
                         </button>
+                        {% elif item.approved_shipping_request %}
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge approved">発送準備中</span>
+                        </div>
+                        {% elif item.pending_shipping_request %}
+                        {# 送信済みの場合は完了表示 + 修正ボタン #}
+                        <div class="sale-request-action-stack">
+                            <span class="sale-request-complete-badge shipping">発送依頼送信済み</span>
+                            <button type="button" class="btn btn-sm btn-edit-request btn-edit-shipping-request js-sale-request-trigger"
+                                data-action="edit"
+                                data-request-id="{{ item.shipping_request.id }}"
+                                data-request-type="shipping_request"
+                                data-product-name="{{ item.product_name or '' }}"
+                                data-sale-price="0"
+                                data-shipping-cost="0"
+                                data-commission="0"
+                                data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                                data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
+                                発送依頼を修正
+                            </button>
+                        </div>
                         {% else %}
-                        {# 未申請の場合は新規申請ボタン #}
-                        <button class="btn btn-sm btn-sale-request"
-                            onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
-                            売却申請
+                        {# 未送信の場合は新規送信ボタン #}
+                        <button type="button" class="btn btn-sm btn-sale-request btn-shipping-request js-sale-request-trigger"
+                            data-action="create-shipping"
+                            data-item-id="{{ item.id }}"
+                            data-product-name="{{ item.product_name or '' }}">
+                            発送依頼を送る
                         </button>
                         {% endif %}
                         {% endif %}
@@ -2258,7 +2515,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{% if is_shared_view %}16{% else %}15{% endif %}"
+                    <td colspan="{% if is_shared_view %}18{% else %}17{% endif %}"
                         style="text-align: center; padding: 40px; color: #94a3b8;">
                         {% if current_user.is_admin() %}
                         商品がありません。<a href="{{ url_for('add_item') }}">最初の商品を登録</a>しましょう。
@@ -2297,9 +2554,9 @@
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
-            data-sale-price="{{ item.sale_price or 0 }}"
+            data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
-            data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
                 <div class="card-photo">
@@ -2334,8 +2591,16 @@
                 <div class="card-status">
                     {% if item.sale_date %}
                     <span class="status-badge sold">売却済</span>
-                    {% elif item.pending_sale_request %}
-                    <span class="status-badge pending-sale">申請中</span>
+                    {% elif item.pending_completion_request %}
+                    <span class="status-badge pending-sale">完了報告確認中</span>
+                    {% elif item.pending_shipping_request %}
+                    <span class="status-badge pending-sale">発送依頼確認中</span>
+                    {% elif item.can_send_completion_report %}
+                    <span class="status-badge listed">発送されました</span>
+                    {% elif item.approved_shipping_request %}
+                    <span class="status-badge listed">発送準備中</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="status-badge pending-sale">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -2359,6 +2624,22 @@
                         <span class="price-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
                             else %}-{% endif %}</span>
                     </div>
+                    <div class="price-item">
+                        <span class="price-label">手数料</span>
+                        <span class="price-value">
+                            {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                            ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
+                    </div>
+                    <div class="price-item">
+                        <span class="price-label">送料</span>
+                        <span class="price-value">
+                            {% if item.sale_date or item.display_shipping_cost %}
+                            ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
+                    </div>
                     {% if item.sale_date %}
                     <div class="price-item profit">
                         <span class="price-label">利益</span>
@@ -2378,9 +2659,9 @@
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
                 {% if current_user.is_admin() %}
-                <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 {% if item.can_delete %}
                 <a href="{{ url_for('delete_item', id=item.id) }}" class="btn btn-sm btn-delete"
                     onclick="return confirm('削除しますか？')">削除</a>
@@ -2398,17 +2679,58 @@
                 {% else %}
                 <span class="badge badge-waiting">承認待ち</span>
                 {% endif %}
-                {% elif item.pending_sale_request %}
-                {# 売却申請中の場合は修正ボタン #}
-                <button class="btn btn-sm btn-edit-request"
-                    onclick="openEditRequestModal({{ item.sale_request.id }}, '{{ item.product_name|e }}', {{ item.sale_request.sale_price }}, {{ item.sale_request.shipping_cost or 0 }}, '{{ item.sale_request.qr_image_path or '' }}', '{{ item.sale_request.qr_image_path2 or '' }}')">
-                    申請修正
+                {% elif item.pending_completion_request %}
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
+                    <button type="button" class="btn btn-sm btn-edit-request btn-edit-completion-request js-sale-request-trigger"
+                        data-action="edit"
+                        data-request-id="{{ item.completion_request.id }}"
+                        data-request-type="completion_report"
+                        data-product-name="{{ item.product_name or '' }}"
+                        data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                        data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                        data-commission="{{ item.completion_request.commission or 0 }}"
+                        data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                        data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
+                        取引完了報告を修正
+                    </button>
+                </div>
+                {% elif item.can_send_completion_report %}
+                <button type="button" class="btn btn-sm btn-sale-request btn-completion-request js-sale-request-trigger"
+                    data-action="create-completion"
+                    data-item-id="{{ item.id }}"
+                    data-product-name="{{ item.product_name or '' }}"
+                    data-listing-price="{{ item.listing_price or 0 }}">
+                    取引完了報告
                 </button>
+                {% elif item.approved_shipping_request %}
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge approved">発送準備中</span>
+                </div>
+                {% elif item.pending_shipping_request %}
+                {# 送信済みの場合は完了表示 + 修正ボタン #}
+                <div class="sale-request-action-stack">
+                    <span class="sale-request-complete-badge shipping">発送依頼送信済み</span>
+                    <button type="button" class="btn btn-sm btn-edit-request btn-edit-shipping-request js-sale-request-trigger"
+                        data-action="edit"
+                        data-request-id="{{ item.shipping_request.id }}"
+                        data-request-type="shipping_request"
+                        data-product-name="{{ item.product_name or '' }}"
+                        data-sale-price="0"
+                        data-shipping-cost="0"
+                        data-commission="0"
+                        data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                        data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
+                        発送依頼を修正
+                    </button>
+                </div>
                 {% else %}
-                {# 未申請の場合は新規申請ボタン #}
-                <button class="btn btn-sm btn-sale-request"
-                    onclick="openSaleRequestModal({{ item.id }}, '{{ item.product_name|e }}', {{ item.listing_price or 0 }})">
-                    売却申請
+                {# 未送信の場合は新規送信ボタン #}
+                <button type="button" class="btn btn-sm btn-sale-request btn-shipping-request js-sale-request-trigger"
+                    data-action="create-shipping"
+                    data-item-id="{{ item.id }}"
+                    data-product-name="{{ item.product_name or '' }}">
+                    発送依頼を送る
                 </button>
                 {% endif %}
                 {% endif %}
@@ -2727,6 +3049,7 @@
             switch (column) {
                 case 'purchase_price':
                 case 'listing_price':
+                case 'commission_total':
                 case 'sale_price':
                 case 'profit':
                     aVal = parseInt(a.querySelector(`td:nth-child(${getColumnIndex(column)})`).textContent.replace(/[¥,\s想定%()]/g, '')) || 0;
@@ -2758,11 +3081,12 @@
             'brand_name': 4,
             'item_condition': 5,
             'store_name': 6,
-            'purchase_date': 7,
-            'purchase_price': 8,
-            'listing_price': 9,
-            'sale_price': 10,
-            'profit': 11
+            'purchase_date': 9,
+            'purchase_price': 10,
+            'listing_price': 11,
+            'commission_total': 12,
+            'sale_price': 14,
+            'profit': 15
         };
         return map[column] || 2;
     }
@@ -2837,30 +3161,288 @@
             });
     }
 
-    // ========== 売却申請機能 ==========
-    function openSaleRequestModal(itemId, productName, listingPrice) {
+    // ========== 会員側送信機能 ==========
+    const saleRequestModeConfig = {
+        shipping_request: {
+            title: '📦 発送依頼を送る',
+            editTitle: '📝 発送依頼の修正',
+            submit: '発送依頼を送信',
+            editSubmit: '発送依頼を保存',
+            help: '発送依頼では「何の商品が売れたか分かる画像」と「発送用QRコード画像」の2点を送ってください。',
+            image1: '売れた商品が分かる画像',
+            image2: '発送用QRコード画像',
+            imageHint: '発送依頼では2枚とも必須です。',
+            showFinancials: false,
+            requireSecondImage: true,
+            primaryRequired: true
+        },
+        completion_report: {
+            title: '🧾 取引完了報告を送る',
+            editTitle: '📝 取引完了報告の修正',
+            submit: '取引完了報告を送信',
+            editSubmit: '取引完了報告を保存',
+            help: '売上・送料・手数料が確認できる取引完了画面の画像を送ってください。数値は開花側で確認します。',
+            image1: '取引完了画面',
+            image2: '補足画像（任意）',
+            imageHint: '取引完了画面のスクリーンショットを送ってください。',
+            showFinancials: false,
+            requireSecondImage: false,
+            primaryRequired: true
+        }
+    };
+
+    function getSaleRequestModeConfig(requestType) {
+        return saleRequestModeConfig[requestType] || saleRequestModeConfig.shipping_request;
+    }
+
+    function resetUploadArea(areaId, textId, nameId, defaultText) {
+        const uploadArea = document.getElementById(areaId);
+        const uploadText = document.getElementById(textId);
+        const uploadName = document.getElementById(nameId);
+        if (uploadArea) uploadArea.classList.remove('has-file');
+        if (uploadText) uploadText.textContent = defaultText;
+        if (uploadName) uploadName.textContent = '';
+    }
+
+    function setSaleRequestMessage(prefix, message, type = 'error') {
+        const messageEl = document.getElementById(prefix + 'InlineMessage');
+        if (!messageEl) return;
+
+        if (!message) {
+            messageEl.textContent = '';
+            messageEl.className = 'sale-request-inline-message';
+            return;
+        }
+
+        messageEl.textContent = message;
+        messageEl.className = 'sale-request-inline-message show ' + type;
+    }
+
+    function setSaleRequestSubmitting(prefix, isSubmitting) {
+        const submitButton = document.getElementById(prefix + 'SubmitLabel');
+        if (!submitButton) return;
+
+        if (!submitButton.dataset.defaultLabel) {
+            submitButton.dataset.defaultLabel = submitButton.textContent;
+        }
+
+        submitButton.disabled = isSubmitting;
+        submitButton.classList.toggle('is-loading', isSubmitting);
+        submitButton.textContent = isSubmitting
+            ? (prefix === 'editRequest' ? '保存中...' : '送信中...')
+            : submitButton.dataset.defaultLabel;
+    }
+
+    function validateSaleRequestSubmission(prefix) {
+        const requestType = (document.getElementById(prefix + 'Type') || {}).value || 'shipping_request';
+        const imageInput1 = document.getElementById(prefix + 'QrImage');
+        const imageInput2 = document.getElementById(prefix + 'QrImage2');
+        const currentImage1 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage' : '');
+        const currentImage2 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage2' : '');
+        const hasExistingImage1 = currentImage1 && currentImage1.dataset.hasImage === 'true';
+        const hasExistingImage2 = currentImage2 && currentImage2.dataset.hasImage === 'true';
+        const hasNewImage1 = !!(imageInput1 && imageInput1.files && imageInput1.files.length);
+        const hasNewImage2 = !!(imageInput2 && imageInput2.files && imageInput2.files.length);
+        const hasImage1 = hasNewImage1 || hasExistingImage1;
+        const hasImage2 = hasNewImage2 || hasExistingImage2;
+
+        if (requestType === 'shipping_request') {
+            if (!hasImage1 || !hasImage2) {
+                setSaleRequestMessage(prefix, '発送依頼では「売れた商品画像」と「発送用QR画像」の2枚が必要です。');
+                return false;
+            }
+        } else if (!hasImage1) {
+            setSaleRequestMessage(prefix, '取引完了報告では、取引完了画面の画像を1枚以上選択してください。');
+            return false;
+        }
+
+        setSaleRequestMessage(prefix, '');
+        return true;
+    }
+
+    function toggleSaleRequestFinancialFields(prefix, showFinancials) {
+        ['Price', 'Shipping', 'Commission'].forEach((fieldName) => {
+            const group = document.getElementById(prefix + fieldName + 'Group');
+            const input = document.getElementById(prefix + fieldName);
+            if (!group || !input) return;
+
+            group.style.display = showFinancials ? '' : 'none';
+            input.disabled = !showFinancials;
+            input.required = showFinancials && fieldName === 'Price';
+            if (!showFinancials) {
+                input.value = '';
+            } else if (!input.value) {
+                input.value = fieldName === 'Price' ? '' : 0;
+            }
+        });
+    }
+
+    function applySaleRequestMode(prefix, requestType, listingPrice = 0) {
+        const config = getSaleRequestModeConfig(requestType);
+        const isCreateMode = prefix === 'saleRequest';
+        const titleEl = document.getElementById(prefix + 'Title');
+        const helpEl = document.getElementById(prefix + 'Help');
+        const typeInput = document.getElementById(prefix + 'Type');
+        const submitLabel = document.getElementById(prefix + 'SubmitLabel');
+        const imageLabel1 = document.getElementById(prefix + 'ImageLabel1');
+        const imageLabel2 = document.getElementById(prefix + 'ImageLabel2');
+        const imageHint = document.getElementById(prefix + 'ImageHint');
+        const imageInput1 = document.getElementById(prefix + 'QrImage');
+        const imageInput2 = document.getElementById(prefix + 'QrImage2');
+        const priceInput = document.getElementById(prefix + 'Price');
+        const shippingInput = document.getElementById(prefix + 'Shipping');
+        const commissionInput = document.getElementById(prefix + 'Commission');
+
+        if (titleEl) titleEl.textContent = prefix === 'editRequest' ? (config.editTitle || config.title) : config.title;
+        if (helpEl) helpEl.textContent = config.help;
+        if (typeInput) typeInput.value = requestType;
+        if (submitLabel) submitLabel.textContent = prefix === 'editRequest' ? (config.editSubmit || config.submit) : config.submit;
+        if (imageLabel1) imageLabel1.textContent = config.image1;
+        if (imageLabel2) imageLabel2.textContent = config.image2;
+        if (imageHint) imageHint.textContent = config.imageHint;
+
+        toggleSaleRequestFinancialFields(prefix, config.showFinancials);
+
+        if (priceInput && config.showFinancials) priceInput.value = listingPrice || '';
+        if (shippingInput && config.showFinancials) shippingInput.value = shippingInput.value || 0;
+        if (commissionInput && config.showFinancials) commissionInput.value = commissionInput.value || 0;
+        setSaleRequestSubmitting(prefix, false);
+        setSaleRequestMessage(prefix, '');
+    }
+
+    function openShippingRequestModal(itemId, productName) {
+        document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
         document.getElementById('saleRequestItemId').value = itemId;
         document.getElementById('saleRequestProductName').textContent = productName;
-        document.getElementById('saleRequestPrice').value = listingPrice || '';
-        document.getElementById('saleRequestShipping').value = 0;
         document.getElementById('saleRequestQrImage').value = '';
-        document.getElementById('fileUploadArea').classList.remove('has-file');
-        document.getElementById('fileUploadText').textContent = 'クリックまたはドラッグして画像を選択';
-        document.getElementById('fileUploadName').textContent = '';
         document.getElementById('saleRequestQrImage2').value = '';
-        document.getElementById('fileUploadArea2').classList.remove('has-file');
-        document.getElementById('fileUploadText2').textContent = 'クリックまたはドラッグして画像を選択';
-        document.getElementById('fileUploadName2').textContent = '';
+        resetUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', 'クリックまたはドラッグして画像を選択');
+        resetUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', 'クリックまたはドラッグして画像を選択');
+        applySaleRequestMode('saleRequest', 'shipping_request', 0);
         document.getElementById('saleRequestModal').classList.add('open');
     }
 
+    function openCompletionRequestModal(itemId, productName, listingPrice) {
+        document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
+        document.getElementById('saleRequestItemId').value = itemId;
+        document.getElementById('saleRequestProductName').textContent = productName;
+        document.getElementById('saleRequestQrImage').value = '';
+        document.getElementById('saleRequestQrImage2').value = '';
+        document.getElementById('saleRequestPrice').value = 0;
+        document.getElementById('saleRequestShipping').value = 0;
+        document.getElementById('saleRequestCommission').value = 0;
+        resetUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', 'クリックまたはドラッグして画像を選択');
+        resetUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', 'クリックまたはドラッグして画像を選択');
+        applySaleRequestMode('saleRequest', 'completion_report', listingPrice);
+        document.getElementById('saleRequestModal').classList.add('open');
+    }
+
+    function openSaleRequestModal(itemId, productName, listingPrice) {
+        openShippingRequestModal(itemId, productName, listingPrice);
+    }
+
     function closeSaleRequestModal() {
+        setSaleRequestSubmitting('saleRequest', false);
+        setSaleRequestMessage('saleRequest', '');
         document.getElementById('saleRequestModal').classList.remove('open');
     }
 
-    // ファイル選択時の処理
+    function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, qrImagePath, qrImagePath2) {
+        document.getElementById('editRequestId').value = requestId;
+        document.getElementById('editRequestProductName').textContent = productName;
+        document.getElementById('editRequestQrImage').value = '';
+        document.getElementById('editRequestQrImage2').value = '';
+        document.getElementById('editRequestShipping').value = shippingCost || 0;
+        document.getElementById('editRequestCommission').value = commission || 0;
+
+        resetUploadArea('editFileUploadArea', 'editFileUploadText', 'editFileUploadName', 'クリックまたはドラッグして新しい画像を選択');
+        resetUploadArea('editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', 'クリックまたはドラッグして新しい画像を選択');
+
+        applySaleRequestMode('editRequest', requestType, salePrice || 0);
+        if (requestType === 'completion_report') {
+            document.getElementById('editRequestPrice').value = salePrice || '';
+            document.getElementById('editRequestShipping').value = shippingCost || 0;
+            document.getElementById('editRequestCommission').value = commission || 0;
+        }
+
+        const currentImage = document.getElementById('editCurrentImage');
+        const currentImage2 = document.getElementById('editCurrentImage2');
+
+        if (qrImagePath) {
+            currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
+            currentImage.style.display = 'block';
+            currentImage.dataset.hasImage = 'true';
+        } else {
+            currentImage.innerHTML = '';
+            currentImage.style.display = 'none';
+            currentImage.dataset.hasImage = 'false';
+        }
+
+        if (qrImagePath2) {
+            currentImage2.innerHTML = '<img src="/static/' + qrImagePath2 + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
+            currentImage2.style.display = 'block';
+            currentImage2.dataset.hasImage = 'true';
+        } else {
+            currentImage2.innerHTML = '';
+            currentImage2.style.display = 'none';
+            currentImage2.dataset.hasImage = 'false';
+        }
+
+        document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
+        document.getElementById('editRequestModal').classList.add('open');
+    }
+
+    function closeEditRequestModal() {
+        setSaleRequestSubmitting('editRequest', false);
+        setSaleRequestMessage('editRequest', '');
+        document.getElementById('editRequestModal').classList.remove('open');
+    }
+
+    document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('.js-sale-request-trigger');
+        if (!trigger) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const action = trigger.dataset.action;
+        const itemId = Number(trigger.dataset.itemId || 0);
+        const requestId = Number(trigger.dataset.requestId || 0);
+        const productName = trigger.dataset.productName || '';
+        const listingPrice = Number(trigger.dataset.listingPrice || 0);
+        const salePrice = Number(trigger.dataset.salePrice || 0);
+        const shippingCost = Number(trigger.dataset.shippingCost || 0);
+        const commission = Number(trigger.dataset.commission || 0);
+        const qrImagePath = trigger.dataset.qrImagePath || '';
+        const qrImagePath2 = trigger.dataset.qrImagePath2 || '';
+        const requestType = trigger.dataset.requestType || 'shipping_request';
+
+        if (action === 'create-shipping') {
+            openShippingRequestModal(itemId, productName);
+            return;
+        }
+
+        if (action === 'create-completion') {
+            openCompletionRequestModal(itemId, productName, listingPrice);
+            return;
+        }
+
+        if (action === 'edit') {
+            openEditRequestModal(
+                requestId,
+                requestType,
+                productName,
+                salePrice,
+                shippingCost,
+                commission,
+                qrImagePath,
+                qrImagePath2
+            );
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
-        function setupFileUpload(inputId, areaId, textId, nameId) {
+        function setupFileUpload(inputId, areaId, textId, nameId, selectedText) {
             const fileInput = document.getElementById(inputId);
             const uploadArea = document.getElementById(areaId);
             const uploadText = document.getElementById(textId);
@@ -2870,11 +3452,15 @@
                 fileInput.addEventListener('change', function () {
                     if (this.files && this.files[0]) {
                         uploadArea.classList.add('has-file');
-                        uploadText.textContent = '選択済み';
+                        uploadText.textContent = selectedText;
                         uploadName.textContent = this.files[0].name;
+                        if (inputId.startsWith('saleRequest')) {
+                            setSaleRequestMessage('saleRequest', '');
+                        } else if (inputId.startsWith('editRequest')) {
+                            setSaleRequestMessage('editRequest', '');
+                        }
                     } else {
                         uploadArea.classList.remove('has-file');
-                        uploadText.textContent = 'クリックまたはドラッグして画像を選択';
                         uploadName.textContent = '';
                     }
                 });
@@ -2900,96 +3486,40 @@
             }
         }
 
-        setupFileUpload('saleRequestQrImage', 'fileUploadArea', 'fileUploadText', 'fileUploadName');
-        setupFileUpload('saleRequestQrImage2', 'fileUploadArea2', 'fileUploadText2', 'fileUploadName2');
+        setupFileUpload('saleRequestQrImage', 'fileUploadArea', 'fileUploadText', 'fileUploadName', '選択済み');
+        setupFileUpload('saleRequestQrImage2', 'fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '選択済み');
+        setupFileUpload('editRequestQrImage', 'editFileUploadArea', 'editFileUploadText', 'editFileUploadName', '新しい画像を選択済み');
+        setupFileUpload('editRequestQrImage2', 'editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', '新しい画像を選択済み');
+
+        const saleRequestForm = document.getElementById('saleRequestForm');
+        if (saleRequestForm) {
+            saleRequestForm.addEventListener('submit', function (event) {
+                if (!validateSaleRequestSubmission('saleRequest')) {
+                    event.preventDefault();
+                    return;
+                }
+                setSaleRequestSubmitting('saleRequest', true);
+            });
+        }
+
+        const editRequestForm = document.getElementById('editRequestForm');
+        if (editRequestForm) {
+            editRequestForm.addEventListener('submit', function (event) {
+                if (!validateSaleRequestSubmission('editRequest')) {
+                    event.preventDefault();
+                    return;
+                }
+                setSaleRequestSubmitting('editRequest', true);
+            });
+        }
     });
 
-    // モーダル外クリックで閉じる
     document.getElementById('saleRequestModal')?.addEventListener('click', function (e) {
         if (e.target === this) {
             closeSaleRequestModal();
         }
     });
 
-    // ========== 売却申請修正機能 ==========
-    function openEditRequestModal(requestId, productName, salePrice, shippingCost, qrImagePath, qrImagePath2) {
-        document.getElementById('editRequestId').value = requestId;
-        document.getElementById('editRequestProductName').textContent = productName;
-        document.getElementById('editRequestPrice').value = salePrice || '';
-        document.getElementById('editRequestShipping').value = shippingCost || 0;
-        document.getElementById('editRequestQrImage').value = '';
-        document.getElementById('editRequestQrImage2').value = '';
-
-        const uploadArea = document.getElementById('editFileUploadArea');
-        const uploadText = document.getElementById('editFileUploadText');
-        const uploadName = document.getElementById('editFileUploadName');
-        const currentImage = document.getElementById('editCurrentImage');
-
-        uploadArea.classList.remove('has-file');
-        uploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
-        uploadName.textContent = '';
-
-        const uploadArea2 = document.getElementById('editFileUploadArea2');
-        const uploadText2 = document.getElementById('editFileUploadText2');
-        const uploadName2 = document.getElementById('editFileUploadName2');
-        const currentImage2 = document.getElementById('editCurrentImage2');
-
-        uploadArea2.classList.remove('has-file');
-        uploadText2.textContent = 'クリックまたはドラッグして新しい画像を選択';
-        uploadName2.textContent = '';
-
-        if (qrImagePath) {
-            currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
-            currentImage.style.display = 'block';
-        } else {
-            currentImage.innerHTML = '';
-            currentImage.style.display = 'none';
-        }
-
-        if (qrImagePath2) {
-            currentImage2.innerHTML = '<img src="/static/' + qrImagePath2 + '" style="max-width: 100px; max-height: 100px; border-radius: 8px;">';
-            currentImage2.style.display = 'block';
-        } else {
-            currentImage2.innerHTML = '';
-            currentImage2.style.display = 'none';
-        }
-
-        document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
-        document.getElementById('editRequestModal').classList.add('open');
-    }
-
-    function closeEditRequestModal() {
-        document.getElementById('editRequestModal').classList.remove('open');
-    }
-
-    // 編集モーダルのファイル選択時の処理
-    document.addEventListener('DOMContentLoaded', function () {
-        function setupEditFileUpload(inputId, areaId, textId, nameId) {
-            const editFileInput = document.getElementById(inputId);
-            const editUploadArea = document.getElementById(areaId);
-            const editUploadText = document.getElementById(textId);
-            const editUploadName = document.getElementById(nameId);
-
-            if (editFileInput && editUploadArea) {
-                editFileInput.addEventListener('change', function () {
-                    if (this.files && this.files[0]) {
-                        editUploadArea.classList.add('has-file');
-                        editUploadText.textContent = '新しい画像を選択済み';
-                        editUploadName.textContent = this.files[0].name;
-                    } else {
-                        editUploadArea.classList.remove('has-file');
-                        editUploadText.textContent = 'クリックまたはドラッグして新しい画像を選択';
-                        editUploadName.textContent = '';
-                    }
-                });
-            }
-        }
-
-        setupEditFileUpload('editRequestQrImage', 'editFileUploadArea', 'editFileUploadText', 'editFileUploadName');
-        setupEditFileUpload('editRequestQrImage2', 'editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2');
-    });
-
-    // モーダル外クリックで閉じる
     document.getElementById('editRequestModal')?.addEventListener('click', function (e) {
         if (e.target === this) {
             closeEditRequestModal();
@@ -2998,34 +3528,36 @@
 </script>
 
 {% if not current_user.is_admin() %}
-<!-- 売却申請モーダル -->
+<!-- 会員側送信モーダル -->
 <div class="sale-request-modal" id="saleRequestModal">
     <div class="sale-request-content">
         <div class="sale-request-header">
-            <h3>📦 売却申請</h3>
-            <button class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
+            <h3 id="saleRequestTitle">📦 発送依頼を送る</h3>
+            <button type="button" class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
         </div>
-        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm"
-            onsubmit="this.action='/sale-request/submit/' + document.getElementById('saleRequestItemId').value;">
+        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm">
             <input type="hidden" id="saleRequestItemId" name="item_id" value="">
+            <input type="hidden" id="saleRequestType" name="request_type" value="shipping_request">
             <div class="sale-request-body">
                 <div class="sale-request-product" id="saleRequestProductName"></div>
+                <p class="sale-request-help" id="saleRequestHelp">発送依頼では「何の商品が売れたか分かる画像」と「発送用QRコード画像」の2点を送ってください。</p>
+                <div class="sale-request-inline-message" id="saleRequestInlineMessage"></div>
 
                 <div class="sale-request-form">
-                    <div class="form-group">
-                        <label>売上金額（税込） <small>※必須</small></label>
+                    <div class="form-group" id="saleRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込） <small>※管理側確認用</small></label>
                         <input type="number" id="saleRequestPrice" name="sale_price" required min="1"
                             placeholder="販売価格を入力">
                     </div>
 
-                    <div class="form-group">
-                        <label>送料 <small>（任意）</small></label>
+                    <div class="form-group" id="saleRequestShippingGroup" style="display: none;">
+                        <label>送料 <small>（管理側確認用）</small></label>
                         <input type="number" id="saleRequestShipping" name="shipping_cost" min="0"
                             placeholder="送料を入力" value="0">
                     </div>
 
                     <div class="form-group">
-                        <label>画像1 <small>（任意）</small></label>
+                        <label id="saleRequestImageLabel1">発送前確認画像1</label>
                         <div class="file-upload-area" id="fileUploadArea"
                             onclick="document.getElementById('saleRequestQrImage').click();">
                             <div class="file-upload-icon">📷</div>
@@ -3037,7 +3569,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label>画像2 <small>（任意）</small></label>
+                        <label id="saleRequestImageLabel2">発送用QRコード画像</label>
                         <div class="file-upload-area" id="fileUploadArea2"
                             onclick="document.getElementById('saleRequestQrImage2').click();">
                             <div class="file-upload-icon">📷</div>
@@ -3047,48 +3579,65 @@
                         <input type="file" id="saleRequestQrImage2" name="qr_image2" accept="image/*"
                             style="display:none;">
                     </div>
+
+                    <div class="form-group" id="saleRequestCommissionGroup" style="display: none;">
+                        <label>手数料 <small>（管理側確認用）</small></label>
+                        <input type="number" id="saleRequestCommission" name="commission" min="0"
+                            placeholder="手数料を入力" value="0">
+                    </div>
+
+                    <p class="form-hint" id="saleRequestImageHint">発送依頼では2枚とも必須です。</p>
                 </div>
             </div>
             <div class="sale-request-footer">
                 <button type="button" class="btn btn-cancel" onclick="closeSaleRequestModal()">キャンセル</button>
-                <button type="submit" class="btn btn-submit">申請を送信</button>
+                <button type="submit" class="btn btn-submit" id="saleRequestSubmitLabel">発送依頼を送信</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- 売却申請修正モーダル -->
+<!-- 会員側送信修正モーダル -->
 <div class="sale-request-modal" id="editRequestModal">
     <div class="sale-request-content" style="background: white;">
         <div class="sale-request-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
-            <h3>📝 売却申請の修正</h3>
-            <button class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+            <h3 id="editRequestTitle">📝 発送依頼の修正</h3>
+            <button type="button" class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
         </div>
         <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
             <input type="hidden" id="editRequestId" name="request_id" value="">
+            <input type="hidden" id="editRequestType" value="shipping_request">
             <div class="sale-request-body">
                 <div class="sale-request-product" id="editRequestProductName"></div>
+                <p class="sale-request-help" id="editRequestHelp">発送依頼または取引完了報告の画像を修正できます。</p>
+                <div class="sale-request-inline-message" id="editRequestInlineMessage"></div>
 
                 <div class="sale-request-form">
-                    <div class="form-group">
-                        <label>売上金額（税込） <small>※必須</small></label>
+                    <div class="form-group" id="editRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込） <small>※管理側確認用</small></label>
                         <input type="number" id="editRequestPrice" name="sale_price" required min="1"
                             placeholder="販売価格を入力">
                     </div>
 
-                    <div class="form-group">
-                        <label>送料 <small>（任意）</small></label>
+                    <div class="form-group" id="editRequestShippingGroup" style="display: none;">
+                        <label>送料 <small>（管理側確認用）</small></label>
                         <input type="number" id="editRequestShipping" name="shipping_cost" min="0"
                             placeholder="送料を入力" value="0">
                     </div>
 
-                    <div class="form-group">
-                        <label>現在の画像1</label>
-                        <div id="editCurrentImage" style="margin-bottom: 10px; display: none;"></div>
+                    <div class="form-group" id="editRequestCommissionGroup" style="display: none;">
+                        <label>手数料 <small>（管理側確認用）</small></label>
+                        <input type="number" id="editRequestCommission" name="commission" min="0"
+                            placeholder="手数料を入力" value="0">
                     </div>
 
                     <div class="form-group">
-                        <label>新しい画像1 <small>（変更する場合のみ）</small></label>
+                        <label>現在の画像1</label>
+                        <div id="editCurrentImage" data-has-image="false" style="margin-bottom: 10px; display: none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="editRequestImageLabel1">新しい画像1</label>
                         <div class="file-upload-area" id="editFileUploadArea"
                             onclick="document.getElementById('editRequestQrImage').click();">
                             <div class="file-upload-icon">📷</div>
@@ -3101,11 +3650,11 @@
 
                     <div class="form-group">
                         <label>現在の画像2</label>
-                        <div id="editCurrentImage2" style="margin-bottom: 10px; display: none;"></div>
+                        <div id="editCurrentImage2" data-has-image="false" style="margin-bottom: 10px; display: none;"></div>
                     </div>
 
                     <div class="form-group">
-                        <label>新しい画像2 <small>（変更する場合のみ）</small></label>
+                        <label id="editRequestImageLabel2">新しい画像2</label>
                         <div class="file-upload-area" id="editFileUploadArea2"
                             onclick="document.getElementById('editRequestQrImage2').click();">
                             <div class="file-upload-icon">📷</div>
@@ -3115,17 +3664,19 @@
                         <input type="file" id="editRequestQrImage2" name="qr_image2" accept="image/*"
                             style="display:none;">
                     </div>
+
+                    <p class="form-hint" id="editRequestImageHint">発送依頼では2枚とも必須です。</p>
                 </div>
             </div>
             <div class="sale-request-footer" style="flex-direction: column; gap: 0.75rem;">
                 <div style="display: flex; gap: 1rem;">
                     <button type="button" class="btn btn-cancel" onclick="closeEditRequestModal()"
                         style="flex: 1;">キャンセル</button>
-                    <button type="submit" class="btn"
-                        style="flex: 1; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; border: none;">修正を保存</button>
+                    <button type="submit" class="btn" id="editRequestSubmitLabel"
+                        style="flex: 1; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; border: none;">発送依頼を保存</button>
                 </div>
                 <button type="button" class="btn" onclick="cancelSaleRequest()"
-                    style="width: 100%; background: #fee2e2; color: #991b1b; border: none;">申請をキャンセル</button>
+                    style="width: 100%; background: #fee2e2; color: #991b1b; border: none;">送信をキャンセル</button>
             </div>
         </form>
     </div>
@@ -3133,7 +3684,9 @@
 
 <script>
     function cancelSaleRequest() {
-        if (confirm('売却申請をキャンセルしますか？')) {
+        const requestType = document.getElementById('editRequestType').value;
+        const requestLabel = requestType === 'completion_report' ? '取引完了報告' : '発送依頼';
+        if (confirm(requestLabel + 'をキャンセルしますか？')) {
             const requestId = document.getElementById('editRequestId').value;
             const form = document.createElement('form');
             form.method = 'POST';
@@ -3368,9 +3921,9 @@
                 return;
             }
 
-            const itemId = card.getAttribute('data-id');
-            if (itemId) {
-                window.location.href = '/view/' + itemId;
+            const detailLink = card.querySelector('a[href*="/view/"]');
+            if (detailLink) {
+                window.location.href = detailLink.href;
             }
         });
     });

@@ -1,432 +1,663 @@
 {% extends "base.html" %}
-{% block title %}書類管理 - 株式会社 開花{% endblock %}
+
+{% block title %}書類管理 - 株式会社開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>書類管理</h1>
+{% set selected_group = selected_group if selected_group is defined else 'all' %}
+{% set selected_service_type = selected_service_type if selected_service_type is defined else 'all' %}
+{% set stage_cards = stage_cards if stage_cards is defined else [] %}
+{% set group_meta = group_meta if group_meta is defined else {} %}
+{% set active_meta = group_meta.get(selected_group, {}) %}
+{% set service_breakdown = service_breakdown if service_breakdown is defined else [] %}
+{% set stage_request_rows = stage_request_rows if stage_request_rows is defined else [] %}
+
+{% macro service_badge(service_type, service_name) -%}
+    {% set normalized = service_type or '' %}
+    <span class="service-badge {{ normalized if normalized else 'default' }}">{{ service_name or '未設定' }}</span>
+{%- endmacro %}
+
+{% macro status_badge(status, label) -%}
+    <span class="status-badge {{ status or 'draft' }}">{{ label or '未設定' }}</span>
+{%- endmacro %}
+
+{% macro request_actions(row) -%}
+<div class="inline-actions">
+    {% if row.detail_url %}
+    <a href="{{ row.detail_url }}" class="btn btn-info btn-sm">申請詳細</a>
+    {% endif %}
+    {% if row.create_vendor_estimate_url %}
+    <a href="{{ row.create_vendor_estimate_url }}" class="btn btn-primary btn-sm">業者向け見積依頼書を作成</a>
+    {% endif %}
+    {% if row.create_vendor_kaitori_url %}
+    <a href="{{ row.create_vendor_kaitori_url }}" class="btn btn-primary btn-sm">業者買取明細書を登録</a>
+    {% endif %}
+    {% if row.create_client_invoice_url %}
+    <a href="{{ row.create_client_invoice_url }}" class="btn btn-primary btn-sm">クライアント向け買取明細書を作成</a>
+    {% endif %}
+    {% if row.shikiriosho_url %}
+    <a href="{{ row.shikiriosho_url }}" class="btn btn-outline btn-sm">仕切書を確認</a>
+    {% elif row.create_shikiriosho_url %}
+    <a href="{{ row.create_shikiriosho_url }}" class="btn btn-primary btn-sm">仕切書を作成</a>
+    {% endif %}
 </div>
+{%- endmacro %}
 
-
-<div class="doc-types-grid">
-    <!-- 精算書（仕切押し書） -->
-    <div class="doc-type-card">
-        <h3>精算書</h3>
-        <p class="doc-type-desc">開花の名前を借りる場合の精算書。<br>管理者からユーザーへ送付。<br>オークション落札時に自動作成。</p>
-        <div class="doc-type-actions">
-            <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_shikiriosho_add') }}" class="btn btn-primary">+ 新規作成</a>
-        </div>
-        <div class="doc-type-count">
-            <span class="count-number">{{ seisan_count }}</span> 件
-        </div>
-    </div>
-
-    <!-- 見積依頼書 -->
-    <div class="doc-type-card {% if mitsumori_new_count > 0 %}has-new{% endif %}">
-        <h3>
-            見積依頼書
-            {% if mitsumori_new_count > 0 %}
-            <span class="new-badge">{{ mitsumori_new_count }}</span>
-            {% endif %}
-        </h3>
-        <p class="doc-type-desc">ユーザーからの見積依頼書を確認。</p>
-        <div class="doc-type-actions">
-            <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">一覧</a>
-        </div>
-        <div class="doc-type-count">
-            <span class="count-number">{{ mitsumori_count }}</span> 件
-        </div>
-    </div>
-
-    <!-- 買取明細書 -->
-    <div class="doc-type-card">
-        <h3>買取明細書</h3>
-        <p class="doc-type-desc">商品の買取内容を記載した明細書。<br>身分証・同意書を添付可能。</p>
-        <div class="doc-type-actions">
-            <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">一覧</a>
-            <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">+ 新規作成</a>
-        </div>
-        <div class="doc-type-count">
-            <span class="count-number">{{ kaitori_count }}</span> 件
-        </div>
-    </div>
-</div>
-
-<!-- ユーザーからの見積依頼書（受信BOX） -->
-<div class="doc-section mitsumori-inbox">
-    <h2>ユーザーからの見積依頼書</h2>
-    {% if user_mitsumori_summary %}
-    <div class="user-mitsumori-list">
-        {% for user in user_mitsumori_summary %}
-        <div class="user-mitsumori-card">
-            <div class="user-header" onclick="toggleUserMitsumori({{ user.user_id }})">
-                <div class="user-info">
-                    <span class="user-name">{{ user.display_name or user.username }}</span>
-                    <span class="mitsumori-count-badge">{{ user.mitsumori_count }}件</span>
-                </div>
-                <div class="status-summary">
-                    {% if user.draft_count and user.draft_count > 0 %}
-                    <span class="status-mini status-draft">下書き {{ user.draft_count }}</span>
-                    {% endif %}
-                    {% if user.completed_count and user.completed_count > 0 %}
-                    <span class="status-mini status-completed">完了 {{ user.completed_count }}</span>
-                    {% endif %}
-                </div>
-                <span class="toggle-icon" id="toggle-icon-{{ user.user_id }}">▼</span>
+{% macro related_documents_block(documents) -%}
+    {% if documents %}
+    <div class="related-documents">
+        <div class="related-documents-label">関連書類</div>
+        {% for doc in documents %}
+        <div class="related-document-card">
+            <div class="related-document-head">
+                <strong>{{ doc.document_type or '書類' }}</strong>
+                {{ status_badge(doc.status, doc.status_label) }}
             </div>
-            <div class="user-mitsumori-details" id="mitsumori-details-{{ user.user_id }}" style="display: none;">
-                <table class="data-table compact-table">
-                    <thead>
-                        <tr>
-                            <th>No.</th>
-                            <th>件名</th>
-                            <th>発行日</th>
-                            <th>金額</th>
-                            <th>ステータス</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for m in user_mitsumori_details[user.user_id] %}
-                        <tr>
-                            <td class="doc-no">{{ m.document_no }}</td>
-                            <td>{{ m.subject or '（件名なし）' }}</td>
-                            <td>{{ m.issue_date }}</td>
-                            <td class="amount">¥{{ "{:,}".format(m.total_amount or 0) }}</td>
-                            <td>
-                                {% if m.status == 'completed' %}
-                                <span class="status-badge status-completed">完了</span>
-                                {% else %}
-                                <span class="status-badge status-draft">下書き</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('admin_user_mitsumori_view', id=m.id) }}" class="btn btn-sm btn-info">詳細</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="related-document-meta">
+                <span>{{ doc.document_no or '-' }}</span>
+                <span>{{ doc.issue_date or '-' }}</span>
+            </div>
+            <div class="inline-actions">
+                {% if doc.detail_url %}
+                <a href="{{ doc.detail_url }}" class="btn btn-secondary btn-sm">書類詳細</a>
+                {% endif %}
+                {% if doc.request_url %}
+                <a href="{{ doc.request_url }}" class="btn btn-outline btn-sm">依頼を開く</a>
+                {% endif %}
+                {% if doc.attachment_path %}
+                <a href="{{ url_for('static', filename=doc.attachment_path) }}" target="_blank" class="btn btn-outline btn-sm">添付を開く</a>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
     </div>
-    {% else %}
-    <p class="empty-message">ユーザーからの見積依頼書はありません</p>
     {% endif %}
-</div>
+{%- endmacro %}
 
-<!-- ユーザーからの買取明細書（受信） -->
-<div class="doc-section">
-    <h2>ユーザーからの買取明細書（承認待ち）</h2>
-    <div class="table-container">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>No.</th>
-                    <th>送信者</th>
-                    <th>サービス種別</th>
-                    <th>発行日</th>
-                    <th>合計金額</th>
-                    <th>ステータス</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for inv in pending_invoices %}
-                <tr>
-                    <td class="doc-no">{{ inv.invoice_no }}</td>
-                    <td>{{ inv.sender_name }}</td>
-                    <td>{{ inv.service_type }}</td>
-                    <td>{{ inv.issue_date }}</td>
-                    <td class="amount">¥{{ "{:,}".format(inv.total_amount) }}</td>
-                    <td>
-                        <span class="status-badge status-pending">承認待ち</span>
-                    </td>
-                    <td>
-                        <a href="{{ url_for('admin_invoice_view', id=inv.id) }}" class="btn btn-sm btn-info">詳細</a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="7" class="text-center text-muted">承認待ちの書類はありません</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+{% macro request_table(rows) -%}
+<div class="table-scroll">
+    <table class="dashboard-table">
+        <thead>
+            <tr>
+                <th>クライアント</th>
+                <th class="col-service">サービス</th>
+                <th>受付日</th>
+                <th>現在の状況</th>
+                <th>書類と次の作業</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>
+                    <div class="cell-title">{{ row.client_name or '-' }}</div>
+                </td>
+                <td class="col-service">{{ service_badge(row.service_type, row.service_name) }}</td>
+                <td>{{ row.created_date_label or '-' }}</td>
+                <td>{{ status_badge(row.status, row.status_label) }}</td>
+                <td class="work-column">
+                    <div class="cell-title">{{ row.next_document_label or '-' }}</div>
+                    {% if row.request_flow_label %}
+                    <div class="cell-sub">{{ row.request_flow_label }}</div>
+                    {% endif %}
+                    {{ related_documents_block(row.related_documents or []) }}
+                </td>
+                <td>{{ request_actions(row) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
+{%- endmacro %}
 
 <style>
-.doc-types-grid {
+.documents-page {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
+    gap: 1.25rem;
 }
 
-.doc-type-card {
-    background: white;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+.section-card {
+    background: #fff;
     border: 1px solid #e2e8f0;
-    transition: transform 0.2s, box-shadow 0.2s;
-    position: relative;
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: 1.25rem;
 }
 
-.doc-type-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.doc-type-card h3 {
-    margin: 0 0 8px 0;
-    font-size: 1.25rem;
-    color: #1e293b;
+.page-header,
+.stage-header,
+.stage-topbar {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
-.doc-type-card.has-new {
-    border-color: #ef4444;
-    border-width: 2px;
+.page-header h1,
+.stage-header h2,
+.section-card h3 {
+    margin: 0;
+    color: #0f172a;
 }
 
-.new-badge {
+.page-header p,
+.stage-summary,
+.helper-text,
+.cell-sub,
+.stage-pill,
+.doc-pill {
+    color: #64748b;
+}
+
+.page-header p,
+.stage-summary,
+.helper-text {
+    margin: 0.45rem 0 0;
+    line-height: 1.75;
+}
+
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.overview-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dbeafe;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 18px;
+    padding: 1.1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.overview-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 34px rgba(37, 99, 235, 0.10);
+    border-color: #93c5fd;
+}
+
+.overview-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.stage-pill {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 6px;
-    background: #ef4444;
-    color: white;
-    font-size: 0.75rem;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
     font-weight: 700;
-    border-radius: 50%;
-    animation: pulse-badge 2s infinite;
 }
 
-@keyframes pulse-badge {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
-.doc-type-desc {
-    color: #64748b;
-    font-size: 0.9rem;
-    margin-bottom: 16px;
-    line-height: 1.5;
-}
-
-.doc-type-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.doc-type-count {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    background: #f1f5f9;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    color: #64748b;
-}
-
-.doc-type-count .count-number {
-    font-weight: 700;
-    color: #2563eb;
-}
-
-.doc-section {
-    background: white;
+.count-pill {
+    min-width: 5.2rem;
+    padding: 0.45rem 0.7rem;
     border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    background: #eff6ff;
+    text-align: right;
 }
 
-.doc-section h2 {
-    margin: 0 0 16px 0;
-    font-size: 1.1rem;
-    color: #1e293b;
+.count-pill strong {
+    display: block;
+    color: #1d4ed8;
+    font-size: 1rem;
 }
 
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
+.count-pill span {
+    font-size: 0.78rem;
+    color: #475569;
 }
 
-.status-pending {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.doc-no {
-    font-family: monospace;
-    font-weight: 500;
-}
-
-.btn-sm {
-    padding: 4px 12px;
-    font-size: 12px;
-}
-
-.btn-info {
-    background: #0ea5e9;
-    color: white;
-}
-
-/* 見積依頼書受信BOX */
-.mitsumori-inbox {
-    margin-top: 20px;
-}
-
-.mitsumori-inbox h2 {
-    color: #1e40af;
-}
-
-.user-mitsumori-list {
+.doc-pill-list {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin-top: 0.85rem;
 }
 
-.user-mitsumori-card {
+.doc-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.32rem 0.75rem;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow: hidden;
+    font-size: 0.8rem;
 }
 
-.user-header {
+.service-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.service-filter-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 0.95rem 1rem;
+}
+
+.service-filter-card.is-active {
+    border-color: #60a5fa;
+    background: #eff6ff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.service-filter-head,
+.service-filter-counts {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: background 0.2s;
+    gap: 0.5rem;
 }
 
-.user-header:hover {
-    background: #f1f5f9;
+.service-filter-counts {
+    margin-top: 0.6rem;
+    color: #475569;
+    font-size: 0.86rem;
 }
 
-.user-info {
+.stage-header-actions {
     display: flex;
+    gap: 0.6rem;
     align-items: center;
-    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    margin-left: auto;
+    padding-top: 0.2rem;
 }
 
-.user-name {
-    font-weight: 600;
-    font-size: 1.1rem;
-    color: #1e293b;
+.mini-toggle {
+    position: relative;
 }
 
-.mitsumori-count-badge {
-    background: #3b82f6;
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
+.mini-toggle summary {
+    list-style: none;
+    cursor: pointer;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    white-space: nowrap;
 }
 
-.status-summary {
-    display: flex;
-    gap: 8px;
+.mini-toggle summary::-webkit-details-marker {
+    display: none;
 }
 
-.status-mini {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 500;
+.mini-toggle[open] summary {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+    background: #eff6ff;
 }
 
-.status-mini.status-draft {
+.mini-toggle-body {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    width: min(320px, 80vw);
+    z-index: 10;
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    padding: 0.9rem 1rem;
+}
+
+.mini-toggle-body ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #475569;
+    line-height: 1.8;
+}
+
+.mini-toggle-body p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.7;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.dashboard-table {
+    width: 100%;
+    min-width: 1120px;
+    border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+    padding: 0.85rem 0.8rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+    text-align: left;
+}
+
+.dashboard-table th {
+    color: #475569;
+    font-size: 0.84rem;
+    font-weight: 700;
+    background: #f8fafc;
+}
+
+.col-service {
+    width: 14.5rem;
+    white-space: nowrap;
+}
+
+.work-column {
+    min-width: 23rem;
+}
+
+.service-badge,
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.service-badge.wholesale {
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+.service-badge.auction {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.service-badge.simultaneous {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.service-badge.default {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.status-badge.pending,
+.status-badge.draft {
     background: #fef3c7;
-    color: #b45309;
+    color: #92400e;
 }
 
-.status-mini.status-completed {
-    background: #d1fae5;
-    color: #047857;
+.status-badge.approved,
+.status-badge.sent {
+    background: #dcfce7;
+    color: #166534;
 }
 
-.toggle-icon {
+.status-badge.appraising,
+.status-badge.inspecting,
+.status-badge.processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-badge.completed {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.cell-title {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.inline-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.related-documents {
+    margin-top: 0.8rem;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.related-documents-label {
+    font-size: 0.76rem;
     color: #64748b;
-    font-size: 0.85rem;
-    transition: transform 0.3s;
+    font-weight: 700;
 }
 
-.toggle-icon.open {
-    transform: rotate(180deg);
+.related-document-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
 }
 
-.user-mitsumori-details {
-    border-top: 1px solid #e2e8f0;
-    padding: 16px;
-    background: white;
+.related-document-head,
+.related-document-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.7rem;
+    flex-wrap: wrap;
 }
 
-.compact-table {
+.related-document-meta {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.empty-state,
+.empty-inline,
+.info-panel {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 1rem;
+    line-height: 1.8;
+    color: #475569;
+}
+
+.empty-inline {
+    margin-top: 0.8rem;
     font-size: 0.9rem;
 }
 
-.compact-table th,
-.compact-table td {
-    padding: 8px 12px;
+.info-panel {
+    display: grid;
+    gap: 0.35rem;
 }
 
-.status-badge.status-completed {
-    background: #d1fae5;
-    color: #047857;
+.info-panel strong {
+    color: #0f172a;
 }
 
-.status-badge.status-draft {
-    background: #f1f5f9;
-    color: #64748b;
-}
-
-.empty-message {
-    color: #64748b;
-    text-align: center;
-    padding: 30px;
-    font-style: italic;
-}
-
-@media (max-width: 768px) {
-    .user-header {
-        flex-wrap: wrap;
-        gap: 10px;
+@media (max-width: 1100px) {
+    .overview-grid,
+    .service-filter-grid {
+        grid-template-columns: 1fr;
     }
-    
-    .status-summary {
-        width: 100%;
-        justify-content: flex-start;
+}
+
+@media (max-width: 720px) {
+    .overview-grid,
+    .service-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .overview-card-head,
+    .service-filter-head,
+    .related-document-head,
+    .related-document-meta {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .count-pill {
+        text-align: left;
+    }
+
+    .mini-toggle-body {
+        left: 0;
+        right: auto;
+        width: min(320px, calc(100vw - 3rem));
+    }
+
+    .stage-header-actions {
+        margin-top: 0;
+        margin-left: 0;
+        padding-top: 0;
     }
 }
 </style>
 
-<script>
-function toggleUserMitsumori(userId) {
-    const details = document.getElementById('mitsumori-details-' + userId);
-    const icon = document.getElementById('toggle-icon-' + userId);
-    
-    if (details.style.display === 'none') {
-        details.style.display = 'block';
-        icon.classList.add('open');
-    } else {
-        details.style.display = 'none';
-        icon.classList.remove('open');
-    }
-}
-</script>
+<div class="documents-page">
+    <section class="section-card page-header">
+        <div>
+            <h1>書類管理</h1>
+            <p>書類の流れを 1・2・3・4 の段階ごとに確認できます。処理を進めると、その段階で必要な書類だけを確認しながら次の作業へ進められます。</p>
+        </div>
+        <div class="inline-actions">
+            <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">書類履歴を見る</a>
+        </div>
+    </section>
+
+    {% if selected_group == 'all' %}
+    <section class="overview-grid">
+        {% for card in stage_cards %}
+        <a href="{{ card.url }}" class="overview-card">
+            <div class="overview-card-head">
+                <div>
+                    <span class="stage-pill">{{ card.flow_label }}</span>
+                    <h2>{{ card.title }}</h2>
+                </div>
+                <div class="count-pill">
+                    <strong>{{ card.current_count }}件</strong>
+                    <span>現在進行中の案件</span>
+                </div>
+            </div>
+            <p class="helper-text">{{ card.summary }}</p>
+            <div class="doc-pill-list">
+                {% for label in card.documents %}
+                <span class="doc-pill">{{ label }}</span>
+                {% endfor %}
+            </div>
+        </a>
+        {% endfor %}
+    </section>
+    {% else %}
+    <section class="section-card stage-header">
+        <div>
+            <span class="stage-pill">{{ active_meta.flow_label or '-' }}</span>
+            <h2>{{ active_meta.stage_title or '書類管理' }}</h2>
+            <p class="stage-summary">{{ active_meta.summary or '' }}</p>
+            <div class="doc-pill-list">
+                {% for label in active_meta.documents or [] %}
+                <span class="doc-pill">{{ label }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="stage-header-actions">
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">一覧へ戻る</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">この段階の履歴を見る</a>
+            <details class="mini-toggle">
+                <summary>確認ポイント</summary>
+                <div class="mini-toggle-body">
+                    <ul>
+                        {% for item in active_meta.check_points or [] %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </details>
+            <details class="mini-toggle">
+                <summary>現在の状況</summary>
+                <div class="mini-toggle-body">
+                    <p><strong>現在進行中の案件:</strong> {{ selected_group_current_count }}件</p>
+                    {% if selected_group == 'client_incoming' %}
+                    <p><strong>表示中のサービス:</strong> {{ selected_group_service_label }}</p>
+                    {% endif %}
+                    <p>過去の履歴は、左メニューの「書類履歴」から期間やキーワードで確認できます。</p>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    {% if selected_group in ['client_incoming', 'vendor_incoming'] %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                {% if selected_group == 'client_incoming' %}
+                <h3>サービス別に確認する</h3>
+                <p class="helper-text">クライアントからの受付は、サービスごとに現在進行中の案件を絞り込んで確認できます。</p>
+                {% else %}
+                <h3>回答月で確認する</h3>
+                <p class="helper-text">業者から届いた回答書類は、登録月ごとに絞り込んで確認できます。</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="service-filter-grid">
+            {% for item in service_breakdown %}
+            <a href="{{ item.url }}" class="service-filter-card {% if item.is_selected %}is-active{% endif %}">
+                <div class="service-filter-head">
+                    <strong>{{ item.label }}</strong>
+                    {% if item.is_selected %}
+                    <span class="stage-pill">表示中</span>
+                    {% endif %}
+                </div>
+                <div class="service-filter-counts">
+                    <span>進行中 {{ item.current_count }}件</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h3>{{ active_meta.action_title or '進行中の案件' }}</h3>
+                <p class="helper-text">{{ active_meta.action_note or '' }}</p>
+            </div>
+        </div>
+        {% if stage_request_rows %}
+            {{ request_table(stage_request_rows) }}
+        {% else %}
+        <div class="empty-state">
+            この段階で進行中の案件はありません。<br>
+            一覧へ戻るか、左メニューの「書類履歴」から過去のやり取りを確認してください。
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+</div>
 {% endblock %}

@@ -8,6 +8,303 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1a1a2e">
+    <style>
+        .history-back-bar {
+            margin-bottom: 0.9rem;
+        }
+
+        .history-back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            background: #fff;
+            color: #475569;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-back-button:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+
+        .analytics-detail-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.6rem;
+            padding: 0.35rem 0.7rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .analytics-detail-trigger:hover {
+            border-color: #93c5fd;
+            color: #1d4ed8;
+            background: #eff6ff;
+        }
+
+        .analytics-detail-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 2000;
+        }
+
+        .analytics-detail-modal.is-open {
+            display: flex;
+        }
+
+        .analytics-detail-dialog {
+            width: min(720px, 100%);
+            max-height: min(85vh, 760px);
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+            border: 1px solid #dbeafe;
+        }
+
+        .analytics-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.1rem 1.2rem 0.9rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #0f172a;
+            line-height: 1.55;
+            letter-spacing: 0.03em;
+        }
+
+        .analytics-detail-close {
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .analytics-detail-close:hover {
+            color: #0f172a;
+        }
+
+        .analytics-detail-body {
+            padding: 1rem 1.2rem 1.2rem;
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .analytics-detail-formula {
+            padding: 0.85rem 0.95rem;
+            border-radius: 12px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
+        }
+
+        .analytics-detail-lines {
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .analytics-detail-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .analytics-detail-line-label {
+            color: #475569;
+            font-size: 0.9rem;
+            line-height: 1.75;
+            letter-spacing: 0.02em;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .analytics-detail-line-value {
+            color: #0f172a;
+            font-size: 0.92rem;
+            font-weight: 700;
+            text-align: right;
+            line-height: 1.65;
+            flex: 0 0 auto;
+            padding-left: 0.5rem;
+        }
+
+        .analytics-detail-note {
+            padding: 0.75rem 0.85rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.8;
+            letter-spacing: 0.02em;
+        }
+
+        .announcement-toast {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            z-index: 3200;
+            width: min(420px, calc(100vw - 1.5rem));
+            display: none;
+            gap: 0.9rem;
+            padding: 1rem 1.05rem;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, 0.96);
+            color: #f8fafc;
+            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.34);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            backdrop-filter: blur(10px);
+        }
+
+        .announcement-toast.is-visible {
+            display: flex;
+            animation: announcement-toast-slide-in 0.22s ease-out;
+        }
+
+        .announcement-toast-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 34px;
+            padding: 0 0.85rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.18);
+            color: #bfdbfe;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            flex: 0 0 auto;
+        }
+
+        .announcement-toast[data-type="important"] .announcement-toast-badge {
+            background: rgba(248, 113, 113, 0.18);
+            color: #fecaca;
+        }
+
+        .announcement-toast[data-type="warning"] .announcement-toast-badge {
+            background: rgba(251, 191, 36, 0.18);
+            color: #fde68a;
+        }
+
+        .announcement-toast[data-type="success"] .announcement-toast-badge {
+            background: rgba(52, 211, 153, 0.18);
+            color: #bbf7d0;
+        }
+
+        .announcement-toast-body {
+            min-width: 0;
+            flex: 1 1 auto;
+            display: grid;
+            gap: 0.38rem;
+        }
+
+        .announcement-toast-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .announcement-toast-title {
+            margin: 0;
+            font-size: 0.98rem;
+            line-height: 1.6;
+            color: #fff;
+            word-break: break-word;
+        }
+
+        .announcement-toast-content {
+            margin: 0;
+            color: #e2e8f0;
+            line-height: 1.75;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+
+        .announcement-toast-meta {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }
+
+        .announcement-toast-close {
+            border: none;
+            background: transparent;
+            color: #cbd5e1;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+            flex: 0 0 auto;
+        }
+
+        .announcement-toast-close:hover {
+            color: #fff;
+        }
+
+        @keyframes announcement-toast-slide-in {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .announcement-toast {
+                right: 0.75rem;
+                left: 0.75rem;
+                bottom: 0.75rem;
+                width: auto;
+                padding: 0.95rem;
+            }
+
+            .announcement-toast-badge {
+                min-width: 64px;
+                height: 30px;
+                padding: 0 0.7rem;
+            }
+        }
+    </style>
     <!-- PWA / ホーム画面追加時の設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -63,119 +360,137 @@
             <button class="sidebar-close" onclick="toggleSidebar()">×</button>
         </div>
         <div class="sidebar-nav">
-            <!-- ========== ユーザー機能 ========== -->
-            <div class="sidebar-group-label">ユーザー機能</div>
-            
             {% if current_user.is_admin() %}
-            <!-- 管理者用：書類 -->
-            <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_invoice_add', 'user_invoice_edit', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    書類
-                    <span class="category-arrow">▼</span>
-                </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_invoice_add', 'user_invoice_edit', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
-                    
-                    <!-- 受信BOX -->
-                    <div class="sidebar-subcategory">
-                        <div class="subcategory-label">受信BOX</div>
-                        <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類一覧</a>
-                    </div>
-                    
-                    <!-- 書類作成 -->
-                    <div class="sidebar-subcategory">
-                        <div class="subcategory-label">書類作成</div>
-                        <a href="{{ url_for('user_invoice_add') }}" class="{% if request.endpoint in ['user_invoice_add', 'user_invoice_edit'] %}active{% endif %}">買取明細書</a>
-                        <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
-                        <a href="{{ url_for('user_keisan_list') }}" class="{% if request.endpoint in ['user_keisan_list', 'user_keisan_add', 'user_keisan_view', 'user_keisan_edit'] %}active{% endif %}">計算書</a>
-                        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
-                    </div>
-                </div>
-            </div>
+            {% include "_sidebar_admin.html" %}
             {% else %}
-            <!-- 一般ユーザー用：書類 -->
+            {% if current_user.is_admin() %}
+            <div class="sidebar-group-label">ホーム</div>
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    書類
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    全体売上管理
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
-                    
-                    <!-- 受信BOX -->
-                    <div class="sidebar-subcategory">
-                        <div class="subcategory-label">受信BOX</div>
-                        <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類一覧</a>
-                    </div>
-                    
-                    <!-- 開花への依頼 -->
-                    <div class="sidebar-subcategory">
-                        <div class="subcategory-label">開花への依頼</div>
-                        <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
-                    </div>
-                    
-                    <!-- 顧客への書類 -->
-                    <div class="sidebar-subcategory">
-                        <div class="subcategory-label">顧客への書類</div>
-                        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
-                    </div>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">全体売上管理</a>
+                    <a href="{{ url_for('admin_analytics_kaika_sales') }}" class="{% if request.endpoint == 'admin_analytics_kaika_sales' %}active{% endif %}">開花売上分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー売上分析</a>
                 </div>
             </div>
             {% endif %}
+            <!-- ========== ユーザー機能 ========== -->
+            <a href="{{ url_for('user_home') }}" class="{% if request.endpoint == 'user_home' %}active{% endif %}">ホーム</a>
             
             <!-- 商品管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products', 'admin_sale_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    商品管理
-                    {% if current_user.is_admin() and get_pending_sale_request_count() > 0 %}
-                    <span class="menu-badge">{{ get_pending_sale_request_count() }}</span>
-                    {% endif %}
+                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    <span class="menu-label">商品管理</span>
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['index', 'reports', 'report_monthly', 'report_inventory', 'report_annual', 'admin_user_products', 'admin_sale_requests', 'admin_sales_agency_requests', 'sales_agency_my_requests', 'long_term_items'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
-                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') != '1' %}active{% endif %}">商品一覧</a>
-                    <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') == '1' %}active{% endif %}">
-                        長期在庫商品
-                        {% if get_admin_long_term_item_count() > 0 %}
-                        <span class="menu-badge-inline warning">{{ get_admin_long_term_item_count() }}</span>
-                        {% endif %}
-                    </a>
-                    <a href="{{ url_for('admin_sale_requests') }}" class="{% if request.endpoint == 'admin_sale_requests' %}active{% endif %}">
-                        発送商品受信BOX
-                        {% if get_pending_sale_request_count() > 0 %}
-                        <span class="menu-badge-inline">{{ get_pending_sale_request_count() }}</span>
-                        {% endif %}
-                    </a>
-                    <a href="{{ url_for('admin_sales_agency_requests') }}" class="{% if request.endpoint == 'admin_sales_agency_requests' %}active{% endif %}">
-                        販売代行サービス受信BOX
-                        {% if get_pending_sales_agency_count() > 0 %}
-                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count() }}</span>
-                        {% endif %}
-                    </a>
+                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') != 'long_term' %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') == 'long_term' %}active{% endif %}">長期保存商品</a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
-                        長期在庫商品
+                        <span class="menu-label">長期在庫商品</span>
                         {% if get_long_term_item_count() > 0 %}
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}
                     </a>
                     <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint == 'sales_agency_my_requests' %}active{% endif %}">販売代行申請履歴</a>
                     {% endif %}
-                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                 </div>
             </div>
+
+            <!-- 書類 -->
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    書類
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">受信BOX</div>
+                        <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類一覧</a>
+                    </div>
+
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">開花への依頼</div>
+                        <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
+                    </div>
+
+                    <div class="sidebar-subcategory">
+                        <div class="subcategory-label">顧客への書類</div>
+                        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user.is_admin() %}
+            {% set admin_notification_count = get_pending_sale_request_count() + get_pending_disposal_count() %}
+            <div class="sidebar-category">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    <span class="menu-label">通知ボックス</span>
+                    {% if admin_notification_count > 0 %}
+                    <span class="menu-badge">{{ admin_notification_count }}</span>
+                    {% endif %}
+                    <span class="category-arrow">▼</span>
+                </button>
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_shipping_requests', 'admin_completion_requests', 'admin_disposal_requests', 'admin_sales_agency_requests', 'admin_sales_agency_request_detail'] %}open{% endif %}">
+                    <a href="{{ url_for('admin_shipping_requests') }}" class="{% if request.endpoint == 'admin_shipping_requests' %}active{% endif %}">
+                        <span class="menu-label">発送BOX</span>
+                        {% if get_pending_sale_request_count_by_type('shipping_request') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('shipping_request') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_completion_requests') }}" class="{% if request.endpoint == 'admin_completion_requests' %}active{% endif %}">
+                        <span class="menu-label">受取完了BOX</span>
+                        {% if get_pending_sale_request_count_by_type('completion_report') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sale_request_count_by_type('completion_report') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'wholesale') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'wholesale') %}active{% endif %}">
+                        <span class="menu-label">業者卸販売BOX</span>
+                        {% if get_pending_sales_agency_count_by_service('wholesale') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('wholesale') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'auction') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'auction') %}active{% endif %}">
+                        <span class="menu-label">業者オークションBOX</span>
+                        {% if get_pending_sales_agency_count_by_service('auction') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('auction') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="{% if (request.endpoint == 'admin_sales_agency_requests' and request.args.get('service_type') == 'simultaneous') or (request.endpoint == 'admin_sales_agency_request_detail' and req is defined and req.service_type == 'simultaneous') %}active{% endif %}">
+                        <span class="menu-label">同時出品BOX</span>
+                        {% if get_pending_sales_agency_count_by_service('simultaneous') > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_sales_agency_count_by_service('simultaneous') }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
+                        <span class="menu-label">在庫処分申請</span>
+                        {% if get_pending_disposal_count() > 0 %}
+                        <span class="menu-badge-inline">{{ get_pending_disposal_count() }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+            {% endif %}
             
             <!-- データ確認 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint == 'user_analytics' %}active{% endif %}" onclick="toggleCategory(this)">
-                    データ確認
+                <button class="sidebar-category-toggle {% if request.endpoint in ['user_analytics', 'reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}" onclick="toggleCategory(this)">
+                    管理分析
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint == 'user_analytics' %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['user_analytics', 'reports', 'report_monthly', 'report_inventory', 'report_annual'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー全体の分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント別分析</a>
+                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                     {% else %}
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">My分析</a>
+                    <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート・CSV</a>
                     {% endif %}
                 </div>
             </div>
@@ -196,29 +511,23 @@
             {% if current_user.is_admin() %}
             <!-- 機能（ユーザー機能用） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard', 'admin_disposal_requests'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}active{% endif %}" onclick="toggleCategory(this)">
                     機能
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard', 'admin_disposal_requests'] or 'line' in request.endpoint %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['admin_announcements', 'admin_stripe_dashboard'] or 'line' in request.endpoint %}open{% endif %}">
                     <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">お知らせ</a>
                     {% if current_user.is_owner() %}
-                    <a href="{{ url_for('admin_line_dashboard') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
+                    <a href="{{ url_for('admin_line_dashboard_v2') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>
                     {% endif %}
                     <a href="{{ url_for('admin_stripe_dashboard') }}" class="{% if request.endpoint == 'admin_stripe_dashboard' %}active{% endif %}">決済管理</a>
-                    <a href="{{ url_for('admin_disposal_requests') }}" class="{% if request.endpoint == 'admin_disposal_requests' %}active{% endif %}">
-                        商品処分申請
-                        {% if get_pending_disposal_count() > 0 %}
-                        <span class="menu-badge">{{ get_pending_disposal_count() }}</span>
-                        {% endif %}
-                    </a>
                 </div>
             </div>
             
             <!-- 問い合わせ管理（管理者用） -->
             <div class="sidebar-category">
                 <button class="sidebar-category-toggle {% if request.endpoint in ['admin_inquiries', 'admin_inquiry_view', 'admin_inquiry_reply'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    問い合わせ管理
+                    <span class="menu-label">問い合わせ管理</span>
                     {% if get_unread_inquiry_count() > 0 %}
                     <span class="menu-badge">{{ get_unread_inquiry_count() }}</span>
                     {% endif %}
@@ -292,13 +601,16 @@
             
             <!-- データ確認 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}active{% endif %}" onclick="toggleCategory(this)">
-                    データ確認
+                <button class="sidebar-category-toggle {% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}" onclick="toggleCategory(this)">
+                    開花分析
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['admin_analytics', 'admin_analytics_kaika'] %}open{% endif %}">
-                    <a href="{{ url_for('admin_analytics') }}" class="{% if request.endpoint == 'admin_analytics' %}active{% endif %}">すべてのアカウントの分析</a>
-                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花（管理者）の分析</a>
+                <div class="sidebar-category-items {% if request.endpoint == 'admin_analytics_kaika' %}open{% endif %}">
+                    {% if current_user.has_permission('analytics') %}
+                    <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint == 'admin_analytics_kaika' %}active{% endif %}">開花管理分析</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">分析権限が付与されていません</span>
+                    {% endif %}
                 </div>
             </div>
             
@@ -310,7 +622,11 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_master_settings', 'admin_backup'] %}open{% endif %}">
                     <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint == 'admin_master_settings' %}active{% endif %}">商品登録用マスター</a>
+                    {% if current_user.has_permission('backup') %}
                     <a href="{{ url_for('admin_backup') }}" class="{% if request.endpoint == 'admin_backup' %}active{% endif %}">バックアップ</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">バックアップ権限が付与されていません</span>
+                    {% endif %}
                 </div>
             </div>
             
@@ -323,7 +639,11 @@
                     <span class="category-arrow">▼</span>
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_users', 'admin_add_user', 'admin_edit_user'] %}open{% endif %}">
+                    {% if current_user.has_permission('users') %}
                     <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' or request.endpoint == 'admin_add_user' or request.endpoint == 'admin_edit_user' %}active{% endif %}">ユーザー一覧</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">ユーザー管理権限が付与されていません</span>
+                    {% endif %}
                 </div>
             </div>
             
@@ -334,19 +654,23 @@
                     <span class="category-arrow">▼</span>
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}open{% endif %}">
-                    {% if current_user.is_owner() or current_user.is_admin() %}
+                    {% if current_user.can_manage_proxy_service() %}
                     <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint == 'admin_proxy_service' %}active{% endif %}">代行サービス</a>
                     <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">オークション計算書</a>
+                    {% else %}
+                    <span class="sidebar-item-disabled">代行仕入れオークション掲載権が付与されていません</span>
                     {% endif %}
                     <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行サービス履歴</a>
                 </div>
             </div>
+            {% endif %}
             {% endif %}
         </div>
     </aside>
     {% endif %}
     
     <main class="container">
+        {% set history_back_fallback = url_for('admin_items') if current_user.is_authenticated and current_user.is_admin() else (url_for('index') if current_user.is_authenticated else url_for('login')) %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -358,8 +682,37 @@
             {% endif %}
         {% endwith %}
         
+        {% set is_user_home = request.endpoint == 'user_home' %}
+        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] %}
+        {% if not hide_history_back %}
+        <div
+            class="history-back-bar"
+            id="historyBackBar"
+            {% if is_user_home %}hidden data-home-conditional="true"{% endif %}>
+            <button
+                type="button"
+                class="history-back-button"
+                onclick="try { if (window.history.length > 1) { window.history.back(); } else if (document.referrer) { window.location.href = document.referrer; } else { window.location.href='{{ history_back_fallback }}'; } } catch (error) { window.location.href='{{ history_back_fallback }}'; }">
+                ← 1つ前の画面に戻る
+            </button>
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
+    {% if current_user.is_authenticated and not current_user.is_admin() and not current_user.is_owner() %}
+    <div class="announcement-toast" id="announcementToast" data-type="info" aria-live="polite" aria-atomic="true">
+        <div class="announcement-toast-badge" id="announcementToastBadge">お知らせ</div>
+        <div class="announcement-toast-body">
+            <div class="announcement-toast-header">
+                <h3 class="announcement-toast-title" id="announcementToastTitle">開花からお知らせ</h3>
+                <button type="button" class="announcement-toast-close" id="announcementToastClose" aria-label="お知らせを閉じる">×</button>
+            </div>
+            <p class="announcement-toast-content" id="announcementToastContent"></p>
+            <p class="announcement-toast-meta" id="announcementToastMeta"></p>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- 利益計算式モーダル -->
     <div class="profit-calc-modal" id="profitCalcModal">
@@ -982,6 +1335,21 @@
         font-style: italic;
         cursor: not-allowed;
     }
+
+    .table-edge-scrollable {
+        cursor: ew-resize;
+    }
+
+    img.image-fallback {
+        object-fit: contain !important;
+        background: #f8fafc;
+    }
+
+    @media (max-width: 768px) {
+        .table-edge-scrollable {
+            cursor: auto;
+        }
+    }
     </style>
     
     <script>
@@ -989,6 +1357,32 @@
         document.querySelectorAll('.alert').forEach(alert => {
             setTimeout(() => alert.remove(), 5000);
         });
+
+        (function setupHistoryBackBar() {
+            const historyBackBar = document.getElementById('historyBackBar');
+            if (!historyBackBar || historyBackBar.dataset.homeConditional !== 'true') {
+                return;
+            }
+
+            try {
+                if (!document.referrer) {
+                    return;
+                }
+
+                const referrerUrl = new URL(document.referrer);
+                const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+                const referrerPath = referrerUrl.pathname.replace(/\/+$/, '') || '/';
+                const isSameOrigin = referrerUrl.origin === window.location.origin;
+                const isBlockedReferrer = referrerPath === '/login' || referrerPath.startsWith('/preview/user');
+                const shouldShow = isSameOrigin && referrerPath !== currentPath && !isBlockedReferrer;
+
+                if (shouldShow) {
+                    historyBackBar.hidden = false;
+                }
+            } catch (error) {
+                historyBackBar.hidden = true;
+            }
+        })();
         
         // サイドバートグル
         function toggleSidebar() {
@@ -1261,8 +1655,467 @@
             document.getElementById('resultRateRequiredPrice').textContent = '¥' + requiredPrice.toLocaleString();
             document.getElementById('resultRateProfit').textContent = '¥' + targetProfit.toLocaleString();
         }
+
+        (function setupEdgeHoverTableScroll() {
+            if (window.innerWidth <= 768) return;
+
+            const scrollContainerSelector = [
+                '.js-edge-hover-scroll',
+                '.table-scroll',
+                '.table-container',
+                '.admin-table-container',
+                '.client-table-wrap',
+                '.recent-sales-table-wrap',
+                '.master-table-container',
+                '.cashflow-table-container',
+                '.bids-table-container',
+                '.inquiry-table-container',
+                '.logs-table-container',
+                '.report-table-wrapper'
+            ].join(', ');
+            const nestedScrollableSelector = [
+                ':scope > .js-edge-hover-scroll',
+                ':scope > .table-scroll',
+                ':scope > .table-container',
+                ':scope > .admin-table-container',
+                ':scope > .client-table-wrap',
+                ':scope > .recent-sales-table-wrap',
+                ':scope > .master-table-container',
+                ':scope > .cashflow-table-container',
+                ':scope > .bids-table-container',
+                ':scope > .inquiry-table-container',
+                ':scope > .logs-table-container',
+                ':scope > .report-table-wrapper'
+            ].join(', ');
+            let activeTarget = null;
+            let activeDirection = 0;
+            let hoverStrength = 0;
+            let rafId = null;
+            let lastTimestamp = 0;
+
+            function canScroll(target) {
+                return target && target.scrollWidth > target.clientWidth + 12;
+            }
+
+            function canUseAsScrollTarget(target) {
+                return canScroll(target) && getComputedStyle(target).overflowX !== 'visible';
+            }
+
+            function resolveScrollTarget(container) {
+                if (!container) return null;
+
+                const nestedScroll = container.querySelector(nestedScrollableSelector);
+                if (nestedScroll && canUseAsScrollTarget(nestedScroll)) {
+                    return nestedScroll;
+                }
+
+                if (canUseAsScrollTarget(container)) {
+                    return container;
+                }
+
+                const parentContainer = container.parentElement
+                    ? container.parentElement.closest(scrollContainerSelector)
+                    : null;
+                if (parentContainer && canUseAsScrollTarget(parentContainer)) {
+                    return parentContainer;
+                }
+
+                return canScroll(container) ? container : null;
+            }
+
+            function stopAutoScroll() {
+                activeDirection = 0;
+                hoverStrength = 0;
+                if (activeTarget) {
+                    activeTarget.classList.remove('table-edge-scrollable');
+                }
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                lastTimestamp = 0;
+            }
+
+            function stepAutoScroll(timestamp) {
+                if (!activeTarget || !activeDirection || !canScroll(activeTarget)) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                if (!lastTimestamp) {
+                    lastTimestamp = timestamp;
+                }
+
+                const delta = timestamp - lastTimestamp;
+                lastTimestamp = timestamp;
+                const pixelsPerSecond = 180 + (820 * hoverStrength);
+                activeTarget.scrollLeft += activeDirection * pixelsPerSecond * (delta / 1000);
+
+                const atLeftEdge = activeDirection < 0 && activeTarget.scrollLeft <= 0;
+                const atRightEdge = activeDirection > 0 && (
+                    activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1
+                );
+                if (atLeftEdge || atRightEdge) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                rafId = requestAnimationFrame(stepAutoScroll);
+            }
+
+            function startAutoScroll(target, direction, strength) {
+                activeTarget = target;
+                activeDirection = direction;
+                hoverStrength = strength;
+                if (!rafId) {
+                    lastTimestamp = 0;
+                    rafId = requestAnimationFrame(stepAutoScroll);
+                }
+            }
+
+            function updatePointerScroll(target, event) {
+                if (!canScroll(target)) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                const threshold = Math.min(140, Math.max(72, rect.width * 0.16));
+                const offsetX = event.clientX - rect.left;
+                const leftRatio = 1 - Math.min(1, offsetX / threshold);
+                const rightRatio = Math.min(1, Math.max(0, (offsetX - (rect.width - threshold)) / threshold));
+
+                if (offsetX <= threshold && target.scrollLeft > 0) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, -1, Math.max(0.2, leftRatio));
+                    return;
+                }
+
+                if (offsetX >= rect.width - threshold && target.scrollLeft + target.clientWidth < target.scrollWidth - 1) {
+                    target.classList.add('table-edge-scrollable');
+                    startAutoScroll(target, 1, Math.max(0.2, rightRatio));
+                    return;
+                }
+
+                target.classList.remove('table-edge-scrollable');
+                if (activeTarget === target) {
+                    stopAutoScroll();
+                }
+            }
+
+            document.addEventListener('mousemove', function (event) {
+                const hoverContainer = event.target.closest(scrollContainerSelector);
+                const target = resolveScrollTarget(hoverContainer);
+
+                if (!target) {
+                    stopAutoScroll();
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                if (event.clientY < rect.top || event.clientY > rect.bottom) {
+                    target.classList.remove('table-edge-scrollable');
+                    if (activeTarget === target) {
+                        stopAutoScroll();
+                    }
+                    return;
+                }
+
+                updatePointerScroll(target, event);
+            }, { passive: true });
+
+            document.addEventListener('mouseout', function (event) {
+                if (!event.relatedTarget) {
+                    stopAutoScroll();
+                }
+            });
+
+            document.addEventListener('scroll', function () {
+                if (!activeTarget) return;
+                if (
+                    !canScroll(activeTarget) ||
+                    (activeDirection < 0 && activeTarget.scrollLeft <= 0) ||
+                    (activeDirection > 0 && activeTarget.scrollLeft + activeTarget.clientWidth >= activeTarget.scrollWidth - 1)
+                ) {
+                    stopAutoScroll();
+                }
+            }, { passive: true, capture: true });
+
+            window.addEventListener('blur', stopAutoScroll);
+            window.addEventListener('resize', stopAutoScroll, { passive: true });
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    stopAutoScroll();
+                }
+            });
+        })();
+
+        (function setupMissingImageFallback() {
+            const fallbackSvg = encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+                    <rect width="320" height="240" rx="18" fill="#f1f5f9"/>
+                    <rect x="24" y="24" width="272" height="192" rx="14" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>
+                    <path d="M92 158l34-42 26 30 38-50 38 62H92z" fill="#94a3b8"/>
+                    <circle cx="118" cy="92" r="14" fill="#cbd5e1"/>
+                    <text x="160" y="198" text-anchor="middle" fill="#475569" font-family="sans-serif" font-size="20" font-weight="600">画像なし</text>
+                </svg>`
+            );
+            const fallbackSrc = `data:image/svg+xml;charset=UTF-8,${fallbackSvg}`;
+
+            document.addEventListener('error', function (event) {
+                const target = event.target;
+                if (!(target instanceof HTMLImageElement)) return;
+                if (target.dataset.fallbackApplied === 'true') return;
+
+                const currentSrc = target.getAttribute('src') || '';
+                if (!currentSrc.includes('/static/uploads/')) return;
+
+                target.dataset.fallbackApplied = 'true';
+                target.dataset.originalSrc = currentSrc;
+                target.src = fallbackSrc;
+                target.alt = '画像が見つかりません';
+                target.classList.add('image-fallback');
+                if (!target.title) {
+                    target.title = '検証コピーに画像ファイルが無いため、代替画像を表示しています';
+                }
+            }, true);
+        })();
+
+        window.openAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeAnalyticsDetail = function (modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            document.body.style.overflow = '';
+        };
+
+        document.addEventListener('click', function (event) {
+            const modal = event.target.closest('.analytics-detail-modal');
+            if (modal && event.target === modal) {
+                modal.classList.remove('is-open');
+                document.body.style.overflow = '';
+            }
+        });
+
+        (function setupAnnouncementToast() {
+            const toast = document.getElementById('announcementToast');
+            if (!toast) return;
+
+            const badge = document.getElementById('announcementToastBadge');
+            const title = document.getElementById('announcementToastTitle');
+            const content = document.getElementById('announcementToastContent');
+            const meta = document.getElementById('announcementToastMeta');
+            const closeButton = document.getElementById('announcementToastClose');
+            const pollUrl = "{{ url_for('user_announcements_api') }}";
+            const storageKey = "kaika:announcement-seen:v1:{{ current_user.id if current_user.is_authenticated else 0 }}";
+            const badgeLabels = {
+                info: '\u304a\u77e5\u3089\u305b',
+                important: '\u91cd\u8981',
+                warning: '\u6ce8\u610f',
+                success: '\u66f4\u65b0',
+            };
+
+            let audioContext = null;
+            let hideTimerId = null;
+
+            function readSeenMap() {
+                try {
+                    return JSON.parse(window.localStorage.getItem(storageKey) || '{}');
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            function writeSeenMap(seenMap) {
+                try {
+                    window.localStorage.setItem(storageKey, JSON.stringify(seenMap));
+                } catch (error) {
+                    // localStorage が使えない場合は通知表示のみ継続
+                }
+            }
+
+            function buildAnnouncementVersion(announcement) {
+                return [
+                    announcement.id || '',
+                    announcement.announcement_type || '',
+                    announcement.title || '',
+                    announcement.content || '',
+                    announcement.publish_at || '',
+                    announcement.created_at || '',
+                ].join('||');
+            }
+
+            function getUnseenAnnouncements(announcements) {
+                const seenMap = readSeenMap();
+                return (announcements || []).filter((announcement) => {
+                    const id = String(announcement.id || '');
+                    return seenMap[id] !== buildAnnouncementVersion(announcement);
+                });
+            }
+
+            function markAnnouncementsSeen(announcements) {
+                const seenMap = readSeenMap();
+                (announcements || []).forEach((announcement) => {
+                    const id = String(announcement.id || '');
+                    seenMap[id] = buildAnnouncementVersion(announcement);
+                });
+                writeSeenMap(seenMap);
+            }
+
+            function hideToast() {
+                toast.classList.remove('is-visible');
+                if (hideTimerId) {
+                    window.clearTimeout(hideTimerId);
+                    hideTimerId = null;
+                }
+            }
+
+            function formatAnnouncementTime(value) {
+                if (!value) return '';
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                return date.toLocaleString('ja-JP', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            }
+
+            function playAnnouncementTone() {
+                try {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContextClass) return;
+                    if (!audioContext) {
+                        audioContext = new AudioContextClass();
+                    }
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume().catch(() => {});
+                    }
+
+                    [0, 0.18].forEach((offset, index) => {
+                        const oscillator = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        oscillator.type = 'sine';
+                        oscillator.frequency.value = index === 0 ? 880 : 1174;
+                        gain.gain.setValueAtTime(0.0001, audioContext.currentTime + offset);
+                        gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + offset + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + offset + 0.16);
+                        oscillator.connect(gain);
+                        gain.connect(audioContext.destination);
+                        oscillator.start(audioContext.currentTime + offset);
+                        oscillator.stop(audioContext.currentTime + offset + 0.18);
+                    });
+                } catch (error) {
+                    // ブラウザ制限で再生できない場合は無音で継続
+                }
+            }
+
+            function notifyBrowser(announcement, extraCount) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') {
+                    return;
+                }
+
+                const bodySuffix = extraCount > 0 ? `\n\u307b\u304b${extraCount}\u4ef6\u306e\u65b0\u7740\u304c\u3042\u308a\u307e\u3059\u3002` : '';
+                try {
+                    new Notification(`\u958b\u82b1\u304b\u3089\u304a\u77e5\u3089\u305b: ${announcement.title || '\u65b0\u7740\u901a\u77e5'}`, {
+                        body: `${announcement.content || ''}${bodySuffix}`.trim(),
+                    });
+                } catch (error) {
+                    // Notification API が使えない場合はトーストのみ表示
+                }
+            }
+
+            function showAnnouncementToast(announcement, extraCount, playSound) {
+                const announcementType = announcement.announcement_type || 'info';
+                const timestamp = formatAnnouncementTime(announcement.publish_at || announcement.created_at);
+                const metaParts = [];
+
+                toast.dataset.type = announcementType;
+                badge.textContent = badgeLabels[announcementType] || badgeLabels.info;
+                title.textContent = announcement.title || '\u958b\u82b1\u304b\u3089\u304a\u77e5\u3089\u305b';
+                content.textContent = announcement.content || '';
+
+                if (timestamp) {
+                    metaParts.push(timestamp);
+                }
+                if (extraCount > 0) {
+                    metaParts.push(`\u307b\u304b${extraCount}\u4ef6\u306e\u65b0\u3057\u3044\u304a\u77e5\u3089\u305b\u304c\u3042\u308a\u307e\u3059`);
+                }
+                meta.textContent = metaParts.join(' | ');
+
+                toast.classList.add('is-visible');
+                if (hideTimerId) {
+                    window.clearTimeout(hideTimerId);
+                }
+                hideTimerId = window.setTimeout(hideToast, 12000);
+
+                if (playSound) {
+                    playAnnouncementTone();
+                }
+                notifyBrowser(announcement, extraCount);
+            }
+
+            async function fetchAnnouncements() {
+                try {
+                    const response = await fetch(`${pollUrl}?_=${Date.now()}`, {
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+                    if (!response.ok) {
+                        return [];
+                    }
+                    const data = await response.json();
+                    return Array.isArray(data.announcements) ? data.announcements : [];
+                } catch (error) {
+                    return [];
+                }
+            }
+
+            async function refreshAnnouncements(options = {}) {
+                const playSound = options.playSound !== false;
+                const announcements = await fetchAnnouncements();
+                window.dispatchEvent(new CustomEvent('kaika:announcements-updated', {
+                    detail: {
+                        announcements: announcements,
+                    },
+                }));
+                const unseenAnnouncements = getUnseenAnnouncements(announcements);
+                if (!unseenAnnouncements.length) {
+                    return;
+                }
+
+                markAnnouncementsSeen(unseenAnnouncements);
+                showAnnouncementToast(unseenAnnouncements[0], unseenAnnouncements.length - 1, playSound);
+            }
+
+            closeButton.addEventListener('click', hideToast);
+
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) {
+                    refreshAnnouncements();
+                }
+            });
+
+            refreshAnnouncements();
+            window.setInterval(refreshAnnouncements, 60000);
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
-

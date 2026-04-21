@@ -1,112 +1,184 @@
 {% extends "base.html" %}
-{% block title %}お知らせ管理 - 株式会社 開花{% endblock %}
+{% block title %}お知らせ一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>お知らせ管理</h1>
-    <a href="{{ url_for('admin_add_announcement') }}" class="btn btn-primary">+ 新規作成</a>
+    <h1>お知らせ一覧</h1>
+    <a href="{{ url_for('admin_add_announcement') }}" class="btn btn-primary">+ 新規追加</a>
 </div>
 
-
-<div class="admin-section">
-    <div class="admin-table-container">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>状態</th>
-                    <th>種類</th>
-                    <th>タイトル</th>
-                    <th>公開開始</th>
-                    <th>公開終了</th>
-                    <th>作成者</th>
-                    <th>作成日</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ann in announcements %}
-                <tr class="{% if not ann.is_active %}row-inactive{% endif %}">
-                    <td>
-                        {% if ann.is_active %}
-                        <span class="badge badge-active">有効</span>
-                        {% else %}
-                        <span class="badge badge-inactive">無効</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if ann.announcement_type == 'important' %}
-                        <span class="ann-type ann-type-important">重要</span>
-                        {% elif ann.announcement_type == 'warning' %}
-                        <span class="ann-type ann-type-warning">注意</span>
-                        {% elif ann.announcement_type == 'success' %}
-                        <span class="ann-type ann-type-success">完了</span>
-                        {% else %}
-                        <span class="ann-type ann-type-info">通常</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <strong>{{ ann.title }}</strong>
-                        <br><small class="text-muted">{{ ann.content[:50] }}{% if ann.content|length > 50 %}...{% endif %}</small>
-                    </td>
-                    <td>{{ (ann.publish_at|string)[:16] if ann.publish_at else '即時' }}</td>
-                    <td>{{ (ann.expire_at|string)[:16] if ann.expire_at else '無期限' }}</td>
-                    <td>{{ ann.author_name or '-' }}</td>
-                    <td>{{ (ann.created_at|string)[:10] if ann.created_at else '-' }}</td>
-                    <td class="action-cell">
-                        <a href="{{ url_for('admin_toggle_announcement', id=ann.id) }}" 
-                           class="btn btn-sm {% if ann.is_active %}btn-secondary{% else %}btn-primary{% endif %}">
-                            {% if ann.is_active %}無効化{% else %}有効化{% endif %}
-                        </a>
-                        <a href="{{ url_for('admin_edit_announcement', id=ann.id) }}" class="btn btn-sm btn-edit">編集</a>
-                        <a href="{{ url_for('admin_delete_announcement', id=ann.id) }}" 
-                           class="btn btn-sm btn-delete" onclick="return confirm('削除しますか？')">削除</a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 40px; color: #94a3b8;">
-                        お知らせがありません。<a href="{{ url_for('admin_add_announcement') }}">最初のお知らせを作成</a>しましょう。
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="announcement-list-page">
+    <div class="table-card">
+        <div class="table-scroll">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>公開状態</th>
+                        <th>種類</th>
+                        <th>タイトル / 本文</th>
+                        <th>通知先</th>
+                        <th>公開開始</th>
+                        <th>公開終了</th>
+                        <th>作成者</th>
+                        <th>作成日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ann in announcements %}
+                    <tr class="{% if not ann.is_active %}row-inactive{% endif %}">
+                        <td>
+                            {% if ann.is_active %}
+                            <span class="status-badge active">公開中</span>
+                            {% else %}
+                            <span class="status-badge inactive">停止中</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ann.announcement_type == 'important' %}
+                            <span class="type-badge important">重要</span>
+                            {% elif ann.announcement_type == 'warning' %}
+                            <span class="type-badge warning">注意</span>
+                            {% elif ann.announcement_type == 'success' %}
+                            <span class="type-badge success">完了・更新</span>
+                            {% else %}
+                            <span class="type-badge info">通常</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="title-cell">
+                                <strong>{{ ann.title }}</strong>
+                                <small>{{ ann.content[:70] }}{% if ann.content|length > 70 %}...{% endif %}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="recipient-cell">
+                                <strong>{{ ann.recipient_summary or '一斉通知' }}</strong>
+                                <small>
+                                    {% if ann.line_notify_enabled %}
+                                        {% if ann.line_notified_at %}
+                                        LINE通知済み
+                                        {% else %}
+                                        公開時にLINE通知
+                                        {% endif %}
+                                    {% else %}
+                                    画面表示のみ
+                                    {% endif %}
+                                </small>
+                                {% if ann.recipient_scope == 'selected' and ann.recipient_user_ids_list %}
+                                <small>ID: {{ ann.recipient_user_ids_list|join(', ') }}</small>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>{{ (ann.publish_at|string)[:16] if ann.publish_at else '即時公開' }}</td>
+                        <td>{{ (ann.expire_at|string)[:16] if ann.expire_at else '期限なし' }}</td>
+                        <td>{{ ann.author_name or '-' }}</td>
+                        <td>{{ (ann.created_at|string)[:10] if ann.created_at else '-' }}</td>
+                        <td>
+                            <div class="action-cell">
+                                <a href="{{ url_for('admin_toggle_announcement', id=ann.id) }}" class="btn btn-sm {% if ann.is_active %}btn-secondary{% else %}btn-primary{% endif %}">
+                                    {% if ann.is_active %}停止{% else %}公開{% endif %}
+                                </a>
+                                <a href="{{ url_for('admin_edit_announcement', id=ann.id) }}" class="btn btn-sm btn-edit">編集</a>
+                                <a href="{{ url_for('admin_delete_announcement', id=ann.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('このお知らせを削除しますか？')">削除</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="empty-state">
+                                まだお知らせがありません。必要に応じて新規追加してください。
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <style>
-.row-inactive {
-    opacity: 0.5;
+.announcement-list-page {
+    display: grid;
+}
+
+.table-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1080px;
+}
+
+.admin-table th,
+.admin-table td {
+    padding: 0.9rem 0.95rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.admin-table th {
     background: #f8fafc;
+    color: #334155;
+    text-align: left;
+    font-size: 0.85rem;
 }
 
-.ann-type {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
+.row-inactive {
+    opacity: 0.72;
 }
 
-.ann-type-important { background: #fee2e2; color: #dc2626; }
-.ann-type-warning { background: #fef3c7; color: #d97706; }
-.ann-type-success { background: #d1fae5; color: #059669; }
-.ann-type-info { background: #dbeafe; color: #2563eb; }
+.status-badge,
+.type-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
 
-.badge-active { background: #d1fae5; color: #059669; }
-.badge-inactive { background: #f1f5f9; color: #64748b; }
+.status-badge.active { background: #d1fae5; color: #047857; }
+.status-badge.inactive { background: #e2e8f0; color: #475569; }
 
-.text-muted {
-    color: #94a3b8;
+.type-badge.info { background: #dbeafe; color: #1d4ed8; }
+.type-badge.important { background: #fee2e2; color: #dc2626; }
+.type-badge.warning { background: #fef3c7; color: #b45309; }
+.type-badge.success { background: #d1fae5; color: #047857; }
+
+.title-cell,
+.recipient-cell,
+.action-cell {
+    display: grid;
+    gap: 0.28rem;
+}
+
+.title-cell small,
+.recipient-cell small {
+    color: #64748b;
+    line-height: 1.6;
 }
 
 .action-cell {
-    white-space: nowrap;
+    grid-template-columns: repeat(3, max-content);
+    gap: 0.45rem;
 }
 
-.action-cell .btn {
-    margin-right: 3px;
+.empty-state {
+    padding: 2.4rem 1rem;
+    text-align: center;
+    color: #64748b;
 }
 </style>
 {% endblock %}
-

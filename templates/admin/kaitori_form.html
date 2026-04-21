@@ -9,6 +9,9 @@
 </div>
 
 <form method="POST" class="kaitori-form" enctype="multipart/form-data">
+    {% if source_request is defined and source_request %}
+    <input type="hidden" name="request_id" value="{{ source_request.id }}">
+    {% endif %}
     <div class="form-section">
         <h3>基本情報</h3>
         <div class="form-grid">
@@ -30,6 +33,20 @@
         </div>
     </div>
 
+    {% if source_request is defined and source_request %}
+    <div class="form-section">
+        <h3>案件情報</h3>
+        <div class="attachment-info">
+            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+            {% if source_vendor_kaitori is defined and source_vendor_kaitori %}
+            <p><strong>元になる業者明細:</strong> {{ source_vendor_kaitori.document_no or '-' }} の内容をもとに、ユーザー向け買取明細書を作成します。</p>
+            {% else %}
+            <p>業者側の回答確認後に、ユーザーへ送る最終的な買取明細書を作成する画面です。</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="form-section">
         <h3>買取先（売主）情報</h3>
         <div class="form-grid">
@@ -38,7 +55,7 @@
                 <select id="seller_id" name="seller_id" class="form-control" onchange="loadUserProducts()">
                     <option value="">-- ユーザーを選択 --</option>
                     {% for user in users %}
-                    <option value="{{ user.id }}" {% if kaitori and kaitori.seller_id == user.id %}selected{% endif %}>
+                    <option value="{{ user.id }}" {% if (kaitori and kaitori.seller_id == user.id) or (not kaitori and source_request is defined and source_request and source_request.user_id == user.id) %}selected{% endif %}>
                         {{ user.display_name or user.username }}
                     </option>
                     {% endfor %}

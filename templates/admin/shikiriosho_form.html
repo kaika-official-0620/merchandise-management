@@ -9,6 +9,9 @@
 </div>
 
 <form method="POST" class="shikiriosho-form">
+    {% if source_request is defined and source_request %}
+    <input type="hidden" name="request_id" value="{{ source_request.id }}">
+    {% endif %}
     <div class="form-section">
         <h3>基本情報</h3>
         <div class="form-grid">
@@ -35,6 +38,16 @@
         </div>
     </div>
 
+    {% if source_request is defined and source_request %}
+    <div class="form-section">
+        <h3>案件情報</h3>
+        <div class="attachment-info">
+            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+            <p>この案件に紐づく既存データを引用して仕切書を作成します。明細は必要に応じて編集できます。</p>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="form-section">
         <h3>宛先</h3>
         <div class="form-grid">
@@ -43,7 +56,7 @@
                 <select id="recipient_id" name="recipient_id" class="form-control">
                     <option value="">-- ユーザーを選択 --</option>
                     {% for user in users %}
-                    <option value="{{ user.id }}" {% if shikiriosho and shikiriosho.recipient_id == user.id %}selected{% endif %}>
+                    <option value="{{ user.id }}" {% if (shikiriosho and shikiriosho.recipient_id == user.id) or (not shikiriosho and recipient_id_default is defined and recipient_id_default == user.id) %}selected{% endif %}>
                         {{ user.display_name or user.username }}
                     </option>
                     {% endfor %}
@@ -51,15 +64,15 @@
             </div>
             <div class="form-group">
                 <label for="recipient_name">または直接入力（御中）</label>
-                <input type="text" id="recipient_name" name="recipient_name" value="{{ shikiriosho.recipient_name if shikiriosho else '' }}" placeholder="会社名・団体名" class="form-control">
+                <input type="text" id="recipient_name" name="recipient_name" value="{{ shikiriosho.recipient_name if shikiriosho else (recipient_name_default if recipient_name_default is defined else '') }}" placeholder="会社名・団体名" class="form-control">
             </div>
             <div class="form-group">
                 <label for="contact_name">お名前</label>
-                <input type="text" id="contact_name" name="contact_name" value="{{ shikiriosho.contact_name if shikiriosho else '' }}" placeholder="担当者名" class="form-control">
+                <input type="text" id="contact_name" name="contact_name" value="{{ shikiriosho.contact_name if shikiriosho else (contact_name_default if contact_name_default is defined else '') }}" placeholder="担当者名" class="form-control">
             </div>
             <div class="form-group">
                 <label for="personal_number">個人番号</label>
-                <input type="text" id="personal_number" name="personal_number" value="{{ shikiriosho.personal_number if shikiriosho else '' }}" placeholder="管理用番号" class="form-control">
+                <input type="text" id="personal_number" name="personal_number" value="{{ shikiriosho.personal_number if shikiriosho else (personal_number_default if personal_number_default is defined else '') }}" placeholder="管理用番号" class="form-control">
             </div>
         </div>
     </div>
@@ -165,13 +178,13 @@
     <div class="form-section">
         <h3>備考</h3>
         <div class="form-group">
-            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ shikiriosho.notes if shikiriosho else '' }}</textarea>
+            <textarea name="notes" rows="3" class="form-control" placeholder="備考・特記事項">{{ shikiriosho.notes if shikiriosho else (notes_default if notes_default is defined else '') }}</textarea>
         </div>
     </div>
 
     <div class="form-actions">
         <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-        <button type="submit" name="status" value="sent" class="btn btn-primary">保存して送信</button>
+        <button type="submit" name="status" value="completed" class="btn btn-primary">送信待機にする</button>
     </div>
 </form>
 

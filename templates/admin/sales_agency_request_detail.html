@@ -167,7 +167,7 @@
 
 .items-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 0.9rem;
 }
 
@@ -178,11 +178,12 @@
     border-radius: 16px;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
+    justify-items: start;
 }
 
 .item-thumb {
-    width: 100%;
-    aspect-ratio: 1 / 1;
+    width: 92px;
+    height: 92px;
     border-radius: 12px;
     object-fit: cover;
     background: #e2e8f0;
@@ -206,6 +207,10 @@
     font-weight: 700;
 }
 
+.item-status.cancelled {
+    color: #b91c1c;
+}
+
 .item-link {
     display: inline-flex;
     align-items: center;
@@ -222,6 +227,39 @@
 .item-link:hover {
     border-color: #93c5fd;
     color: #1d4ed8;
+}
+
+.item-actions {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.item-inline-form {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.item-inline-form input[type="text"] {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.88rem;
+}
+
+.item-inline-form .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.cancel-note {
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    background: #fff1f2;
+    color: #9f1239;
+    font-size: 0.84rem;
+    line-height: 1.7;
 }
 
 .note-box,
@@ -375,10 +413,29 @@
                             {% if item.brand_name %}
                             <div class="item-brand">{{ item.brand_name }}</div>
                             {% endif %}
-                            {% if item.appraisal_status_label %}
-                            <div class="item-status">{{ item.appraisal_status_label }}</div>
+                            {% if item.item_status_label %}
+                            <div class="item-status {% if item.is_cancelled %}cancelled{% endif %}">{{ item.item_status_label }}</div>
                             {% endif %}
-                            <a href="{{ item.detail_url }}" class="item-link">商品詳細を見る</a>
+                            <div class="item-actions">
+                                {% if item.detail_url %}
+                                <a href="{{ item.detail_url }}" class="item-link">商品詳細を見る</a>
+                                {% else %}
+                                <div class="cancel-note">参照元の商品詳細は見つかりませんでした。受付内容の確認と書類作成はこの申請詳細から続けられます。</div>
+                                {% endif %}
+                                {% if item.is_cancelled %}
+                                <div class="cancel-note">
+                                    <strong>この商品はキャンセル済みです。</strong>
+                                    {% if item.cancel_reason %}
+                                    <div>理由: {{ item.cancel_reason }}</div>
+                                    {% endif %}
+                                </div>
+                                {% elif item.request_item_id %}
+                                <form method="post" action="{{ url_for('admin_sales_agency_request_item_cancel', request_id=req.id, item_id=item.request_item_id) }}" class="item-inline-form" onsubmit="return confirm('この商品を今回の申請からキャンセルしますか？');">
+                                    <input type="text" name="cancel_reason" placeholder="キャンセル理由（任意）">
+                                    <button type="submit" class="btn btn-reject">この商品をキャンセル</button>
+                                </form>
+                                {% endif %}
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -396,7 +453,7 @@
                     <textarea id="admin-note-input" placeholder="必要に応じてメモを入力してください">{{ req.admin_note or '' }}</textarea>
                 </div>
 
-                {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id %}
+                    {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.request_can_create_shikiriosho or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id or req.shikiriosho_url %}
                 <div class="document-links">
                     {% if req.request_can_create_vendor_estimate %}
                     <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">業者向け見積依頼書を作成</a>
@@ -415,6 +472,12 @@
                     {% endif %}
                     {% if req.client_invoice_id %}
                     <a href="{{ url_for('admin_kaitori_view', id=req.client_invoice_id) }}" class="btn btn-secondary">ユーザー向け買取明細書を見る</a>
+                    {% endif %}
+                    {% if req.request_can_create_shikiriosho %}
+                    <a href="{{ url_for('admin_shikiriosho_add', request_id=req.id) }}" class="btn btn-secondary">仕切書を作成</a>
+                    {% endif %}
+                    {% if req.shikiriosho_url %}
+                    <a href="{{ req.shikiriosho_url }}" class="btn btn-secondary">仕切書を見る</a>
                     {% endif %}
                 </div>
                 <div class="muted-text" style="margin-top: 0.6rem;">書類は「ユーザー依頼受領 → 業者向け見積依頼書 → 業者買取明細書 → ユーザー向け買取明細書」の順で扱います。</div>

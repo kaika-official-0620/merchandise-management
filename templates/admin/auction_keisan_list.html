@@ -1,208 +1,150 @@
 {% extends "base.html" %}
-
-{% block title %}オークション計算書管理 - 物販管理システム{% endblock %}
+{% block title %}計算書送信待機 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>オークション計算書管理</h1>
-    <p class="page-description">オークション落札で自動作成された計算書を確認・編集し、ユーザーに送信できます</p>
-</div>
-
-<div class="stats-cards">
-    <div class="stat-card draft">
-        <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'draft')|list|length }}</div>
-        <div class="stat-label">未送信</div>
-    </div>
-    <div class="stat-card submitted">
-        <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'submitted')|list|length }}</div>
-        <div class="stat-label">送信済み</div>
-    </div>
-    <div class="stat-card total">
-        <div class="stat-value">{{ keisan_list|length }}</div>
-        <div class="stat-label">合計</div>
-    </div>
-</div>
-
-<div class="table-container">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>書類No.</th>
-                <th>ユーザー</th>
-                <th>件名</th>
-                <th>発行日</th>
-                <th>合計金額</th>
-                <th>ステータス</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for doc in keisan_list %}
-            <tr>
-                <td class="doc-no">{{ doc.document_no }}</td>
-                <td>
-                    <span class="user-name">{{ doc.user_name or doc.username }}</span>
-                </td>
-                <td>{{ doc.subject or '-' }}</td>
-                <td>{{ doc.issue_date }}</td>
-                <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
-                <td>
-                    {% if doc.status == 'submitted' %}
-                        <span class="status-badge status-submitted">送信済み</span>
-                    {% elif doc.status == 'completed' %}
-                        <span class="status-badge status-completed">完了</span>
-                    {% else %}
-                        <span class="status-badge status-draft">未送信</span>
-                    {% endif %}
-                </td>
-                <td class="actions">
-                    <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
-                    {% if doc.status == 'draft' %}
-                    <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
-                    <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display: inline;">
-                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('この計算書をユーザーに送信しますか？')">送信</button>
-                    </form>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="7" class="text-center text-muted">オークション計算書がありません</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
 <style>
-.page-header {
-    margin-bottom: 24px;
-}
-
-.page-header h1 {
-    margin: 0 0 8px 0;
-}
-
-.page-description {
-    color: #64748b;
-    margin: 0;
-}
-
-.stats-cards {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: white;
-    padding: 16px 24px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    border-left: 4px solid;
-}
-
-.stat-card.draft { border-color: #f59e0b; }
-.stat-card.submitted { border-color: #3b82f6; }
-.stat-card.total { border-color: #6366f1; }
-
-.stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.stat-label {
-    color: #64748b;
-    font-size: 0.875rem;
-}
-
-.table-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table th,
-.data-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-    white-space: nowrap;
-}
-
-.data-table th {
-    background: #f8fafc;
-    font-weight: 600;
-    color: #475569;
-}
-
-.doc-no {
-    font-family: 'Consolas', monospace;
-    font-weight: 500;
-    font-size: 0.875rem;
-}
-
-.user-name {
-    font-weight: 500;
-}
-
-.amount {
-    font-family: 'Consolas', monospace;
-    font-weight: 600;
-    color: #10b981;
-}
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.status-draft { background: #fef3c7; color: #b45309; }
-.status-submitted { background: #dbeafe; color: #1d4ed8; }
-.status-completed { background: #d1fae5; color: #059669; }
-
-.actions {
-    display: flex;
-    gap: 6px;
-}
-
-.btn-sm { 
-    padding: 4px 10px; 
-    font-size: 12px;
-    border-radius: 4px;
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
-}
-.btn-info { background: #3b82f6; color: white; }
-.btn-secondary { background: #64748b; color: white; }
-.btn-success { background: #10b981; color: white; }
-
-.text-center { text-align: center; }
-.text-muted { color: #94a3b8; padding: 24px; }
-
-@media (max-width: 768px) {
-    .stats-cards {
-        flex-wrap: wrap;
-    }
-    
-    .stat-card {
-        flex: 1;
-        min-width: 100px;
-    }
-    
-    .data-table {
-        min-width: 800px;
-    }
-}
+.queue-page { max-width: 1280px; margin: 0 auto; }
+.queue-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; }
+.queue-header h1 { margin: 0; }
+.queue-note { margin: .4rem 0 0; color: #64748b; line-height: 1.7; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.stat-card, .table-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
+.stat-card { padding: 1rem 1.1rem; }
+.stat-label { color: #64748b; font-size: .84rem; }
+.stat-value { margin-top: .3rem; font-size: 1.9rem; font-weight: 800; color: #0f172a; }
+.queue-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: .55rem .9rem; border-radius: 10px; text-decoration: none; font-weight: 700; border: none; cursor: pointer; }
+.btn-primary { background: #0f172a; color: #fff; }
+.btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
+.btn-success { background: #10b981; color: #fff; }
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+.data-table th, .data-table td { padding: .9rem 1rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.data-table th { background: #f8fafc; color: #334155; text-align: left; white-space: nowrap; }
+.data-table tbody tr:hover { background: #f8fafc; }
+.doc-no { font-family: Consolas, monospace; font-weight: 700; color: #1d4ed8; }
+.item-summary { color: #334155; line-height: 1.55; min-width: 260px; }
+.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.status-draft { background: #fef3c7; color: #92400e; }
+.status-ready { background: #d1fae5; color: #065f46; }
+.status-sent { background: #dbeafe; color: #1d4ed8; }
+.amount { font-weight: 800; color: #047857; white-space: nowrap; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.checkbox-col { width: 44px; text-align: center; }
+.empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
+@media (max-width: 768px) { .stats { grid-template-columns: 1fr; } .queue-header { flex-direction: column; } }
 </style>
+
+<div class="queue-page">
+    <div class="queue-header">
+        <div>
+            <h1>計算書送信待機</h1>
+            <p class="queue-note">下書きを確認したあと、完成した計算書だけを個別送信または一括送信できます。ユーザーには送信済みの書類だけが表示されます。</p>
+        </div>
+        <div class="queue-actions">
+            <form action="{{ url_for('admin_auction_keisan_send_bulk') }}" method="POST">
+                <input type="hidden" name="send_scope" value="all">
+                <button type="submit" class="btn btn-success" onclick="return confirm('送信待機中の完成書類をまとめて送信しますか？')">完成書類を一括送信</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-label">下書き確認中</div>
+            <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'draft')|list|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">送信待機</div>
+            <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'completed')|list|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">送信済み</div>
+            <div class="stat-value">{{ keisan_list|selectattr('status', 'equalto', 'submitted')|list|length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">対象月</div>
+            <div class="stat-value">{{ target_month }}</div>
+        </div>
+    </div>
+
+    <form action="{{ url_for('admin_auction_keisan_send_bulk') }}" method="POST">
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-col"><input type="checkbox" id="check-all-keisan"></th>
+                        <th>計算書No.</th>
+                        <th>クライアント</th>
+                        <th>対象明細</th>
+                        <th>件名</th>
+                        <th>発行日</th>
+                        <th>合計金額</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in keisan_list %}
+                    <tr>
+                        <td class="checkbox-col">
+                            {% if doc.status == 'completed' %}
+                            <input type="checkbox" name="document_ids" value="{{ doc.id }}" class="queue-checkbox">
+                            {% endif %}
+                        </td>
+                        <td class="doc-no">{{ doc.document_no }}</td>
+                        <td>{{ doc.user_name or doc.username }}</td>
+                        <td class="item-summary">{{ doc.item_names }}</td>
+                        <td>{{ doc.subject or '-' }}</td>
+                        <td>{{ doc.issue_date }}</td>
+                        <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                        <td>
+                            {% if doc.status == 'submitted' %}
+                            <span class="status-chip status-sent">送信済み</span>
+                            {% elif doc.status == 'completed' %}
+                            <span class="status-chip status-ready">送信待機</span>
+                            {% else %}
+                            <span class="status-chip status-draft">下書き確認中</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-primary">詳細</a>
+                                {% if doc.status == 'draft' %}
+                                <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                                {% elif doc.status == 'completed' %}
+                                <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-secondary">再確認</a>
+                                <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-success" onclick="return confirm('この完成書類をクライアントへ送信しますか？')">個別送信</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="empty-state">対象の計算書はまだありません。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if keisan_list %}
+        <div class="queue-actions" style="margin-top: 1rem;">
+            <button type="submit" class="btn btn-success" onclick="return confirm('選択した完成書類を送信しますか？')">選択した完成書類を送信</button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+const checkAllKeisan = document.getElementById('check-all-keisan');
+if (checkAllKeisan) {
+    checkAllKeisan.addEventListener('change', function () {
+        document.querySelectorAll('.queue-checkbox').forEach((checkbox) => {
+            checkbox.checked = this.checked;
+        });
+    });
+}
+</script>
 {% endblock %}

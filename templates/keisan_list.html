@@ -5,9 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h1>計算書一覧</h1>
-    <div class="header-actions">
-        <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
-    </div>
+    <p class="page-note">月額システム利用料と撮影梱包発送代行手数料は、管理側の確認後に自動送信されます。</p>
 </div>
 
 <div class="table-container">
@@ -32,14 +30,12 @@
                 <td>{{ doc.issue_date }}</td>
                 <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
                 <td>
-                    {% if doc.is_admin_created %}
-                        <span class="status-badge status-admin">管理者発行</span>
-                    {% elif doc.status == 'completed' %}
+                    {% if doc.status == 'completed' %}
                         <span class="status-badge status-completed">完了</span>
                     {% elif doc.status == 'submitted' %}
                         <span class="status-badge status-submitted">送信済</span>
                     {% else %}
-                        <span class="status-badge status-draft">下書き</span>
+                        <span class="status-badge status-draft">送信待ち</span>
                     {% endif %}
                 </td>
                 <td class="actions">
@@ -72,9 +68,10 @@
     margin: 0;
 }
 
-.header-actions {
-    display: flex;
-    gap: 10px;
+.page-note {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 0.92rem;
 }
 
 .doc-no {
@@ -92,12 +89,9 @@
 .status-completed { background: #d4edda; color: #155724; }
 .status-submitted { background: #cce5ff; color: #004085; }
 .status-draft { background: #fff3cd; color: #856404; }
-.status-admin { background: #e0cffc; color: #6610f2; }
-
 .btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
 .btn-info { background: #17a2b8; color: white; }
 .btn-pdf { background: #dc3545; color: white; }
-.btn-primary { background: #3b82f6; color: white; }
 
 .actions { white-space: nowrap; }
 

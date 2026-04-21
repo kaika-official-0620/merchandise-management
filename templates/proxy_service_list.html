@@ -7,14 +7,13 @@
 </div>
 
 <div class="auction-list-intro">
-    <p>公開状況に応じて、開始前・開催中・締切後のオークションを確認できます。</p>
+    <p>現在開催中のオークションです。参加するオークションを選択してください。</p>
 </div>
 
 <div class="public-auction-grid">
     {% for auction in auctions %}
-    <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="public-auction-card {{ auction.status }}">
+    <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="public-auction-card">
         <div class="auction-card-header">
-            <div class="status-badge {{ auction.status }}">{{ auction.status_label }}</div>
             {% if auction.sale_mode == 'fixed' %}
             <span class="mode-tag fixed">即決・早い者勝ち</span>
             {% else %}
@@ -31,47 +30,19 @@
             <div class="auction-meta">
                 <div class="meta-item">
                     <span class="meta-icon">📦</span>
-                    <span class="meta-value">登録商品 {{ auction.item_count or 0 }}点</span>
+                    <span class="meta-value">{{ auction.item_count or 0 }}点出品中</span>
                 </div>
-                {% if auction.status == 'open' %}
-                <div class="meta-item">
-                    <span class="meta-icon">🟢</span>
-                    <span class="meta-value">受付中 {{ auction.active_item_count or 0 }}点</span>
-                </div>
-                {% elif auction.status == 'ended' %}
-                <div class="meta-item">
-                    <span class="meta-icon">🏁</span>
-                    <span class="meta-value">結果対象 {{ auction.winner_count or 0 }}点</span>
-                </div>
-                {% else %}
-                <div class="meta-item">
-                    <span class="meta-icon">⏳</span>
-                    <span class="meta-value">開始待ち</span>
-                </div>
-                {% endif %}
-                {% if auction.start_datetime %}
-                <div class="meta-item">
-                    <span class="meta-icon">▶</span>
-                    <span class="meta-value">開始 {{ auction.start_datetime }}</span>
-                </div>
-                {% endif %}
                 {% if auction.end_datetime %}
                 <div class="meta-item">
-                    <span class="meta-icon">■</span>
-                    <span class="meta-value">終了 {{ auction.end_datetime }}</span>
+                    <span class="meta-icon">⏰</span>
+                    <span class="meta-value">{{ auction.end_datetime }} まで</span>
                 </div>
                 {% endif %}
             </div>
         </div>
         
         <div class="auction-card-footer">
-            {% if auction.status == 'open' %}
-            <span class="view-btn">参加する →</span>
-            {% elif auction.status == 'ended' %}
-            <span class="view-btn">結果を見る →</span>
-            {% else %}
-            <span class="view-btn">公開予定を確認 →</span>
-            {% endif %}
+            <span class="view-btn">詳細を見る →</span>
         </div>
     </a>
     {% endfor %}
@@ -103,59 +74,23 @@
 }
 
 .public-auction-card:hover {
+    border-color: var(--primary);
     box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
     transform: translateY(-2px);
 }
 
-.public-auction-card.open {
-    border-color: #10b981;
-}
-
-.public-auction-card.scheduled {
-    border-color: #f59e0b;
-}
-
-.public-auction-card.ended {
-    border-color: #64748b;
-}
-
 .auction-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.85rem 1rem;
+    padding: 0.75rem 1rem;
     background: var(--bg-main);
     border-bottom: 1px solid var(--border);
 }
 
-.status-badge,
 .mode-tag {
     display: inline-block;
     padding: 4px 12px;
-    border-radius: 999px;
+    border-radius: 20px;
     font-size: 0.75rem;
     font-weight: 600;
-}
-
-.status-badge.open {
-    background: #10b981;
-    color: white;
-}
-
-.status-badge.scheduled {
-    background: #f59e0b;
-    color: white;
-}
-
-.status-badge.ended {
-    background: #475569;
-    color: white;
-}
-
-.status-badge.private {
-    background: #94a3b8;
-    color: white;
 }
 
 .mode-tag.auction {
@@ -198,6 +133,10 @@
     gap: 0.5rem;
     font-size: 0.9rem;
     color: var(--text-muted);
+}
+
+.meta-icon {
+    font-size: 1rem;
 }
 
 .auction-card-footer {

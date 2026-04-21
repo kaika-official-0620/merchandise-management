@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ '長期在庫商品' if long_term_only else 'ユーザーの商品一覧' }} - 株式会社 開花{% endblock %}
+{% block title %}{% if request.args.get('inventory_view') == 'long_term' %}長期保存商品{% else %}ユーザーの商品一覧{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set is_long_term_view = request.args.get('inventory_view') == 'long_term' %}
 <style>
     /* 検索ボタン */
     .search-toggle-container {
@@ -187,143 +189,6 @@
         gap: 0.5rem;
     }
 
-    .page-description {
-        margin-top: 0.5rem;
-        color: #64748b;
-        font-size: 0.95rem;
-    }
-
-    .long-term-overview {
-        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
-        border: 1px solid #fed7aa;
-        border-radius: 16px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 10px 30px rgba(249, 115, 22, 0.08);
-    }
-
-    .long-term-overview-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .long-term-overview-header h2 {
-        margin: 0;
-        color: #9a3412;
-        font-size: 1.1rem;
-    }
-
-    .long-term-overview-header p {
-        margin: 0.35rem 0 0;
-        color: #9a3412;
-        font-size: 0.9rem;
-    }
-
-    .long-term-overview-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: flex-end;
-    }
-
-    .summary-filter-link {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.55rem 0.9rem;
-        border-radius: 999px;
-        border: 1px solid #fdba74;
-        background: white;
-        color: #c2410c;
-        text-decoration: none;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
-
-    .summary-filter-link:hover,
-    .summary-filter-link.active {
-        background: #ea580c;
-        border-color: #ea580c;
-        color: white;
-    }
-
-    .long-term-client-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.85rem;
-    }
-
-    .long-term-client-card {
-        display: block;
-        background: white;
-        border: 1px solid #fed7aa;
-        border-radius: 14px;
-        padding: 1rem;
-        text-decoration: none;
-        color: #1e293b;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-    }
-
-    .long-term-client-card:hover,
-    .long-term-client-card.active {
-        transform: translateY(-2px);
-        border-color: #f97316;
-        box-shadow: 0 12px 24px rgba(249, 115, 22, 0.16);
-    }
-
-    .long-term-client-name {
-        display: block;
-        font-size: 0.95rem;
-        font-weight: 700;
-        margin-bottom: 0.45rem;
-    }
-
-    .long-term-client-count {
-        display: block;
-        font-size: 1.7rem;
-        font-weight: 800;
-        color: #c2410c;
-        line-height: 1.1;
-    }
-
-    .long-term-client-meta {
-        display: block;
-        margin-top: 0.45rem;
-        color: #7c2d12;
-        font-size: 0.85rem;
-    }
-
-    .long-term-current-filter {
-        margin-top: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
-        padding-top: 1rem;
-        border-top: 1px dashed #fdba74;
-        color: #9a3412;
-        font-size: 0.9rem;
-    }
-
-    .long-term-current-filter a {
-        color: #c2410c;
-        font-weight: 600;
-        text-decoration: none;
-    }
-
-    .long-term-empty-state {
-        background: white;
-        border: 1px dashed #fdba74;
-        border-radius: 12px;
-        padding: 1rem;
-        color: #9a3412;
-        text-align: center;
-    }
-
     /* テーブルスタイル */
     .table-container {
         background: white;
@@ -335,15 +200,15 @@
 
     .data-table {
         width: 100%;
-        min-width: 1400px;
+        min-width: 1500px;
         border-collapse: collapse;
-        font-size: 0.9rem;
+        font-size: 1.04rem;
         border: 1px solid #d1d5db;
     }
 
     .data-table th {
         background: #f8fafc;
-        padding: 12px 10px;
+        padding: 13px 11px;
         text-align: left;
         font-weight: 600;
         color: #475569;
@@ -364,7 +229,7 @@
     }
 
     .data-table td {
-        padding: 10px;
+        padding: 12px 11px;
         border: 1px solid #d1d5db;
         vertical-align: middle;
     }
@@ -375,8 +240,105 @@
         width: 300px;
     }
 
+    .data-table th.store-col,
+    .data-table td.store-col {
+        min-width: 150px;
+    }
+
+    .data-table th.owner-col,
+    .data-table td.owner-col,
+    .data-table th.updater-col,
+    .data-table td.updater-col {
+        min-width: 120px;
+    }
+
+    .data-table th.fee-col,
+    .data-table td.fee-col {
+        min-width: 220px;
+        width: 220px;
+    }
+
+    .data-table th.shipping-col,
+    .data-table td.shipping-col {
+        min-width: 130px;
+        width: 130px;
+    }
+
+    .fee-breakdown {
+        display: inline-block;
+        text-align: left;
+    }
+
+    .fee-breakdown summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        list-style: none;
+        font-weight: 600;
+        color: inherit;
+    }
+
+    .fee-breakdown summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .fee-breakdown-body {
+        margin-top: 6px;
+        padding: 8px 10px;
+        border: 1px solid #dbeafe;
+        border-radius: 10px;
+        background: #f8fbff;
+        min-width: 220px;
+        line-height: 1.6;
+        white-space: normal;
+    }
+
+    .fee-detail-line {
+        white-space: normal;
+    }
+
+    .fee-summary-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #2563eb;
+        font-size: 0.66rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .fee-summary-meta {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
+        font-size: 0.68rem;
+        color: #64748b;
+        line-height: 1.5;
+        white-space: normal;
+    }
+
     .data-table td.product-name-col {
         white-space: nowrap;
+    }
+
+    .data-table td.store-col,
+    .data-table td.owner-col,
+    .data-table td.updater-col {
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow-wrap: normal;
+    }
+
+    .data-table td.owner-col .badge-admin,
+    .data-table td.owner-col .badge-user {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        max-width: none;
     }
 
     .data-table tbody tr:hover {
@@ -579,6 +541,11 @@
         color: #1e40af;
     }
 
+    .status-badge.pending-sale {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
     .status-badge.unlisted {
         background: #f1f5f9;
         color: #64748b;
@@ -596,6 +563,32 @@
 
     .amount.negative {
         color: #ef4444;
+    }
+
+    .item-checkbox,
+    #select-all {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #93c5fd;
+        border-radius: 999px;
+        background: #fff;
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0 !important;
+        cursor: pointer;
+        box-sizing: border-box;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .item-checkbox:checked,
+    #select-all:checked {
+        border-color: #2563eb;
+        background:
+            radial-gradient(circle at center, #2563eb 0 42%, transparent 46%),
+            #ffffff;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
     }
 
     /* コンディションバッジ */
@@ -652,15 +645,6 @@
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.75rem;
-    }
-
-    /* 一括操作エリア */
-    .bulk-actions {
-        background: #f8fafc;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
     }
 
     /* モーダル */
@@ -735,16 +719,6 @@
     }
 
     @media (max-width: 768px) {
-        .long-term-overview-header,
-        .long-term-current-filter {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .long-term-overview-actions {
-            justify-content: flex-start;
-        }
-
         .search-action-bar {
             flex-direction: row;
             gap: 0.5rem;
@@ -987,7 +961,7 @@
 
         .user-card-title h3 {
             margin: 0;
-            font-size: 0.7rem;
+            font-size: 0.9rem;
             font-weight: 500;
             color: #1e293b;
             line-height: 1.3;
@@ -1007,26 +981,109 @@
 
         /* 価格のみコンパクト表示 */
         .user-card-info-grid {
-            display: block;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
         }
 
         .user-card-info-item {
-            display: none;
-        }
-
-        /* 仕入価格のみ表示 */
-        .user-card-info-item:first-child {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
         }
 
         .user-card-info-label {
-            display: none;
+            display: block;
+            font-size: 0.78rem;
+            color: #94a3b8;
         }
 
         .user-card-info-value {
-            font-size: 0.75rem;
+            font-size: 0.9rem;
             font-weight: 600;
             color: #1e293b;
+        }
+
+        .fee-breakdown {
+            display: inline-block;
+            text-align: left;
+        }
+
+        .fee-breakdown summary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            list-style: none;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        .fee-breakdown summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .fee-breakdown-body {
+            margin-top: 6px;
+            padding: 8px 10px;
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            background: #f8fbff;
+            font-size: 0.72rem;
+            line-height: 1.6;
+            color: #475569;
+            white-space: nowrap;
+        }
+
+        .sale-type-inline {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .sale-type-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #4338ca;
+            font-size: 0.68rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .fee-detail-line {
+            white-space: normal;
+        }
+
+        .fee-summary-meta {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 8px;
+            font-size: 0.68rem;
+            color: #64748b;
+            line-height: 1.5;
+            white-space: normal;
+        }
+
+        .fee-breakdown-note {
+            color: #94a3b8;
+            font-size: 0.68rem;
+        }
+
+        .fee-summary-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #2563eb;
+            font-size: 0.66rem;
+            font-weight: 700;
+            line-height: 1.2;
         }
 
         .user-card-info-value.positive {
@@ -1063,55 +1120,16 @@
 </style>
 
 <div class="page-header">
-    <h1>{{ '長期在庫商品' if long_term_only else 'ユーザーの商品一覧' }}</h1>
-    <p class="page-description">
-        {% if long_term_only %}
-        90日以上保管されている未売却商品を、クライアント別に確認できます。
-        {% else %}
-        クライアントごとの商品一覧です。長期在庫サマリーから対象クライアントにそのまま絞り込めます。
+    <div>
+        <h1>{{ '長期保存商品' if is_long_term_view else 'ユーザーの商品一覧' }}</h1>
+        {% if is_long_term_view %}
+        <p style="margin: 0.35rem 0 0; color: #64748b; font-size: 0.92rem; line-height: 1.7;">仕入日から90日以上経過し、まだ販売完了していない商品だけを表示しています。</p>
         {% endif %}
-    </p>
+    </div>
+    {% if is_long_term_view %}
+    <a href="{{ url_for('admin_user_products') }}" class="btn">商品一覧に戻る</a>
+    {% endif %}
 </div>
-
-{% if long_term_summary or long_term_only %}
-<section class="long-term-overview">
-    <div class="long-term-overview-header">
-        <div>
-            <h2>クライアント別の長期在庫サマリー</h2>
-            <p>未売却かつ90日以上保管されている商品が合計 {{ total_long_term_count }} 件あります。</p>
-        </div>
-        <div class="long-term-overview-actions">
-            <a href="{{ url_for('admin_user_products', long_term_only=1) }}"
-                class="summary-filter-link {% if long_term_only and not selected_owner_id %}active{% endif %}">長期在庫をすべて見る</a>
-            {% if long_term_only %}
-            <a href="{{ url_for('admin_user_products') }}" class="summary-filter-link">通常一覧に戻る</a>
-            {% endif %}
-        </div>
-    </div>
-
-    {% if long_term_summary %}
-    <div class="long-term-client-grid">
-        {% for client in long_term_summary %}
-        <a href="{{ url_for('admin_user_products', long_term_only=1, owner_id=client.user_id) }}"
-            class="long-term-client-card {% if selected_owner_id == client.user_id and long_term_only %}active{% endif %}">
-            <span class="long-term-client-name">{{ client.client_name }}</span>
-            <span class="long-term-client-count">{{ client.item_count }}件</span>
-            <span class="long-term-client-meta">最長 {{ client.oldest_days_in_storage }} 日保管</span>
-        </a>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="long-term-empty-state">現在、長期在庫として該当する商品はありません。</div>
-    {% endif %}
-
-    {% if long_term_only and selected_owner_name %}
-    <div class="long-term-current-filter">
-        <span>{{ selected_owner_name }} の長期在庫を表示中です。</span>
-        <a href="{{ url_for('admin_user_products', long_term_only=1) }}">絞り込みを解除</a>
-    </div>
-    {% endif %}
-</section>
-{% endif %}
 
 <!-- 検索ボタン＆アクションボタン -->
 <div class="search-action-bar">
@@ -1183,6 +1201,7 @@
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
                     <option value="sold">売却済</option>
+                    <option value="appraisal_pending">査定待ち</option>
                     <option value="listed">出品中</option>
                     <option value="unlisted">未出品</option>
                 </select>
@@ -1194,7 +1213,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>卸価格</label>
+                <label>仕入れ額</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1206,7 +1225,7 @@
                 <input type="number" id="tab-filter-sale-max" placeholder="以下">
             </div>
             <div class="filter-item">
-                <label>利益</label>
+                <label>最終利益</label>
                 <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-profit-max" placeholder="以下">
@@ -1221,46 +1240,27 @@
     </div>
 </div>
 
-{% if items %}
-<div class="bulk-actions">
-    <form id="bulk-transfer-form" action="{{ url_for('admin_transfer_items_bulk') }}" method="POST"
-        style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; gap: 6px;">
-            <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
-            <span>すべて選択</span>
-        </label>
-        <select name="target_user_id" required style="min-width: 200px;">
-            <option value="">転送先ユーザーを選択</option>
-            {% for user in users %}
-            <option value="{{ user.id }}">{{ user.display_name or user.username }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-primary" onclick="return confirmBulkTransfer()">一括転送</button>
-    </form>
-</div>
-{% endif %}
-
 <!-- 商品テーブル -->
 <div class="table-container">
     <div class="table-scroll">
         <table class="data-table" id="itemsTable">
             <thead>
                 <tr>
-                    <th style="width: 40px;"></th>
                     <th style="width: 60px;">写真</th>
                     <th class="sortable" data-sort="kaika_product_code">開花管理番号</th>
                     <th class="sortable product-name-col" data-sort="product_name">商品名</th>
                     <th class="sortable" data-sort="brand_name">ブランド</th>
                     <th>型番</th>
                     <th>状態</th>
-                    <th class="sortable" data-sort="store_name">仕入先</th>
-                    <th>登録者</th>
-                    <th>最終更新者</th>
+                    <th class="sortable store-col" data-sort="store_name">仕入先</th>
+                    <th class="owner-col">登録者</th>
+                    <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">卸価格</th>
-                    <th class="sortable" data-sort="listing_price">出品価格</th>
+                    <th class="sortable" data-sort="purchase_price">仕入れ額</th>
+                    <th class="sortable fee-col" data-sort="commission_total">手数料</th>
+                    <th class="shipping-col">送料</th>
                     <th class="sortable" data-sort="sale_price">売上</th>
-                    <th class="sortable" data-sort="profit">利益</th>
+                    <th class="sortable" data-sort="profit">最終利益</th>
                     <th>販売状況</th>
                     <th style="width: 100px;">操作</th>
                 </tr>
@@ -1272,18 +1272,14 @@
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}"
-                    data-sales-destination="{{ item.sales_destination or '' }}"
+                    data-sales-destination="{{ item.sales_destination_display or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
-                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.wholesale_price or 0 }}"
-                    data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+                    data-date="{{ item.purchase_date or '' }}" data-purchase-price="{{ item.display_purchase_price or 0 }}"
+                    data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.display_sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
-                    <td>
-                        <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
-                            class="item-checkbox">
-                    </td>
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1296,7 +1292,12 @@
                         {% endif %}
                     </td>
                     <td>{{ item.kaika_product_code or '-' }}</td>
-                    <td class="product-name-col"><strong>{{ item.product_name or '-' }}</strong></td>
+                    <td class="product-name-col">
+                        <strong>{{ item.product_name or '-' }}</strong>
+                        {% if item.notes %}
+                        <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;" title="{{ item.notes }}">メモ: {{ item.notes|truncate(36) }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ item.brand_name or '-' }}</td>
                     <td>{{ item.model_number or '-' }}</td>
                     <td>
@@ -1305,19 +1306,36 @@
                             }}</span>
                         {% else %}-{% endif %}
                     </td>
-                    <td>{{ item.store_name or '-' }}</td>
-                    <td><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
-                    <td>{{ item.updated_by_name or '-' }}</td>
+                    <td class="store-col" title="{{ item.store_name or '-' }}">{{ item.store_name or '-' }}</td>
+                    <td class="owner-col"><span class="badge-user">{{ item.owner_display_name or item.owner_username or '-' }}</span></td>
+                    <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
-                    <td class="amount">
-                        {% if item.listing_price %}
-                        ¥{{ "{:,}".format(item.listing_price) }}
+                    <td class="amount">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                    <td class="amount fee-col">
+                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        <details class="fee-breakdown">
+                            <summary><span>¥{{ "{:,}".format(item.display_fee_total or 0) }}</span><span class="fee-summary-toggle">内訳</span></summary>
+                            <div class="fee-breakdown-body">
+                                {% for fee_detail in item.fee_breakdown_details or [] %}
+                                {% if not fee_detail.startswith('送料:') %}
+                                <div class="fee-detail-line">{{ fee_detail }}</div>
+                                {% endif %}
+                                {% endfor %}
+                                {% if item.kaika_fee %}
+                                <div class="fee-breakdown-note">開花手数料は仕入れ額に含めて計算しています。</div>
+                                {% endif %}
+                            </div>
+                        </details>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="amount shipping-col">
+                        {% if item.sale_date or item.display_shipping_cost %}
+                        ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount">
                         {% if item.sale_date %}
-                        ¥{{ "{:,}".format(item.sale_price or 0) }}
+                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td
@@ -1330,6 +1348,8 @@
                     <td>
                         {% if item.sale_date %}
                         <span class="status-badge sold">売却済</span>
+                        {% elif item.appraisal_status == 'waiting' %}
+                        <span class="status-badge pending-sale">査定待ち</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1337,8 +1357,8 @@
                         {% endif %}
                     </td>
                     <td class="action-cell">
-                        <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
-                        <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                        <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                         <button class="btn btn-sm btn-primary"
                             onclick="openTransferModal({{ item.id }}, '{{ item.product_name | e }}')">転送</button>
                         {% if item.can_delete %}
@@ -1350,11 +1370,7 @@
                 {% else %}
                 <tr>
                     <td colspan="17" style="text-align: center; padding: 40px; color: #94a3b8;">
-                        {% if long_term_only %}
-                        {{ selected_owner_name ~ ' の長期在庫商品はありません' if selected_owner_name else '長期在庫商品はありません' }}
-                        {% else %}
                         ユーザーの商品がありません
-                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -1375,13 +1391,23 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}">
+        <div class="user-item-card {% if item.sale_date %}card-sold{% endif %}"
+            data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}"
+            data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}"
+            data-condition="{{ item.item_condition or '' }}"
+            data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
+            data-date="{{ item.purchase_date or '' }}"
+            data-purchase-price="{{ item.display_purchase_price or 0 }}"
+            data-sale-price="{{ item.display_sale_price or 0 }}"
+            data-profit="{{ item.profit or 0 }}"
+            data-sale-type="{{ item.sale_type or '' }}"
+            data-sale-date="{{ item.sale_date or '' }}"
+            data-sales-destination="{{ item.sales_destination_display or '' }}"
+            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
             <div
                 class="user-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
-                <div class="user-card-checkbox">
-                    <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form"
-                        class="item-checkbox">
-                </div>
                 <div class="user-card-photo">
                     {% if item.all_photos and item.all_photos|length > 1 %}
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
@@ -1400,11 +1426,16 @@
                 <div class="user-card-title">
                     <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
                     <h3>{{ item.product_name or '-' }}</h3>
+                    {% if item.notes %}
+                    <div style="margin-top: 4px; font-size: 0.75rem; color: #64748b; line-height: 1.4;">メモ: {{ item.notes|truncate(48) }}</div>
+                    {% endif %}
                     <span class="user-card-owner">{{ item.owner_display_name or item.owner_username or '-' }}</span>
                 </div>
                 <div class="user-card-status">
                     {% if item.sale_date %}
                     <span class="status-badge sold">売却済</span>
+                    {% elif item.appraisal_status == 'waiting' %}
+                    <span class="status-badge pending-sale">査定待ち</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -1415,36 +1446,49 @@
             <div class="user-card-body">
                 <div class="user-card-info-grid">
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">卸価格</span>
-                        <span class="user-card-info-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
+                        <span class="user-card-info-label">仕入れ額</span>
+                        <span class="user-card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
                     </div>
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">出品</span>
-                        <span class="user-card-info-value">{% if item.listing_price %}¥{{
-                            "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
+                        <span class="user-card-info-label">手数料</span>
+                        <span class="user-card-info-value">
+                            {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                            ¥{{ "{:,}".format(item.display_fee_total or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
+                    </div>
+                    <div class="user-card-info-item">
+                        <span class="user-card-info-label">送料</span>
+                        <span class="user-card-info-value">
+                            {% if item.sale_date or item.display_shipping_cost %}
+                            ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
+                            {% else %}-{% endif %}
+                        </span>
                     </div>
                     <div class="user-card-info-item">
                         <span class="user-card-info-label">売上</span>
-                        <span class="user-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or
+                        <span class="user-card-info-value">{% if item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or
                             0) }}{% else %}-{% endif %}</span>
+                    </div>
+                    <div class="user-card-info-item">
+                        <span class="user-card-info-label">最終利益</span>
+                        <span class="user-card-info-value {% if item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                            {% if item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
             <div class="user-card-footer">
                 <div class="user-card-actions">
-                    <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">詳細</a>
-                    <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">編集</a>
+                    <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                    <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 </div>
             </div>
         </div>
         {% else %}
         <div class="user-item-card">
             <div class="user-card-body" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                {% if long_term_only %}
-                {{ selected_owner_name ~ ' の長期在庫商品はありません' if selected_owner_name else '長期在庫商品はありません' }}
-                {% else %}
                 ユーザーの商品がありません
-                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -1602,6 +1646,7 @@
         const queryDestination = (query.get('destination') || '').toLowerCase();
         const queryDateFrom = query.get('date_from') || '';
         const queryDateTo = query.get('date_to') || '';
+        const queryInventoryView = (query.get('inventory_view') || '').toLowerCase();
 
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
         const filterPurchaseMax = document.getElementById('tab-filter-purchase-max')?.value || '';
@@ -1619,24 +1664,35 @@
             return true;
         }
 
-        const rows = document.querySelectorAll('#itemsTable tbody tr');
-        rows.forEach(row => {
-            if (!row.dataset.id) return;
+        function formatDateKey(dateValue) {
+            const date = new Date(dateValue);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
 
-            const id = row.dataset.id;
-            const name = (row.dataset.name || '').toLowerCase();
-            const brand = (row.dataset.brand || '').toLowerCase();
-            const model = (row.dataset.model || '').toLowerCase();
-            const owner = (row.dataset.owner || '').toLowerCase();
-            const condition = row.dataset.condition || '';
-            const status = row.dataset.status || '';
-            const saleType = (row.dataset.saleType || '').toLowerCase();
+        const longTermCutoffDate = new Date();
+        longTermCutoffDate.setHours(0, 0, 0, 0);
+        longTermCutoffDate.setDate(longTermCutoffDate.getDate() - 90);
+        const longTermCutoffKey = formatDateKey(longTermCutoffDate);
+
+        function shouldShowRecord(record) {
+            const id = record.dataset.id || '';
+            const name = (record.dataset.name || '').toLowerCase();
+            const brand = (record.dataset.brand || '').toLowerCase();
+            const model = (record.dataset.model || '').toLowerCase();
+            const owner = (record.dataset.owner || '').toLowerCase();
+            const condition = record.dataset.condition || '';
+            const status = record.dataset.status || '';
+            const saleType = (record.dataset.saleType || '').toLowerCase();
             const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
-            const saleDate = row.dataset.saleDate || '';
-            const salesDestination = (row.dataset.salesDestination || '').toLowerCase();
-            const purchasePrice = row.dataset.purchasePrice || '0';
-            const salePrice = row.dataset.salePrice || '0';
-            const profit = row.dataset.profit || '0';
+            const saleDate = record.dataset.saleDate || '';
+            const purchaseDate = (record.dataset.date || '').slice(0, 10);
+            const salesDestination = (record.dataset.salesDestination || '').toLowerCase();
+            const purchasePrice = record.dataset.purchasePrice || '0';
+            const salePrice = record.dataset.salePrice || '0';
+            const profit = record.dataset.profit || '0';
 
             let show = true;
 
@@ -1658,17 +1714,36 @@
             if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
             if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
             if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
+            if (queryInventoryView == 'long_term' && (!purchaseDate || status === 'sold' || purchaseDate > longTermCutoffKey)) show = false;
 
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
             if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
             if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) show = false;
 
+            return show;
+        }
+
+        const rows = document.querySelectorAll('#itemsTable tbody tr[data-id]');
+        rows.forEach(row => {
+            const show = shouldShowRecord(row);
             row.style.display = show ? '' : 'none';
             if (show) visibleCount++;
         });
 
+        const cards = document.querySelectorAll('#mobileCards .user-item-card[data-id]');
+        cards.forEach(card => {
+            const show = shouldShowRecord(card);
+            card.style.display = show ? '' : 'none';
+        });
+
         const countEl = document.getElementById('filtered-count');
         if (countEl) countEl.textContent = visibleCount + '件表示';
+
+        const totalCountEl = document.querySelector('.total-count');
+        if (totalCountEl) totalCountEl.textContent = visibleCount;
+
+        const currentIndexEl = document.querySelector('.current-index');
+        if (currentIndexEl) currentIndexEl.textContent = visibleCount > 0 ? '1' : '0';
     }
 
     function openTransferModal(itemId, itemName) {
@@ -1749,6 +1824,7 @@
     function sortTable(column, ascending) {
         const tbody = document.querySelector('#itemsTable tbody');
         const rows = Array.from(tbody.querySelectorAll('tr'));
+        const datasetKey = column.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 
         rows.sort((a, b) => {
             if (!a.dataset.id) return 1;
@@ -1758,19 +1834,19 @@
 
             switch (column) {
                 case 'purchase_price':
-                case 'listing_price':
+                case 'commission_total':
                 case 'sale_price':
                 case 'profit':
-                    aVal = parseInt(a.dataset[column.replace('_', '')] || a.dataset[column] || '0') || 0;
-                    bVal = parseInt(b.dataset[column.replace('_', '')] || b.dataset[column] || '0') || 0;
+                    aVal = parseInt(a.dataset[datasetKey] || '0') || 0;
+                    bVal = parseInt(b.dataset[datasetKey] || '0') || 0;
                     break;
                 case 'kaika_product_code':
                     aVal = (a.dataset.kaikaProductCode || '');
                     bVal = (b.dataset.kaikaProductCode || '');
                     break;
                 default:
-                    aVal = a.dataset[column.replace('_', '')] || '';
-                    bVal = b.dataset[column.replace('_', '')] || '';
+                    aVal = a.dataset[datasetKey] || '';
+                    bVal = b.dataset[datasetKey] || '';
             }
 
             if (ascending) {
@@ -1975,7 +2051,7 @@
             const brandInput = document.getElementById('tab-filter-brand');
             if (brandInput) brandInput.value = queryBrand;
         }
-        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to')) {
+        if (query.get('status') || query.get('sale_type') || query.get('sale_type_not') || query.get('brand') || query.get('destination') || query.get('date_from') || query.get('date_to') || query.get('inventory_view')) {
             filterTable();
             updateFilterCount();
         }

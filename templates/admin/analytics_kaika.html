@@ -1,16 +1,23 @@
 {% extends "base.html" %}
-{% block title %}開花（管理者）分析 - 株式会社 開花{% endblock %}
+{% block title %}開花管理分析 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>開花（管理者）商品の分析</h1>
-    <p class="page-description">管理者商品（user_id = NULL）のみの分析データ</p>
+    <h1>開花管理分析</h1>
+    <p class="page-description">開花商品の登録状況、売上、利益、販売先、現在庫をこの画面の中で確認できます。</p>
+</div>
+
+<div class="period-chip-row">
+    <a class="period-chip {% if period_preset == 'year' %}active{% endif %}" href="{{ url_for('admin_analytics_kaika', period_preset='year', keyword=detail_keyword or None) }}">今年</a>
+    <a class="period-chip {% if period_preset == 'all' %}active{% endif %}" href="{{ url_for('admin_analytics_kaika', period_preset='all', keyword=detail_keyword or None) }}">全期間</a>
+    <span class="period-chip active">表示期間: {{ period_label }}</span>
 </div>
 
 <!-- 日付フィルター -->
 <div class="date-filter-section">
     <form method="GET" action="{{ url_for('admin_analytics_kaika') }}" class="date-filter-form">
         <div class="date-filter-row">
+            <input type="hidden" name="period_preset" value="custom">
             <div class="date-input-group">
                 <label>開始日</label>
                 <input type="date" name="date_from" value="{{ date_from }}" class="date-input">
@@ -20,14 +27,18 @@
                 <label>終了日</label>
                 <input type="date" name="date_to" value="{{ date_to }}" class="date-input">
             </div>
+            <div class="date-input-group keyword-group">
+                <label>商品名で絞り込み</label>
+                <input type="text" name="keyword" value="{{ detail_keyword or '' }}" class="date-input" placeholder="商品名・販売先など">
+            </div>
             <button type="submit" class="btn btn-primary btn-sm">絞り込み</button>
-            {% if date_from or date_to %}
-            <a href="{{ url_for('admin_analytics_kaika') }}" class="btn btn-secondary btn-sm">クリア</a>
+            {% if date_from or date_to or detail_keyword %}
+            <a href="{{ url_for('admin_analytics_kaika', period_preset='year') }}" class="btn btn-secondary btn-sm">クリア</a>
             {% endif %}
         </div>
         {% if date_from or date_to %}
         <div class="filter-active-notice">
-            <span class="filter-badge">フィルター適用中: {{ date_from or '指定なし' }} 〜 {{ date_to or '指定なし' }}</span>
+            <span class="filter-badge">フィルター適用中: {{ period_label }}</span>
         </div>
         {% endif %}
     </form>
@@ -35,47 +46,60 @@
 
 <!-- 全体統計 -->
 <div class="admin-stats-grid">
-    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items') }}">
-        <div class="stat-label-top">総商品数</div>
+    {% for metric in overall_metric_cards or [] %}
+    <div class="admin-stat-card">
+        <div class="stat-label-top">{{ metric.label }}</div>
         <div class="stat-content">
-            <span class="stat-value">{{ overall_stats.total_items or 0 }}</span>
+            <span class="stat-value {{ metric.value_class or '' }}">{{ metric.display_value }}</span>
+            {% if metric.subvalue %}
+            <span class="stat-subvalue">{{ metric.subvalue }}</span>
+            {% endif %}
         </div>
-    </a>
-    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items') }}">
-        <div class="stat-label-top">総仕入額</div>
-        <div class="stat-content">
-            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_purchase or 0) }}</span>
-        </div>
-    </a>
-    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items', status='sold', date_from=date_from, date_to=date_to) }}">
-        <div class="stat-label-top">総売上</div>
-        <div class="stat-content">
-            <span class="stat-value">¥{{ "{:,}".format(overall_stats.total_sales or 0) }}</span>
-        </div>
-    </a>
-    <a class="admin-stat-card analytics-link-card" href="{{ url_for('admin_items', status='sold', date_from=date_from, date_to=date_to) }}">
-        <div class="stat-label-top">総利益</div>
-        <div class="stat-content">
-            <span class="stat-value {% if overall_stats.total_profit and overall_stats.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                ¥{{ "{:,}".format(overall_stats.total_profit or 0) }}
-            </span>
-        </div>
-    </a>
+        <button type="button" class="analytics-detail-trigger" onclick="openAnalyticsDetail('kaika-{{ metric.id }}')">詳細</button>
+    </div>
+    {% endfor %}
 </div>
+
+{% for metric in overall_metric_cards or [] %}
+<div class="analytics-detail-modal" id="kaika-{{ metric.id }}">
+    <div class="analytics-detail-dialog">
+        <div class="analytics-detail-header">
+            <h3>{{ metric.title }}</h3>
+            <button type="button" class="analytics-detail-close" onclick="closeAnalyticsDetail('kaika-{{ metric.id }}')">×</button>
+        </div>
+        <div class="analytics-detail-body">
+            {% if metric.formula %}
+            <div class="analytics-detail-formula">{{ metric.formula }}</div>
+            {% endif %}
+            <div class="analytics-detail-lines">
+                {% for line in metric.lines or [] %}
+                <div class="analytics-detail-line">
+                    <span class="analytics-detail-line-label">{{ line.label }}</span>
+                    <span class="analytics-detail-line-value">{{ line.display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% if metric.note %}
+            <div class="analytics-detail-note">{{ metric.note }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <!-- 在庫統計 -->
 {% if inventory %}
 <div class="admin-section">
     <h2>在庫状況</h2>
     <div class="inventory-stats">
-        <a class="inventory-stat analytics-link-card" href="{{ url_for('admin_items', status='unsold') }}">
+        <div class="inventory-stat">
             <span class="inventory-label">未販売商品</span>
             <span class="inventory-value">{{ inventory.unsold_count or 0 }}件</span>
-        </a>
-        <a class="inventory-stat analytics-link-card" href="{{ url_for('admin_items', status='unsold') }}">
+        </div>
+        <div class="inventory-stat">
             <span class="inventory-label">在庫価値</span>
             <span class="inventory-value">¥{{ "{:,}".format(inventory.inventory_value or 0) }}</span>
-        </a>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -84,7 +108,7 @@
 {% if monthly_sales %}
 <div class="admin-section">
     <h2>売上・利益（月別推移）</h2>
-    <div class="admin-table-container">
+    <div class="admin-table-container js-edge-hover-scroll">
         <table class="admin-table">
             <thead>
                 <tr>
@@ -101,7 +125,7 @@
                 {% for month in monthly_sales %}
                 <tr>
                     <td><strong>{{ month.month }}</strong></td>
-                    <td><a href="{{ url_for('admin_items', sale_month=month.month) }}" style="color: #2563eb; text-decoration: none; font-weight: 600;" title="{{ month.month }} の販売商品を表示">{{ month.count }}件</a></td>
+                    <td><strong>{{ month.count }}件</strong></td>
                     <td>¥{{ "{:,}".format(month.sales or 0) }}</td>
                     <td class="{% if month.profit and month.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                         ¥{{ "{:,}".format(month.profit or 0) }}
@@ -130,7 +154,7 @@
         <h2>ブランド別利益率</h2>
         <div class="brand-stats-list">
             {% for brand in brand_stats %}
-            <a class="brand-stat-item analytics-link-card" href="{{ url_for('admin_items', status='sold', brand=(brand.brand_name or ''), date_from=date_from, date_to=date_to) }}">
+            <div class="brand-stat-item">
                 <div class="brand-rank">{{ loop.index }}</div>
                 <div class="brand-info">
                     <h4>{{ brand.brand_name or '(未設定)' }}</h4>
@@ -144,7 +168,7 @@
                         ¥{{ "{:,}".format(brand.total_profit or 0) }}
                     </span>
                 </div>
-            </a>
+            </div>
             {% else %}
             <p class="empty-message">データがありません</p>
             {% endfor %}
@@ -156,7 +180,7 @@
     {% if sale_type_stats %}
     <div class="admin-section">
         <h2>販売タイプ別統計</h2>
-        <div class="admin-table-container">
+        <div class="admin-table-container js-edge-hover-scroll">
             <table class="admin-table">
                 <thead>
                     <tr>
@@ -189,7 +213,149 @@
     {% endif %}
 </div>
 
+{% if destination_stats %}
+<div class="admin-section">
+    <h2>販売先別の実績</h2>
+    <div class="admin-table-container js-edge-hover-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>販売先</th>
+                    <th>販売件数</th>
+                    <th>売上</th>
+                    <th>利益</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for destination in destination_stats %}
+                <tr>
+                    <td>{{ destination.sales_destination }}</td>
+                    <td>{{ destination.count }}件</td>
+                    <td>¥{{ "{:,}".format(destination.total_sales or 0) }}</td>
+                    <td class="{% if destination.total_profit and destination.total_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                        ¥{{ "{:,}".format(destination.total_profit or 0) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="admin-grid-2 analytics-detail-grid">
+    <div class="admin-section">
+        <h2>対象期間の販売実績一覧</h2>
+        <div class="admin-table-container js-edge-hover-scroll">
+            <table class="admin-table analytics-detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>商品名</th>
+                        <th>ブランド</th>
+                        <th>販売日</th>
+                        <th>仕入れ額</th>
+                        <th>売上</th>
+                        <th>手数料</th>
+                        <th>送料</th>
+                        <th>利益</th>
+                        <th>販売タイプ</th>
+                        <th>販売先</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in sold_detail_items %}
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.product_name or '-' }}</td>
+                        <td>{{ item.brand_name or '-' }}</td>
+                        <td>{{ item.sale_date or '-' }}</td>
+                        <td>¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                        <td>¥{{ "{:,}".format(item.display_sale_price or 0) }}</td>
+                        <td>¥{{ "{:,}".format(item.display_fee_total or 0) }}</td>
+                        <td>¥{{ "{:,}".format(item.display_shipping_cost or 0) }}</td>
+                        <td class="{% if item.profit and item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">¥{{ "{:,}".format(item.profit or 0) }}</td>
+                        <td>{{ item.sale_type_summary or '-' }}</td>
+                        <td>{{ item.sales_destination_display or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="11" class="empty-cell">対象期間の販売データはありません</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="admin-section">
+        <h2>現在在庫一覧</h2>
+        <div class="admin-table-container js-edge-hover-scroll">
+            <table class="admin-table analytics-detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>商品名</th>
+                        <th>ブランド</th>
+                        <th>仕入日</th>
+                        <th>仕入れ額</th>
+                        <th>販売タイプ</th>
+                        <th>販売先</th>
+                        <th>状態</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in inventory_detail_items %}
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.product_name or '-' }}</td>
+                        <td>{{ item.brand_name or '-' }}</td>
+                        <td>{{ item.purchase_date or '-' }}</td>
+                        <td>¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                        <td>{{ item.sale_type_summary or '-' }}</td>
+                        <td>{{ item.sales_destination_display or '-' }}</td>
+                        <td>{{ item.status_label or '未出品' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="empty-cell">現在庫データはありません</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <style>
+/* 期間チップ */
+.period-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+}
+
+.period-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.period-chip.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
 /* 日付フィルター */
 .date-filter-section {
     background: #f8fafc;
@@ -250,6 +416,14 @@
     display: block;
     text-decoration: none;
     color: inherit;
+}
+
+.admin-stat-card .analytics-detail-trigger {
+    margin-top: 0.75rem;
+}
+
+.keyword-group {
+    min-width: 220px;
 }
 
 .filter-active-notice {
@@ -376,6 +550,45 @@
     padding: 2rem;
 }
 
+.analytics-detail-grid {
+    margin-top: 1rem;
+}
+
+.page-description {
+    line-height: 1.85;
+    letter-spacing: 0.02em;
+}
+
+.date-input-group label {
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+}
+
+.inventory-label,
+.brand-detail {
+    line-height: 1.75;
+    letter-spacing: 0.02em;
+}
+
+.admin-table td {
+    font-size: 0.95rem;
+}
+
+.analytics-detail-table th:first-child,
+.analytics-detail-table td:first-child,
+.admin-table th:first-child,
+.admin-table td:first-child {
+    min-width: 160px;
+}
+
+.analytics-detail-table td:nth-child(2) {
+    min-width: 220px;
+}
+
+.analytics-detail-table td:nth-child(3) {
+    min-width: 150px;
+}
+
 /* スマホ表示 */
 @media (max-width: 768px) {
     .page-header h1 {
@@ -399,9 +612,16 @@
         font-size: 0.65rem;
     }
     
-    .admin-stat-card .stat-value {
-        font-size: 0.9rem;
-    }
+.admin-stat-card .stat-value {
+    font-size: 0.9rem;
+}
+
+.admin-stat-card .stat-subvalue {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.76rem;
+    color: #64748b;
+}
     
     .admin-section h2 {
         font-size: 0.95rem;
