@@ -9,37 +9,71 @@
     </h1>
     <div class="header-actions">
         <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
-        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">代行サービス履歴</a>
-        <a href="{{ url_for('admin_auction_keisan_list') }}" class="btn btn-secondary">オークション計算書</a>
+        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">履歴一覧</a>
+        {% if result_summary.pending_finalize_count > 0 or not auction_state.is_ended %}
         <button onclick="finalizeAuction()" class="btn btn-danger">オークション終了・落札確定</button>
+        {% else %}
+        <button class="btn btn-secondary" disabled>確定対象なし</button>
+        {% endif %}
         <button onclick="deleteAuction()" class="btn btn-outline-danger">削除</button>
     </div>
 </div>
 
-<div class="proxy-admin-container">
-    <div class="summary-card-grid">
-        <div class="summary-card">
-            <span class="summary-card-label">公開中</span>
-            <strong class="summary-card-value">{{ summary.active_count or 0 }}件</strong>
-        </div>
-        <div class="summary-card">
-            <span class="summary-card-label">成約済み</span>
-            <strong class="summary-card-value">{{ summary.sold_count or 0 }}件</strong>
-        </div>
-        <div class="summary-card">
-            <span class="summary-card-label">入札件数</span>
-            <strong class="summary-card-value">{{ summary.bid_entry_count or 0 }}件</strong>
-        </div>
-        <div class="summary-card">
-            <span class="summary-card-label">入札あり商品</span>
-            <strong class="summary-card-value">{{ summary.participated_item_count or 0 }}件</strong>
-        </div>
-        <div class="summary-card">
-            <span class="summary-card-label">即決購入</span>
-            <strong class="summary-card-value">{{ summary.fixed_purchase_count or 0 }}件</strong>
+<div class="auction-overview-card {{ auction_state.status }}">
+    <div class="overview-main">
+        <span class="overview-badge {{ auction_state.status }}">{{ auction_state.status_label }}</span>
+        <div class="overview-copy">
+            <h2>公開状態と締切状況</h2>
+            <p>
+                {% if auction_state.status == 'open' %}
+                現在公開中です。終了時刻になると受付を停止し、公開ページは結果表示へ切り替わります。
+                {% elif auction_state.status == 'ended' %}
+                募集は締切済みです。ユーザー画面には自分が競り落とした商品のみ結果を表示します。
+                {% elif auction_state.status == 'scheduled' %}
+                予約公開中です。開始時刻まではユーザー側には開始待ちとして表示されます。
+                {% else %}
+                非公開です。必要に応じて公開設定と日時を更新してください。
+                {% endif %}
+            </p>
         </div>
     </div>
+    <div class="overview-grid">
+        <div class="overview-item">
+            <span class="overview-label">販売方式</span>
+            <strong>{% if settings.sale_mode == 'fixed' %}即決・早い者勝ち{% else %}オークション{% endif %}</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">開始</span>
+            <strong>{% if auction_state.start_datetime %}{{ auction_state.start_datetime.strftime('%Y/%m/%d %H:%M') }}{% else %}即時公開{% endif %}</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">終了</span>
+            <strong>{% if auction_state.end_datetime %}{{ auction_state.end_datetime.strftime('%Y/%m/%d %H:%M') }}{% else %}無期限{% endif %}</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">公開中商品</span>
+            <strong>{{ items|length }}件</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">結果対象</span>
+            <strong>{{ result_summary.winner_count }}件</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">クライアント反映待ち</span>
+            <strong>{{ result_summary.pending_reflection_count }}件</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">反映済み</span>
+            <strong>{{ result_summary.reflected_count }}件</strong>
+        </div>
+        <div class="overview-item">
+            <span class="overview-label">入札なし終了</span>
+            <strong>{{ result_summary.no_bid_count }}件</strong>
+        </div>
+    </div>
+</div>
 
+<div class="proxy-admin-container">
     <!-- 設定フォーム -->
     <div class="settings-card">
         <h2>基本設定</h2>
@@ -75,14 +109,14 @@
                 <label>販売方式</label>
                 <div class="sale-mode-options">
                     <label class="radio-label">
-                        <input type="radio" name="sale_mode" value="auction" {% if not settings.sale_mode or settings.sale_mode == 'auction' %}checked{% endif %}>
+                        <input type="radio" name="sale_mode" value="auction" {% if not settings.sale_mode or settings.sale_mode == 'auction' %}checked{% endif %} onchange="updateSaleModePreview()">
                         <span class="radio-text">
                             <strong>オークション</strong>
                             <small>入札形式で最高額を競います</small>
                         </span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="sale_mode" value="fixed" {% if settings.sale_mode == 'fixed' %}checked{% endif %}>
+                        <input type="radio" name="sale_mode" value="fixed" {% if settings.sale_mode == 'fixed' %}checked{% endif %} onchange="updateSaleModePreview()">
                         <span class="radio-text">
                             <strong>即決・早い者勝ち</strong>
                             <small>固定価格で先着順に購入できます</small>
@@ -174,7 +208,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="filter-group">
+                <div class="filter-group auction-only-field" id="published-bid-filter-group">
                     <select id="published-bid-filter" class="filter-select" onchange="filterPublishedItems()">
                         <option value="">入札状態</option>
                         <option value="has-bid">入札あり</option>
@@ -192,7 +226,7 @@
                  data-name="{{ (item.product_name or '')|lower }}"
                  data-brand="{{ (item.brand_name or '')|lower }}"
                  data-owner="{{ item.owner_name }}"
-                 data-has-bid="{{ 'yes' if item.bid_count else 'no' }}">
+                 data-has-bid="{{ 'yes' if item.highest_bid else 'no' }}">
                 <div class="item-photo">
                     {% if item.photo_path %}
                     <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
@@ -203,29 +237,36 @@
                 <div class="item-info">
                     <div class="item-name">{{ item.product_name or '-' }}</div>
                     <div class="item-brand">{{ item.brand_name or '-' }}</div>
-                    <div class="item-start-price">公開価格: ¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
-                    {% if item.bid_count %}
+                    <div class="item-start-price">
+                        <span class="js-sale-mode-price-label" data-fixed-label="販売価格" data-auction-label="開始価格">{{ item.price_label or ('販売価格' if settings.sale_mode == 'fixed' else '開始価格') }}</span>:
+                        <span id="listing-price-display-{{ item.id }}">¥{{ "{:,}".format(item.listing_price or item.default_listing_price or 0) }}</span>
+                    </div>
+                    <div class="item-price-editor">
+                        <label class="js-sale-mode-input-label" data-fixed-label="販売価格を設定" data-auction-label="開始価格を設定">{{ '販売価格を設定' if settings.sale_mode == 'fixed' else '開始価格を設定' }}</label>
+                        <input type="number" min="{{ item.minimum_listing_price or 0 }}" step="1" id="listing-price-{{ item.id }}" value="{{ item.listing_price or item.default_listing_price or 0 }}" placeholder="{{ '販売価格' if settings.sale_mode == 'fixed' else '開始価格' }}" oninput="syncAuctionItemPriceMin({{ item.id }})">
+                        <small>仕入れ価格: ¥{{ "{:,}".format(item.minimum_listing_price or 0) }}</small>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="saveItemPricing({{ item.id }}, this)">保存</button>
+                    </div>
+                    {% if settings.sale_mode == 'auction' and item.highest_bid %}
                     <div class="item-bid-info">
-                        <span class="bid-amount">
-                            {% if item.highest_bid %}
-                            最高入札: ¥{{ "{:,}".format(item.highest_bid) }}
-                            {% else %}
-                            入札あり
-                            {% endif %}
-                        </span>
+                        <span class="bid-amount">最高入札: ¥{{ "{:,}".format(item.highest_bid) }}</span>
                         <span class="bid-count">({{ item.bid_count }}件)</span>
                     </div>
-                    {% if item.highest_bidder %}
-                    <div class="item-bidder">最高入札者: {{ item.highest_bidder }}</div>
-                    {% endif %}
-                    {% else %}
+                    <div class="item-bidder">入札者: {{ item.highest_bidder }}</div>
+                    {% elif settings.sale_mode == 'auction' %}
                     <div class="item-no-bid">入札なし</div>
                     {% endif %}
+                    <div class="item-max-price auction-only-field">
+                        <div class="item-max-price-label">最高価格: <span id="max-price-display-{{ item.id }}">{% if item.has_proxy_auction_max_price %}¥{{ "{:,}".format(item.proxy_auction_max_price) }}{% else %}未設定{% endif %}</span></div>
+                        <div class="item-max-price-editor">
+                            <input type="number" min="{{ item.listing_price or item.default_listing_price or item.minimum_listing_price or 0 }}" step="1" id="max-price-{{ item.id }}" value="{{ item.proxy_auction_max_price or '' }}" placeholder="最高価格">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="saveItemPricing({{ item.id }}, this)">保存</button>
+                        </div>
+                    </div>
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
-                    <div class="item-owner">掲載者: {{ item.published_by_name or '未設定' }}</div>
                 </div>
                 <div class="item-actions">
-                    <button type="button" class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
+                    <button class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
                         公開解除
                     </button>
                 </div>
@@ -236,6 +277,119 @@
         <div class="empty-message">
             公開中の商品はありません。<br>
             商品一覧から「代行サービスに掲載」をクリックして商品を追加してください。
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="results-card">
+        <div class="results-header">
+            <div>
+                <h2>終了結果 / 購入者一覧 <span class="item-count">{{ result_items|length }}件</span></h2>
+                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけクライアントの商品一覧へ反映できます。</p>
+            </div>
+            {% if result_summary.pending_reflection_count > 0 %}
+            <button type="button" class="btn btn-primary" onclick="reflectAllWinnerItems()">
+                落札商品を一括でクライアントに反映
+            </button>
+            {% endif %}
+        </div>
+        {% if result_items %}
+        <div class="results-table-container">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>商品</th>
+                        <th>結果</th>
+                        <th>終了方法</th>
+                        <th>落札者 / 購入者</th>
+                        <th>金額</th>
+                        <th>入札</th>
+                        <th>クライアント反映</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in result_items %}
+                    <tr>
+                        <td>
+                            <div class="results-product-cell">
+                                <div class="result-item-photo">
+                                    {% if item.photo_path %}
+                                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                                    {% else %}
+                                    <div class="no-photo">No Image</div>
+                                    {% endif %}
+                                </div>
+                                <div class="results-product-info">
+                                    <strong>{{ item.product_name or '-' }}</strong>
+                                    <span>{{ item.brand_name or '-' }}</span>
+                                    <span>登録者: {{ item.owner_name }}</span>
+                                    {% if item.has_proxy_auction_max_price %}
+                                    <span>最高価格: ¥{{ "{:,}".format(item.proxy_auction_max_price) }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="result-status-badge {{ item.status_class }}">{{ item.status_label }}</span>
+                        </td>
+                        <td>{{ item.ended_method_label or '公開中' }}</td>
+                        <td>
+                            {% if item.winner_name %}
+                            <div class="result-person-cell">
+                                <strong>{{ item.winner_name }}</strong>
+                                {% if item.winner_user_id %}
+                                <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}">クライアント商品一覧へ</a>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="result-empty-text">入札なし / 成立なし</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.result_price %}
+                            ¥{{ "{:,}".format(item.result_price) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>{{ item.bid_count or 0 }}件</td>
+                        <td>
+                            <div class="result-reflection-cell">
+                                <span class="result-status-badge {{ item.reflection_status_class }}">{{ item.reflection_status_label }}</span>
+                                {% if item.is_reflected_to_client %}
+                                <span>{{ item.reflected_user_name or '-' }}</span>
+                                <span>{{ item.reflected_at_display }}</span>
+                                {% elif item.can_reflect_to_client %}
+                                <span>落札者の商品一覧へ未登録です</span>
+                                {% elif item.result_code == 'auction_closed_with_bid' %}
+                                <span>先に落札確定を行ってください</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="result-action-cell">
+                                {% if item.can_reflect_to_client %}
+                                <button type="button" class="btn btn-sm btn-primary" onclick="reflectWinnerItem({{ item.id }}, this)">
+                                    クライアントに反映
+                                </button>
+                                {% elif item.is_reflected_to_client and item.winner_user_id %}
+                                <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}" class="btn btn-sm btn-secondary">
+                                    商品一覧を見る
+                                </a>
+                                {% else %}
+                                <span class="result-empty-text">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-message">
+            結果表示できる商品はまだありません。
         </div>
         {% endif %}
     </div>
@@ -291,7 +445,7 @@
                  data-name="{{ (item.product_name or '')|lower }}"
                  data-brand="{{ (item.brand_name or '')|lower }}"
                  data-owner="{{ item.owner_name }}"
-                 data-price="{{ item.listing_price or 0 }}">
+                 data-price="{{ item.default_listing_price or item.purchase_price or item.listing_price or 0 }}">
                 <div class="item-checkbox">
                     <input type="checkbox" class="available-item-checkbox" data-id="{{ item.id }}" onchange="updateAvailableSelection()">
                 </div>
@@ -305,15 +459,25 @@
                 <div class="item-info">
                     <div class="item-name">{{ item.product_name or '-' }}</div>
                     <div class="item-brand">{{ item.brand_name or '-' }}</div>
-                    <div class="item-price">公開価格: ¥{{ "{:,}".format(item.proxy_price or item.listing_price or 0) }}</div>
-                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
-                    <div class="price-input-row">
-                        <label for="proxy-price-{{ item.id }}">公開価格</label>
-                        <input type="number" id="proxy-price-{{ item.id }}" class="proxy-price-input" min="1" value="{{ item.proxy_price or item.listing_price or 0 }}">
+                    <div class="item-price">
+                        <span class="js-sale-mode-price-label" data-fixed-label="販売価格" data-auction-label="開始価格">{{ '販売価格' if settings.sale_mode == 'fixed' else '開始価格' }}</span>:
+                        <span id="available-listing-price-display-{{ item.id }}">¥{{ "{:,}".format(item.default_listing_price or item.purchase_price or item.listing_price or 0) }}</span>
                     </div>
+                    <div class="item-price-editor">
+                        <label class="js-sale-mode-input-label" data-fixed-label="販売価格を設定" data-auction-label="開始価格を設定">{{ '販売価格を設定' if settings.sale_mode == 'fixed' else '開始価格を設定' }}</label>
+                        <input type="number" min="{{ item.minimum_listing_price or 0 }}" step="1" id="available-listing-price-{{ item.id }}" value="{{ item.default_listing_price or item.purchase_price or item.listing_price or 0 }}" placeholder="{{ '販売価格' if settings.sale_mode == 'fixed' else '開始価格' }}" oninput="syncAvailableItemPriceMin({{ item.id }})">
+                        <small>仕入れ価格: ¥{{ "{:,}".format(item.minimum_listing_price or 0) }}</small>
+                    </div>
+                    <div class="item-max-price auction-only-field">
+                        <div class="item-max-price-label">最高価格: <span id="available-max-price-display-{{ item.id }}">{% if item.has_proxy_auction_max_price %}¥{{ "{:,}".format(item.proxy_auction_max_price) }}{% else %}未設定{% endif %}</span></div>
+                        <div class="item-max-price-editor">
+                            <input type="number" min="{{ item.default_listing_price or item.minimum_listing_price or 0 }}" step="1" id="available-max-price-{{ item.id }}" value="{{ item.proxy_auction_max_price or '' }}" placeholder="最高価格">
+                        </div>
+                    </div>
+                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
                 </div>
                 <div class="item-actions">
-                    <button type="button" class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
+                    <button class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
                         掲載する
                     </button>
                 </div>
@@ -524,6 +688,104 @@
     flex-wrap: wrap;
 }
 
+.auction-overview-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    border-left: 6px solid #94a3b8;
+}
+
+.auction-overview-card.open {
+    border-left-color: #10b981;
+}
+
+.auction-overview-card.ended {
+    border-left-color: #475569;
+}
+
+.auction-overview-card.scheduled {
+    border-left-color: #f59e0b;
+}
+
+.overview-main {
+    display: flex;
+    gap: 1rem;
+    flex: 1;
+}
+
+.overview-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    height: fit-content;
+}
+
+.overview-badge.open {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.overview-badge.ended {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.overview-badge.scheduled {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.overview-badge.private {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.overview-copy h2 {
+    font-size: 1.1rem;
+    margin: 0 0 0.45rem 0;
+}
+
+.overview-copy p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 0.75rem;
+    min-width: 420px;
+}
+
+.overview-item {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 0.85rem;
+}
+
+.overview-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.overview-item strong {
+    color: #1e293b;
+    font-size: 0.95rem;
+}
+
 .btn-danger {
     background: #dc2626;
     color: white;
@@ -542,6 +804,161 @@
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 1.5rem;
+}
+
+.results-card {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.results-card h2 {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.results-subcopy {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.results-table-container {
+    overflow-x: auto;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 980px;
+}
+
+.results-table th,
+.results-table td {
+    padding: 0.85rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.9rem;
+}
+
+.results-table th {
+    color: #475569;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.results-product-cell {
+    display: flex;
+    gap: 0.85rem;
+    min-width: 240px;
+}
+
+.results-product-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    color: #475569;
+}
+
+.results-product-info strong {
+    color: #0f172a;
+}
+
+.result-person-cell,
+.result-reflection-cell,
+.result-action-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.result-person-cell a,
+.result-action-cell a {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.result-empty-text {
+    color: #64748b;
+}
+
+.result-item-photo {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-item-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.result-item-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.result-item-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.result-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    height: fit-content;
+}
+
+.result-status-badge.open {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.result-status-badge.closed {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.result-status-badge.won {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.result-status-badge.muted,
+.result-status-badge.scheduled {
+    background: #f1f5f9;
+    color: #64748b;
 }
 
 .bids-card {
@@ -824,33 +1241,6 @@
     gap: 0.5rem;
 }
 
-/* サマリー */
-.summary-card-grid {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 1rem;
-}
-
-.summary-card {
-    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 1rem;
-}
-
-.summary-card-label {
-    display: block;
-    font-size: 0.8rem;
-    color: #64748b;
-    margin-bottom: 0.35rem;
-}
-
-.summary-card-value {
-    font-size: 1.45rem;
-    color: #1e293b;
-}
-
 /* 一括操作バー */
 .bulk-action-bar {
     display: flex;
@@ -973,6 +1363,79 @@
     margin-bottom: 0.25rem;
 }
 
+.proxy-item-card .item-price-editor {
+    margin-bottom: 0.45rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #dbeafe;
+    background: #ffffff;
+    border-radius: 6px;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.proxy-item-card .item-price-editor label {
+    font-size: 0.78rem;
+    color: #1e40af;
+    font-weight: 600;
+}
+
+.proxy-item-card .item-price-editor input {
+    width: 100%;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+}
+
+.proxy-item-card .item-price-editor input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.proxy-item-card .item-price-editor small {
+    font-size: 0.74rem;
+    color: #64748b;
+}
+
+.proxy-item-card .item-max-price {
+    margin-bottom: 0.35rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    border-radius: 6px;
+}
+
+.proxy-item-card .item-max-price-label {
+    font-size: 0.78rem;
+    color: #1d4ed8;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.proxy-item-card .item-max-price-editor {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.proxy-item-card .item-max-price-editor input {
+    width: 100%;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.proxy-item-card .item-max-price-editor input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.auction-only-field {
+    transition: opacity 0.2s ease;
+}
+
 .proxy-item-card .item-bid-info {
     background: #f0fdf4;
     padding: 0.4rem 0.6rem;
@@ -1010,25 +1473,6 @@
     margin-top: 0.25rem;
 }
 
-.proxy-item-card .price-input-row {
-    margin-top: 0.55rem;
-}
-
-.proxy-item-card .price-input-row label {
-    display: block;
-    margin-bottom: 0.3rem;
-    font-size: 0.72rem;
-    color: #64748b;
-}
-
-.proxy-item-card .proxy-price-input {
-    width: 100%;
-    padding: 0.55rem 0.65rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    box-sizing: border-box;
-}
-
 .proxy-item-card .item-actions {
     padding: 0 0.75rem 0.75rem;
 }
@@ -1041,12 +1485,17 @@
 }
 
 @media (max-width: 1024px) {
-    .proxy-admin-container {
-        grid-template-columns: 1fr;
+    .auction-overview-card {
+        flex-direction: column;
     }
 
-    .summary-card-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    .overview-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+        min-width: 0;
+    }
+
+    .proxy-admin-container {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -1055,20 +1504,106 @@
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .summary-card-grid {
-        grid-template-columns: 1fr;
+    .results-header {
+        flex-direction: column;
+        align-items: stretch;
     }
 }
 </style>
 
 <script>
 const AUCTION_ID = {{ auction_id }};
+const PREVIEW_QUERY = {
+    preview_token: {{ (preview_token or '') | tojson }},
+    preview_role: {{ (preview_role or '') | tojson }}
+};
+
+function buildPreviewUrl(path) {
+    const url = new URL(path, window.location.origin);
+    if (PREVIEW_QUERY.preview_token && PREVIEW_QUERY.preview_role) {
+        url.searchParams.set('preview_token', PREVIEW_QUERY.preview_token);
+        url.searchParams.set('preview_role', PREVIEW_QUERY.preview_role);
+    }
+    return url.pathname + url.search + url.hash;
+}
+
+function updateSaleModePreview() {
+    const saleMode = getCurrentSaleMode();
+
+    document.querySelectorAll('.js-sale-mode-price-label').forEach(label => {
+        label.textContent = saleMode === 'fixed' ? label.dataset.fixedLabel : label.dataset.auctionLabel;
+    });
+
+    document.querySelectorAll('.js-sale-mode-input-label').forEach(label => {
+        label.textContent = saleMode === 'fixed' ? label.dataset.fixedLabel : label.dataset.auctionLabel;
+    });
+
+    document.querySelectorAll('.auction-only-field').forEach(block => {
+        block.style.display = saleMode === 'auction' ? '' : 'none';
+    });
+
+    document.querySelectorAll('.item-price-editor input').forEach(input => {
+        if (input.id.includes('listing-price')) {
+            input.placeholder = saleMode === 'fixed' ? '販売価格' : '開始価格';
+        }
+    });
+}
+
+function getCurrentSaleMode() {
+    const selected = document.querySelector('input[name="sale_mode"]:checked');
+    return selected ? selected.value : 'auction';
+}
+
+function getAvailableItemPricing(itemId) {
+    const listingInput = document.getElementById(`available-listing-price-${itemId}`);
+    const maxInput = document.getElementById(`available-max-price-${itemId}`);
+    return {
+        listing_price: listingInput ? listingInput.value : '',
+        proxy_auction_max_price: getCurrentSaleMode() === 'auction' && maxInput ? maxInput.value : ''
+    };
+}
+
+function getPublishedItemPricing(itemId) {
+    const listingInput = document.getElementById(`listing-price-${itemId}`);
+    const maxInput = document.getElementById(`max-price-${itemId}`);
+    return {
+        listing_price: listingInput ? listingInput.value : '',
+        proxy_auction_max_price: getCurrentSaleMode() === 'auction' && maxInput ? maxInput.value : ''
+    };
+}
+
+function syncAuctionItemPriceMin(itemId) {
+    const listingInput = document.getElementById(`listing-price-${itemId}`);
+    const maxInput = document.getElementById(`max-price-${itemId}`);
+    if (listingInput && maxInput) {
+        maxInput.min = listingInput.value || maxInput.min || 0;
+    }
+}
+
+function syncAvailableItemPriceMin(itemId) {
+    const listingInput = document.getElementById(`available-listing-price-${itemId}`);
+    const maxInput = document.getElementById(`available-max-price-${itemId}`);
+    const display = document.getElementById(`available-listing-price-display-${itemId}`);
+    const card = document.getElementById(`available-${itemId}`);
+    if (listingInput && maxInput) {
+        maxInput.min = listingInput.value || maxInput.min || 0;
+    }
+    if (display && listingInput) {
+        const parsed = parseInt(listingInput.value || '0', 10) || 0;
+        display.textContent = `¥${parsed.toLocaleString()}`;
+        if (card) {
+            card.dataset.price = parsed;
+        }
+    }
+}
+
 function toggleProxyItem(itemId, btn) {
-    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
+    fetch(buildPreviewUrl(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify(getPublishedItemPricing(itemId))
     })
     .then(response => response.json())
     .then(data => {
@@ -1085,31 +1620,18 @@ function toggleProxyItem(itemId, btn) {
 }
 
 function addProxyItem(itemId, btn) {
-    const priceInput = document.getElementById(`proxy-price-${itemId}`);
-    const proxyPrice = priceInput ? parseInt(priceInput.value, 10) : NaN;
-    if (!priceInput || Number.isNaN(proxyPrice) || proxyPrice <= 0) {
-        alert('公開価格は1円以上で入力してください');
-        if (priceInput) {
-            priceInput.focus();
-            priceInput.select();
-        }
-        return;
-    }
-
     btn.disabled = true;
     btn.textContent = '処理中...';
     
     // 現在のフィルター状態を保存
     saveAvailableFilters();
     
-    fetch(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`, {
+    fetch(buildPreviewUrl(`/admin/proxy-service/${AUCTION_ID}/toggle-item/${itemId}`), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            proxy_price: proxyPrice
-        })
+        body: JSON.stringify(getAvailableItemPricing(itemId))
     })
     .then(response => response.json())
     .then(data => {
@@ -1158,6 +1680,61 @@ function reloadWithFilters() {
     location.reload();
 }
 
+function saveItemPricing(itemId, btn) {
+    const pricing = getPublishedItemPricing(itemId);
+    const listingDisplay = document.getElementById(`listing-price-display-${itemId}`);
+    const maxDisplay = document.getElementById(`max-price-display-${itemId}`);
+    const originalText = btn ? btn.textContent : '';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+    }
+
+    fetch(buildPreviewUrl(`/admin/proxy-service/${AUCTION_ID}/item/${itemId}/pricing`), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(pricing)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            throw new Error(data.error || '価格の保存に失敗しました');
+        }
+        if (listingDisplay) {
+            listingDisplay.textContent = data.display_listing_price;
+        }
+        if (maxDisplay) {
+            maxDisplay.textContent = data.display_max_price;
+        }
+        const listingInput = document.getElementById(`listing-price-${itemId}`);
+        const maxInput = document.getElementById(`max-price-${itemId}`);
+        if (listingInput) {
+            listingInput.value = data.listing_price || 0;
+        }
+        if (maxInput) {
+            maxInput.value = data.proxy_auction_max_price || '';
+            maxInput.min = data.listing_price || maxInput.min || 0;
+        }
+        if (btn) {
+            btn.textContent = '保存済み';
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = originalText || '保存';
+            }, 900);
+        }
+    })
+    .catch(error => {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = originalText || '保存';
+        }
+        alert(error.message || '価格の保存に失敗しました');
+    });
+}
+
 // 選択状態の更新
 function updateAvailableSelection() {
     const checkboxes = document.querySelectorAll('.available-item-checkbox');
@@ -1202,49 +1779,42 @@ function toggleAllAvailableItems(checkbox) {
 // 一括掲載
 function bulkAddItems() {
     const checkedBoxes = document.querySelectorAll('.available-item-checkbox:checked');
-    const itemIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
-    const itemPrices = {};
+    const items = Array.from(checkedBoxes).map(cb => {
+        const itemId = parseInt(cb.dataset.id);
+        return {
+            id: itemId,
+            ...getAvailableItemPricing(itemId)
+        };
+    });
     
-    if (itemIds.length === 0) {
+    if (items.length === 0) {
         alert('商品を選択してください');
         return;
     }
-
-    for (const itemId of itemIds) {
-        const priceInput = document.getElementById(`proxy-price-${itemId}`);
-        const proxyPrice = priceInput ? parseInt(priceInput.value, 10) : NaN;
-        if (!priceInput || Number.isNaN(proxyPrice) || proxyPrice <= 0) {
-            alert('公開価格は1円以上で入力してください');
-            if (priceInput) {
-                priceInput.focus();
-                priceInput.select();
-            }
-            return;
-        }
-        itemPrices[itemId] = proxyPrice;
-    }
     
-    if (!confirm(itemIds.length + '件の商品を一括で掲載しますか？')) {
+    if (!confirm(items.length + '件の商品を一括で掲載しますか？')) {
         return;
     }
     
     // フィルター状態を保存
     saveAvailableFilters();
     
-    fetch(`/admin/proxy-service/${AUCTION_ID}/bulk-toggle`, {
+    fetch(buildPreviewUrl(`/admin/proxy-service/${AUCTION_ID}/bulk-toggle`), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            item_ids: itemIds,
-            action: 'add',
-            item_prices: itemPrices
+            items,
+            action: 'add'
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            if (data.errors && data.errors.length) {
+                alert(data.errors.join('\n'));
+            }
             reloadWithFilters();
         } else {
             alert(data.error || 'エラーが発生しました');
@@ -1328,6 +1898,15 @@ document.addEventListener('DOMContentLoaded', function() {
     restoreAvailableFilters();
     filterServiceUsers();
     updateSelectedUserCount();
+    updateSaleModePreview();
+    document.querySelectorAll('[id^="listing-price-"]').forEach(input => {
+        const itemId = input.id.replace('listing-price-', '');
+        syncAuctionItemPriceMin(itemId);
+    });
+    document.querySelectorAll('[id^="available-listing-price-"]').forEach(input => {
+        const itemId = input.id.replace('available-listing-price-', '');
+        syncAvailableItemPriceMin(itemId);
+    });
 
     // 一括操作バーを初期表示
     const bulkBar = document.getElementById('available-bulk-bar');
@@ -1463,17 +2042,17 @@ function deleteAuction() {
     
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = '/admin/proxy-service/{{ auction_id }}/delete';
+    form.action = buildPreviewUrl('/admin/proxy-service/{{ auction_id }}/delete');
     document.body.appendChild(form);
     form.submit();
 }
 
 function finalizeAuction() {
-    if (!confirm('オークションを終了し、落札者に商品を割り当てますか？\n\nこの操作は取り消せません。入札のあった商品は落札者の商品一覧に移動します。')) {
+    if (!confirm('オークションを終了して落札結果を確定しますか？\n\nこの操作は取り消せません。確定後は結果一覧から「クライアントに反映」を押して、落札商品を各クライアントの商品一覧へ登録できます。')) {
         return;
     }
     
-    fetch('/admin/proxy-service/{{ auction_id }}/finalize', {
+    fetch(buildPreviewUrl('/admin/proxy-service/{{ auction_id }}/finalize'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1490,6 +2069,63 @@ function finalizeAuction() {
     })
     .catch(err => {
         alert('エラーが発生しました');
+    });
+}
+
+function reflectWinnerItem(itemId, btn) {
+    const button = btn || null;
+    if (button) {
+        button.disabled = true;
+    }
+
+    fetch(buildPreviewUrl(`/admin/proxy-service/{{ auction_id }}/reflect-item/${itemId}`), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            if (button) {
+                button.disabled = false;
+            }
+            alert(data.error || 'クライアント反映に失敗しました');
+        }
+    })
+    .catch(() => {
+        if (button) {
+            button.disabled = false;
+        }
+        alert('クライアント反映中にエラーが発生しました');
+    });
+}
+
+function reflectAllWinnerItems() {
+    if (!confirm('落札確定済みの商品を一括でクライアントの商品一覧へ反映しますか？')) {
+        return;
+    }
+
+    fetch(buildPreviewUrl('/admin/proxy-service/{{ auction_id }}/reflect-all'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.error || '一括反映に失敗しました');
+        }
+    })
+    .catch(() => {
+        alert('一括反映中にエラーが発生しました');
     });
 }
 </script>

@@ -345,7 +345,7 @@ input:disabled, select:disabled, textarea:disabled {
 }
 </style>
 
-{% set basic_readonly = not current_user.is_owner() and item %}
+{% set basic_readonly = not (current_user.is_owner() or current_user.is_admin()) and item %}
 {% set is_kaika_scope = is_kaika_scope | default(false) %}
 {% if item and is_kaika_scope %}
 {% set current_kaika_sale_type = 'normal' %}

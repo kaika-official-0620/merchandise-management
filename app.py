@@ -16,8 +16,8 @@ import time
 import calendar
 import traceback
 from decimal import Decimal
-from datetime import datetime, timedelta, date
-from urllib.parse import urlparse
+from datetime import datetime, timedelta, date, timezone
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 # Stripe連携
 try:
@@ -67,6 +67,795 @@ app.config['REMEMBER_COOKIE_SECURE'] = bool(os.environ.get('RENDER'))
 app.config['REMEMBER_COOKIE_REFRESH_EACH_REQUEST'] = False
 
 # グローバルエラーハンドラー（エラーをブラウザに詳細表示）
+JST = timezone(timedelta(hours=9), name='JST')
+
+
+def get_jst_now():
+    """公開開始/終了の比較は日本時間基準で揃える。"""
+    return datetime.now(JST).replace(tzinfo=None)
+
+
+def parse_proxy_service_datetime(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(JST).replace(tzinfo=None)
+        return value
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+
+        candidates = [raw, raw.replace('T', ' ')]
+        if raw.endswith('Z'):
+            candidates.insert(0, raw[:-1] + '+00:00')
+
+        for candidate in candidates:
+            try:
+                parsed = datetime.fromisoformat(candidate)
+                if parsed.tzinfo is not None:
+                    return parsed.astimezone(JST).replace(tzinfo=None)
+                return parsed
+            except ValueError:
+                continue
+
+        normalized = raw.replace('T', ' ')
+        for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S'):
+            try:
+                return datetime.strptime(normalized, fmt)
+            except ValueError:
+                continue
+
+    return None
+
+
+def normalize_proxy_service_datetime_input(value):
+    parsed = parse_proxy_service_datetime(value)
+    if not parsed:
+        return None
+    return parsed.strftime('%Y-%m-%d %H:%M:%S')
+
+
+def extract_proxy_service_purchase_buyer_name(sales_destination):
+    if not sales_destination:
+        return None
+
+    destination_text = str(sales_destination).strip()
+    for prefix in ('即決購入:', '即決購入：'):
+        if destination_text.startswith(prefix):
+            buyer_name = destination_text[len(prefix):].strip()
+            return buyer_name or None
+
+    return None
+
+
+def proxy_service_row_to_dict(row):
+    if row is None:
+        return None
+    return row if isinstance(row, dict) else dict(row)
+
+
+def build_proxy_service_origin_note(original_item_id, mode='auction'):
+    note_prefix = '代行仕入れサービス購入' if mode == 'fixed' else '代行仕入れサービス落札'
+    return f'{note_prefix} / 元商品ID:{original_item_id}'
+
+
+def append_proxy_service_origin_note(existing_notes, original_item_id, mode='auction'):
+    origin_note = build_proxy_service_origin_note(original_item_id, mode=mode)
+    notes = (existing_notes or '').strip()
+    if origin_note in notes:
+        return notes
+    return f'{notes}\n{origin_note}' if notes else origin_note
+
+
+def lookup_proxy_service_reflected_item(cur, original_item_id, winner_user_id=None):
+    note_marker = f'%元商品ID:{original_item_id}%'
+
+    if DATABASE_URL:
+        query = """
+            SELECT m.id, m.user_id, m.proxy_parent_item_id, m.purchase_date, m.created_at,
+                   COALESCE(u.display_name, u.username, '不明') AS owner_name
+            FROM merchandise m
+            LEFT JOIN users u ON u.id = m.user_id
+            WHERE (m.proxy_parent_item_id = %s OR m.notes LIKE %s)
+        """
+        params = [original_item_id, note_marker]
+        if winner_user_id:
+            query += " AND m.user_id = %s"
+            params.append(winner_user_id)
+        query += """
+            ORDER BY CASE WHEN m.proxy_parent_item_id = %s THEN 0 ELSE 1 END,
+                     m.id DESC
+            LIMIT 1
+        """
+        params.append(original_item_id)
+    else:
+        query = """
+            SELECT m.id, m.user_id, m.proxy_parent_item_id, m.purchase_date, m.created_at,
+                   COALESCE(u.display_name, u.username, '不明') AS owner_name
+            FROM merchandise m
+            LEFT JOIN users u ON u.id = m.user_id
+            WHERE (m.proxy_parent_item_id = ? OR m.notes LIKE ?)
+        """
+        params = [original_item_id, note_marker]
+        if winner_user_id:
+            query += " AND m.user_id = ?"
+            params.append(winner_user_id)
+        query += """
+            ORDER BY CASE WHEN m.proxy_parent_item_id = ? THEN 0 ELSE 1 END,
+                     m.id DESC
+            LIMIT 1
+        """
+        params.append(original_item_id)
+
+    cur.execute(query, tuple(params))
+    return proxy_service_row_to_dict(cur.fetchone())
+
+
+def hydrate_proxy_service_reflection_state(conn, items):
+    if not items:
+        return items
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
+
+    try:
+        for item in items:
+            needs_lookup = not item.get('reflected_item_id')
+            if not needs_lookup and item.get('reflected_user_name') and item.get('reflected_at'):
+                continue
+
+            if not item.get('sale_date') and not item.get('highest_bid_user_id'):
+                continue
+
+            reflected_item = lookup_proxy_service_reflected_item(
+                cur,
+                item.get('id'),
+                winner_user_id=item.get('highest_bid_user_id'),
+            )
+            if not reflected_item:
+                continue
+
+            item['reflected_item_id'] = reflected_item.get('id')
+            item['reflected_user_id'] = reflected_item.get('user_id')
+            item['reflected_user_name'] = reflected_item.get('owner_name')
+            item['reflected_at'] = reflected_item.get('created_at') or reflected_item.get('purchase_date')
+    finally:
+        cur.close()
+
+    return items
+
+
+def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=None):
+    now = now or get_jst_now()
+    original_item_id = item.get('id')
+    winner_user_id = item.get('winner_user_id')
+    winner_name = item.get('winner_name') or item.get('highest_bidder') or ''
+    winning_price = int(item.get('result_price') or item.get('highest_bid') or item.get('sale_price') or 0)
+
+    if not original_item_id or not winner_user_id or winning_price <= 0:
+        raise ValueError('落札情報が不足しているため、クライアントへ反映できません')
+
+    reflected_notes = append_proxy_service_origin_note(item.get('notes'), original_item_id, mode='auction')
+    today = now.strftime('%Y-%m-%d')
+    updated_at_value = now.strftime('%Y-%m-%d %H:%M:%S')
+    doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{original_item_id}"
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        existing_reflected = lookup_proxy_service_reflected_item(cur, original_item_id, winner_user_id=winner_user_id)
+        if existing_reflected:
+            if existing_reflected.get('proxy_parent_item_id') != original_item_id:
+                cur.execute("""
+                    UPDATE merchandise
+                    SET proxy_parent_item_id = %s,
+                        updated_by = %s,
+                        updated_at = %s
+                    WHERE id = %s
+                """, (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']))
+            cur.close()
+            return {
+                'created': False,
+                'reflected_item_id': existing_reflected['id'],
+                'winner_user_id': winner_user_id,
+                'winner_name': winner_name,
+            }
+
+        cur.execute("""
+            INSERT INTO merchandise (
+                user_id, purchase_date, photo_path, product_name, brand_name,
+                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
+                purchase_price, payment_method, listing_price, expected_shipping,
+                expected_commission, model_number, additional_photos, is_listed, notes,
+                proxy_parent_item_id, updated_by, updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s
+            ) RETURNING id
+        """, (
+            winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
+            item.get('item_condition'), '代行仕入れサービス', '代行仕入れサービス', winning_price, 0,
+            winning_price, '代行仕入れ', item.get('listing_price') or 0, item.get('expected_shipping') or 0,
+            item.get('expected_commission') or 0, item.get('model_number'), item.get('additional_photos'), False, reflected_notes,
+            original_item_id, reflected_by_user_id, updated_at_value
+        ))
+        reflected_item_id = cur.fetchone()['id']
+
+        cur.execute("""
+            INSERT INTO user_keisan (
+                document_no, user_id, issue_date, recipient_name,
+                subject, total_amount, notes, status, is_admin_created
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s
+            ) RETURNING id
+        """, (
+            doc_no, winner_user_id, today, winner_name,
+            '代行仕入れサービス落札', winning_price,
+            f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_item_id}', 'draft', True
+        ))
+        keisan_id = cur.fetchone()['id']
+
+        cur.execute("""
+            INSERT INTO user_keisan_items (
+                keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (keisan_id, 1, item.get('product_name', '商品'), reflected_item_id, 1, '点', winning_price, winning_price))
+        cur.close()
+    else:
+        cur = conn.cursor()
+        existing_reflected = lookup_proxy_service_reflected_item(cur, original_item_id, winner_user_id=winner_user_id)
+        if existing_reflected:
+            if existing_reflected.get('proxy_parent_item_id') != original_item_id:
+                cur.execute("""
+                    UPDATE merchandise
+                    SET proxy_parent_item_id = ?,
+                        updated_by = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']))
+            cur.close()
+            return {
+                'created': False,
+                'reflected_item_id': existing_reflected['id'],
+                'winner_user_id': winner_user_id,
+                'winner_name': winner_name,
+            }
+
+        cur.execute("""
+            INSERT INTO merchandise (
+                user_id, purchase_date, photo_path, product_name, brand_name,
+                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
+                purchase_price, payment_method, listing_price, expected_shipping,
+                expected_commission, model_number, additional_photos, is_listed, notes,
+                proxy_parent_item_id, updated_by, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?
+            )
+        """, (
+            winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
+            item.get('item_condition'), '代行仕入れサービス', '代行仕入れサービス', winning_price, 0,
+            winning_price, '代行仕入れ', item.get('listing_price') or 0, item.get('expected_shipping') or 0,
+            item.get('expected_commission') or 0, item.get('model_number'), item.get('additional_photos'), 0, reflected_notes,
+            original_item_id, reflected_by_user_id, updated_at_value
+        ))
+        reflected_item_id = cur.lastrowid
+
+        cur.execute("""
+            INSERT INTO user_keisan (
+                document_no, user_id, issue_date, recipient_name,
+                subject, total_amount, notes, status, is_admin_created
+            ) VALUES (
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?
+            )
+        """, (
+            doc_no, winner_user_id, today, winner_name,
+            '代行仕入れサービス落札', winning_price,
+            f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_item_id}', 'draft', 1
+        ))
+        keisan_id = cur.lastrowid
+
+        cur.execute("""
+            INSERT INTO user_keisan_items (
+                keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (keisan_id, 1, item.get('product_name', '商品'), reflected_item_id, 1, '点', winning_price, winning_price))
+        cur.close()
+
+    return {
+        'created': True,
+        'reflected_item_id': reflected_item_id,
+        'winner_user_id': winner_user_id,
+        'winner_name': winner_name,
+    }
+
+
+def get_proxy_service_auction_state(settings, now=None):
+    settings_dict = dict(settings or {})
+    now = now or get_jst_now()
+    start_dt = parse_proxy_service_datetime(settings_dict.get('start_datetime'))
+    end_dt = parse_proxy_service_datetime(settings_dict.get('end_datetime'))
+    is_public = bool(settings_dict.get('is_public'))
+    sale_mode = settings_dict.get('sale_mode') or 'auction'
+
+    is_not_started = bool(start_dt and now < start_dt)
+    is_ended = bool(end_dt and now > end_dt)
+    is_open = is_public and not is_not_started and not is_ended
+
+    if not is_public:
+        status = 'private'
+        status_label = '非公開'
+    elif is_not_started:
+        status = 'scheduled'
+        status_label = '開始前'
+    elif is_ended:
+        status = 'ended'
+        status_label = '締切済み'
+    else:
+        status = 'open'
+        status_label = '公開中'
+
+    return {
+        'status': status,
+        'status_label': status_label,
+        'is_public': is_public,
+        'sale_mode': sale_mode,
+        'start_datetime': start_dt,
+        'end_datetime': end_dt,
+        'is_not_started': is_not_started,
+        'is_ended': is_ended,
+        'is_open': is_open,
+        'has_schedule': bool(start_dt or end_dt),
+        'has_started': not is_not_started,
+    }
+
+
+def normalize_proxy_service_price_value(value):
+    try:
+        normalized = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, normalized)
+
+
+def extract_proxy_service_price_input(data, key):
+    if data is None:
+        return False, 0
+
+    try:
+        has_key = key in data
+    except TypeError:
+        has_key = data.get(key) is not None
+
+    if not has_key:
+        return False, 0
+
+    return True, normalize_proxy_service_price_value(data.get(key))
+
+
+def resolve_proxy_service_admin_pricing(item_data, sale_mode, data=None):
+    item = proxy_service_row_to_dict(item_data) or {}
+    has_listing_input, listing_input = extract_proxy_service_price_input(data, 'listing_price')
+    has_max_input, max_input = extract_proxy_service_price_input(data, 'proxy_auction_max_price')
+
+    current_listing_price = normalize_proxy_service_price_value(item.get('listing_price'))
+    current_max_price = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
+    purchase_price = normalize_proxy_service_price_value(item.get('purchase_price'))
+
+    default_listing_price = current_listing_price or purchase_price
+    next_listing_price = listing_input if has_listing_input else default_listing_price
+    if next_listing_price <= 0 and purchase_price > 0:
+        next_listing_price = purchase_price
+
+    next_max_price = max_input if has_max_input else current_max_price
+
+    if purchase_price and next_listing_price < purchase_price:
+        raise ValueError(f'開始価格・販売価格は仕入れ価格（¥{purchase_price:,}）以上で設定してください')
+
+    if sale_mode == 'fixed':
+        next_max_price = 0
+    elif next_max_price and next_max_price < next_listing_price:
+        raise ValueError(f'最高価格は開始価格（¥{next_listing_price:,}）以上で設定してください')
+
+    return {
+        'listing_price': next_listing_price,
+        'proxy_auction_max_price': next_max_price,
+        'purchase_price': purchase_price,
+        'display_listing_price': f'¥{next_listing_price:,}' if next_listing_price else '¥0',
+        'display_max_price': f'¥{next_max_price:,}' if next_max_price else '未設定',
+        'default_listing_price': default_listing_price,
+    }
+
+
+def finalize_proxy_service_buyout(cur, merchandise_id, winner_user_id, winner_name, winning_bid, actor_user_id, now=None, is_postgres=False):
+    now = now or get_jst_now()
+    sale_destination = f'最高価格到達: {winner_name}' if winner_name else '最高価格到達'
+
+    if is_postgres:
+        cur.execute("""
+            UPDATE merchandise
+            SET sale_date = %s,
+                sale_price = %s,
+                sale_type = 'auction_buyout',
+                sales_destination = %s,
+                show_in_proxy_service = FALSE,
+                updated_by = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND sale_date IS NULL
+        """, (now.date(), winning_bid, sale_destination, actor_user_id, merchandise_id))
+        if cur.rowcount == 0:
+            return False
+        cur.execute("""
+            UPDATE users
+            SET proxy_service_budget = GREATEST(0, COALESCE(proxy_service_budget, 0) - %s)
+            WHERE id = %s
+        """, (winning_bid, winner_user_id))
+        return True
+
+    cur.execute("""
+        UPDATE merchandise
+        SET sale_date = ?,
+            sale_price = ?,
+            sale_type = 'auction_buyout',
+            sales_destination = ?,
+            show_in_proxy_service = 0,
+            updated_by = ?,
+            updated_at = ?
+        WHERE id = ? AND sale_date IS NULL
+    """, (
+        now.strftime('%Y-%m-%d'),
+        winning_bid,
+        sale_destination,
+        actor_user_id,
+        now.strftime('%Y-%m-%d %H:%M:%S'),
+        merchandise_id,
+    ))
+    if cur.rowcount == 0:
+        return False
+    cur.execute("""
+        UPDATE users
+        SET proxy_service_budget = MAX(0, COALESCE(proxy_service_budget, 0) - ?)
+        WHERE id = ?
+    """, (winning_bid, winner_user_id))
+    return True
+
+
+def fetch_proxy_service_items(conn, auction_id):
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT m.id, m.user_id, m.photo_path, m.additional_photos, m.product_name, m.brand_name,
+                   m.item_condition, m.purchase_price, m.listing_price, m.model_number, m.sale_date, m.sale_price,
+                   m.sale_type, m.sales_destination, m.show_in_proxy_service, m.auction_id,
+                   m.expected_shipping, m.expected_commission, m.notes, m.proxy_auction_max_price,
+                   COALESCE(u.display_name, u.username, '不明') as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bidder,
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bid_user_id,
+                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count,
+                   (SELECT MAX(created_at) FROM proxy_service_bids WHERE merchandise_id = m.id) as last_bid_at,
+                   (SELECT child.id FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_item_id,
+                   (SELECT child.user_id FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_user_id,
+                   (SELECT COALESCE(u2.display_name, u2.username, '不明')
+                    FROM merchandise child
+                    LEFT JOIN users u2 ON u2.id = child.user_id
+                    WHERE child.proxy_parent_item_id = m.id
+                    ORDER BY child.id DESC
+                    LIMIT 1) as reflected_user_name,
+                   (SELECT child.created_at FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_at
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.auction_id = %s
+            ORDER BY CASE WHEN m.sale_date IS NULL THEN 0 ELSE 1 END, m.id DESC
+        """, (auction_id,))
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT m.id, m.user_id, m.photo_path, m.additional_photos, m.product_name, m.brand_name,
+                   m.item_condition, m.purchase_price, m.listing_price, m.model_number, m.sale_date, m.sale_price,
+                   m.sale_type, m.sales_destination, m.show_in_proxy_service, m.auction_id,
+                   m.expected_shipping, m.expected_commission, m.notes, m.proxy_auction_max_price,
+                   COALESCE(u.display_name, u.username, '不明') as owner_name,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bid,
+                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bidder,
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as highest_bid_user_id,
+                   (SELECT COUNT(*) FROM proxy_service_bids WHERE merchandise_id = m.id) as bid_count,
+                   (SELECT MAX(created_at) FROM proxy_service_bids WHERE merchandise_id = m.id) as last_bid_at,
+                   (SELECT child.id FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_item_id,
+                   (SELECT child.user_id FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_user_id,
+                   (SELECT COALESCE(u2.display_name, u2.username, '不明')
+                    FROM merchandise child
+                    LEFT JOIN users u2 ON u2.id = child.user_id
+                    WHERE child.proxy_parent_item_id = m.id
+                    ORDER BY child.id DESC
+                    LIMIT 1) as reflected_user_name,
+                   (SELECT child.created_at FROM merchandise child WHERE child.proxy_parent_item_id = m.id ORDER BY child.id DESC LIMIT 1) as reflected_at
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.auction_id = ?
+            ORDER BY CASE WHEN m.sale_date IS NULL THEN 0 ELSE 1 END, m.id DESC
+        """, (auction_id,))
+        items = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+    return hydrate_proxy_service_reflection_state(conn, items)
+
+
+def annotate_proxy_service_items(items, settings, now=None, current_user_id=None):
+    auction_state = get_proxy_service_auction_state(settings, now=now)
+    sale_mode = auction_state['sale_mode']
+    winner_result_codes = {'auction_closed_with_bid', 'auction_finalized', 'fixed_sold'}
+
+    annotated_items = []
+    winner_results = []
+    summary = {
+        'total_items': 0,
+        'active_count': 0,
+        'sold_count': 0,
+        'winner_count': 0,
+        'pending_finalize_count': 0,
+        'pending_reflection_count': 0,
+        'reflected_count': 0,
+        'no_bid_count': 0,
+    }
+
+    for raw_item in items or []:
+        item = dict(raw_item)
+        bid_count = int(item.get('bid_count') or 0)
+        highest_bid = item.get('highest_bid')
+        sale_price = item.get('sale_price')
+        purchase_price = normalize_proxy_service_price_value(item.get('purchase_price'))
+        listing_price = normalize_proxy_service_price_value(item.get('listing_price'))
+        max_price = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
+        winner_user_id = item.get('highest_bid_user_id')
+        winner_name = item.get('highest_bidder')
+        is_sold = bool(item.get('sale_date'))
+        is_buyout_sale = bool((item.get('sale_type') or '') == 'auction_buyout')
+
+        result_code = 'scheduled'
+        status_label = '開始前'
+        status_class = 'scheduled'
+        ended_method_label = ''
+        result_price = highest_bid or sale_price or listing_price or purchase_price or 0
+
+        if sale_mode == 'fixed':
+            purchase_buyer_name = extract_proxy_service_purchase_buyer_name(item.get('sales_destination'))
+            if purchase_buyer_name:
+                winner_name = purchase_buyer_name
+
+            if is_sold:
+                result_code = 'fixed_sold'
+                status_label = '購入成立'
+                status_class = 'won'
+                ended_method_label = '即決購入'
+                result_price = sale_price or highest_bid or item.get('listing_price') or 0
+            elif auction_state['is_ended']:
+                result_code = 'fixed_closed_unsold'
+                status_label = '販売終了'
+                status_class = 'closed'
+                ended_method_label = '時間締切'
+                result_price = item.get('listing_price') or 0
+            elif auction_state['is_open']:
+                result_code = 'fixed_open'
+                status_label = '販売中'
+                status_class = 'open'
+                result_price = item.get('listing_price') or 0
+        else:
+            if is_sold and highest_bid:
+                result_code = 'auction_finalized'
+                status_label = '売り切れ' if is_buyout_sale else '落札確定'
+                status_class = 'won'
+                ended_method_label = '最高価格到達' if is_buyout_sale else '管理画面で落札確定'
+                result_price = sale_price or highest_bid
+            elif auction_state['is_ended'] and highest_bid:
+                result_code = 'auction_closed_with_bid'
+                status_label = '締切済み'
+                status_class = 'closed'
+                ended_method_label = '時間締切'
+                result_price = highest_bid
+            elif auction_state['is_ended']:
+                result_code = 'auction_closed_no_bid'
+                status_label = '入札なし'
+                status_class = 'muted'
+                ended_method_label = '時間締切'
+                result_price = None
+            elif auction_state['is_open']:
+                result_code = 'auction_open'
+                status_label = '入札受付中'
+                status_class = 'open'
+                result_price = highest_bid or item.get('listing_price') or 0
+
+        reflected_item_id = item.get('reflected_item_id')
+        is_reflected_to_client = bool(reflected_item_id)
+        reflected_user_name = item.get('reflected_user_name') or winner_name
+        reflected_at_display = format_optional_datetime(item.get('reflected_at'), fallback='-')
+
+        if is_reflected_to_client and result_code == 'fixed_sold':
+            reflection_status_label = '自動反映済み'
+            reflection_status_class = 'won'
+        elif is_reflected_to_client:
+            reflection_status_label = '反映済み'
+            reflection_status_class = 'won'
+        elif result_code == 'auction_finalized':
+            reflection_status_label = '未反映'
+            reflection_status_class = 'scheduled'
+        elif result_code == 'auction_closed_with_bid':
+            reflection_status_label = '落札確定待ち'
+            reflection_status_class = 'muted'
+        elif result_code == 'fixed_sold':
+            reflection_status_label = '要確認'
+            reflection_status_class = 'scheduled'
+        else:
+            reflection_status_label = '対象外'
+            reflection_status_class = 'muted'
+
+        item['bid_count'] = bid_count
+        item['has_bid'] = bid_count > 0
+        item['is_sold'] = is_sold
+        item['purchase_price'] = purchase_price
+        item['minimum_listing_price'] = purchase_price
+        item['default_listing_price'] = listing_price or purchase_price
+        item['price_label'] = '販売価格' if sale_mode == 'fixed' else '開始価格'
+        item['proxy_auction_max_price'] = max_price
+        item['has_proxy_auction_max_price'] = bool(max_price > 0 and sale_mode == 'auction')
+        item['is_buyout_sale'] = is_buyout_sale
+        item['sold_message'] = '最高価格に到達したため売り切れました' if is_buyout_sale else '売り切れました'
+        item['winner_user_id'] = winner_user_id
+        item['winner_name'] = winner_name
+        item['result_code'] = result_code
+        item['status_label'] = status_label
+        item['status_class'] = status_class
+        item['ended_method_label'] = ended_method_label
+        item['result_price'] = result_price
+        item['is_action_locked'] = not auction_state['is_open'] or is_sold
+        item['is_user_winner'] = bool(current_user_id and winner_user_id == current_user_id and result_code in winner_result_codes)
+        item['user_result_label'] = '購入成立' if result_code == 'fixed_sold' else '落札'
+        item['is_reflected_to_client'] = is_reflected_to_client
+        item['reflection_status_label'] = reflection_status_label
+        item['reflection_status_class'] = reflection_status_class
+        item['reflected_item_id'] = reflected_item_id
+        item['reflected_user_name'] = reflected_user_name
+        item['reflected_at_display'] = reflected_at_display
+        item['can_reflect_to_client'] = bool(result_code == 'auction_finalized' and not is_reflected_to_client)
+        annotated_items.append(item)
+
+        summary['total_items'] += 1
+        if result_code in ('auction_open', 'fixed_open'):
+            summary['active_count'] += 1
+        if is_sold:
+            summary['sold_count'] += 1
+        if result_code in ('auction_closed_with_bid', 'auction_finalized', 'fixed_sold'):
+            summary['winner_count'] += 1
+        if result_code == 'auction_closed_with_bid':
+            summary['pending_finalize_count'] += 1
+        if item['can_reflect_to_client']:
+            summary['pending_reflection_count'] += 1
+        if is_reflected_to_client:
+            summary['reflected_count'] += 1
+        if result_code in ('auction_closed_no_bid', 'fixed_closed_unsold'):
+            summary['no_bid_count'] += 1
+
+        if item['is_user_winner']:
+            winner_results.append(item)
+
+    return annotated_items, summary, winner_results
+
+
+def build_proxy_service_live_snapshot(items, auction_state):
+    snapshot_items = []
+    for item in items or []:
+        snapshot_items.append({
+            'id': item.get('id'),
+            'is_sold': bool(item.get('is_sold')),
+            'highest_bid': normalize_proxy_service_price_value(item.get('highest_bid')),
+            'highest_bidder': item.get('highest_bidder') or '',
+            'result_price': normalize_proxy_service_price_value(item.get('result_price')),
+            'bid_count': int(item.get('bid_count') or 0),
+            'status_label': item.get('status_label') or '',
+            'ended_method_label': item.get('ended_method_label') or '',
+        })
+
+    return {
+        'auction_status': auction_state.get('status'),
+        'sale_mode': auction_state.get('sale_mode'),
+        'item_count': len(snapshot_items),
+        'items': snapshot_items,
+    }
+
+
+def build_public_proxy_service_sections(conn, now=None, current_user_id=None):
+    now = now or get_jst_now()
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT *
+            FROM proxy_service_settings
+            ORDER BY id DESC
+        """)
+        raw_auctions = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT *
+            FROM proxy_service_settings
+            ORDER BY id DESC
+        """)
+        raw_auctions = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+
+    current_auctions = []
+    upcoming_auctions = []
+    history_auctions = []
+
+    for auction in raw_auctions:
+        auction_state = get_proxy_service_auction_state(auction, now=now)
+        annotated_items, summary, winner_results = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction['id']),
+            auction,
+            now=now,
+            current_user_id=current_user_id,
+        )
+
+        has_visible_history = bool(
+            annotated_items and (
+                auction_state['is_ended']
+                or summary['winner_count']
+                or summary['pending_finalize_count']
+                or summary['no_bid_count']
+            )
+        )
+
+        display_state = dict(auction_state)
+        if display_state['status'] == 'private' and has_visible_history:
+            display_state['status'] = 'ended'
+            display_state['status_label'] = '締切済み'
+            display_state['is_open'] = False
+            display_state['is_ended'] = True
+
+        auction_dict = dict(auction)
+        auction_dict.update(display_state)
+        auction_dict['item_count'] = len(annotated_items)
+        auction_dict['active_item_count'] = summary['active_count']
+        auction_dict['winner_count'] = summary['winner_count']
+        auction_dict['no_bid_count'] = summary['no_bid_count']
+        auction_dict['user_result_count'] = len(winner_results)
+        auction_dict['has_visible_history'] = has_visible_history
+
+        if display_state['status'] == 'open':
+            current_auctions.append(auction_dict)
+        elif display_state['status'] == 'scheduled':
+            upcoming_auctions.append(auction_dict)
+        elif has_visible_history:
+            history_auctions.append(auction_dict)
+
+    current_auctions.sort(key=lambda auction: (auction.get('end_datetime') or now, auction.get('id') or 0))
+    upcoming_auctions.sort(key=lambda auction: (auction.get('start_datetime') or now, auction.get('id') or 0))
+    history_auctions.sort(key=lambda auction: (auction.get('end_datetime') or now, auction.get('id') or 0), reverse=True)
+
+    return {
+        'current_auctions': current_auctions,
+        'upcoming_auctions': upcoming_auctions,
+        'history_auctions': history_auctions,
+    }
+
+# グローバルエラーハンドラー（エラーをブラウザに詳細表示）
+
 @app.errorhandler(500)
 def internal_error(error):
     import traceback
@@ -859,6 +1648,14 @@ if DATABASE_URL:
         # 商品に代行サービス表示フラグを追加
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS show_in_proxy_service BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS proxy_parent_item_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS proxy_auction_max_price INTEGER DEFAULT 0")
         except:
             pass
         
@@ -1879,6 +2676,14 @@ else:
         # 商品に代行サービス表示フラグを追加
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN show_in_proxy_service INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN proxy_parent_item_id INTEGER REFERENCES merchandise(id)")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN proxy_auction_max_price INTEGER DEFAULT 0")
         except:
             pass
         
@@ -10553,78 +11358,118 @@ def admin_proxy_service_history():
         flash('オーナーまたは管理者権限が必要です', 'error')
         return redirect(url_for('index'))
     
-    finalized_items = []
+    result_items = []
     bid_history = []
+    history_summary = {
+        'result_count': 0,
+        'winner_count': 0,
+        'pending_finalize_count': 0,
+        'no_bid_count': 0,
+        'bid_count': 0,
+    }
     
     try:
         conn = get_db()
+        now = get_jst_now()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            # 落札済み商品（代行サービス経由で売却された商品）
-            # proxy_service_bidsに入札があり、sale_dateが入っている商品
             cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price, m.sales_destination,
-                       m.photo_path, m.listing_price,
-                       u.display_name as winner_name,
-                       pb.bid_amount as winning_bid,
-                       pb.created_at as bid_time
-                FROM merchandise m
-                JOIN proxy_service_bids pb ON m.id = pb.merchandise_id
-                JOIN users u ON pb.user_id = u.id
-                WHERE m.sale_date IS NOT NULL
-                AND pb.bid_amount = (SELECT MAX(bid_amount) FROM proxy_service_bids WHERE merchandise_id = m.id)
-                ORDER BY m.sale_date DESC
-                LIMIT 100
+                SELECT *
+                FROM proxy_service_settings
+                ORDER BY id DESC
             """)
-            finalized_items = cur.fetchall()
-            
-            # 全入札履歴
+            auctions = [dict(row) for row in cur.fetchall()]
             cur.execute("""
-                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name,
-                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date,
-                       u.display_name as user_display_name
+                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name, pb.user_id,
+                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date, m.auction_id,
+                       ps.auction_name, ps.sale_mode, ps.end_datetime,
+                       u.display_name as user_display_name,
+                       (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winner_user_id,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winning_bid
                 FROM proxy_service_bids pb
                 JOIN merchandise m ON pb.merchandise_id = m.id
-                LEFT JOIN users u ON pb.user_id = u.id
-                ORDER BY pb.created_at DESC
-                LIMIT 200
-            """)
-            bid_history = cur.fetchall()
-        else:
-            import sqlite3
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            
-            # 落札済み商品
-            cur.execute("""
-                SELECT m.id, m.product_name, m.brand_name, m.sale_date, m.sale_price, m.sales_destination,
-                       m.photo_path, m.listing_price,
-                       u.display_name as winner_name,
-                       pb.bid_amount as winning_bid,
-                       pb.created_at as bid_time
-                FROM merchandise m
-                JOIN proxy_service_bids pb ON m.id = pb.merchandise_id
-                JOIN users u ON pb.user_id = u.id
-                WHERE m.sale_date IS NOT NULL
-                AND pb.bid_amount = (SELECT MAX(bid_amount) FROM proxy_service_bids WHERE merchandise_id = m.id)
-                ORDER BY m.sale_date DESC
-                LIMIT 100
-            """)
-            finalized_items = [dict(row) for row in cur.fetchall()]
-            
-            # 全入札履歴
-            cur.execute("""
-                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name,
-                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date,
-                       u.display_name as user_display_name
-                FROM proxy_service_bids pb
-                JOIN merchandise m ON pb.merchandise_id = m.id
+                LEFT JOIN proxy_service_settings ps ON m.auction_id = ps.id
                 LEFT JOIN users u ON pb.user_id = u.id
                 ORDER BY pb.created_at DESC
                 LIMIT 200
             """)
             bid_history = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT *
+                FROM proxy_service_settings
+                ORDER BY id DESC
+            """)
+            auctions = [dict(row) for row in cur.fetchall()]
+            cur.execute("""
+                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name, pb.user_id,
+                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date, m.auction_id,
+                       ps.auction_name, ps.sale_mode, ps.end_datetime,
+                       u.display_name as user_display_name,
+                       (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winner_user_id,
+                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winning_bid
+                FROM proxy_service_bids pb
+                JOIN merchandise m ON pb.merchandise_id = m.id
+                LEFT JOIN proxy_service_settings ps ON m.auction_id = ps.id
+                LEFT JOIN users u ON pb.user_id = u.id
+                ORDER BY pb.created_at DESC
+                LIMIT 200
+            """)
+            bid_history = [dict(row) for row in cur.fetchall()]
+
+        for auction in auctions:
+            auction_state = get_proxy_service_auction_state(auction, now=now)
+            annotated_items, summary, _ = annotate_proxy_service_items(
+                fetch_proxy_service_items(conn, auction['id']),
+                auction,
+                now=now,
+            )
+
+            history_summary['winner_count'] += summary['winner_count']
+            history_summary['pending_finalize_count'] += summary['pending_finalize_count']
+            history_summary['no_bid_count'] += summary['no_bid_count']
+
+            for item in annotated_items:
+                if auction_state['status'] != 'ended' and not item.get('is_sold') and not item.get('has_bid'):
+                    continue
+
+                item['auction_name'] = auction.get('auction_name') or 'オークション'
+                item['auction_sale_mode'] = auction_state['sale_mode']
+                item['auction_status_label'] = auction_state['status_label']
+                item['auction_end_datetime'] = auction_state['end_datetime']
+                result_items.append(item)
+
+        for bid in bid_history:
+            end_dt = parse_proxy_service_datetime(bid.get('end_datetime'))
+            auction_ended = bool(end_dt and now > end_dt)
+            is_winner = bool(
+                bid.get('winner_user_id')
+                and bid.get('user_id') == bid.get('winner_user_id')
+                and bid.get('bid_amount') == bid.get('winning_bid')
+            )
+
+            if bid.get('sale_date') or auction_ended:
+                if is_winner:
+                    bid['bid_status'] = 'won'
+                    bid['bid_status_label'] = '落札'
+                else:
+                    bid['bid_status'] = 'lost'
+                    bid['bid_status_label'] = '不成立'
+            else:
+                bid['bid_status'] = 'pending'
+                bid['bid_status_label'] = '受付中'
+
+            created_at = bid.get('created_at')
+            if isinstance(created_at, datetime):
+                bid['created_at_display'] = created_at.strftime('%Y/%m/%d %H:%M')
+            elif created_at:
+                bid['created_at_display'] = str(created_at)[:16].replace('-', '/').replace('T', ' ')
+            else:
+                bid['created_at_display'] = '-'
+
+        history_summary['result_count'] = len(result_items)
+        history_summary['bid_count'] = len(bid_history)
         
         cur.close()
         conn.close()
@@ -10634,8 +11479,9 @@ def admin_proxy_service_history():
         traceback.print_exc()
     
     return render_template('admin/proxy_service_history.html',
-                         finalized_items=finalized_items,
-                         bid_history=bid_history)
+                         result_items=result_items,
+                         bid_history=bid_history,
+                         history_summary=history_summary)
 
 @app.route('/admin/proxy-service/<int:auction_id>/finalize', methods=['POST'])
 @login_required
@@ -10863,6 +11709,222 @@ def admin_proxy_service_finalize(auction_id):
         'finalized_count': finalized_count,
         'already_sold_count': already_sold_count,
         'unmatched_count': unmatched_count
+    })
+
+
+@app.route('/admin/proxy-service/<int:auction_id>/reflect-all', methods=['POST'])
+@login_required
+def admin_proxy_service_reflect_all(auction_id):
+    """落札確定済みの商品を一括でクライアントの商品一覧へ反映"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+
+    conn = get_db()
+    now = get_jst_now()
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
+        settings = proxy_service_row_to_dict(cur.fetchone())
+        cur.close()
+
+        if not settings:
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+        annotated_items, _, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction_id),
+            settings,
+            now=now,
+        )
+        reflectable_items = [item for item in annotated_items if item.get('can_reflect_to_client')]
+
+        if not reflectable_items:
+            conn.close()
+            return jsonify({'success': True, 'message': 'クライアントに反映する商品はありませんでした。', 'reflected_count': 0})
+
+        reflected_count = 0
+        for item in reflectable_items:
+            create_proxy_service_reflected_item(conn, item, current_user.id, now=now)
+            reflected_count += 1
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'{reflected_count}件の商品をクライアントの商品一覧へ反映しました。',
+            'reflected_count': reflected_count,
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'一括反映中にエラーが発生しました: {str(e)}'}), 500
+
+
+@app.route('/admin/proxy-service/<int:auction_id>/reflect-item/<int:item_id>', methods=['POST'])
+@login_required
+def admin_proxy_service_reflect_item(auction_id, item_id):
+    """落札確定済みの商品をクライアントの商品一覧へ反映"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+
+    conn = get_db()
+    now = get_jst_now()
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
+        settings = proxy_service_row_to_dict(cur.fetchone())
+        cur.close()
+
+        if not settings:
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+        annotated_items, _, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction_id),
+            settings,
+            now=now,
+        )
+        target_item = next((item for item in annotated_items if item.get('id') == item_id), None)
+        if not target_item:
+            conn.close()
+            return jsonify({'success': False, 'error': '対象商品が見つかりません'}), 404
+
+        if target_item.get('is_reflected_to_client'):
+            conn.close()
+            return jsonify({
+                'success': True,
+                'message': f'「{target_item.get("product_name") or "商品"}」は既にクライアントへ反映済みです。',
+                'already_reflected': True,
+                'reflected_item_id': target_item.get('reflected_item_id'),
+                'winner_user_id': target_item.get('winner_user_id'),
+            })
+
+        if not target_item.get('can_reflect_to_client'):
+            conn.close()
+            return jsonify({'success': False, 'error': '落札確定後の商品のみ反映できます'}), 400
+
+        reflection_result = create_proxy_service_reflected_item(conn, target_item, current_user.id, now=now)
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'「{target_item.get("product_name") or "商品"}」を{reflection_result.get("winner_name") or "クライアント"}の商品一覧へ反映しました。',
+            'reflected_item_id': reflection_result.get('reflected_item_id'),
+            'winner_user_id': reflection_result.get('winner_user_id'),
+            'created': reflection_result.get('created', False),
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'反映中にエラーが発生しました: {str(e)}'}), 500
+
+
+@app.route('/admin/proxy-service/<int:auction_id>/item/<int:item_id>/pricing', methods=['POST'])
+@login_required
+def admin_proxy_service_update_item_pricing(auction_id, item_id):
+    """公開中商品のオークション価格設定を更新"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    data = request.get_json(silent=True) or request.form
+
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT sale_mode FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        settings = cur.fetchone()
+        sale_mode = (settings or {}).get('sale_mode') or 'auction'
+        cur.execute("""
+            SELECT id, purchase_price, listing_price, proxy_auction_max_price, sale_date, auction_id
+            FROM merchandise
+            WHERE id = %s AND auction_id = %s
+        """, (item_id, auction_id))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        if item.get('sale_date'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '終了済み商品の価格設定は変更できません'}), 400
+        try:
+            pricing = resolve_proxy_service_admin_pricing(item, sale_mode, data=data)
+        except ValueError as exc:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        cur.execute("""
+            UPDATE merchandise
+            SET listing_price = %s,
+                proxy_auction_max_price = %s,
+                updated_by = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """, (pricing['listing_price'], pricing['proxy_auction_max_price'], current_user.id, item_id))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT sale_mode FROM proxy_service_settings WHERE id = ?", (auction_id,))
+        settings_row = cur.fetchone()
+        sale_mode = (dict(settings_row).get('sale_mode') if settings_row else None) or 'auction'
+        cur.execute("""
+            SELECT id, purchase_price, listing_price, proxy_auction_max_price, sale_date, auction_id
+            FROM merchandise
+            WHERE id = ? AND auction_id = ?
+        """, (item_id, auction_id))
+        item = cur.fetchone()
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        item_dict = dict(item)
+        if item_dict.get('sale_date'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '終了済み商品の価格設定は変更できません'}), 400
+        try:
+            pricing = resolve_proxy_service_admin_pricing(item_dict, sale_mode, data=data)
+        except ValueError as exc:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        cur.execute("""
+            UPDATE merchandise
+            SET listing_price = ?,
+                proxy_auction_max_price = ?,
+                updated_by = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (pricing['listing_price'], pricing['proxy_auction_max_price'], current_user.id, get_jst_now().strftime('%Y-%m-%d %H:%M:%S'), item_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({
+        'success': True,
+        'listing_price': pricing['listing_price'],
+        'proxy_auction_max_price': pricing['proxy_auction_max_price'],
+        'display_listing_price': pricing['display_listing_price'],
+        'display_max_price': pricing['display_max_price'],
     })
 
 @app.route('/admin/auction-keisan')
@@ -11149,7 +12211,7 @@ def admin_auction_keisan_pdf(id):
 def public_proxy_service_list():
     """代行仕入れサービス公開ページ - オークション一覧"""
     conn = get_db()
-    now = datetime.now()
+    now = get_jst_now()
     
     # サービス利用対象ユーザーかチェック（ログイン時のみ）
     if current_user.is_authenticated:
@@ -11168,199 +12230,222 @@ def public_proxy_service_list():
             conn.close()
             return render_template('proxy_service_closed.html', reason='not_allowed')
     
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 公開中のオークション一覧を取得
-        cur.execute("""
-            SELECT ps.*, 
-                   (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count
-            FROM proxy_service_settings ps
-            WHERE ps.is_public = TRUE
-            ORDER BY ps.id DESC
-        """)
-        auctions = [dict(a) for a in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT ps.*, 
-                   (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id AND m.sale_date IS NULL) as item_count
-            FROM proxy_service_settings ps
-            WHERE ps.is_public = 1
-            ORDER BY ps.id DESC
-        """)
-        columns = ['id', 'is_public', 'page_title', 'page_description', 'start_datetime', 'end_datetime', 'updated_by', 'updated_at', 'sale_mode', 'auction_name', 'item_count']
-        auctions = []
-        for row in cur.fetchall():
-            a = dict(zip(columns[:len(row)], row))
-            auctions.append(a)
-    
-    # 有効なオークションのみフィルタリング（日時チェック）
-    active_auctions = []
-    for auction in auctions:
-        start_dt = auction.get('start_datetime')
-        end_dt = auction.get('end_datetime')
-        
-        if start_dt:
-            if isinstance(start_dt, str):
-                start_dt = datetime.fromisoformat(start_dt)
-            if now < start_dt:
-                continue
-        
-        if end_dt:
-            if isinstance(end_dt, str):
-                end_dt = datetime.fromisoformat(end_dt)
-            if now > end_dt:
-                continue
-        
-        active_auctions.append(auction)
-    
-    cur.close()
+    sections = build_public_proxy_service_sections(
+        conn,
+        now=now,
+        current_user_id=current_user.id if current_user.is_authenticated else None,
+    )
     conn.close()
-    
-    # オークションが1つだけなら直接そのページへリダイレクト
-    if len(active_auctions) == 1:
-        return redirect(url_for('public_proxy_service', auction_id=active_auctions[0]['id']))
-    
-    # オークションがなければ閉鎖ページ
-    if not active_auctions:
+
+    if not sections['current_auctions'] and not sections['upcoming_auctions'] and not sections['history_auctions']:
         return render_template('proxy_service_closed.html', reason='disabled')
-    
-    return render_template('proxy_service_list.html', auctions=active_auctions)
+
+    return render_template(
+        'proxy_service_list.html',
+        current_auctions=sections['current_auctions'],
+        upcoming_auctions=sections['upcoming_auctions'],
+        history_auctions=sections['history_auctions'],
+    )
+
+
+@app.route('/proxy-service/history')
+def public_proxy_service_history():
+    """代行仕入れサービスの履歴一覧"""
+    conn = get_db()
+    now = get_jst_now()
+
+    if current_user.is_authenticated:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            cur.close()
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            cur.close()
+
+        if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+            conn.close()
+            return render_template('proxy_service_closed.html', reason='not_allowed')
+
+    sections = build_public_proxy_service_sections(
+        conn,
+        now=now,
+        current_user_id=current_user.id if current_user.is_authenticated else None,
+    )
+    conn.close()
+
+    return render_template(
+        'proxy_service_history_public.html',
+        history_auctions=sections['history_auctions'],
+    )
 
 @app.route('/proxy-service/<int:auction_id>')
 def public_proxy_service(auction_id):
     """代行仕入れサービス公開ページ（個別オークション）"""
     conn = get_db()
-    now = datetime.now()
+    now = get_jst_now()
+    current_user_id = current_user.id if current_user.is_authenticated else None
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
         settings = cur.fetchone()
-        
-        if not settings or not settings['is_public']:
+
+        if not settings:
+            cur.close()
+            conn.close()
             return render_template('proxy_service_closed.html', reason='disabled')
-        
+
         settings_dict = dict(settings)
-        
-        # サービス利用対象ユーザーかチェック（ログイン時のみ）
+
         if current_user.is_authenticated:
             cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
             is_allowed_user = cur.fetchone() is not None
-            # 管理者/オーナーは常にアクセス可能
             if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                cur.close()
+                conn.close()
                 return render_template('proxy_service_closed.html', reason='not_allowed')
-        
-        # 日時チェック
-        start_dt = settings_dict.get('start_datetime')
-        end_dt = settings_dict.get('end_datetime')
-        
-        if start_dt and now < start_dt:
-            return render_template('proxy_service_closed.html', reason='not_started', start_datetime=start_dt)
-        
-        if end_dt and now > end_dt:
-            return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
-        
-        # このオークションに掲載中の商品を取得
-        cur.execute("""
-            SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
-                   m.listing_price, m.model_number, COALESCE(u.display_name, '不明') as owner_name,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
-                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
-            FROM merchandise m
-            LEFT JOIN users u ON m.user_id = u.id
-            WHERE m.auction_id = %s AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-        """, (auction_id,))
-        items = cur.fetchall()
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         row = cur.fetchone()
-        
-        if not row or not row[1]:  # is_public
+
+        if not row:
+            cur.close()
+            conn.close()
             return render_template('proxy_service_closed.html', reason='disabled')
-        
-        # SQLiteの場合、カラム名でアクセスできるようにする
-        columns = ['id', 'is_public', 'page_title', 'page_description', 'start_datetime', 'end_datetime', 'updated_by', 'updated_at', 'sale_mode', 'auction_name']
-        settings_dict = dict(zip(columns, row[:len(columns)]))
-        # sale_modeが取得できない場合のデフォルト値
+
+        settings_dict = dict(row)
         if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
             settings_dict['sale_mode'] = 'auction'
-        
-        # サービス利用対象ユーザーかチェック（ログイン時のみ）
+
         if current_user.is_authenticated:
             cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
             is_allowed_user = cur.fetchone() is not None
-            # 管理者/オーナーは常にアクセス可能
             if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                cur.close()
+                conn.close()
                 return render_template('proxy_service_closed.html', reason='not_allowed')
-        
-        # 日時チェック
-        start_dt = settings_dict.get('start_datetime')
-        end_dt = settings_dict.get('end_datetime')
-        
-        if start_dt:
-            start_dt = datetime.fromisoformat(start_dt) if isinstance(start_dt, str) else start_dt
-            if now < start_dt:
-                return render_template('proxy_service_closed.html', reason='not_started', start_datetime=start_dt)
-        
-        if end_dt:
-            end_dt = datetime.fromisoformat(end_dt) if isinstance(end_dt, str) else end_dt
-            if now > end_dt:
-                return render_template('proxy_service_closed.html', reason='ended', end_datetime=end_dt)
-        
-        # このオークションに掲載中の商品を取得
-        cur.execute("""
-            SELECT m.id, m.photo_path, m.additional_photos, m.product_name, m.brand_name, m.item_condition,
-                   m.listing_price, m.model_number, COALESCE(u.display_name, '不明') as owner_name,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bid,
-                   (SELECT bidder_name FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as highest_bidder
-            FROM merchandise m
-            LEFT JOIN users u ON m.user_id = u.id
-            WHERE m.auction_id = ? AND m.sale_date IS NULL
-            ORDER BY m.id DESC
-        """, (auction_id,))
-        items = cur.fetchall()
-    
-    item_dicts = [dict(i) for i in items]
-    item_ids = [item_dict.get('id') for item_dict in item_dicts if item_dict.get('id')]
-    if item_ids:
-        if DATABASE_URL:
-            placeholders = ','.join(['%s'] * len(item_ids))
-            cur.execute(
-                f"SELECT id, wholesale_price FROM merchandise WHERE id IN ({placeholders})",
-                tuple(item_ids)
-            )
-            price_map = {
-                row['id']: row.get('wholesale_price')
-                for row in cur.fetchall()
-            }
-        else:
-            placeholders = ','.join(['?'] * len(item_ids))
-            cur.execute(
-                f"SELECT id, wholesale_price FROM merchandise WHERE id IN ({placeholders})",
-                tuple(item_ids)
-            )
-            price_map = {
-                row[0]: row[1]
-                for row in cur.fetchall()
-            }
-        for item_dict in item_dicts:
-            item_dict['wholesale_price'] = price_map.get(item_dict.get('id'))
-            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
-    else:
-        for item_dict in item_dicts:
-            item_dict['proxy_price'] = get_effective_proxy_price(item_dict)
+
+    auction_state = get_proxy_service_auction_state(settings_dict, now=now)
+    items, result_summary, winner_results = annotate_proxy_service_items(
+        fetch_proxy_service_items(conn, auction_id),
+        settings_dict,
+        now=now,
+        current_user_id=current_user_id,
+    )
+    has_visible_history = any(
+        item['result_code'] in ('auction_closed_with_bid', 'auction_closed_no_bid', 'auction_finalized', 'fixed_sold', 'fixed_closed_unsold')
+        for item in items
+    )
+    live_status_snapshot = build_proxy_service_live_snapshot(items, auction_state)
 
     cur.close()
     conn.close()
-    
+
+    if not settings_dict.get('is_public') and not has_visible_history:
+        return render_template('proxy_service_closed.html', reason='disabled')
+
+    if auction_state['status'] == 'scheduled':
+        return render_template('proxy_service_closed.html', reason='not_started', start_datetime=auction_state['start_datetime'])
+
+    if auction_state['status'] == 'private' and has_visible_history:
+        auction_state = dict(auction_state)
+        auction_state['status'] = 'ended'
+        auction_state['status_label'] = '締切済み'
+        auction_state['is_ended'] = True
+        auction_state['is_open'] = False
+
     return render_template('proxy_service_public.html',
-                         settings=settings_dict,
-                         items=item_dicts,
-                         end_datetime=end_dt if 'end_dt' in dir() else settings_dict.get('end_datetime'),
-                         auction_id=auction_id)
+                          settings=settings_dict,
+                          items=items,
+                          auction_state=auction_state,
+                          result_summary=result_summary,
+                          winner_results=winner_results,
+                          live_status_snapshot=live_status_snapshot,
+                          end_datetime=auction_state['end_datetime'],
+                          auction_id=auction_id)
+
+
+@app.route('/proxy-service/<int:auction_id>/status')
+def public_proxy_service_status(auction_id):
+    """代行仕入れサービス公開ページのライブ更新用ステータス"""
+    conn = get_db()
+    now = get_jst_now()
+    current_user_id = current_user.id if current_user.is_authenticated else None
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        settings = cur.fetchone()
+
+        if not settings:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '公開設定が見つかりません'}), 404
+
+        settings_dict = dict(settings)
+        if current_user.is_authenticated:
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+        row = cur.fetchone()
+
+        if not row:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '公開設定が見つかりません'}), 404
+
+        settings_dict = dict(row)
+        if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
+            settings_dict['sale_mode'] = 'auction'
+
+        if current_user.is_authenticated:
+            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
+            is_allowed_user = cur.fetchone() is not None
+            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+
+    auction_state = get_proxy_service_auction_state(settings_dict, now=now)
+    items, _, _ = annotate_proxy_service_items(
+        fetch_proxy_service_items(conn, auction_id),
+        settings_dict,
+        now=now,
+        current_user_id=current_user_id,
+    )
+    has_visible_history = any(
+        item['result_code'] in ('auction_closed_with_bid', 'auction_closed_no_bid', 'auction_finalized', 'fixed_sold', 'fixed_closed_unsold')
+        for item in items
+    )
+
+    cur.close()
+    conn.close()
+
+    if not settings_dict.get('is_public') and not has_visible_history:
+        return jsonify({'success': False, 'error': '公開されていません'}), 403
+
+    if auction_state['status'] == 'private' and has_visible_history:
+        auction_state = dict(auction_state)
+        auction_state['status'] = 'ended'
+        auction_state['status_label'] = '締切済み'
+        auction_state['is_ended'] = True
+        auction_state['is_open'] = False
+
+    return jsonify({
+        'success': True,
+        'snapshot': build_proxy_service_live_snapshot(items, auction_state),
+    })
 
 @app.route('/proxy-service/bid', methods=['POST'])
 def proxy_service_bid():
@@ -11408,18 +12493,26 @@ def proxy_service_bid():
         return jsonify({'success': False, 'error': '有効な金額を入力してください'}), 400
     
     conn = get_db()
-    now = datetime.now()
+    now = get_jst_now()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # まず商品を取得してauction_idを確認
-        cur.execute("SELECT id, listing_price, wholesale_price, auction_id FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE", (merchandise_id,))
+        cur.execute("""
+            SELECT id, listing_price, auction_id, proxy_auction_max_price, sale_date
+            FROM merchandise
+            WHERE id = %s AND show_in_proxy_service = TRUE
+        """, (merchandise_id,))
         item = cur.fetchone()
         if not item:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        if item.get('sale_date'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
         
         # 商品のauction_idに基づいて設定を取得
         auction_id = item.get('auction_id')
@@ -11433,9 +12526,13 @@ def proxy_service_bid():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
+        if (settings.get('sale_mode') or 'auction') != 'auction':
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は入札形式ではありません（早い者勝ちの商品です）'}), 400
         
-        start_dt = settings.get('start_datetime')
-        end_dt = settings.get('end_datetime')
+        start_dt = parse_proxy_service_datetime(settings.get('start_datetime'))
+        end_dt = parse_proxy_service_datetime(settings.get('end_datetime'))
         
         if start_dt and now < start_dt:
             cur.close()
@@ -11449,16 +12546,23 @@ def proxy_service_bid():
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = %s ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        effective_price = get_effective_proxy_price(dict(item))
-        min_bid = highest['bid_amount'] + 1 if highest else effective_price
+        min_bid = highest['bid_amount'] + 1 if highest else (item['listing_price'] or 0)
+        max_price = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
+        if max_price and highest and highest['bid_amount'] >= max_price:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は最高価格に到達したため売り切れました'}), 400
         
         if bid_amount < min_bid:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+
+        accepted_bid_amount = max_price if max_price and bid_amount >= max_price else bid_amount
+        budget_required = accepted_bid_amount if max_price and bid_amount >= max_price else bid_amount
         
         # 利用可能金額チェック
-        if not current_user.can_purchase_proxy_item(bid_amount):
+        if not current_user.can_purchase_proxy_item(budget_required):
             remaining = current_user.get_proxy_service_remaining_budget()
             cur.close()
             conn.close()
@@ -11466,20 +12570,45 @@ def proxy_service_bid():
         
         # 入札を保存（user_id含む）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
-                   (merchandise_id, user_id, bidder_name, bid_amount))
+                   (merchandise_id, user_id, bidder_name, accepted_bid_amount))
+
+        item_sold = bool(max_price and bid_amount >= max_price)
+        if item_sold and not finalize_proxy_service_buyout(
+            cur,
+            merchandise_id,
+            user_id,
+            bidder_name,
+            accepted_bid_amount,
+            current_user.id,
+            now=now,
+            is_postgres=True,
+        ):
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
     else:
         cur = conn.cursor()
         
         # まず商品を取得してauction_idを確認
-        cur.execute("SELECT id, listing_price, wholesale_price, auction_id FROM merchandise WHERE id = ? AND show_in_proxy_service = 1", (merchandise_id,))
+        cur.execute("""
+            SELECT id, listing_price, auction_id, proxy_auction_max_price, sale_date
+            FROM merchandise
+            WHERE id = ? AND show_in_proxy_service = 1
+        """, (merchandise_id,))
         item = cur.fetchone()
         if not item:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
+        item_dict = dict(item)
+        if item_dict.get('sale_date'):
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
         
         # 商品のauction_idに基づいて設定を取得
-        auction_id = item[3] if len(item) > 3 else None  # auction_id
+        auction_id = item_dict.get('auction_id')
         if auction_id:
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         else:
@@ -11490,52 +12619,44 @@ def proxy_service_bid():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションは現在開催されていません'}), 400
+        sale_mode = row[8] if len(row) > 8 else 'auction'
+        if sale_mode != 'auction':
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は入札形式ではありません（早い者勝ちの商品です）'}), 400
         
         # 時間チェック（SQLiteの場合）
-        start_dt_idx = 5  # start_datetime
-        end_dt_idx = 6    # end_datetime
-        if len(row) > start_dt_idx and row[start_dt_idx]:
-            start_dt = row[start_dt_idx]
-            if isinstance(start_dt, str):
-                try:
-                    start_dt = datetime.fromisoformat(start_dt)
-                except:
-                    start_dt = None
-            if start_dt and now < start_dt:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
-        if len(row) > end_dt_idx and row[end_dt_idx]:
-            end_dt = row[end_dt_idx]
-            if isinstance(end_dt, str):
-                try:
-                    end_dt = datetime.fromisoformat(end_dt)
-                except:
-                    end_dt = None
-            if end_dt and now > end_dt:
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
+        start_dt = parse_proxy_service_datetime(row[4] if len(row) > 4 else None)
+        end_dt = parse_proxy_service_datetime(row[5] if len(row) > 5 else None)
+        if start_dt and now < start_dt:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
+        if end_dt and now > end_dt:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
         
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = ? ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        item_dict = {
-            'id': item[0],
-            'listing_price': item[1],
-            'wholesale_price': item[2],
-            'auction_id': item[3] if len(item) > 3 else None,
-        }
-        effective_price = get_effective_proxy_price(item_dict)
-        min_bid = highest[0] + 1 if highest else effective_price
+        min_bid = highest[0] + 1 if highest else (item_dict.get('listing_price') or 0)
+        max_price = normalize_proxy_service_price_value(item_dict.get('proxy_auction_max_price'))
+        if max_price and highest and highest[0] >= max_price:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品は最高価格に到達したため売り切れました'}), 400
         
         if bid_amount < min_bid:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+
+        accepted_bid_amount = max_price if max_price and bid_amount >= max_price else bid_amount
+        budget_required = accepted_bid_amount if max_price and bid_amount >= max_price else bid_amount
         
         # 利用可能金額チェック
-        if not current_user.can_purchase_proxy_item(bid_amount):
+        if not current_user.can_purchase_proxy_item(budget_required):
             remaining = current_user.get_proxy_service_remaining_budget()
             cur.close()
             conn.close()
@@ -11543,7 +12664,23 @@ def proxy_service_bid():
         
         # 入札を保存（user_id含む）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
-                   (merchandise_id, user_id, bidder_name, bid_amount))
+                   (merchandise_id, user_id, bidder_name, accepted_bid_amount))
+
+        item_sold = bool(max_price and bid_amount >= max_price)
+        if item_sold and not finalize_proxy_service_buyout(
+            cur,
+            merchandise_id,
+            user_id,
+            bidder_name,
+            accepted_bid_amount,
+            current_user.id,
+            now=now,
+            is_postgres=False,
+        ):
+            conn.rollback()
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
     
     conn.commit()
     cur.close()
@@ -11552,8 +12689,10 @@ def proxy_service_bid():
     return jsonify({
         'success': True, 
         'message': '入札が完了しました',
-        'bid_amount': bid_amount,
-        'bidder_name': bidder_name
+        'bid_amount': accepted_bid_amount,
+        'bidder_name': bidder_name,
+        'item_sold': item_sold,
+        'sold_message': '最高価格に到達したため売り切れました' if item_sold else ''
     })
 
 @app.route('/proxy-service/purchase', methods=['POST'])
@@ -11577,7 +12716,7 @@ def proxy_service_purchase():
     buyer_name = current_user.display_name or current_user.username
     
     conn = get_db()
-    now = datetime.now()
+    now = get_jst_now()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -11586,8 +12725,7 @@ def proxy_service_purchase():
         cur.execute("""
             SELECT id, listing_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
-                   expected_commission, model_number, additional_photos, notes,
-                   purchase_price, wholesale_price, wholesale_fee_rate
+                   expected_commission, model_number, additional_photos, notes
             FROM merchandise 
             WHERE id = %s AND show_in_proxy_service = TRUE
         """, (merchandise_id,))
@@ -11622,8 +12760,8 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
         
-        start_dt = settings.get('start_datetime')
-        end_dt = settings.get('end_datetime')
+        start_dt = parse_proxy_service_datetime(settings.get('start_datetime'))
+        end_dt = parse_proxy_service_datetime(settings.get('end_datetime'))
         
         if start_dt and now < start_dt:
             cur.close()
@@ -11634,15 +12772,9 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
         
-        purchase_price = get_effective_proxy_price(dict(item))
-        if purchase_price <= 0:
-            cur.close()
-            conn.close()
-            return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
+        purchase_price = item['listing_price'] or 0
         
         # 利用可能金額チェック
-        original_purchase_price = int(item.get('purchase_price') or 0)
-        client_wholesale_fee_rate = round(((purchase_price - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
         if not current_user.can_purchase_proxy_item(purchase_price):
             remaining = current_user.get_proxy_service_remaining_budget()
             cur.close()
@@ -11654,7 +12786,7 @@ def proxy_service_purchase():
             UPDATE merchandise 
             SET sale_date = %s, 
                 sale_price = %s,
-                sale_type = 'proxy_service',
+                sale_type = 'fixed',
                 sales_destination = %s,
                 show_in_proxy_service = FALSE
             WHERE id = %s AND sale_date IS NULL
@@ -11670,25 +12802,20 @@ def proxy_service_purchase():
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
 
-        buyer_notes = (item.get('notes') or '').strip()
-        origin_note = f'代行仕入れサービス購入 / 元商品ID:{merchandise_id}'
-        if buyer_notes:
-            buyer_notes = f"{buyer_notes}\n{origin_note}"
-        else:
-            buyer_notes = origin_note
+        buyer_notes = append_proxy_service_origin_note(item.get('notes'), merchandise_id, mode='fixed')
 
         cur.execute("""
             INSERT INTO merchandise (
                 user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
+                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                 listing_price, expected_shipping, expected_commission,
-                model_number, supplier_detail, additional_photos, is_listed, notes
+                model_number, additional_photos, is_listed, notes, proxy_parent_item_id, updated_by, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s
-            ) RETURNING id
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
+            )
         """, (
             user_id,
             now.date(),
@@ -11697,48 +12824,22 @@ def proxy_service_purchase():
             item.get('brand_name'),
             item.get('item_condition'),
             '代行仕入れサービス',
+            '代行仕入れサービス',
             purchase_price,
-            client_wholesale_fee_rate,
+            0,
             purchase_price,
             '代行仕入れ',
             item.get('listing_price') or 0,
             item.get('expected_shipping') or 0,
             item.get('expected_commission') or 0,
             item.get('model_number'),
-            '代行仕入れサービス',
             item.get('additional_photos'),
             False,
             buyer_notes,
+            merchandise_id,
+            current_user.id,
+            now.strftime('%Y-%m-%d %H:%M:%S'),
         ))
-        new_item_id = cur.fetchone()['id']
-
-        doc_no = f"PXY-{now.strftime('%Y%m%d%H%M%S%f')}-{user_id}"
-        cur.execute("""
-            INSERT INTO user_keisan (
-                document_no, user_id, issue_date, recipient_name,
-                subject, total_amount, notes, status, is_admin_created
-            ) VALUES (
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s
-            ) RETURNING id
-        """, (
-            doc_no,
-            user_id,
-            now.date(),
-            buyer_name,
-            '代行仕入れサービス購入',
-            purchase_price,
-            f'商品名: {item.get("product_name", "商品")}\n商品ID: {merchandise_id}\n購入者: {buyer_name}',
-            'submitted',
-            True
-        ))
-        keisan_id = cur.fetchone()['id']
-
-        cur.execute("""
-            INSERT INTO user_keisan_items (
-                keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (keisan_id, 1, item.get('product_name', '商品'), new_item_id, 1, purchase_price, purchase_price))
     else:
         cur = conn.cursor()
         
@@ -11746,8 +12847,7 @@ def proxy_service_purchase():
         cur.execute("""
             SELECT id, listing_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
-                   expected_commission, model_number, additional_photos, notes,
-                   purchase_price, wholesale_price, wholesale_fee_rate
+                   expected_commission, model_number, additional_photos, notes
             FROM merchandise 
             WHERE id = ? AND show_in_proxy_service = 1
         """, (merchandise_id,))
@@ -11777,9 +12877,6 @@ def proxy_service_purchase():
             'model_number': item[10],
             'additional_photos': item[11],
             'notes': item[12],
-            'purchase_price': item[13],
-            'wholesale_price': item[14],
-            'wholesale_fee_rate': item[15],
         }
         
         # 商品のauction_idに基づいて設定を取得
@@ -11801,15 +12898,19 @@ def proxy_service_purchase():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は即決購入できません（このオークションは入札形式です）'}), 400
-        
-        purchase_price = get_effective_proxy_price(item_dict)
-        if purchase_price <= 0:
+
+        start_dt = parse_proxy_service_datetime(row[4] if len(row) > 4 else None)
+        end_dt = parse_proxy_service_datetime(row[5] if len(row) > 5 else None)
+        if start_dt and now < start_dt:
             cur.close()
             conn.close()
-            return jsonify({'success': False, 'error': '即決購入価格が未設定のため購入できません'}), 400
-
-        original_purchase_price = int(item_dict.get('purchase_price') or 0)
-        client_wholesale_fee_rate = round(((purchase_price - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
+            return jsonify({'success': False, 'error': '公開はまだ開始されていません'}), 400
+        if end_dt and now > end_dt:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '公開は終了しました'}), 400
+        
+        purchase_price = item_dict.get('listing_price') or 0
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -11823,7 +12924,7 @@ def proxy_service_purchase():
             UPDATE merchandise 
             SET sale_date = ?, 
                 sale_price = ?,
-                sale_type = 'proxy_service',
+                sale_type = 'fixed',
                 sales_destination = ?,
                 show_in_proxy_service = 0
             WHERE id = ? AND sale_date IS NULL
@@ -11839,24 +12940,19 @@ def proxy_service_purchase():
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
 
-        buyer_notes = (item_dict.get('notes') or '').strip()
-        origin_note = f'代行仕入れサービス購入 / 元商品ID:{merchandise_id}'
-        if buyer_notes:
-            buyer_notes = f"{buyer_notes}\n{origin_note}"
-        else:
-            buyer_notes = origin_note
+        buyer_notes = append_proxy_service_origin_note(item_dict.get('notes'), merchandise_id, mode='fixed')
 
         cur.execute("""
             INSERT INTO merchandise (
                 user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
+                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
                 listing_price, expected_shipping, expected_commission,
-                model_number, supplier_detail, additional_photos, is_listed, notes
+                model_number, additional_photos, is_listed, notes, proxy_parent_item_id, updated_by, updated_at
             ) VALUES (
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?
             )
         """, (
             user_id,
@@ -11866,48 +12962,22 @@ def proxy_service_purchase():
             item_dict.get('brand_name'),
             item_dict.get('item_condition'),
             '代行仕入れサービス',
+            '代行仕入れサービス',
             purchase_price,
-            client_wholesale_fee_rate,
+            0,
             purchase_price,
             '代行仕入れ',
             item_dict.get('listing_price') or 0,
             item_dict.get('expected_shipping') or 0,
             item_dict.get('expected_commission') or 0,
             item_dict.get('model_number'),
-            '代行仕入れサービス',
             item_dict.get('additional_photos'),
             0,
             buyer_notes,
+            merchandise_id,
+            current_user.id,
+            now.strftime('%Y-%m-%d %H:%M:%S'),
         ))
-        new_item_id = cur.lastrowid
-
-        doc_no = f"PXY-{now.strftime('%Y%m%d%H%M%S%f')}-{user_id}"
-        cur.execute("""
-            INSERT INTO user_keisan (
-                document_no, user_id, issue_date, recipient_name,
-                subject, total_amount, notes, status, is_admin_created
-            ) VALUES (
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?
-            )
-        """, (
-            doc_no,
-            user_id,
-            now.strftime('%Y-%m-%d'),
-            buyer_name,
-            '代行仕入れサービス購入',
-            purchase_price,
-            f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {merchandise_id}\n購入者: {buyer_name}',
-            'submitted',
-            1
-        ))
-        keisan_id = cur.lastrowid
-
-        cur.execute("""
-            INSERT INTO user_keisan_items (
-                keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (keisan_id, 1, item_dict.get('product_name', '商品'), new_item_id, 1, purchase_price, purchase_price))
     
     conn.commit()
     cur.close()
@@ -14976,30 +16046,86 @@ def admin_user_products():
     """ユーザーの商品一覧（一般ユーザーの商品のみ）"""
     items = []
     users = []
-    
+    long_term_summary = []
+    long_term_request_map = {}
+    selected_owner_id = request.args.get('owner_id', type=int)
+    long_term_only = request.args.get('long_term_only', '').lower() in ['1', 'true', 'yes', 'on']
+    selected_owner_name = None
+    total_long_term_count = 0
+    show_long_term_details = (not long_term_only) or bool(selected_owner_id)
+    show_long_term_overview = bool(long_term_only)
+    preview_mode = False
+
     try:
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             # 一般ユーザーのIDを取得
-            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user'")
+            cur.execute("SELECT id, username, display_name, role, line_user_id FROM users WHERE role = 'user' ORDER BY COALESCE(display_name, username), username")
             normal_users = cur.fetchall()
             normal_user_ids = [u['id'] for u in normal_users]
-            
-            # 一般ユーザーの商品のみ取得
-            if normal_user_ids:
-                placeholders = ','.join(['%s'] * len(normal_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", normal_user_ids)
-            else:
-                cur.execute("SELECT * FROM merchandise WHERE 1=0")
-            items_raw = cur.fetchall()
+            normal_user_id_set = set(normal_user_ids)
+            if selected_owner_id and selected_owner_id not in normal_user_id_set:
+                selected_owner_id = None
             
             # 転送先ユーザー一覧（全ユーザー）
-            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            cur.execute("SELECT id, username, display_name, role, line_user_id FROM users ORDER BY username")
             users = cur.fetchall()
-            
-            # ユーザー情報をマッピング
             user_map = {u['id']: u for u in users}
+            selected_owner = user_map.get(selected_owner_id) if selected_owner_id else None
+            if selected_owner:
+                selected_owner_name = selected_owner.get('display_name') or selected_owner.get('username')
+
+            # クライアント別の長期保存サマリー
+            if long_term_only:
+                all_long_term_items, long_term_request_map = get_visible_long_term_items(conn, user_ids=normal_user_ids)
+                summary_map = {}
+                for item in all_long_term_items:
+                    user_id = item.get('user_id')
+                    user_info = user_map.get(user_id, {})
+                    storage_started_at = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+                    summary = summary_map.setdefault(user_id, {
+                        'user_id': user_id,
+                        'username': user_info.get('username'),
+                        'display_name': user_info.get('display_name'),
+                        'item_count': 0,
+                        'oldest_storage_started_at': storage_started_at,
+                    })
+                    summary['item_count'] += 1
+                    if storage_started_at and (
+                        not summary.get('oldest_storage_started_at')
+                        or storage_started_at < summary.get('oldest_storage_started_at')
+                    ):
+                        summary['oldest_storage_started_at'] = storage_started_at
+
+                long_term_summary = sorted(
+                    summary_map.values(),
+                    key=lambda row: (
+                        -(row.get('item_count') or 0),
+                        (row.get('display_name') or row.get('username') or '')
+                    )
+                )
+
+                if show_long_term_details:
+                    items_raw = [
+                        item for item in all_long_term_items
+                        if not selected_owner_id or item.get('user_id') == selected_owner_id
+                    ]
+                else:
+                    items_raw = []
+            elif normal_user_ids:
+                placeholders = ','.join(['%s'] * len(normal_user_ids))
+                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+                item_params = list(normal_user_ids)
+                if selected_owner_id:
+                    item_query += " AND user_id = %s"
+                    item_params.append(selected_owner_id)
+                item_query += " ORDER BY created_at DESC"
+                cur.execute(item_query, item_params)
+                items_raw = cur.fetchall()
+            else:
+                items_raw = []
+
             items = []
             for item in items_raw:
                 item_dict = dict(item)
@@ -15008,10 +16134,12 @@ def admin_user_products():
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
                     item_dict['owner_role'] = user_info.get('role')
+                    item_dict['owner_line_user_id'] = user_info.get('line_user_id')
                 else:
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                    item_dict['owner_line_user_id'] = None
                 
                 # 全画像リスト（メイン + 追加）
                 item_dict['all_photos'] = []
@@ -15023,30 +16151,82 @@ def admin_user_products():
                         item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
                     except:
                         pass
+
+                item_dict['storage_started_at_display'] = format_storage_started_date(item_dict)
+                item_dict['days_since_purchase'] = calculate_days_in_storage(item_dict)
                 
-                if not is_kaika_inventory_item(item_dict):
-                    items.append(item_dict)
+                items.append(item_dict)
+
+            if long_term_only and items and not long_term_request_map:
+                long_term_request_map = get_long_term_request_map(conn, [item['id'] for item in items])
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             # 一般ユーザーのIDを取得
-            cur.execute("SELECT id, username, display_name, role FROM users WHERE role = 'user'")
+            cur.execute("SELECT id, username, display_name, role, line_user_id FROM users WHERE role = 'user' ORDER BY COALESCE(display_name, username), username")
             normal_users = cur.fetchall()
             normal_user_ids = [u['id'] for u in normal_users]
+            normal_user_id_set = set(normal_user_ids)
+            if selected_owner_id and selected_owner_id not in normal_user_id_set:
+                selected_owner_id = None
             
-            # 一般ユーザーの商品のみ取得
-            if normal_user_ids:
-                placeholders = ','.join(['?'] * len(normal_user_ids))
-                cur.execute(f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) ORDER BY created_at DESC", normal_user_ids)
-            else:
-                cur.execute("SELECT * FROM merchandise WHERE 1=0")
-            items_raw = cur.fetchall()
-            
-            cur.execute("SELECT id, username, display_name, role FROM users ORDER BY username")
+            cur.execute("SELECT id, username, display_name, role, line_user_id FROM users ORDER BY username")
             users = cur.fetchall()
-            
-            # ユーザー情報をマッピング
             user_map = {u['id']: dict(u) for u in users}
+            selected_owner = user_map.get(selected_owner_id) if selected_owner_id else None
+            if selected_owner:
+                selected_owner_name = selected_owner.get('display_name') or selected_owner.get('username')
+
+            # クライアント別の長期保存サマリー
+            if long_term_only:
+                all_long_term_items, long_term_request_map = get_visible_long_term_items(conn, user_ids=normal_user_ids)
+                summary_map = {}
+                for item in all_long_term_items:
+                    user_id = item.get('user_id')
+                    user_info = user_map.get(user_id, {})
+                    storage_started_at = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+                    summary = summary_map.setdefault(user_id, {
+                        'user_id': user_id,
+                        'username': user_info.get('username'),
+                        'display_name': user_info.get('display_name'),
+                        'item_count': 0,
+                        'oldest_storage_started_at': storage_started_at,
+                    })
+                    summary['item_count'] += 1
+                    if storage_started_at and (
+                        not summary.get('oldest_storage_started_at')
+                        or storage_started_at < summary.get('oldest_storage_started_at')
+                    ):
+                        summary['oldest_storage_started_at'] = storage_started_at
+
+                long_term_summary = sorted(
+                    summary_map.values(),
+                    key=lambda row: (
+                        -(row.get('item_count') or 0),
+                        (row.get('display_name') or row.get('username') or '')
+                    )
+                )
+
+                if show_long_term_details:
+                    items_raw = [
+                        item for item in all_long_term_items
+                        if not selected_owner_id or item.get('user_id') == selected_owner_id
+                    ]
+                else:
+                    items_raw = []
+            elif normal_user_ids:
+                placeholders = ','.join(['?'] * len(normal_user_ids))
+                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+                item_params = list(normal_user_ids)
+                if selected_owner_id:
+                    item_query += " AND user_id = ?"
+                    item_params.append(selected_owner_id)
+                item_query += " ORDER BY created_at DESC"
+                cur.execute(item_query, item_params)
+                items_raw = cur.fetchall()
+            else:
+                items_raw = []
+
             items = []
             for item in items_raw:
                 item_dict = dict(item)
@@ -15055,10 +16235,12 @@ def admin_user_products():
                     item_dict['owner_username'] = user_info.get('username')
                     item_dict['owner_display_name'] = user_info.get('display_name')
                     item_dict['owner_role'] = user_info.get('role')
+                    item_dict['owner_line_user_id'] = user_info.get('line_user_id')
                 else:
                     item_dict['owner_username'] = None
                     item_dict['owner_display_name'] = None
                     item_dict['owner_role'] = None
+                    item_dict['owner_line_user_id'] = None
                 
                 # 全画像リスト（メイン + 追加）
                 item_dict['all_photos'] = []
@@ -15070,9 +16252,14 @@ def admin_user_products():
                         item_dict['all_photos'].extend([p.replace('\\', '/') for p in additional])
                     except:
                         pass
+
+                item_dict['storage_started_at_display'] = format_storage_started_date(item_dict)
+                item_dict['days_since_purchase'] = calculate_days_in_storage(item_dict)
                 
-                if not is_kaika_inventory_item(item_dict):
-                    items.append(item_dict)
+                items.append(item_dict)
+
+            if long_term_only and items and not long_term_request_map:
+                long_term_request_map = get_long_term_request_map(conn, [item['id'] for item in items])
         
         cur.close()
         conn.close()
@@ -15080,7 +16267,29 @@ def admin_user_products():
         print(f"User products error: {e}")
         import traceback
         traceback.print_exc()
-        return render_template('admin/user_products.html', items=[], users=[])
+        return render_template(
+            'admin/user_products.html',
+            items=[],
+            users=[],
+            long_term_only=long_term_only,
+            long_term_summary=[],
+            total_long_term_count=0,
+            selected_owner_id=selected_owner_id,
+            selected_owner_name=selected_owner_name,
+            show_long_term_details=show_long_term_details,
+            show_long_term_overview=show_long_term_overview,
+        )
+
+    for client_summary in long_term_summary:
+        client_summary['client_name'] = client_summary.get('display_name') or client_summary.get('username') or '未設定'
+        client_summary['item_count'] = int(client_summary.get('item_count') or 0)
+        client_summary['oldest_days_in_storage'] = calculate_days_in_storage(client_summary.get('oldest_storage_started_at')) or 0
+        total_long_term_count += client_summary['item_count']
+
+    if selected_owner_id and not selected_owner_name:
+        selected_summary = next((summary for summary in long_term_summary if summary.get('user_id') == selected_owner_id), None)
+        if selected_summary:
+            selected_owner_name = selected_summary.get('client_name')
     
     # 利益計算と利益率の追加、最終更新者名の追加
     all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
@@ -15128,14 +16337,56 @@ def admin_user_products():
                     diff = datetime.now() - created_at
                     can_delete = diff.days < 1
             item['can_delete'] = can_delete
-    
-    fee_settings = get_fee_settings()
-    for item in items:
-        apply_inventory_display_metrics(item, scope='user', fee_settings=fee_settings)
 
-    return render_template('admin/user_products.html', 
-                          items=items, 
-                          users=[dict(u) for u in users])
+        request_info = long_term_request_map.get(item.get('id')) if long_term_only else None
+        item['disposal_request_id'] = request_info.get('id') if request_info else None
+        item['disposal_type'] = request_info.get('disposal_type') if request_info else None
+        status_context = get_long_term_request_status_context(
+            item['disposal_type'],
+            request_info.get('status') if request_info else None,
+            sale_date=item.get('sale_date')
+        )
+        action_context = get_long_term_request_action_context(
+            item['disposal_type'],
+            request_info.get('status') if request_info else None,
+            sale_date=item.get('sale_date')
+        )
+        item['disposal_status'] = status_context['status_value']
+        item['disposal_status_stage'] = status_context['status_stage']
+        item['disposal_type_label'] = LONG_TERM_DISPOSAL_TYPE_LABELS.get(item['disposal_type'], '未申請') if request_info else '未申請'
+        item['disposal_status_label'] = status_context['status_label']
+        item['disposal_next_action_label'] = status_context['next_action_label']
+        item['disposal_requested_at_display'] = format_optional_datetime(request_info.get('created_at')) if request_info else '-'
+        item['disposal_processed_at_display'] = format_optional_datetime(request_info.get('processed_at'), fallback='') if request_info else ''
+        item['shipping_name'] = request_info.get('shipping_name') if request_info else None
+        item['shipping_phone'] = request_info.get('shipping_phone') if request_info else None
+        item['shipping_address'] = request_info.get('shipping_address') if request_info else None
+        item['admin_note'] = request_info.get('admin_note') if request_info else None
+        item['primary_action'] = action_context['primary_action']
+        item['primary_action_label'] = action_context['primary_action_label']
+        item['primary_confirm_message'] = action_context['primary_confirm_message']
+        item['secondary_action'] = action_context['secondary_action']
+        item['secondary_action_label'] = action_context['secondary_action_label']
+        item['secondary_confirm_message'] = action_context['secondary_confirm_message']
+        item['show_sale_entry'] = action_context['show_sale_entry']
+        item['sale_entry_label'] = action_context['sale_entry_label']
+        item['finish_action'] = action_context['finish_action']
+        item['finish_action_label'] = action_context['finish_action_label']
+        item['finish_confirm_message'] = action_context['finish_confirm_message']
+        item['can_notify_owner'] = bool(item.get('owner_line_user_id')) or preview_mode
+    
+    return render_template(
+        'admin/user_products.html',
+        items=items,
+        users=[dict(u) for u in users],
+        long_term_only=long_term_only,
+        long_term_summary=long_term_summary,
+        total_long_term_count=total_long_term_count,
+        selected_owner_id=selected_owner_id,
+        selected_owner_name=selected_owner_name,
+        show_long_term_details=show_long_term_details,
+        show_long_term_overview=show_long_term_overview,
+    )
 
 @app.route('/admin/items/add', methods=['GET', 'POST'])
 @login_required
@@ -21515,195 +22766,68 @@ def submit_disposal_request():
 @app.route('/long-term-items')
 @login_required
 def long_term_items():
-    """長期在庫商品（仕入れ日から3ヶ月以上経過）の一覧・処分オプションページ"""
+    """長期保存商品（登録から90日以上経過）の一覧・処分オプションページ"""
+    if current_user.is_admin():
+        return redirect(url_for('admin_user_products', long_term_only=1))
+
     items = []
+    request_map = {}
     
     try:
         conn = get_db()
-        
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            # デバッグ: まず条件に合う商品数を確認
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM merchandise m
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-            """, (current_user.id,))
-            debug_count = cur.fetchone()['count']
-            print(f"[DEBUG] long_term_items: Found {debug_count} items matching date condition (user_id={current_user.id})", flush=True)
-            
-            # 通知マークのカウントと一致させるため、申請未作成の商品も確認
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                  AND dr.id IS NULL
-            """, (current_user.id,))
-            debug_count_no_request = cur.fetchone()['count']
-            print(f"[DEBUG] long_term_items: Found {debug_count_no_request} items with no disposal request (should match notification badge)", flush=True)
-            
-            # 仕入れ日から3ヶ月以上経過した未売却商品を取得（PostgreSQLでは日付を直接計算）
-            # LEFT JOINを使用して、申請がない商品も含めて取得
-            try:
-                cur.execute("""
-                    SELECT m.*, 
-                           dr.id as disposal_request_id, 
-                           dr.disposal_type, 
-                           dr.status as disposal_status,
-                           (CURRENT_DATE - m.purchase_date)::INTEGER as days_since_purchase
-                    FROM merchandise m
-                    LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
-                        AND dr.reason = 'long_term'
-                        AND dr.status != 'completed'
-                    WHERE m.user_id = %s 
-                      AND m.sale_date IS NULL
-                      AND m.purchase_date IS NOT NULL
-                      AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                    ORDER BY 
-                        CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
-                        m.purchase_date ASC
-                """, (current_user.id,))
-                items = [dict(row) for row in cur.fetchall()]
-                print(f"[DEBUG] long_term_items: Retrieved {len(items)} items using LEFT JOIN", flush=True)
-                
-                # デバッグ用：取得した商品のIDを確認
-                if items:
-                    item_ids = [str(item.get('id', 'N/A')) for item in items]
-                    print(f"[DEBUG] long_term_items: Item IDs: {', '.join(item_ids)}", flush=True)
-            except Exception as query_error:
-                print(f"[ERROR] long_term_items query error: {query_error}", flush=True)
-                import traceback
-                traceback.print_exc()
-                items = []
-        else:
-            cur = conn.cursor()
-            cur.row_factory = sqlite3.Row
-            
-            # 3ヶ月前の日付を計算（SQLite用）
-            three_months_ago = datetime.now() - timedelta(days=90)
-            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
-            print(f"[DEBUG] long_term_items: SQLite - three_months_ago_str={three_months_ago_str}", flush=True)
-            
-            # 仕入れ日から3ヶ月以上経過した未売却商品を取得
-            cur.execute("""
-                SELECT m.*, 
-                       dr.id as disposal_request_id, dr.disposal_type, dr.status as disposal_status,
-                       CAST((julianday('now') - julianday(m.purchase_date)) AS INTEGER) as days_since_purchase
-                FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id 
-                    AND dr.reason = 'long_term'
-                    AND dr.status != 'completed'
-                WHERE m.user_id = ? 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= ?
-                ORDER BY 
-                    CASE WHEN dr.id IS NULL THEN 0 ELSE 1 END,
-                    m.purchase_date ASC
-            """, (current_user.id, three_months_ago_str))
-            items = [dict(row) for row in cur.fetchall()]
-            print(f"[DEBUG] long_term_items: SQLite - Retrieved {len(items)} items", flush=True)
-        
-        cur.close()
+        items, request_map = get_visible_long_term_items(conn, user_id=current_user.id)
         conn.close()
     except Exception as e:
-        print(f"[ERROR] long_term_items: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
+        safe_debug_print(f"[ERROR] long_term_items: {e}", flush=True)
+        safe_traceback_print()
     
     # 各商品の経過日数を計算
     for item in items:
-        if item.get('purchase_date'):
-            try:
-                purchase_date = item['purchase_date']
-                # 文字列の場合はdatetimeに変換
-                if isinstance(purchase_date, str):
-                    purchase_date = datetime.strptime(purchase_date[:10], '%Y-%m-%d').date()
-                # datetime型の場合はdate部分を取得
-                elif hasattr(purchase_date, 'date') and callable(purchase_date.date):
-                    purchase_date = purchase_date.date()
-                # date型はそのまま使用
-                
-                # 経過日数を計算
-                today = datetime.now().date()
-                days = (today - purchase_date).days
-                item['days_since_purchase'] = days
-                item['months_since_purchase'] = days // 30
-            except Exception as e:
-                print(f"[ERROR] Date calculation error for item {item.get('id')}: {e}", flush=True)
-                item['days_since_purchase'] = 0
-                item['months_since_purchase'] = 0
+        try:
+            item['storage_started_at_display'] = format_storage_started_date(item)
+            days = calculate_days_in_storage(item) or 0
+            item['days_since_purchase'] = days
+            item['months_since_purchase'] = days // 30
+            request_info = request_map.get(item.get('id'))
+            item['disposal_request_id'] = request_info.get('id') if request_info else None
+            item['disposal_type'] = request_info.get('disposal_type') if request_info else None
+            status_context = get_long_term_request_status_context(
+                item.get('disposal_type'),
+                request_info.get('status') if request_info else None,
+                sale_date=item.get('sale_date')
+            )
+            item['disposal_status'] = status_context['status_value']
+            item['disposal_status_stage'] = status_context['status_stage']
+            item['disposal_status_label'] = status_context['status_label']
+            item['disposal_type_label'] = LONG_TERM_DISPOSAL_TYPE_LABELS.get(item.get('disposal_type'), '')
+        except Exception as e:
+            print(f"[ERROR] Date calculation error for item {item.get('id')}: {e}", flush=True)
+            item['storage_started_at_display'] = '-'
+            item['days_since_purchase'] = 0
+            item['months_since_purchase'] = 0
+            item['disposal_status_stage'] = 'none'
+            item['disposal_status_label'] = '未申請'
+            item['disposal_type_label'] = ''
     
     # デバッグ情報を取得
     debug_info = {}
     try:
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 日付条件に合う商品数
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM merchandise m
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-            """, (current_user.id,))
-            debug_info['total_matching_date'] = cur.fetchone()['count']
-            
-            # 申請未作成の商品数
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                  AND dr.id IS NULL
-            """, (current_user.id,))
-            debug_info['no_request'] = cur.fetchone()['count']
-            
-            # 実際に取得された商品の詳細を確認
-            cur.execute("""
-                SELECT m.id, m.product_name, m.purchase_date, m.sale_date
-                FROM merchandise m
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                LIMIT 5
-            """, (current_user.id,))
-            debug_items = [dict(row) for row in cur.fetchall()]
-            debug_info['sample_items'] = debug_items
-            
-            # 現在の日付と90日前の日付
-            cur.execute("SELECT CURRENT_DATE as today, (CURRENT_DATE - INTERVAL '90 days')::DATE as cutoff_date")
-            date_info = cur.fetchone()
-            debug_info['today'] = str(date_info['today'])
-            debug_info['cutoff_date'] = str(date_info['cutoff_date'])
-            
-            debug_info['items_count'] = len(items)
-            # 変数スコープの問題を回避するため、直接カウントを取得
-            # items_no_requestとitems_with_requestは既にitemsに結合されているため、個別にカウントできない
-            debug_info['items_no_request_count'] = sum(1 for item in items if not item.get('disposal_request_id'))
-            debug_info['items_with_request_count'] = sum(1 for item in items if item.get('disposal_request_id'))
-            
-            cur.close()
-            conn.close()
-        else:
-            three_months_ago = datetime.now() - timedelta(days=90)
-            debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
-            debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
-            debug_info['items_count'] = len(items)
+        three_months_ago = datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)
+        debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
+        debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
+        debug_info['items_count'] = len(items)
+        debug_info['items_no_request_count'] = sum(1 for item in items if not item.get('disposal_request_id'))
+        debug_info['items_with_request_count'] = sum(1 for item in items if item.get('disposal_request_id'))
+        debug_info['sample_items'] = [
+            {
+                'id': item.get('id'),
+                'product_name': item.get('product_name'),
+                'storage_started_at': item.get('storage_started_at_display'),
+                'sale_date': item.get('sale_date'),
+                'status': item.get('disposal_status'),
+            }
+            for item in items[:5]
+        ]
     except Exception as e:
         debug_info['error'] = str(e)
         import traceback
@@ -21797,6 +22921,39 @@ def submit_long_term_disposal_request():
                               shipping_address, shipping_name, shipping_phone))
         
         conn.commit()
+
+        try:
+            admin_conn = get_db()
+            if DATABASE_URL:
+                admin_cur = admin_conn.cursor(cursor_factory=RealDictCursor)
+                admin_cur.execute("SELECT line_user_id FROM users WHERE role IN ('admin', 'owner') AND line_user_id IS NOT NULL")
+            else:
+                admin_cur = admin_conn.cursor()
+                admin_cur.execute("SELECT line_user_id FROM users WHERE role IN ('admin', 'owner') AND line_user_id IS NOT NULL")
+
+            admins = admin_cur.fetchall()
+            admin_cur.close()
+            admin_conn.close()
+
+            disposal_type_names = {
+                'auction': 'オークション販売',
+                'liquidation': '在庫処分',
+                'shipping': '受け取り郵送'
+            }
+            message = (
+                f"【長期保存商品の申請】\n"
+                f"{current_user.display_name or current_user.username}さんが長期保存商品の処分方法を選択しました。\n"
+                f"選択内容: {disposal_type_names.get(disposal_type, disposal_type)}\n"
+                f"対象商品数: {len(merchandise_ids)}件\n"
+                f"管理画面の「商品処分申請」から確認してください。"
+            )
+
+            for admin in admins:
+                line_id = admin['line_user_id'] if isinstance(admin, dict) else admin[0]
+                if line_id:
+                    send_line_push(line_id, message)
+        except Exception as notify_error:
+            print(f"Long-term disposal admin notification error: {notify_error}")
         
         disposal_type_names = {
             'auction': 'オークション販売',
@@ -21814,46 +22971,16 @@ def submit_long_term_disposal_request():
 
 
 def get_long_term_item_count():
-    """仕入れ日から3ヶ月以上経過した未処理の長期在庫商品数を取得"""
+    """登録から90日以上経過した未処理の長期保存商品数を取得"""
     if not current_user.is_authenticated:
         return 0
     
     try:
         conn = get_db()
-        
-        if DATABASE_URL:
-            cur = conn.cursor()
-            # 仕入れ日から3ヶ月以上経過した未処理の長期在庫商品数を取得（PostgreSQLでは日付を直接計算）
-            cur.execute("""
-                SELECT COUNT(*) FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-                WHERE m.user_id = %s 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= (CURRENT_DATE - INTERVAL '90 days')::DATE
-                  AND dr.id IS NULL
-            """, (current_user.id,))
-        else:
-            cur = conn.cursor()
-            # 3ヶ月前の日付を計算（SQLite用）
-            three_months_ago = datetime.now() - timedelta(days=90)
-            three_months_ago_str = three_months_ago.strftime('%Y-%m-%d')
-            
-            cur.execute("""
-                SELECT COUNT(*) FROM merchandise m
-                LEFT JOIN item_disposal_requests dr ON m.id = dr.merchandise_id AND dr.status != 'completed' AND dr.reason = 'long_term'
-                WHERE m.user_id = ? 
-                  AND m.sale_date IS NULL
-                  AND m.purchase_date IS NOT NULL
-                  AND m.purchase_date <= ?
-                  AND dr.id IS NULL
-            """, (current_user.id, three_months_ago_str))
-        
-        count = cur.fetchone()[0]
-        cur.close()
+        items, _ = get_visible_long_term_items(conn, user_id=current_user.id)
         conn.close()
-        return count
-    except:
+        return len(items)
+    except Exception:
         return 0
 
 
@@ -21862,51 +22989,310 @@ def inject_long_term_item_count():
     return dict(get_long_term_item_count=get_long_term_item_count)
 
 
+def get_admin_long_term_item_count():
+    """管理者向けに一般ユーザー商品の長期保存件数を取得"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return 0
+
+    try:
+        conn = get_db()
+
+        if DATABASE_URL:
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id FROM users WHERE role = 'user'")
+            normal_user_ids = [row['id'] for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM users WHERE role = 'user'")
+            normal_user_ids = [row[0] for row in cur.fetchall()]
+        cur.close()
+
+        items, _ = get_visible_long_term_items(conn, user_ids=normal_user_ids)
+        conn.close()
+        return len(items)
+    except Exception:
+        return 0
+
+
+@app.context_processor
+def inject_admin_long_term_item_count():
+    return dict(get_admin_long_term_item_count=get_admin_long_term_item_count)
+
+
+@app.route('/admin/long-term-items/notify/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_notify_long_term_user(user_id):
+    """管理画面から長期保存商品の案内をユーザーへ送信"""
+    conn = None
+    cur = None
+    conn = get_db()
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT id, username, display_name, line_user_id, role
+                FROM users
+                WHERE id = %s
+            """, (user_id,))
+            user = cur.fetchone()
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, username, display_name, line_user_id, role
+                FROM users
+                WHERE id = ?
+            """, (user_id,))
+            row = cur.fetchone()
+            user = dict(row) if row else None
+
+        if not user or user.get('role') != 'user':
+            flash('対象ユーザーが見つかりません', 'error')
+            return redirect(url_for('admin_user_products', long_term_only=1))
+
+        if not user.get('line_user_id'):
+            flash('このユーザーはLINE連携が未設定のため通知できません', 'error')
+            return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+
+        long_term_items = get_long_term_items_for_user(conn, user_id)
+
+        if not long_term_items:
+            flash('このユーザーには通知対象の長期保存商品がありません', 'info')
+            return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+
+        customer_name = user.get('display_name') or user.get('username') or 'お客様'
+        message = build_long_term_notification_message(customer_name, long_term_items)
+
+        result = send_line_push(user['line_user_id'], message)
+        if result.get('success'):
+            flash(f'{customer_name}さんへ長期保存商品の案内を送信しました', 'success')
+        else:
+            flash(f"通知送信に失敗しました: {result.get('error', '不明なエラー')}", 'error')
+    except Exception as e:
+        flash(f'通知送信中にエラーが発生しました: {str(e)}', 'error')
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+
+
+@app.route('/admin/long-term-items/notify-item/<int:item_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_notify_long_term_item(item_id):
+    """管理画面から長期保存商品の案内を商品単位でユーザーへ送信"""
+    conn = None
+    cur = None
+    user_id = None
+
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT m.id, m.user_id, m.product_name,
+                       COALESCE(m.created_at::date, m.purchase_date::date) AS storage_started_at,
+                       u.username, u.display_name, u.line_user_id, u.role
+                FROM merchandise m
+                JOIN users u ON u.id = m.user_id
+                WHERE m.id = %s
+                  AND u.role = 'user'
+                  AND m.sale_date IS NULL
+                  AND COALESCE(m.created_at::date, m.purchase_date::date) <= (CURRENT_DATE - INTERVAL '90 days')::DATE
+            """, (item_id,))
+            item = cur.fetchone()
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            three_months_ago = datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)
+            cur.execute("""
+                SELECT m.id, m.user_id, m.product_name,
+                       COALESCE(date(m.created_at), m.purchase_date) AS storage_started_at,
+                       u.username, u.display_name, u.line_user_id, u.role
+                FROM merchandise m
+                JOIN users u ON u.id = m.user_id
+                WHERE m.id = ?
+                  AND u.role = 'user'
+                  AND m.sale_date IS NULL
+                  AND COALESCE(date(m.created_at), m.purchase_date) <= ?
+            """, (item_id, three_months_ago.strftime('%Y-%m-%d')))
+            row = cur.fetchone()
+            item = dict(row) if row else None
+
+        if not item:
+            flash('通知対象の長期保存商品が見つかりません', 'error')
+            return redirect(url_for('admin_user_products', long_term_only=1))
+
+        user_id = item.get('user_id')
+        if not item.get('line_user_id'):
+            flash('このユーザーはLINE連携が未設定のため通知できません', 'error')
+            return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+
+        long_term_items = get_long_term_items_for_user(conn, user_id, merchandise_id=item_id)
+        if not long_term_items:
+            flash('この商品は通知対象の長期保存商品ではありません', 'info')
+            return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+
+        customer_name = item.get('display_name') or item.get('username') or 'お客様'
+        message = build_long_term_notification_message(customer_name, long_term_items)
+        result = send_line_push(item['line_user_id'], message)
+        if result.get('success'):
+            flash(f"{customer_name}さんへ「{item.get('product_name') or '商品'}」の案内を送信しました", 'success')
+        else:
+            flash(f"通知送信に失敗しました: {result.get('error', '不明なエラー')}", 'error')
+    except Exception as e:
+        flash(f'通知送信中にエラーが発生しました: {str(e)}', 'error')
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if user_id:
+        return redirect(url_for('admin_user_products', long_term_only=1, owner_id=user_id))
+    return redirect(url_for('admin_user_products', long_term_only=1))
+
+
 @app.route('/admin/disposal-requests')
 @login_required
 @admin_required
 def admin_disposal_requests():
     """管理者向け商品処分申請一覧"""
+    filtered_user_id = request.args.get('user_id', type=int)
+    filtered_merchandise_id = request.args.get('merchandise_id', type=int)
+    filtered_reason = (request.args.get('reason') or '').strip()
+    filter_tags = []
+    requests = []
+
     conn = get_db()
-    
+
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
+        where_clauses = []
+        params = []
+
+        if filtered_user_id:
+            where_clauses.append("dr.user_id = %s")
+            params.append(filtered_user_id)
+        if filtered_merchandise_id:
+            where_clauses.append("dr.merchandise_id = %s")
+            params.append(filtered_merchandise_id)
+        if filtered_reason in ('long_term', 'overdue'):
+            where_clauses.append("dr.reason = %s")
+            params.append(filtered_reason)
+
+        query = """
             SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
-                   u.display_name, u.username, u.email
+                   m.sale_date, u.display_name, u.username, u.email
             FROM item_disposal_requests dr
             JOIN merchandise m ON dr.merchandise_id = m.id
             JOIN users u ON dr.user_id = u.id
-            ORDER BY dr.created_at DESC
-        """)
+        """
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        query += " ORDER BY dr.created_at DESC"
+        cur.execute(query, params)
         requests = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("""
+        where_clauses = []
+        params = []
+
+        if filtered_user_id:
+            where_clauses.append("dr.user_id = ?")
+            params.append(filtered_user_id)
+        if filtered_merchandise_id:
+            where_clauses.append("dr.merchandise_id = ?")
+            params.append(filtered_merchandise_id)
+        if filtered_reason in ('long_term', 'overdue'):
+            where_clauses.append("dr.reason = ?")
+            params.append(filtered_reason)
+
+        query = """
             SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
-                   u.display_name, u.username, u.email
+                   m.sale_date, u.display_name, u.username, u.email
             FROM item_disposal_requests dr
             JOIN merchandise m ON dr.merchandise_id = m.id
             JOIN users u ON dr.user_id = u.id
-            ORDER BY dr.created_at DESC
-        """)
+        """
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        query += " ORDER BY dr.created_at DESC"
+        cur.execute(query, params)
         columns = [desc[0] for desc in cur.description]
         requests = [dict(zip(columns, row)) for row in cur.fetchall()]
-    
+
     cur.close()
     conn.close()
-    
-    # 統計
-    pending_count = len([r for r in requests if r['status'] == 'pending'])
-    processing_count = len([r for r in requests if r['status'] == 'processing'])
-    completed_count = len([r for r in requests if r['status'] == 'completed'])
+
+    if filtered_reason == 'long_term':
+        filter_tags.append('長期保存申請')
+    elif filtered_reason == 'overdue':
+        filter_tags.append('延滞申請')
+
+    if filtered_user_id:
+        owner_name = None
+        if requests:
+            owner_name = requests[0].get('display_name') or requests[0].get('username')
+        filter_tags.append(f"ユーザー: {owner_name or f'ID {filtered_user_id}'}")
+
+    if filtered_merchandise_id:
+        product_name = None
+        if requests:
+            product_name = requests[0].get('product_name')
+        filter_tags.append(f"商品: {product_name or f'ID {filtered_merchandise_id}'}")
+
+    for req in requests:
+        status_context = get_long_term_request_status_context(
+            req.get('disposal_type'),
+            req.get('status'),
+            sale_date=req.get('sale_date')
+        )
+        action_context = get_long_term_request_action_context(
+            req.get('disposal_type'),
+            req.get('status'),
+            sale_date=req.get('sale_date')
+        )
+        req['status_value'] = status_context['status_value']
+        req['status_label'] = status_context['status_label']
+        req['status_stage'] = status_context['status_stage']
+        req['next_action_label'] = status_context['next_action_label']
+        req['disposal_type_label'] = LONG_TERM_DISPOSAL_TYPE_LABELS.get(req.get('disposal_type'), '未申請')
+        req['requested_at_display'] = format_optional_datetime(req.get('created_at'))
+        req['processed_at_display'] = format_optional_datetime(req.get('processed_at'), fallback='')
+        req['primary_action'] = action_context['primary_action']
+        req['primary_action_label'] = action_context['primary_action_label']
+        req['primary_confirm_message'] = action_context['primary_confirm_message']
+        req['secondary_action'] = action_context['secondary_action']
+        req['secondary_action_label'] = action_context['secondary_action_label']
+        req['secondary_confirm_message'] = action_context['secondary_confirm_message']
+        req['show_sale_entry'] = action_context['show_sale_entry']
+        req['sale_entry_label'] = action_context['sale_entry_label']
+        req['finish_action'] = action_context['finish_action']
+        req['finish_action_label'] = action_context['finish_action_label']
+        req['finish_confirm_message'] = action_context['finish_confirm_message']
+        req['allow_reject'] = action_context['allow_reject']
+
+    pending_count = len([r for r in requests if r['status_stage'] == 'pending'])
+    processing_count = len([r for r in requests if r['status_stage'] == 'processing'])
+    completed_count = len([r for r in requests if r['status_stage'] == 'completed'])
     
     return render_template('admin/disposal_requests.html',
                            requests=requests,
                            pending_count=pending_count,
                            processing_count=processing_count,
-                           completed_count=completed_count)
+                           completed_count=completed_count,
+                           filter_tags=filter_tags,
+                           filtered_user_id=filtered_user_id,
+                           filtered_merchandise_id=filtered_merchandise_id,
+                           filtered_reason=filtered_reason)
 
 
 @app.route('/admin/disposal-request/<int:request_id>/process', methods=['POST'])
@@ -21914,8 +23300,13 @@ def admin_disposal_requests():
 @admin_required
 def process_disposal_request(request_id):
     """商品処分申請を処理"""
-    action = request.form.get('action')  # processing, completed, rejected
+    action = request.form.get('action')
     admin_note = request.form.get('admin_note', '')
+    redirect_target = get_internal_redirect_target(
+        request.referrer,
+        url_for('admin_disposal_requests'),
+        allowed_prefixes=('/admin/disposal-requests', '/admin/user-products', '/view/')
+    )
     
     conn = get_db()
     cur = conn.cursor()
@@ -21926,72 +23317,126 @@ def process_disposal_request(request_id):
             from psycopg2.extras import RealDictCursor
             cur_dict = conn.cursor(cursor_factory=RealDictCursor)
             cur_dict.execute("""
-                SELECT merchandise_id, status 
-                FROM item_disposal_requests 
-                WHERE id = %s
+                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date
+                FROM item_disposal_requests dr
+                JOIN merchandise m ON m.id = dr.merchandise_id
+                WHERE dr.id = %s
             """, (request_id,))
             request_info = cur_dict.fetchone()
             cur_dict.close()
         else:
             cur.execute("""
-                SELECT merchandise_id, status 
-                FROM item_disposal_requests 
-                WHERE id = ?
+                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date
+                FROM item_disposal_requests dr
+                JOIN merchandise m ON m.id = dr.merchandise_id
+                WHERE dr.id = ?
             """, (request_id,))
             row = cur.fetchone()
             if row:
-                request_info = {'merchandise_id': row[0], 'status': row[1]}
+                request_info = {
+                    'merchandise_id': row[0],
+                    'status': row[1],
+                    'disposal_type': row[2],
+                    'sale_date': row[3],
+                }
             else:
                 request_info = None
         
         if not request_info:
             flash('申請が見つかりません', 'error')
-            return redirect(url_for('admin_disposal_requests'))
+            return redirect(redirect_target)
         
-        # 申請ステータスを更新
+        normalized_action = normalize_long_term_request_action(
+            request_info.get('disposal_type'),
+            action,
+            sale_date=request_info.get('sale_date')
+        )
+        current_status = resolve_long_term_request_status(
+            request_info.get('disposal_type'),
+            request_info.get('status'),
+            sale_date=request_info.get('sale_date')
+        )
+        action_context = get_long_term_request_action_context(
+            request_info.get('disposal_type'),
+            request_info.get('status'),
+            sale_date=request_info.get('sale_date')
+        )
+        allowed_actions = {
+            action_context.get('primary_action'),
+            action_context.get('secondary_action'),
+            action_context.get('finish_action'),
+        }
+        if action_context.get('allow_reject'):
+            allowed_actions.add('rejected')
+        allowed_actions.discard(None)
+
+        if request_info.get('disposal_type') == 'auction' and action in ('completed', 'auction_sold') and not request_info.get('sale_date'):
+            flash('オークションは販売結果を商品一覧で入力した時点で完了になります', 'error')
+            return redirect(redirect_target)
+
+        if not normalized_action:
+            flash('この申請ではその操作はできません', 'error')
+            return redirect(redirect_target)
+
+        if normalized_action == 'rejected' and not action_context.get('allow_reject'):
+            flash('現在の状態では差し戻しできません', 'error')
+            return redirect(redirect_target)
+
+        if normalized_action != 'rejected' and allowed_actions and normalized_action not in allowed_actions:
+            flash('現在の状態ではその操作はできません', 'error')
+            return redirect(redirect_target)
         if DATABASE_URL:
             cur.execute("""
                 UPDATE item_disposal_requests 
                 SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
                 WHERE id = %s
-            """, (action, admin_note, current_user.id, request_id))
+            """, (normalized_action, admin_note, current_user.id, request_id))
         else:
             cur.execute("""
                 UPDATE item_disposal_requests 
                 SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
                 WHERE id = ?
-            """, (action, admin_note, current_user.id, request_id))
+            """, (normalized_action, admin_note, current_user.id, request_id))
         
-        # 申請が完了（completed）になった場合、商品を売却済みにする
-        if action == 'completed':
-            merchandise_id = request_info['merchandise_id'] if isinstance(request_info, dict) else request_info[0]
-            
-            # 商品の売却日を更新（まだ売却日が設定されていない場合のみ）
+        merchandise_id = request_info.get('merchandise_id')
+        if normalized_action in ('shipping_sent', 'liquidation_completed'):
             if DATABASE_URL:
                 cur.execute("""
                     UPDATE merchandise 
                     SET sale_date = CURRENT_DATE,
-                        sale_type = 'disposal'
+                        sale_type = %s
                     WHERE id = %s 
                       AND sale_date IS NULL
-                """, (merchandise_id,))
+                """, (
+                    'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
+                    merchandise_id,
+                ))
             else:
                 cur.execute("""
                     UPDATE merchandise 
                     SET sale_date = DATE('now'),
-                        sale_type = 'disposal'
+                        sale_type = ?
                     WHERE id = ? 
                       AND sale_date IS NULL
-                """, (merchandise_id,))
+                """, (
+                    'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
+                    merchandise_id,
+                ))
         
         conn.commit()
-        
-        action_names = {
-            'processing': '処理中に変更',
-            'completed': '完了',
-            'rejected': '却下'
-        }
-        flash(f'申請を{action_names.get(action, action)}しました', 'success')
+
+        action_label = LONG_TERM_REQUEST_ACTION_NAME_LABELS.get(
+            normalized_action,
+            LONG_TERM_REQUEST_STATUS_LABELS.get(normalized_action, normalized_action)
+        )
+        if normalized_action == 'rejected':
+            flash('申請を差し戻しました', 'success')
+        elif normalized_action == 'closed':
+            flash('長期保存対応を終了し、一覧から外しました', 'success')
+        elif current_status != normalized_action:
+            flash(f'申請を「{action_label}」に更新しました', 'success')
+        else:
+            flash('申請内容を更新しました', 'success')
     except Exception as e:
         conn.rollback()
         flash(f'処理中にエラーが発生しました: {str(e)}', 'error')
@@ -22001,7 +23446,7 @@ def process_disposal_request(request_id):
         cur.close()
         conn.close()
     
-    return redirect(url_for('admin_disposal_requests'))
+    return redirect(redirect_target)
 
 
 # ===================
@@ -22110,6 +23555,552 @@ def inject_fee_settings():
         return {'fee_settings': get_fee_settings()}
     except Exception:
         return {'fee_settings': {}}
+
+LONG_TERM_STORAGE_DAYS = 90
+
+LONG_TERM_AUTO_TRANSFER_DAYS = 150
+
+LONG_TERM_DISPOSAL_TYPE_LABELS = {
+    'auction': 'オークション販売',
+    'liquidation': '在庫処分',
+    'shipping': '返却（郵送）',
+}
+
+LONG_TERM_REQUEST_STATUS_LABELS = {
+    'pending': '申請受付',
+    'processing': '対応中',
+    'completed': '対応完了',
+    'closed': '終了',
+    'rejected': '差し戻し',
+    'auction_listing': 'オークション販売中',
+    'auction_sold': 'オークション販売済み',
+    'shipping_preparing': '郵送準備中',
+    'shipping_sent': '郵送済み',
+    'liquidation_processing': '処分対応中',
+    'liquidation_completed': '処分完了',
+}
+
+LONG_TERM_REQUEST_TYPE_STATUS_LABELS = {
+    'auction': {
+        'pending': '販売申請受付',
+        'processing': 'オークション販売中',
+        'completed': 'オークション販売済み',
+        'closed': '対応終了',
+        'rejected': '差し戻し',
+        'auction_listing': 'オークション販売中',
+        'auction_sold': 'オークション販売済み',
+    },
+    'shipping': {
+        'pending': '返却申請受付',
+        'processing': '郵送準備中',
+        'completed': '郵送済み',
+        'closed': '対応終了',
+        'rejected': '差し戻し',
+        'shipping_preparing': '郵送準備中',
+        'shipping_sent': '郵送済み',
+    },
+    'liquidation': {
+        'pending': '処分申請受付',
+        'processing': '処分対応中',
+        'completed': '処分完了',
+        'closed': '対応終了',
+        'rejected': '差し戻し',
+        'liquidation_processing': '処分対応中',
+        'liquidation_completed': '処分完了',
+    },
+}
+
+LONG_TERM_REQUEST_STAGE_BY_STATUS = {
+    'pending': 'pending',
+    'processing': 'processing',
+    'completed': 'completed',
+    'closed': 'completed',
+    'rejected': 'rejected',
+    'auction_listing': 'processing',
+    'auction_sold': 'completed',
+    'shipping_preparing': 'processing',
+    'shipping_sent': 'completed',
+    'liquidation_processing': 'processing',
+    'liquidation_completed': 'completed',
+}
+
+LONG_TERM_REQUEST_NEXT_ACTION_LABELS = {
+    'auction': {
+        'pending': 'まずオークション販売中へ進めてください',
+        'auction_listing': '売れたら商品一覧で販売結果を入力してください',
+        'auction_sold': '販売結果を確認後に終了してください',
+        'closed': '長期保存対応は終了しています',
+        'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+    },
+    'shipping': {
+        'pending': '返送先を確認して郵送準備中へ進めてください',
+        'shipping_preparing': '発送できたら郵送済みに更新してください',
+        'shipping_sent': '発送確認後に終了してください',
+        'closed': '長期保存対応は終了しています',
+        'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+    },
+    'liquidation': {
+        'pending': '処分対象を確認して処分対応中へ進めてください',
+        'liquidation_processing': '処分が終わったら処分完了に更新してください',
+        'liquidation_completed': '処分内容を確認後に終了してください',
+        'closed': '長期保存対応は終了しています',
+        'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+    },
+}
+
+LONG_TERM_REQUEST_ACTION_NAME_LABELS = {
+    'auction_listing': 'オークション販売中',
+    'auction_sold': 'オークション販売済み',
+    'shipping_preparing': '郵送準備中',
+    'shipping_sent': '郵送済み',
+    'liquidation_processing': '処分対応中',
+    'liquidation_completed': '処分完了',
+    'closed': '終了',
+    'rejected': '差し戻し',
+}
+
+def resolve_long_term_request_status(disposal_type, status, sale_date=None):
+    normalized_type = disposal_type or ''
+    normalized_status = (status or 'pending').strip() if isinstance(status, str) else (status or 'pending')
+
+    if normalized_status == 'closed':
+        return 'closed'
+
+    if normalized_type == 'auction':
+        if sale_date and normalized_status != 'rejected':
+            return 'auction_sold'
+        if normalized_status == 'processing':
+            return 'auction_listing'
+        if normalized_status == 'completed':
+            return 'auction_sold'
+    elif normalized_type == 'shipping':
+        if normalized_status == 'processing':
+            return 'shipping_preparing'
+        if normalized_status == 'completed':
+            return 'shipping_sent'
+    elif normalized_type == 'liquidation':
+        if normalized_status == 'processing':
+            return 'liquidation_processing'
+        if normalized_status == 'completed':
+            return 'liquidation_completed'
+
+    return normalized_status or 'pending'
+
+def get_long_term_request_status_context(disposal_type, status, sale_date=None):
+    if not disposal_type and not status:
+        return {
+            'status_value': None,
+            'status_label': '未申請',
+            'status_stage': 'none',
+            'next_action_label': 'まだお客様から申請がありません',
+        }
+
+    resolved_status = resolve_long_term_request_status(disposal_type, status, sale_date=sale_date)
+    type_labels = LONG_TERM_REQUEST_TYPE_STATUS_LABELS.get(disposal_type or '', {})
+    status_label = type_labels.get(resolved_status) or LONG_TERM_REQUEST_STATUS_LABELS.get(resolved_status, '未申請')
+    status_stage = LONG_TERM_REQUEST_STAGE_BY_STATUS.get(resolved_status, 'pending')
+    next_action_label = LONG_TERM_REQUEST_NEXT_ACTION_LABELS.get(disposal_type or '', {}).get(
+        resolved_status,
+        '申請内容を確認して次の対応を進めてください'
+    )
+
+    return {
+        'status_value': resolved_status,
+        'status_label': status_label,
+        'status_stage': status_stage,
+        'next_action_label': next_action_label,
+    }
+
+def get_long_term_request_action_context(disposal_type, status, sale_date=None):
+    resolved_status = resolve_long_term_request_status(disposal_type, status, sale_date=sale_date)
+    context = {
+        'primary_action': None,
+        'primary_action_label': None,
+        'primary_confirm_message': None,
+        'secondary_action': None,
+        'secondary_action_label': None,
+        'secondary_confirm_message': None,
+        'show_sale_entry': False,
+        'sale_entry_label': '販売結果を入力',
+        'finish_action': None,
+        'finish_action_label': None,
+        'finish_confirm_message': None,
+        'allow_reject': resolved_status in ('pending', 'auction_listing', 'shipping_preparing', 'liquidation_processing'),
+    }
+
+    if disposal_type == 'auction':
+        if sale_date:
+            context['show_sale_entry'] = True
+            context['sale_entry_label'] = '販売結果を確認'
+            context['finish_action'] = 'closed'
+            context['finish_action_label'] = '終了する'
+            context['finish_confirm_message'] = '販売結果を確認済みなら、この長期保存対応を終了して一覧から外しますか？'
+            context['allow_reject'] = False
+            return context
+        if resolved_status == 'pending':
+            context['primary_action'] = 'auction_listing'
+            context['primary_action_label'] = 'オークション販売中にする'
+            context['primary_confirm_message'] = 'この申請をオークション販売中に更新しますか？'
+        elif resolved_status == 'auction_listing':
+            context['show_sale_entry'] = True
+        return context
+
+    if disposal_type == 'shipping':
+        if resolved_status == 'pending':
+            context['primary_action'] = 'shipping_preparing'
+            context['primary_action_label'] = '郵送準備中にする'
+            context['primary_confirm_message'] = 'この申請を郵送準備中に更新しますか？'
+        elif resolved_status == 'shipping_preparing':
+            context['secondary_action'] = 'shipping_sent'
+            context['secondary_action_label'] = '郵送済みにする'
+            context['secondary_confirm_message'] = 'この申請を郵送済みに更新しますか？'
+        elif resolved_status == 'shipping_sent':
+            context['finish_action'] = 'closed'
+            context['finish_action_label'] = '終了する'
+            context['finish_confirm_message'] = '郵送対応の確認が取れたので、この長期保存対応を終了して一覧から外しますか？'
+        else:
+            context['allow_reject'] = False
+        return context
+
+    if disposal_type == 'liquidation':
+        if resolved_status == 'pending':
+            context['primary_action'] = 'liquidation_processing'
+            context['primary_action_label'] = '処分対応中にする'
+            context['primary_confirm_message'] = 'この申請を処分対応中に更新しますか？'
+        elif resolved_status == 'liquidation_processing':
+            context['secondary_action'] = 'liquidation_completed'
+            context['secondary_action_label'] = '処分完了にする'
+            context['secondary_confirm_message'] = 'この申請を処分完了に更新しますか？'
+        elif resolved_status == 'liquidation_completed':
+            context['finish_action'] = 'closed'
+            context['finish_action_label'] = '終了する'
+            context['finish_confirm_message'] = '処分対応の確認が取れたので、この長期保存対応を終了して一覧から外しますか？'
+        else:
+            context['allow_reject'] = False
+        return context
+
+    context['allow_reject'] = False
+    return context
+
+def normalize_long_term_request_action(disposal_type, action, sale_date=None):
+    requested_action = (action or '').strip()
+    if not requested_action:
+        return None
+
+    if requested_action == 'closed':
+        return 'closed'
+
+    if requested_action == 'rejected':
+        return 'rejected'
+
+    if disposal_type == 'auction':
+        if requested_action in ('processing', 'auction_listing'):
+            return 'auction_listing'
+        if requested_action in ('completed', 'auction_sold'):
+            return 'auction_sold' if sale_date else None
+    elif disposal_type == 'shipping':
+        if requested_action in ('processing', 'shipping_preparing'):
+            return 'shipping_preparing'
+        if requested_action in ('completed', 'shipping_sent'):
+            return 'shipping_sent'
+    elif disposal_type == 'liquidation':
+        if requested_action in ('processing', 'liquidation_processing'):
+            return 'liquidation_processing'
+        if requested_action in ('completed', 'liquidation_completed'):
+            return 'liquidation_completed'
+
+    return requested_action
+
+def fetch_long_term_candidate_items(conn, user_id=None, user_ids=None):
+    """長期保存一覧の候補商品を取得する。"""
+    if user_id is None and not user_ids:
+        return []
+
+    cutoff_date = (datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)).strftime('%Y-%m-%d')
+
+    if DATABASE_URL:
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        started_at_expr = "COALESCE(m.created_at::date, m.purchase_date::date)"
+        params = [cutoff_date]
+        if user_id is not None:
+            user_filter = "m.user_id = %s"
+            params.append(user_id)
+        else:
+            placeholders = ','.join(['%s'] * len(user_ids))
+            user_filter = f"m.user_id IN ({placeholders})"
+            params.extend(user_ids)
+
+        cur.execute(f"""
+            SELECT m.*
+            FROM merchandise m
+            WHERE {started_at_expr} <= %s
+              AND {user_filter}
+              AND (
+                    m.sale_date IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM item_disposal_requests dr
+                        WHERE dr.merchandise_id = m.id
+                          AND dr.reason = 'long_term'
+                    )
+                  )
+            ORDER BY {started_at_expr} ASC, m.created_at DESC, m.id DESC
+        """, params)
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        started_at_expr = "COALESCE(date(m.created_at), m.purchase_date)"
+        params = [cutoff_date]
+        if user_id is not None:
+            user_filter = "m.user_id = ?"
+            params.append(user_id)
+        else:
+            placeholders = ','.join(['?'] * len(user_ids))
+            user_filter = f"m.user_id IN ({placeholders})"
+            params.extend(user_ids)
+
+        cur.execute(f"""
+            SELECT m.*
+            FROM merchandise m
+            WHERE {started_at_expr} <= ?
+              AND {user_filter}
+              AND (
+                    m.sale_date IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM item_disposal_requests dr
+                        WHERE dr.merchandise_id = m.id
+                          AND dr.reason = 'long_term'
+                    )
+                  )
+            ORDER BY {started_at_expr} ASC, m.created_at DESC, m.id DESC
+        """, params)
+        columns = [desc[0] for desc in cur.description]
+        items = [dict(zip(columns, row)) for row in cur.fetchall()]
+
+    cur.close()
+    return items
+
+def should_display_long_term_item(item, request_info=None):
+    """長期保存一覧に表示し続ける対象かを判定する。"""
+    sale_date = item.get('sale_date')
+    if request_info:
+        resolved_status = resolve_long_term_request_status(
+            request_info.get('disposal_type'),
+            request_info.get('status'),
+            sale_date=sale_date
+        )
+        if resolved_status == 'closed':
+            return False
+        if sale_date and resolved_status not in ('auction_sold', 'shipping_sent', 'liquidation_completed', 'completed'):
+            return False
+        return True
+
+    return sale_date is None and (calculate_days_in_storage(item) or 0) >= LONG_TERM_STORAGE_DAYS
+
+def get_visible_long_term_items(conn, user_id=None, user_ids=None):
+    """一覧表示対象の長期保存商品と申請マップを返す。"""
+    items = fetch_long_term_candidate_items(conn, user_id=user_id, user_ids=user_ids)
+    request_map = get_long_term_request_map(conn, [item['id'] for item in items]) if items else {}
+    visible_items = [item for item in items if should_display_long_term_item(item, request_map.get(item.get('id')))]
+    return visible_items, request_map
+
+def normalize_date_value(value):
+    """datetime/date/ISO文字列をdate型へそろえる"""
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    if hasattr(value, 'date') and callable(value.date):
+        try:
+            return value.date()
+        except Exception:
+            return None
+
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+
+        try:
+            return datetime.fromisoformat(normalized.replace('Z', '+00:00')).date()
+        except Exception:
+            pass
+
+        for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S'):
+            try:
+                return datetime.strptime(normalized[:19], fmt).date()
+            except Exception:
+                continue
+
+    return None
+
+def get_storage_started_date(record):
+    """長期保存判定に使う起点日（登録日優先、なければ仕入日）を返す"""
+    if isinstance(record, dict):
+        value = record.get('created_at') or record.get('purchase_date')
+    else:
+        value = record
+    return normalize_date_value(value)
+
+def calculate_days_in_storage(record):
+    storage_started_date = get_storage_started_date(record)
+    if not storage_started_date:
+        return None
+    return max((datetime.now().date() - storage_started_date).days, 0)
+
+def format_storage_started_date(record):
+    storage_started_date = get_storage_started_date(record)
+    return storage_started_date.strftime('%Y-%m-%d') if storage_started_date else '-'
+
+def format_optional_datetime(value, fallback='-'):
+    if not value:
+        return fallback
+
+    if isinstance(value, datetime):
+        return value.strftime('%Y/%m/%d %H:%M')
+
+    if hasattr(value, 'strftime') and not isinstance(value, str):
+        try:
+            return value.strftime('%Y/%m/%d %H:%M')
+        except Exception:
+            return fallback
+
+    if isinstance(value, str):
+        parsed = parse_proxy_service_datetime(value)
+        if parsed:
+            return parsed.strftime('%Y/%m/%d %H:%M')
+        normalized = value.strip().replace('T', ' ')
+        if len(normalized) >= 16:
+            return normalized[:16].replace('-', '/')
+        if normalized:
+            return normalized
+
+    return fallback
+
+def get_long_term_items_for_user(conn, user_id, merchandise_id=None):
+    items, _ = get_visible_long_term_items(conn, user_id=user_id)
+    if merchandise_id is not None:
+        items = [item for item in items if item.get('id') == merchandise_id]
+
+    for item in items:
+        item['storage_started_at'] = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+
+    items.sort(key=lambda item: (item.get('storage_started_at') or date.max, item.get('id') or 0))
+    return items
+
+def build_long_term_notification_message(customer_name, long_term_items):
+    item_names = []
+    for item in long_term_items[:5]:
+        product_name = item.get('product_name') or '商品'
+        days_in_storage = calculate_days_in_storage(item)
+        if days_in_storage is not None:
+            item_names.append(f"・{product_name}（{days_in_storage}日）")
+        else:
+            item_names.append(f"・{product_name}")
+
+    item_lines = '\n'.join(item_names)
+    if len(long_term_items) > 5:
+        item_lines += f"\n・ほか {len(long_term_items) - 5}件"
+
+    return (
+        f"【長期保存商品のご案内】\n"
+        f"{customer_name}様の商品に、90日以上保管されている商品があります。\n"
+        f"対象件数: {len(long_term_items)}件\n"
+        f"{item_lines}\n\n"
+        f"アプリの「長期保存商品」から、\n"
+        f"・オークション販売\n"
+        f"・在庫処分\n"
+        f"・受け取り郵送\n"
+        f"のいずれかをご選択ください。"
+    )
+
+def get_internal_redirect_target(raw_url, default, allowed_prefixes=None):
+    if not raw_url:
+        return default
+
+    try:
+        parsed = urlsplit(raw_url)
+    except Exception:
+        return default
+
+    current_host = urlsplit(request.host_url).netloc
+    if parsed.netloc and parsed.netloc != current_host:
+        return default
+
+    path = parsed.path or ''
+    if not path.startswith('/'):
+        return default
+
+    if allowed_prefixes and not any(path.startswith(prefix) for prefix in allowed_prefixes):
+        return default
+
+    return urlunsplit(('', '', path, parsed.query, ''))
+
+def get_long_term_request_map(conn, merchandise_ids):
+    if not merchandise_ids:
+        return {}
+
+    request_map = {}
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        placeholders = ','.join(['%s'] * len(merchandise_ids))
+        cur.execute(f"""
+            SELECT id, merchandise_id, disposal_type, status, shipping_address,
+                   shipping_name, shipping_phone, admin_note, created_at, processed_at
+            FROM item_disposal_requests
+            WHERE reason = 'long_term'
+              AND merchandise_id IN ({placeholders})
+            ORDER BY merchandise_id ASC,
+                     created_at DESC,
+                     processed_at DESC NULLS LAST,
+                     id DESC
+        """, merchandise_ids)
+        rows = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        placeholders = ','.join(['?'] * len(merchandise_ids))
+        cur.execute(f"""
+            SELECT id, merchandise_id, disposal_type, status, shipping_address,
+                   shipping_name, shipping_phone, admin_note, created_at, processed_at
+            FROM item_disposal_requests
+            WHERE reason = 'long_term'
+              AND merchandise_id IN ({placeholders})
+            ORDER BY merchandise_id ASC,
+                     datetime(created_at) DESC,
+                     datetime(processed_at) DESC,
+                     id DESC
+        """, merchandise_ids)
+        columns = [desc[0] for desc in cur.description]
+        rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+
+    cur.close()
+
+    for row in rows:
+        merchandise_id = row.get('merchandise_id')
+        if merchandise_id not in request_map:
+            request_map[merchandise_id] = row
+
+    return request_map
+
+def safe_debug_print(*args, **kwargs):
+    try:
+        print(*args, **kwargs)
+    except OSError:
+        pass
+
+def safe_traceback_print():
+    try:
+        traceback.print_exc()
+    except OSError:
+        pass
 
 def get_fee_settings():
     """料金・手数料設定をDBから取得（キャッシュ付き）"""

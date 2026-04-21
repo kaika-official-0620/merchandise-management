@@ -119,6 +119,15 @@
     margin-top: 4px;
 }
 
+.target-user-search-input {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.target-user-search-status {
+    color: #065f46;
+}
+
 </style>
 
 <div class="page-header">
@@ -155,14 +164,31 @@
             <!-- ユーザーモード：ユーザー選択必須 -->
             <div class="form-group" style="background: #ecfdf5; padding: 1rem; border-radius: 8px; border: 2px solid #10b981; margin-bottom: 1.5rem;">
                 <label for="target_user_id" style="color: #065f46; font-weight: 600;">👤 登録先ユーザー <span style="color: #ef4444;">*必須</span></label>
+                <input
+                    type="search"
+                    id="target_user_search"
+                    class="target-user-search-input"
+                    placeholder="名前・会員番号で検索"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
                 <select id="target_user_id" name="target_user_id" required style="margin-top: 0.5rem;">
                     <option value="">-- ユーザーを選択してください --</option>
                     {% for user in users %}
-                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}>
-                        {{ user.display_name or user.username }}
+                    {% set target_user_name = user.display_name or '' %}
+                    {% set target_user_member_code = user.username or '' %}
+                    {% set target_user_label = target_user_name or ('会員番号: ' ~ target_user_member_code) %}
+                    <option value="{{ user.id }}" {% if default_user_id and default_user_id|string == user.id|string %}selected{% endif %}
+                            data-display-name="{{ target_user_name }}"
+                            data-member-code="{{ target_user_member_code }}"
+                            data-search-text="{{ target_user_name }} {{ target_user_member_code }}">
+                        {{ target_user_label }}{% if target_user_name and target_user_member_code %} / 会員番号: {{ target_user_member_code }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
+                <small id="target_user_search_status" class="form-help target-user-search-status">
+                    全{{ users|length }}件から選択できます。名前または会員番号で絞り込めます。
+                </small>
                 <small class="form-help" style="color: #065f46;">この商品は選択したユーザーの商品として登録されます</small>
             </div>
             {% else %}
@@ -774,6 +800,85 @@ function normalizeKaikaSaleTypeValue(value) {
     if (rawValue === 'multi_listing') return 'live_commerce';
     if (['normal', 'wholesale', 'auction', 'live_commerce'].includes(rawValue)) return rawValue;
     return 'normal';
+}
+
+function normalizeTargetUserSearchValue(value) {
+    return (value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function initializeTargetUserSearch() {
+    const searchInput = document.getElementById('target_user_search');
+    const targetUserSelect = document.getElementById('target_user_id');
+    const searchStatus = document.getElementById('target_user_search_status');
+
+    if (!searchInput || !targetUserSelect) {
+        return;
+    }
+
+    const userOptions = Array.from(targetUserSelect.options)
+        .filter((option) => option.value)
+        .map((option) => ({
+            value: option.value,
+            label: option.textContent.trim(),
+            displayName: option.dataset.displayName || '',
+            memberCode: option.dataset.memberCode || '',
+            searchText: normalizeTargetUserSearchValue(
+                option.dataset.searchText || `${option.textContent} ${option.value}`
+            ),
+            initiallySelected: option.selected
+        }));
+    const initialSelectedValue = targetUserSelect.value || (userOptions.find((option) => option.initiallySelected) || {}).value || '';
+
+    function renderTargetUserOptions(query) {
+        const normalizedQuery = normalizeTargetUserSearchValue(query);
+        const previousValue = targetUserSelect.value || initialSelectedValue;
+        const matchedOptions = normalizedQuery
+            ? userOptions.filter((option) => option.searchText.includes(normalizedQuery))
+            : userOptions;
+        const selectedValue = matchedOptions.some((option) => option.value === previousValue)
+            ? previousValue
+            : '';
+
+        targetUserSelect.innerHTML = '';
+
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = matchedOptions.length === 0 && normalizedQuery
+            ? '-- 該当するユーザーがいません --'
+            : '-- ユーザーを選択してください --';
+        placeholderOption.selected = !selectedValue;
+        targetUserSelect.appendChild(placeholderOption);
+
+        matchedOptions.forEach((optionData) => {
+            const option = document.createElement('option');
+            option.value = optionData.value;
+            option.textContent = optionData.label;
+            option.dataset.displayName = optionData.displayName;
+            option.dataset.memberCode = optionData.memberCode;
+            option.dataset.searchText = optionData.searchText;
+            option.selected = optionData.value === selectedValue;
+            targetUserSelect.appendChild(option);
+        });
+
+        if (searchStatus) {
+            if (!normalizedQuery) {
+                searchStatus.textContent = `全${userOptions.length}件から選択できます。名前または会員番号で絞り込めます。`;
+            } else if (matchedOptions.length === 0) {
+                searchStatus.textContent = '一致するユーザーがいません。名前や会員番号を変えてお試しください。';
+            } else {
+                searchStatus.textContent = `${matchedOptions.length}件に絞り込みました。名前または会員番号で続けて検索できます。`;
+            }
+        }
+    }
+
+    searchInput.addEventListener('input', function() {
+        renderTargetUserOptions(this.value);
+    });
+
+    renderTargetUserOptions(searchInput.value);
 }
 
 // DB設定から動的に手数料計算ルール（段階別固定額）を反映
@@ -1447,6 +1552,7 @@ function setupBrandAutoDetect() {
 document.addEventListener('DOMContentLoaded', function() {
     // マスターデータをロード
     loadMasterData();
+    initializeTargetUserSearch();
     
     updateStatusFields();
     toggleSupplierDetail();
