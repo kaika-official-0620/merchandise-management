@@ -68,7 +68,7 @@
             <strong class="priority-card__count">{{ disposal_count }}件</strong>
             <span class="priority-card__note">{% if disposal_count > 0 %}在庫処分申請の確認があります{% else %}現在はありません{% endif %}</span>
         </a>
-        <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="priority-card {% if long_term_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
+        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="priority-card {% if long_term_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">長期保存商品</span>
             <strong class="priority-card__count">{{ long_term_count }}件</strong>
             <span class="priority-card__note">{% if long_term_count > 0 %}長期保存商品の確認があります{% else %}現在はありません{% endif %}</span>
@@ -93,7 +93,7 @@
             <h3>ユーザー商品一覧</h3>
             <p>クライアントの商品一覧を確認します。</p>
         </a>
-        <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="shortcut-card">
+        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="shortcut-card">
             <h3>長期保存商品</h3>
             <p>90日以上経過した商品を確認します。</p>
         </a>

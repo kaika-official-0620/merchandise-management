@@ -388,12 +388,12 @@
                 </button>
                 <div class="sidebar-category-items {% if request.endpoint in ['index', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
-                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') != 'long_term' %}active{% endif %}">商品一覧</a>
-                    <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') == 'long_term' %}active{% endif %}">長期保存商品</a>
+                    <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and not request.args.get('long_term_only') %}active{% endif %}">商品一覧</a>
+                    <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') %}active{% endif %}">長期保存商品</a>
                     {% else %}
                     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
-                        <span class="menu-label">長期在庫商品</span>
+                        <span class="menu-label">長期保存商品</span>
                         {% if get_long_term_item_count() > 0 %}
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}

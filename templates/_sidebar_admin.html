@@ -154,8 +154,8 @@
     <div class="sidebar-category-items {% if request.endpoint in user_management_endpoints %}open{% endif %}">
         <div class="sidebar-subcategory">
             <div class="subcategory-label">商品管理</div>
-            <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') != 'long_term' %}active{% endif %}">商品一覧</a>
-            <a href="{{ url_for('admin_user_products', inventory_view='long_term') }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('inventory_view') == 'long_term' %}active{% endif %}">長期保存商品</a>
+            <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and not request.args.get('long_term_only') %}active{% endif %}">商品一覧</a>
+            <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') %}active{% endif %}">長期保存商品</a>
         </div>
         <div class="sidebar-subcategory">
             <div class="subcategory-label">通知ボックス</div>

@@ -439,7 +439,7 @@
                 <div>
                     <span class="request-status {{ req.status_stage }}">{{ req.status_label }}</span>
                     <span class="reason-badge {% if req.reason == 'long_term' %}long-term{% else %}overdue{% endif %}">
-                        {% if req.reason == 'long_term' %}📦 長期在庫
+                        {% if req.reason == 'long_term' %}📦 長期保存
                         {% else %}💳 月謝未払い
                         {% endif %}
                     </span>

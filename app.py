@@ -7667,6 +7667,7 @@ def view_item(id):
             cur.execute("SELECT * FROM merchandise WHERE id = ? AND user_id = ?", (id, current_user.id))
     
     item = cur.fetchone()
+    long_term_request = get_long_term_request_map(conn, [id]).get(id) if item else None
     cur.close()
     conn.close()
     
@@ -7713,12 +7714,47 @@ def view_item(id):
             item_dict.get('expected_shipping', 0) or 0,
             item_dict.get('expected_commission', 0) or 0
         )
+
+    item_dict['long_term_request'] = None
+    if long_term_request:
+        status_context = get_long_term_request_status_context(
+            long_term_request.get('disposal_type'),
+            long_term_request.get('status'),
+            sale_date=item_dict.get('sale_date')
+        )
+        action_context = get_long_term_request_action_context(
+            long_term_request.get('disposal_type'),
+            long_term_request.get('status'),
+            sale_date=item_dict.get('sale_date')
+        )
+        item_dict['storage_started_at_display'] = format_storage_started_date(item_dict)
+        item_dict['days_since_purchase'] = calculate_days_in_storage(item_dict)
+        item_dict['long_term_request'] = {
+            'id': long_term_request.get('id'),
+            'type_label': LONG_TERM_DISPOSAL_TYPE_LABELS.get(long_term_request.get('disposal_type'), '未申請'),
+            'status_stage': status_context['status_stage'],
+            'status_label': status_context['status_label'],
+            'next_action_label': status_context['next_action_label'],
+            'requested_at_display': format_optional_datetime(long_term_request.get('created_at')),
+            'processed_at_display': format_optional_datetime(long_term_request.get('processed_at'), fallback=''),
+            'shipping_name': long_term_request.get('shipping_name'),
+            'shipping_phone': long_term_request.get('shipping_phone'),
+            'shipping_address': long_term_request.get('shipping_address'),
+            'admin_note': long_term_request.get('admin_note'),
+            'show_sale_entry': action_context['show_sale_entry'],
+            'sale_entry_label': action_context['sale_entry_label'],
+            'finish_action': action_context['finish_action'],
+            'finish_action_label': action_context['finish_action_label'],
+            'finish_confirm_message': action_context['finish_confirm_message'],
+        }
     
     # リファラーから戻り先URLを判定
-    referrer = request.referrer or ''
-    if 'admin/user-products' in referrer:
-        back_url = url_for('admin_user_products')
-    elif '/admin/users/' in referrer and '/items' in referrer:
+    referrer = get_internal_redirect_target(
+        request.referrer,
+        '',
+        allowed_prefixes=('/admin/user-products', '/admin/disposal-requests', '/admin/users/', '/long-term-items')
+    )
+    if referrer:
         back_url = referrer
     elif current_user.is_admin() or current_user.is_owner():
         back_url = url_for('admin_items')

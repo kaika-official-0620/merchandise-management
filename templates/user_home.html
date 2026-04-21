@@ -589,7 +589,7 @@
         <div class="user-home-menu-picker" id="favoriteMenuPicker" hidden>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="home">ホーム</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="inventory">商品一覧</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期在庫商品</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期保存商品</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="requests">販売代行申請履歴</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類一覧</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="estimate">見積依頼書</button>
@@ -611,7 +611,7 @@
                 <p>現在の在庫と販売状況を確認できます。</p>
             </a>
             <a href="{{ url_for('long_term_items') }}" class="user-home-shortcut" data-menu-id="long-term">
-                <h3>長期在庫商品</h3>
+                <h3>長期保存商品</h3>
                 <p>長期保管中の商品をまとめて確認できます。</p>
             </a>
             <a href="{{ url_for('sales_agency_my_requests') }}" class="user-home-shortcut" data-menu-id="requests">

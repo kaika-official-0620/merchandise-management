@@ -1732,6 +1732,12 @@
                                 {% if item.show_sale_entry %}
                                 <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
                                 {% endif %}
+                                {% if item.finish_action and item.disposal_request_id %}
+                                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                                    <input type="hidden" name="action" value="{{ item.finish_action }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                                </form>
+                                {% endif %}
                                 <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
                             </div>
                         </div>
@@ -1879,6 +1885,12 @@
                     <a href="{{ url_for('view_item', id=item.id) }}" class="btn btn-sm">商品詳細</a>
                     {% if item.show_sale_entry %}
                     <a href="{{ url_for('edit_item', id=item.id) }}" class="btn btn-sm btn-edit">{{ item.sale_entry_label }}</a>
+                    {% endif %}
+                    {% if item.finish_action and item.disposal_request_id %}
+                    <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                        <input type="hidden" name="action" value="{{ item.finish_action }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                    </form>
                     {% endif %}
                     <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
                     {% else %}
