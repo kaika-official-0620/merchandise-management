@@ -1,37 +1,68 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>送付先業者の登録・編集</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
-    </div>
-    <div class="section">
-      <div class="section-head">
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>送付先業者を登録・編集する</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>送付先業者の登録・編集</h3>
-          <p class="section-note">新しい取引先を追加したり、既存の送付先業者を編集する想定です。</p>
+          <h1>送付先業者を登録・編集する</h1>
+          <p>新しい取引先を追加するときは、ここで会社名・担当者名・メールアドレス・電話番号を登録します。既存の送付先も一覧で確認できます。</p>
         </div>
       </div>
-      <div class="compact-list">
-        <div class="compact-item"><strong>東京業者センター</strong><span class="muted">担当: 田中 / メール: vendor@tokyo-example.jp</span></div>
-        <div class="compact-item"><strong>関西ブランド市場</strong><span class="muted">担当: 佐々木 / メール: kansai@brand-example.jp</span></div>
-      </div>
-      <div class="select-grid" style="margin-top:16px;">
-        <div class="field"><label>業者名</label><input type="text" value="ブランド市場合同センター"></div>
-        <div class="field"><label>担当者</label><input type="text" value="山崎 次郎"></div>
-        <div class="field"><label>メールアドレス</label><input type="text" value="joint@market-example.jp"></div>
-      </div>
-      <div class="record-actions" style="margin-top:14px;">
-        <a class="btn btn-primary" href="vendor_estimate_batch_create.html">取引先を登録して戻る</a>
+      <div class="two-col">
+        <div class="section">
+          <div class="section-head"><h3>登録済みの送付先業者</h3></div>
+          <div class="compact-list">
+    <div class="compact-item">
+      <strong>ブランドセンター</strong>
+      <span>center@example.jp / 03-1111-2222</span>
+      <span>ルイヴィトン / シャネル中心</span>
+    </div>
+
+    <div class="compact-item">
+      <strong>ブランド市場</strong>
+      <span>market@example.jp / 03-3333-4444</span>
+      <span>スカーフ / 小物に強い</span>
+    </div>
+
+    <div class="compact-item">
+      <strong>Luxe Gate</strong>
+      <span>luxegate@example.jp / 03-5555-6666</span>
+      <span>財布 / バッグを少量で対応</span>
+    </div>
+    </div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h3>新規業者を登録</h3></div>
+          <div class="form-grid">
+            <label class="field"><span>会社名</span><input type="text" placeholder="例：ブランドセンター"></label>
+            <label class="field"><span>担当者名</span><input type="text" placeholder="例：田中 太郎"></label>
+            <label class="field"><span>メールアドレス</span><input type="email" placeholder="example@vendor.jp"></label>
+            <label class="field"><span>電話番号</span><input type="text" placeholder="03-0000-0000"></label>
+            <label class="field field-wide"><span>メモ</span><textarea rows="5" placeholder="取り扱いブランドや連絡時の注意点を入力"></textarea></label>
+          </div>
+          <div class="card-actions" style="margin-top: 16px;">
+            <button class="btn btn-primary" type="button" onclick="showInlineNotice('vendor-registry-notice','新規業者の入力欄を整えた preview です。実装時はこの内容をそのまま保存できるようにつなぎます。')">登録内容を確認する</button>
+          </div>
+          <p id="vendor-registry-notice" class="inline-notice" hidden></p>
+        </div>
       </div>
     </div>
-  </div>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

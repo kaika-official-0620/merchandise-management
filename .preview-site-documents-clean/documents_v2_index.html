@@ -3,44 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>書類管理 v2 プレビュー</title>
+  <title>書類管理 preview</title>
   <link rel="stylesheet" href="static/preview_v2.css">
+
 </head>
 <body>
-  <div class="page">
-    <div class="page-head">
-      <div>
-        <h1>書類管理</h1>
-        <p>クライアント受付から業者依頼、業者回答、クライアント返送までを 4 段階で確認するプレビューです。今回の preview では、状態更新や書類作成の導線を各段階に寄せて確認できるようにしています。</p>
-      </div>
-    </div>
 
-    <div class="flow-grid">
-      <a class="flow-card" href="documents_v2_client_incoming.html">
-        <span class="flow-step">1</span>
-        <h2>クライアントから受付</h2>
-        <p>どの依頼が届いたか、どの商品が対象か、詳細確認と状態更新をここで行います。</p>
-        <span class="flow-count">進行中 4件</span>
-      </a>
-      <a class="flow-card" href="documents_v2_vendor_outgoing.html">
-        <span class="flow-step">2</span>
-        <h2>開花から業者へ依頼</h2>
-        <p>業者卸販売の商品のみをまとめて選び、送付先業者を決めて見積依頼書を作成します。</p>
-        <span class="flow-count">作成待ち 3件</span>
-      </a>
-      <a class="flow-card" href="documents_v2_vendor_incoming.html">
-        <span class="flow-step">3</span>
-        <h2>業者から回答受領</h2>
-        <p>業者から届いた回答ファイルを登録し、どの商品がいくらで売れたかを確認します。</p>
-        <span class="flow-count">確認待ち 2件</span>
-      </a>
-      <a class="flow-card" href="documents_v2_client_outgoing.html">
-        <span class="flow-step">4</span>
-        <h2>クライアントへ返送</h2>
-        <p>売却済み商品だけを選び、クライアント向けの書類を作成して返送します。</p>
-        <span class="flow-count">返送準備中 3件</span>
-      </a>
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>書類管理 preview</h1>
+      <p>以前の使用感に近い形で、1番から4番までの流れをまとめ直した preview です。トップでは 2×2 の導線だけを見せ、各段階の中身は個別ページで確認します。</p>
     </div>
   </div>
+  <div class="flow-grid">
+    <a class="flow-card" href="documents_v2_client_incoming.html">
+      <span class="flow-step">1</span>
+      <h2>クライアントから受付</h2>
+      <p>どのクライアントから何の商品が届いたかを、名前単位で確認します。</p>
+      <span class="flow-count">4件受付中</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_vendor_outgoing.html">
+      <span class="flow-step">2</span>
+      <h2>開花から業者へ依頼</h2>
+      <p>査定中に切り替えた業者卸販売の商品だけをまとめて業者へ流します。</p>
+      <span class="flow-count">2件準備中</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_vendor_incoming.html">
+      <span class="flow-step">3</span>
+      <h2>業者から回答受領</h2>
+      <p>業者から届いた回答ファイルを1件ずつ確認し、商品ごとに返送先を振り分けます。</p>
+      <span class="flow-count">3ファイル受領</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_client_outgoing.html">
+      <span class="flow-step">4</span>
+      <h2>クライアントへ返送</h2>
+      <p>クライアントごとに書類をまとめて作成し、返送内容を確認します。</p>
+      <span class="flow-count">4名へ返送準備</span>
+    </a>
+    </div>
+</div>
+
+<script src="static/preview_v2.js"></script>
+
 </body>
 </html>

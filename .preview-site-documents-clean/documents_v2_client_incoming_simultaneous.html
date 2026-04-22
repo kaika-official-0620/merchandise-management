@@ -1,43 +1,61 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1. クライアントから受付 - 同時出品</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
-    </div>
-    <div class="page-head">
-      <div>
-        <h1>1. クライアントから受付</h1>
-        <p>同時出品の申請だけを確認します。</p>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>1. クライアントから受付 - 同時出品</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>1. クライアントから受付</h1>
+          <p>最初の画面ではクライアント名ごとに、何の商品が何件届いているかを一覧で確認します。クライアント名を開くと、商品ごとの詳細・状態更新・受付不可通知が行えます。</p>
+        </div>
       </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>クライアント別の受付一覧</h3>
+            <p class="section-note">商品一覧を縦に並べず、まずはクライアント単位で確認できる形にしています。サービスを切り替えても同じ見え方で確認できます。</p>
+          </div>
+        </div>
+        <div class="service-tabs"><a class="service-tab" href="documents_v2_client_incoming.html">すべて</a><a class="service-tab" href="documents_v2_client_incoming_wholesale.html">業者卸販売</a><a class="service-tab" href="documents_v2_client_incoming_auction.html">業者オークション</a><a class="service-tab is-active" href="documents_v2_client_incoming_simultaneous.html">同時出品</a></div>
+        <div class="summary-grid">
+
+<div class="summary-card">
+  <div class="summary-head">
+    <div>
+      <div class="summary-client">高橋 愛</div>
+      <div class="summary-meta">REQ-2026-037 / 受付日 2026/04/16 / 同時出品</div>
     </div>
-    <div class="section">
-      <div class="service-tabs">
-        <a class="service-tab" href="documents_v2_client_incoming.html">すべて</a>
-        <a class="service-tab" href="documents_v2_client_incoming_wholesale.html">業者卸販売</a>
-        <a class="service-tab" href="documents_v2_client_incoming_auction.html">業者オークション</a>
-        <a class="service-tab is-active" href="documents_v2_client_incoming_simultaneous.html">同時出品</a>
-      </div>
-      <div class="origin-items">
-        <div class="origin-card">
-          <div class="origin-head">
-            <div><div class="client-title">高橋 愛</div><div class="origin-meta">REQ-2026-036 / 同時出品</div></div>
-            <span class="pill approved">認証済み</span>
-          </div>
-          <div class="origin-product-list">
-            <div class="origin-product"><div class="product-thumb has-image"><img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ"><div class="product-thumb-caption">申請画像 / セリーヌ ラゲージ</div></div><div class="origin-product-body"><div class="product-title">セリーヌ ラゲージ</div><div class="origin-meta">見積依頼書 / 次の流れ: 売却時のみ返送書類へ反映</div><div class="origin-product-links"><a href="documents_v2_product_detail_celine_luggage.html">商品詳細</a></div></div></div>
-          </div>
-          <div class="card-actions" style="margin-top:16px;"><a class="btn btn-soft" href="documents_v2_request_detail_takahashi.html">詳細を確認する</a></div>
+    <span class="pill payment">入金待ち</span>
+  </div>
+  <div class="summary-card-grid">
+    <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">1点</div></div>
+    <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+    <div class="field-block"><div class="field-label">商品名</div><div class="field-value">セリーヌ ラゲージ ナノ</div></div>
+    <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-soft" href="documents_v2_request_detail_takahashi.html">詳細を確認する</a>
+  </div>
+</div>
+
         </div>
       </div>
     </div>
-  </div>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

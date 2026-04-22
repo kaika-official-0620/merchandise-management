@@ -1,185 +1,118 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1. クライアントから受付</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
-    </div>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>1. クライアントから受付 - すべてのサービス</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
 
-    <div class="page-head">
-      <div>
-        <h1>1. クライアントから受付</h1>
-        <p>クライアントからどのサービスでどの商品が届いたかを、申請画像と商品詳細込みで確認する段階です。状態更新は詳細画面で行います。</p>
-      </div>
-      <div class="mini-actions">
-        <button class="mini-toggle" type="button" onclick="togglePanel('client-point')">確認ポイント</button>
-        <button class="mini-toggle" type="button" onclick="togglePanel('client-status')">現在の状況</button>
-      </div>
-    </div>
+    </head>
+    <body>
 
-    <div id="client-point" class="mini-panel" hidden>
-      <ul>
-        <li>依頼してきた商品を画像・商品詳細まで含めて確認する</li>
-        <li>状態更新は「詳細を確認する」から認証済み / 査定中 / 入金待ちを切り替える</li>
-        <li>受付不可の商品は、詳細画面からクライアントへ通知する</li>
-      </ul>
-    </div>
-    <div id="client-status" class="mini-panel" hidden>
-      <ul>
-        <li>進行中案件 4件</li>
-        <li>業者卸販売 2件 / 業者オークション 1件 / 同時出品 1件</li>
-      </ul>
-    </div>
+    <div class="page">
 
-    <div class="section">
-      <div class="section-head">
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>サービス別に確認する</h3>
-          <p class="section-note">サービスごとに切り替えても、依頼書・申請画像・商品詳細・次の流れは同じ粒度で確認できます。</p>
+          <h1>1. クライアントから受付</h1>
+          <p>最初の画面ではクライアント名ごとに、何の商品が何件届いているかを一覧で確認します。クライアント名を開くと、商品ごとの詳細・状態更新・受付不可通知が行えます。</p>
         </div>
       </div>
-      <div class="service-tabs">
-        <a class="service-tab is-active" href="documents_v2_client_incoming.html">すべて</a>
-        <a class="service-tab" href="documents_v2_client_incoming_wholesale.html">業者卸販売</a>
-        <a class="service-tab" href="documents_v2_client_incoming_auction.html">業者オークション</a>
-        <a class="service-tab" href="documents_v2_client_incoming_simultaneous.html">同時出品</a>
-      </div>
-
-      <div class="origin-items">
-        <div class="origin-card">
-          <div class="origin-head">
-            <div>
-              <div class="client-title">山田 太郎</div>
-              <div class="origin-meta">REQ-2026-041 / 業者卸販売 / 受付日 2026/04/20</div>
-            </div>
-            <span class="pill approved">認証済み</span>
-          </div>
-          <div class="origin-product-list">
-            <div class="origin-product">
-              <div class="product-thumb has-image">
-                <img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ">
-                <div class="product-thumb-caption">申請画像 / ルイヴィトン アルマ</div>
-              </div>
-              <div class="origin-product-body">
-                <div class="product-title">ルイヴィトン アルマ</div>
-                <div class="origin-meta">見積依頼書 / 買取依頼書 / 次の流れ: 業者卸販売へ進行確認</div>
-                <div class="origin-product-links">
-                  <a href="documents_v2_product_detail_lv_alma.html">商品詳細</a>
-                </div>
-              </div>
-            </div>
-            <div class="origin-product">
-              <div class="product-thumb has-image">
-                <img src="static/img_chanel_wallet.svg" alt="シャネル マトラッセ 長財布">
-                <div class="product-thumb-caption">申請画像 / シャネル 長財布</div>
-              </div>
-              <div class="origin-product-body">
-                <div class="product-title">シャネル マトラッセ 長財布</div>
-                <div class="origin-meta">見積依頼書 / 買取依頼書 / 次の流れ: 認証状態を詳細で確認</div>
-                <div class="origin-product-links">
-                  <a href="documents_v2_product_detail_chanel_wallet.html">商品詳細</a>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="card-actions" style="margin-top:16px;">
-            <a class="btn btn-soft" href="documents_v2_request_detail_yamada.html">詳細を確認する</a>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>クライアント別の受付一覧</h3>
+            <p class="section-note">商品一覧を縦に並べず、まずはクライアント単位で確認できる形にしています。サービスを切り替えても同じ見え方で確認できます。</p>
           </div>
         </div>
+        <div class="service-tabs"><a class="service-tab is-active" href="documents_v2_client_incoming.html">すべて</a><a class="service-tab" href="documents_v2_client_incoming_wholesale.html">業者卸販売</a><a class="service-tab" href="documents_v2_client_incoming_auction.html">業者オークション</a><a class="service-tab" href="documents_v2_client_incoming_simultaneous.html">同時出品</a></div>
+        <div class="summary-grid">
 
-        <div class="origin-card">
-          <div class="origin-head">
-            <div>
-              <div class="client-title">佐藤 花子</div>
-              <div class="origin-meta">REQ-2026-039 / 業者卸販売 / 受付日 2026/04/18</div>
-            </div>
-            <span class="pill pending">認証待ち</span>
-          </div>
-          <div class="origin-product-list">
-            <div class="origin-product">
-              <div class="product-thumb has-image">
-                <img src="static/img_hermes_scarf.svg" alt="エルメス スカーフ">
-                <div class="product-thumb-caption">申請画像 / エルメス スカーフ</div>
-              </div>
-              <div class="origin-product-body">
-                <div class="product-title">エルメス スカーフ</div>
-                <div class="origin-meta">見積依頼書 / 買取依頼書 / 次の流れ: 受付可否を確認</div>
-                <div class="origin-product-links">
-                  <a href="documents_v2_product_detail_hermes_scarf.html">商品詳細</a>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="card-actions" style="margin-top:16px;">
-            <a class="btn btn-soft" href="documents_v2_request_detail_sato.html">詳細を確認する</a>
-          </div>
-        </div>
+<div class="summary-card">
+  <div class="summary-head">
+    <div>
+      <div class="summary-client">山田 太郎</div>
+      <div class="summary-meta">REQ-2026-041 / 受付日 2026/04/20 / すべてのサービス</div>
+    </div>
+    <span class="pill appraising">査定中</span>
+  </div>
+  <div class="summary-card-grid">
+    <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">2点</div></div>
+    <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+    <div class="field-block"><div class="field-label">商品名</div><div class="field-value">ルイヴィトン アルマ BB / シャネル マトラッセ 長財布</div></div>
+    <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-soft" href="documents_v2_request_detail_yamada.html">詳細を確認する</a>
+  </div>
+</div>
 
-        <div class="origin-card">
-          <div class="origin-head">
-            <div>
-              <div class="client-title">鈴木 一郎</div>
-              <div class="origin-meta">REQ-2026-038 / 業者オークション / 受付日 2026/04/17</div>
-            </div>
-            <span class="pill approved">認証済み</span>
-          </div>
-          <div class="origin-product-list">
-            <div class="origin-product">
-              <div class="product-thumb has-image">
-                <img src="static/img_rolex_dj.svg" alt="ロレックス デイトジャスト">
-                <div class="product-thumb-caption">申請画像 / ロレックス</div>
-              </div>
-              <div class="origin-product-body">
-                <div class="product-title">ロレックス デイトジャスト</div>
-                <div class="origin-meta">見積依頼書 / 次の流れ: オークション出品へ進行</div>
-                <div class="origin-product-links">
-                  <a href="documents_v2_product_detail_rolex.html">商品詳細</a>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="card-actions" style="margin-top:16px;">
-            <a class="btn btn-soft" href="documents_v2_request_detail_suzuki.html">詳細を確認する</a>
-          </div>
-        </div>
+<div class="summary-card">
+  <div class="summary-head">
+    <div>
+      <div class="summary-client">佐藤 花子</div>
+      <div class="summary-meta">REQ-2026-039 / 受付日 2026/04/18 / すべてのサービス</div>
+    </div>
+    <span class="pill appraising">査定中</span>
+  </div>
+  <div class="summary-card-grid">
+    <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">1点</div></div>
+    <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+    <div class="field-block"><div class="field-label">商品名</div><div class="field-value">エルメス カレ90 スカーフ</div></div>
+    <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-soft" href="documents_v2_request_detail_sato.html">詳細を確認する</a>
+  </div>
+</div>
 
-        <div class="origin-card">
-          <div class="origin-head">
-            <div>
-              <div class="client-title">高橋 愛</div>
-              <div class="origin-meta">REQ-2026-036 / 同時出品 / 受付日 2026/04/15</div>
-            </div>
-            <span class="pill approved">認証済み</span>
-          </div>
-          <div class="origin-product-list">
-            <div class="origin-product">
-              <div class="product-thumb has-image">
-                <img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ">
-                <div class="product-thumb-caption">申請画像 / セリーヌ ラゲージ</div>
-              </div>
-              <div class="origin-product-body">
-                <div class="product-title">セリーヌ ラゲージ</div>
-                <div class="origin-meta">見積依頼書 / 次の流れ: 売却時のみ返送書類へ反映</div>
-                <div class="origin-product-links">
-                  <a href="documents_v2_product_detail_celine_luggage.html">商品詳細</a>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="card-actions" style="margin-top:16px;">
-            <a class="btn btn-soft" href="documents_v2_request_detail_takahashi.html">詳細を確認する</a>
-          </div>
+<div class="summary-card">
+  <div class="summary-head">
+    <div>
+      <div class="summary-client">鈴木 一郎</div>
+      <div class="summary-meta">REQ-2026-038 / 受付日 2026/04/17 / すべてのサービス</div>
+    </div>
+    <span class="pill approved">認証済み</span>
+  </div>
+  <div class="summary-card-grid">
+    <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">1点</div></div>
+    <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+    <div class="field-block"><div class="field-label">商品名</div><div class="field-value">ロレックス デイトジャスト 36</div></div>
+    <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-soft" href="documents_v2_request_detail_suzuki.html">詳細を確認する</a>
+  </div>
+</div>
+
+<div class="summary-card">
+  <div class="summary-head">
+    <div>
+      <div class="summary-client">高橋 愛</div>
+      <div class="summary-meta">REQ-2026-037 / 受付日 2026/04/16 / すべてのサービス</div>
+    </div>
+    <span class="pill payment">入金待ち</span>
+  </div>
+  <div class="summary-card-grid">
+    <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">1点</div></div>
+    <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+    <div class="field-block"><div class="field-label">商品名</div><div class="field-value">セリーヌ ラゲージ ナノ</div></div>
+    <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
+  </div>
+  <div class="card-actions">
+    <a class="btn btn-soft" href="documents_v2_request_detail_takahashi.html">詳細を確認する</a>
+  </div>
+</div>
+
         </div>
       </div>
     </div>
-  </div>
-  <script src="static/preview_v2.js"></script>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

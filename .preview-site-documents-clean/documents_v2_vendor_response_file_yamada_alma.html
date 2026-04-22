@@ -1,59 +1,66 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>回答ファイル確認 - 山田 太郎 / ルイヴィトン アルマ</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_vendor_incoming.html">1個前に戻る</a>
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-    </div>
-    <div class="section">
-      <div class="section-head">
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>2026/04/08 ブランドセンター 回答書 No.041</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>回答ファイル確認</h3>
-          <p class="section-note">山田 太郎さんの「ルイヴィトン アルマ」に紐づく回答ファイルを確認し、そのまま4番の返送書類へつなげる想定です。</p>
+          <h1>2026/04/08 ブランドセンター 回答書 No.041</h1>
+          <p>ブランドセンター から届いた回答ファイルを開き、商品ごとにどのクライアントへ返送するかを決める画面です。</p>
         </div>
       </div>
-      <div class="viewer-shell">
-        <div class="viewer-side">
-          <div class="viewer-meta">
-            <div class="field-block"><div class="field-label">クライアント</div><div class="field-value">山田 太郎</div></div>
-            <div class="field-block"><div class="field-label">商品名</div><div class="field-value">ルイヴィトン アルマ</div></div>
-            <div class="field-block"><div class="field-label">受領月</div><div class="field-value">2026年4月</div></div>
-            <div class="field-block"><div class="field-label">業者名</div><div class="field-value">東京業者センター</div></div>
-            <div class="field-block"><div class="field-label">売却額</div><div class="field-value">¥82,000</div></div>
-            <div class="field-block"><div class="field-label">次の処理</div><div class="field-value">4番で山田 太郎さんの返送書類へ反映</div></div>
-          </div>
-          <div class="viewer-links">
-            <a class="btn btn-primary" href="documents_v2_client_delivery_yamada.html">4番へ反映する</a>
-            <a class="btn btn-outline" href="documents_v2_product_detail_lv_alma.html">商品詳細を開く</a>
+      <div class="two-col">
+        <div class="section">
+          <div class="section-head"><h3>ファイルの中身を確認</h3></div>
+          <div class="file-preview">
+            <div class="file-preview-head">回答ファイル プレビュー</div>
+            <table class="simple-table">
+              <thead><tr><th>No.</th><th>商品名</th><th>売却額</th><th>結果</th></tr></thead>
+              <tbody><tr><td>1</td><td>ルイヴィトン アルマ BB</td><td>¥185,000</td><td>成約</td></tr></tbody>
+            </table>
           </div>
         </div>
-        <div class="viewer-preview">
-          <div class="viewer-image">
-            <h2>業者回答ファイル</h2>
-            <div class="viewer-doc-head">
-              <div>東京業者センター<br>回答日 2026/04/20</div>
-              <div>No. VND-2026-041-A</div>
-            </div>
-            <div class="viewer-items">
-              <div class="viewer-item">
-                <strong>ルイヴィトン アルマ</strong>
-                <div>ブランド: Louis Vuitton</div>
-                <div>状態: 査定済み</div>
-                <div>提示額: ¥82,000</div>
-              </div>
-            </div>
-            <div class="inline-notice">この商品は山田 太郎さんの返送書類へ反映する想定です。4番へ進むと売却額を確認しながら買取明細書を作成できます。</div>
-          </div>
+        <div class="section">
+          <div class="section-head"><h3>4番へ振り分ける</h3></div>
+          <table class="simple-table">
+            <thead><tr><th>No.</th><th>商品名</th><th>売却額</th><th>結果</th><th>返送先クライアント</th><th>操作</th></tr></thead>
+            <tbody>
+        <tr>
+          <td>1</td>
+          <td>ルイヴィトン アルマ BB</td>
+          <td>¥185,000</td>
+          <td>成約</td>
+          <td>
+            <input class="assign-input" list="client-list-lv_alma" id="assign-lv_alma" value="山田 太郎" placeholder="クライアント名を検索">
+            <datalist id="client-list-lv_alma"><option value="山田 太郎"></option><option value="佐藤 花子"></option><option value="鈴木 一郎"></option><option value="高橋 愛"></option></datalist>
+          </td>
+          <td>
+            <button class="btn btn-soft" type="button" onclick="assignClient('assign-lv_alma','assign-note-lv_alma','ルイヴィトン アルマ BB')">振り分ける</button>
+          </td>
+        </tr>
+        <tr class="note-row">
+          <td colspan="6"><p id="assign-note-lv_alma" class="inline-note">この商品は 4番でクライアント返送書類を作るための候補です。</p></td>
+        </tr>
+        </tbody>
+          </table>
         </div>
       </div>
     </div>
-  </div>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

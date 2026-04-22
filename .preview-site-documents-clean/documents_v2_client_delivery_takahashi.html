@@ -1,70 +1,62 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>返送内容確認 - 高橋 愛</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_client_outgoing.html">1個前に戻る</a>
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-    </div>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>高橋 愛 さんへの返送内容</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
 
-    <div class="section">
-      <div class="section-head">
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>高橋 愛さんへの返送内容</h3>
-          <p class="section-note">同時出品で売却済みの商品のみを返送書類へ載せます。キャンセル済み商品は確認のみで、書類には反映しません。</p>
+          <h1>高橋 愛 さんへの返送内容</h1>
+          <p>ここでどの商品を返送書類に含めるかを確認し、買取明細書へ進みます。</p>
         </div>
       </div>
-
-      <div class="origin-product-list">
-        <div class="origin-product">
-          <div class="product-thumb has-image">
-            <img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ">
-            <div class="product-thumb-caption">申請画像 / セリーヌ ラゲージ</div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>返送する商品</h3>
+            <p class="section-note">キャンセル済みの商品は含めず、売却済みの商品のみを返送対象にします。</p>
           </div>
-          <div class="origin-product-body">
-            <div class="product-title">セリーヌ ラゲージ</div>
-            <div class="origin-meta">同時出品 / 売却済み / 78,000円</div>
-            <div class="origin-product-links">
-              <a href="documents_v2_product_detail_celine_luggage.html">商品詳細</a>
+        </div>
+        <div class="stack">
+        <div class="product-card">
+          <div class="product-thumb">
+            <img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ ナノ">
+          </div>
+          <div class="product-body">
+            <div class="product-top">
+              <div>
+                <div class="product-title">セリーヌ ラゲージ ナノ</div>
+                <div class="product-meta">同時出品 / 同時出品 売却完了</div>
+              </div>
+              <span class="pill payment">返送予定</span>
             </div>
-            <div class="row">
-              <div class="field">
-                <label>商品メモ</label>
-                <input type="text" value="同時出品で売却済み">
-              </div>
-              <div class="field">
-                <label>売却額</label>
-                <input id="takahashi-amount-1" type="number" value="78000">
-              </div>
+            <div class="detail-grid">
+              <div class="field-block"><div class="field-label">売却額</div><div class="field-value">¥148,000</div></div>
+              <div class="field-block"><div class="field-label">商品詳細</div><div class="field-value"><a href="documents_v2_product_detail_celine_luggage.html">商品詳細を見る</a></div></div>
+              <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書へ反映</div></div>
             </div>
           </div>
         </div>
-
-        <div class="origin-product">
-          <div class="product-thumb has-image">
-            <img src="static/img_apparel_set.svg" alt="アパレル2点">
-            <div class="product-thumb-caption">申請画像 / アパレル2点</div>
-          </div>
-          <div class="origin-product-body">
-            <div class="product-title">アパレル 2点</div>
-            <div class="origin-meta">キャンセル済み / 書類には反映しない</div>
-            <div class="origin-product-links">
-              <a href="documents_v2_request_detail_takahashi.html">申請詳細を確認</a>
-            </div>
-          </div>
         </div>
-      </div>
-
-      <div class="card-actions" style="margin-top:16px;">
-        <a class="btn btn-primary" href="documents_v2_client_statement_template_takahashi.html">買取明細書テンプレートへ反映する</a>
+        <div class="card-actions" style="margin-top: 18px;">
+          <a class="btn btn-primary" href="documents_v2_client_statement_template_takahashi.html">買取明細書を作成する</a>
+        </div>
       </div>
     </div>
-  </div>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

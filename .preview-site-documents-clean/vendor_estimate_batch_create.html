@@ -1,67 +1,64 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>業者向け見積依頼書作成</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_vendor_outgoing.html">1個前に戻る</a>
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-    </div>
-    <div class="section">
-      <div class="section-head">
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>見積依頼書を作成する</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>業者向け見積依頼書を作成</h3>
-          <p class="section-note">送付先業者を決め、どの商品を今回の見積依頼書へ載せるかを確認して、既存テンプレートへ差し込みます。</p>
+          <h1>見積依頼書を作成する</h1>
+          <p>ここでは、業者へ流したい商品をチェックして既存の見積依頼書テンプレートへ差し込みます。件名や本文ではなく、商品・送付先・テンプレートだけを整える形です。</p>
         </div>
       </div>
+      <div class="two-col">
+        <div class="section">
+          <div class="section-head"><h3>見積依頼書に入れる商品</h3></div>
+          <div class="select-grid">
+        <label class="select-row">
+          <input class="vendor-check" type="checkbox" data-product="ルイヴィトン アルマ BB" data-summary="山田 太郎 / ルイヴィトン アルマ BB / Louis Vuitton">
+          <span class="select-main">山田 太郎 / ルイヴィトン アルマ BB</span>
+          <span class="select-sub">Louis Vuitton / 商品ID KAIKA-101</span>
+        </label>
 
-      <div class="summary-grid">
-        <div class="field-block"><div class="field-label">送付先業者</div><div class="field-value">東京業者センター</div></div>
-        <div class="field-block"><div class="field-label">書類種別</div><div class="field-value">見積依頼書</div></div>
-        <div class="field-block"><div class="field-label">対象クライアント</div><div class="field-value">山田 太郎</div></div>
-        <div class="field-block"><div class="field-label">対象商品数</div><div class="field-value">2商品</div></div>
-      </div>
-
-      <div class="origin-product-list">
-        <div class="origin-product">
-          <div class="product-thumb has-image">
-            <img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ">
-            <div class="product-thumb-caption">申請画像 / ルイヴィトン アルマ</div>
+        <label class="select-row">
+          <input class="vendor-check" type="checkbox" data-product="エルメス カレ90 スカーフ" data-summary="佐藤 花子 / エルメス カレ90 スカーフ / HERMES">
+          <span class="select-main">佐藤 花子 / エルメス カレ90 スカーフ</span>
+          <span class="select-sub">HERMES / 商品ID KAIKA-201</span>
+        </label>
+        </div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h3>見積依頼書の設定</h3></div>
+          <div class="form-grid">
+            <label class="field"><span>送付先業者</span><select><option>選択してください</option><option>ブランドセンター</option><option>ブランド市場</option><option>Luxe Gate</option></select></label>
+            <label class="field"><span>書類種別</span><select><option>見積依頼書</option></select></label>
+            <label class="field field-wide"><span>備考</span><textarea rows="4" placeholder="必要な場合だけ備考を入力"></textarea></label>
           </div>
-          <div class="origin-product-body">
-            <div class="product-title">山田 太郎 / ルイヴィトン アルマ</div>
-            <div class="origin-meta">バッグ / 業者卸販売 / 東京業者センターへ送付</div>
-            <div class="origin-product-links">
-              <a href="documents_v2_product_detail_lv_alma.html">商品詳細</a>
-            </div>
+          <div class="mini-panel">
+            <strong>選択中の商品</strong>
+            <div id="vendor-selected-summary" style="margin-top:8px;color:#475569;">まだ商品を選択していません</div>
+          </div>
+          <div class="card-actions" style="margin-top: 16px;">
+            <a class="btn btn-outline" href="vendor_partner_registry.html">送付先業者を登録・編集する</a>
+            <a class="btn btn-primary" href="documents_v2_vendor_estimate_template.html">テンプレートへ差し込む</a>
           </div>
         </div>
-        <div class="origin-product">
-          <div class="product-thumb has-image">
-            <img src="static/img_chanel_wallet.svg" alt="シャネル マトラッセ 長財布">
-            <div class="product-thumb-caption">申請画像 / シャネル 長財布</div>
-          </div>
-          <div class="origin-product-body">
-            <div class="product-title">山田 太郎 / シャネル マトラッセ 長財布</div>
-            <div class="origin-meta">財布 / 業者卸販売 / 東京業者センターへ送付</div>
-            <div class="origin-product-links">
-              <a href="documents_v2_product_detail_chanel_wallet.html">商品詳細</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card-actions" style="margin-top:16px;">
-        <a class="btn btn-soft" href="vendor_partner_registry.html">送付先業者を追加・編集する</a>
-        <a class="btn btn-primary" href="documents_v2_vendor_estimate_template.html">見積依頼書テンプレートを開く</a>
-        <a class="btn btn-outline" href="vendor_estimate_cancel_preview.html">書類作成をキャンセル</a>
       </div>
     </div>
-  </div>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

@@ -1,149 +1,95 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3. 業者から回答受領</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
-    </div>
-    <div class="page-head">
-      <div>
-        <h1>3. 業者から回答受領</h1>
-        <p>業者から届いた回答ファイルを登録し、商品ごとに内容を確認したうえで、4番のクライアント返送へ振り分けます。</p>
-      </div>
-    </div>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>3. 業者から回答受領</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
 
-    <div class="section">
-      <div class="section-head">
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>回答ファイルを登録する</h3>
-          <p class="section-note">ファイルを登録したあと、そのまま新しいタブで内容を開いて商品ごとに確認できるようにしています。</p>
+          <h1>3. 業者から回答受領</h1>
+          <p>月に1件ではなく、取引ごとの回答ファイルを1件ずつ登録して確認します。ファイルを開くと、商品ごとにどのクライアントへ返送するかを振り分けられます。</p>
         </div>
       </div>
-
-      <div class="upload-form">
-        <div class="upload-row">
-          <div class="file-wrap">
-            <label>回答ファイル</label>
-            <input id="vendor-file" type="file">
-          </div>
-          <div class="field">
-            <label>受領月</label>
-            <select id="vendor-file-month">
-              <option>2026年4月</option>
-              <option>2026年3月</option>
-              <option>2026年2月</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>&nbsp;</label>
-            <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>回答ファイルを登録する</h3>
+            <p class="section-note">ファイル選択と登録ボタンは枠内に収まるようにし、登録後は同じ一覧に増えていくイメージです。</p>
           </div>
         </div>
-        <div id="vendor-file-notice" class="inline-notice" hidden></div>
+        <div class="form-inline">
+          <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
+          <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
+          <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
+        </div>
+        <p id="vendor-file-notice" class="inline-notice" hidden></p>
       </div>
-
-      <div class="response-batch-list">
-        <div class="response-batch">
-          <div class="response-batch-head">
-            <div>
-              <div class="response-batch-title">2026年4月 1回目 / 東京業者センター</div>
-              <div class="response-batch-meta">回答ファイル No. VND-2026-041 / 山田 太郎さんの 2商品</div>
-            </div>
-            <span class="pill ready">確認済み</span>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>登録済みの回答ファイル</h3>
+            <p class="section-note">ファイルごとに開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
           </div>
-          <div class="response-line-list">
-            <div class="response-line">
-              <div class="response-line-head">
-                <div>
-                  <div class="response-line-title">山田 太郎 / ルイヴィトン アルマ</div>
-                  <div class="response-line-meta">売却額 82,000円 / 4番では山田 太郎さんの返送書類へ振り分け</div>
-                </div>
-                <span class="pill ready">返送対象</span>
-              </div>
-              <div class="response-line-actions">
-                <a href="documents_v2_vendor_response_file_yamada_alma.html" target="_blank" rel="noopener noreferrer">ファイルを開く</a>
-                <a href="documents_v2_client_delivery_yamada.html">4番へ振り分ける</a>
-                <a href="documents_v2_product_detail_lv_alma.html">商品詳細を見る</a>
-              </div>
+        </div>
+        <div class="stack">
+        <div class="file-card">
+          <div class="file-head">
+            <div>
+              <div class="file-title">2026/04/08 ブランドセンター 回答書 No.041</div>
+              <div class="file-meta">ブランドセンター / 2026/04 / 商品 1点</div>
             </div>
-            <div class="response-line">
-              <div class="response-line-head">
-                <div>
-                  <div class="response-line-title">山田 太郎 / シャネル マトラッセ 長財布</div>
-                  <div class="response-line-meta">売却額 56,000円 / 4番では山田 太郎さんの返送書類へ振り分け</div>
-                </div>
-                <span class="pill ready">返送対象</span>
-              </div>
-              <div class="response-line-actions">
-                <a href="documents_v2_vendor_response_file_yamada_wallet.html" target="_blank" rel="noopener noreferrer">ファイルを開く</a>
-                <a href="documents_v2_client_delivery_yamada.html">4番へ振り分ける</a>
-                <a href="documents_v2_product_detail_chanel_wallet.html">商品詳細を見る</a>
-              </div>
-            </div>
+            <span class="pill approved">回答受領</span>
+          </div>
+          <p class="section-note">ルイヴィトン アルマ BB</p>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_vendor_response_file_yamada_alma.html">ファイルを開く</a>
           </div>
         </div>
 
-        <div class="response-batch">
-          <div class="response-batch-head">
+        <div class="file-card">
+          <div class="file-head">
             <div>
-              <div class="response-batch-title">2026年4月 2回目 / ブランド市場</div>
-              <div class="response-batch-meta">回答ファイル No. VND-2026-042 / 高橋 愛さんの 1商品</div>
+              <div class="file-title">2026/04/21 Luxe Gate 回答書 No.053</div>
+              <div class="file-meta">Luxe Gate / 2026/04 / 商品 1点</div>
             </div>
-            <span class="pill pending">振り分け待ち</span>
+            <span class="pill approved">回答受領</span>
           </div>
-          <div class="response-line-list">
-            <div class="response-line">
-              <div class="response-line-head">
-                <div>
-                  <div class="response-line-title">高橋 愛 / セリーヌ ラゲージ</div>
-                  <div class="response-line-meta">売却額 78,000円 / 4番では高橋 愛さんの返送書類へ振り分け</div>
-                </div>
-                <span class="pill pending">未反映</span>
-              </div>
-              <div class="response-line-actions">
-                <a href="documents_v2_vendor_response_file_takahashi_celine.html" target="_blank" rel="noopener noreferrer">ファイルを開く</a>
-                <a href="documents_v2_client_delivery_takahashi.html">4番へ振り分ける</a>
-                <a href="documents_v2_product_detail_celine_luggage.html">商品詳細を見る</a>
-              </div>
-            </div>
+          <p class="section-note">シャネル マトラッセ 長財布</p>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_vendor_response_file_yamada_wallet.html">ファイルを開く</a>
           </div>
         </div>
 
-        <div class="response-batch">
-          <div class="response-batch-head">
+        <div class="file-card">
+          <div class="file-head">
             <div>
-              <div class="response-batch-title">2026年3月 1回目 / ブランド市場</div>
-              <div class="response-batch-meta">回答ファイル No. VND-2026-039 / 佐藤 花子さんの 1商品</div>
+              <div class="file-title">2026/04/15 ブランド市場 回答書 No.052</div>
+              <div class="file-meta">ブランド市場 / 2026/04 / 商品 1点</div>
             </div>
-            <span class="pill ready">確認済み</span>
+            <span class="pill approved">回答受領</span>
           </div>
-          <div class="response-line-list">
-            <div class="response-line">
-              <div class="response-line-head">
-                <div>
-                  <div class="response-line-title">佐藤 花子 / エルメス スカーフ</div>
-                  <div class="response-line-meta">売却額 24,000円 / 返送対象にするかをここで判断</div>
-                </div>
-                <span class="pill ready">確認済み</span>
-              </div>
-              <div class="response-line-actions">
-                <a href="documents_v2_vendor_response_file_sato_scarf.html" target="_blank" rel="noopener noreferrer">ファイルを開く</a>
-                <a href="documents_v2_client_outgoing.html">4番の返送一覧を開く</a>
-                <a href="documents_v2_product_detail_hermes_scarf.html">商品詳細を見る</a>
-              </div>
-            </div>
+          <p class="section-note">エルメス カレ90 スカーフ</p>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_vendor_response_file_sato_scarf.html">ファイルを開く</a>
           </div>
+        </div>
         </div>
       </div>
     </div>
-  </div>
-  <script src="static/preview_v2.js"></script>
-</body>
-</html>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

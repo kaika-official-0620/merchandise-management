@@ -1,148 +1,121 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>4. クライアントへ返送</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
-</head>
-<body>
-  <div class="page">
-    <div class="back-bar">
-      <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
-      <a class="btn btn-outline" href="javascript:history.back()">1個前に戻る</a>
-    </div>
-    <div class="page-head">
-      <div>
-        <h1>4. クライアントへ返送</h1>
-        <p>1番で受け付けた商品と、3番で受領した業者回答を見比べながら、クライアント向けの買取明細書を作成します。</p>
-      </div>
-    </div>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>4. クライアントへ返送</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
 
-    <div class="section">
-      <div class="section-head">
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
         <div>
-          <h3>返送対象のクライアント一覧</h3>
-          <p class="section-note">業者回答の内容を確認したうえで、クライアントごとに売却済み商品だけを選び、買取明細書を作成します。</p>
+          <h1>4. クライアントへ返送</h1>
+          <p>クライアント名ごとに返送対象をまとめ、売却済みの商品だけを選んで買取明細書を作成します。商品名ではなくクライアント名単位で表示します。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>返送対象のクライアント一覧</h3>
+            <p class="section-note">まずクライアント名で見て、そのあと詳細画面でどの商品を返送書類へ乗せるか確認します。</p>
+          </div>
+        </div>
+        <div class="summary-grid">
+
+        <div class="summary-card">
+          <div class="summary-head">
+            <div>
+              <div class="summary-client">山田 太郎</div>
+              <div class="summary-meta">2点 / 業者卸販売</div>
+            </div>
+            <span class="pill payment">返送準備中</span>
+          </div>
+          <div class="summary-card-grid">
+            <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">ルイヴィトン アルマ BB / シャネル マトラッセ 長財布</div></div>
+            <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">¥257,000</div></div>
+            <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
+            <div class="field-block"><div class="field-label">元データ</div><div class="field-value">ブランドセンター 回答書 No.041 / Luxe Gate 回答書 No.053</div></div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery_yamada.html">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template_yamada.html">買取明細書を作成する</a>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-head">
+            <div>
+              <div class="summary-client">佐藤 花子</div>
+              <div class="summary-meta">1点 / 業者卸販売</div>
+            </div>
+            <span class="pill payment">返送準備中</span>
+          </div>
+          <div class="summary-card-grid">
+            <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">エルメス カレ90 スカーフ</div></div>
+            <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">¥58,000</div></div>
+            <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
+            <div class="field-block"><div class="field-label">元データ</div><div class="field-value">ブランド市場 回答書 No.052</div></div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery_sato.html">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template_sato.html">買取明細書を作成する</a>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-head">
+            <div>
+              <div class="summary-client">鈴木 一郎</div>
+              <div class="summary-meta">1点 / 業者オークション</div>
+            </div>
+            <span class="pill payment">返送準備中</span>
+          </div>
+          <div class="summary-card-grid">
+            <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">ロレックス デイトジャスト 36</div></div>
+            <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">¥710,000</div></div>
+            <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
+            <div class="field-block"><div class="field-label">元データ</div><div class="field-value">業者オークション 落札結果</div></div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery_suzuki.html">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template_suzuki.html">買取明細書を作成する</a>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-head">
+            <div>
+              <div class="summary-client">高橋 愛</div>
+              <div class="summary-meta">1点 / 同時出品</div>
+            </div>
+            <span class="pill payment">返送準備中</span>
+          </div>
+          <div class="summary-card-grid">
+            <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">セリーヌ ラゲージ ナノ</div></div>
+            <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">¥148,000</div></div>
+            <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
+            <div class="field-block"><div class="field-label">元データ</div><div class="field-value">同時出品 売却完了</div></div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery_takahashi.html">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template_takahashi.html">買取明細書を作成する</a>
+          </div>
+        </div>
+
         </div>
       </div>
     </div>
 
-    <div class="origin-items">
-      <div class="origin-card">
-        <div class="origin-head">
-          <div>
-            <div class="client-title">山田 太郎</div>
-            <div class="origin-meta">REQ-2026-041 / 業者卸販売 / 2商品売却済み</div>
-          </div>
-          <span class="pill ready">返送準備中</span>
-        </div>
-        <div class="origin-product-list">
-          <div class="origin-product">
-            <div class="product-thumb has-image">
-              <img src="static/img_lv_alma.svg" alt="ルイヴィトン アルマ">
-              <div class="product-thumb-caption">申請画像 / ルイヴィトン アルマ</div>
-            </div>
-            <div class="origin-product-body">
-              <div class="product-title">ルイヴィトン アルマ</div>
-              <div class="origin-meta">売却済み / 業者回答 82,000円</div>
-              <div class="origin-product-links">
-                <a href="documents_v2_product_detail_lv_alma.html">商品詳細</a>
-                <a href="documents_v2_vendor_response_file_yamada_alma.html" target="_blank" rel="noopener noreferrer">業者回答を開く</a>
-              </div>
-            </div>
-          </div>
-          <div class="origin-product">
-            <div class="product-thumb has-image">
-              <img src="static/img_chanel_wallet.svg" alt="シャネル マトラッセ 長財布">
-              <div class="product-thumb-caption">申請画像 / シャネル 長財布</div>
-            </div>
-            <div class="origin-product-body">
-              <div class="product-title">シャネル マトラッセ 長財布</div>
-              <div class="origin-meta">売却済み / 業者回答 56,000円</div>
-              <div class="origin-product-links">
-                <a href="documents_v2_product_detail_chanel_wallet.html">商品詳細</a>
-                <a href="documents_v2_vendor_response_file_yamada_wallet.html" target="_blank" rel="noopener noreferrer">業者回答を開く</a>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card-actions" style="margin-top:16px;">
-          <a class="btn btn-primary" href="documents_v2_client_delivery_yamada.html">返送内容を確認する</a>
-          <a class="btn btn-outline" href="documents_v2_client_statement_template_yamada.html">買取明細書を開く</a>
-        </div>
-      </div>
+    <script src="static/preview_v2.js"></script>
 
-      <div class="origin-card">
-        <div class="origin-head">
-          <div>
-            <div class="client-title">鈴木 一郎</div>
-            <div class="origin-meta">REQ-2026-038 / 業者オークション / 1商品売却済み</div>
-          </div>
-          <span class="pill ready">返送準備中</span>
-        </div>
-        <div class="origin-product-list">
-          <div class="origin-product">
-            <div class="product-thumb has-image">
-              <img src="static/img_rolex_dj.svg" alt="ロレックス デイトジャスト">
-              <div class="product-thumb-caption">申請画像 / ロレックス</div>
-            </div>
-            <div class="origin-product-body">
-              <div class="product-title">ロレックス デイトジャスト</div>
-              <div class="origin-meta">売却済み / 業者回答 498,000円</div>
-              <div class="origin-product-links">
-                <a href="documents_v2_product_detail_rolex.html">商品詳細</a>
-                <a href="documents_v2_client_delivery_suzuki.html">返送内容へ進む</a>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card-actions" style="margin-top:16px;">
-          <a class="btn btn-primary" href="documents_v2_client_delivery_suzuki.html">返送内容を確認する</a>
-          <a class="btn btn-outline" href="documents_v2_client_statement_template_suzuki.html">買取明細書を開く</a>
-        </div>
-      </div>
-
-      <div class="origin-card">
-        <div class="origin-head">
-          <div>
-            <div class="client-title">高橋 愛</div>
-            <div class="origin-meta">REQ-2026-036 / 同時出品 / 売却済み1商品 / キャンセル1商品</div>
-          </div>
-          <span class="pill ready">返送準備中</span>
-        </div>
-        <div class="origin-product-list">
-          <div class="origin-product">
-            <div class="product-thumb has-image">
-              <img src="static/img_celine_luggage.svg" alt="セリーヌ ラゲージ">
-              <div class="product-thumb-caption">申請画像 / セリーヌ ラゲージ</div>
-            </div>
-            <div class="origin-product-body">
-              <div class="product-title">セリーヌ ラゲージ</div>
-              <div class="origin-meta">売却済み / 同時出品 78,000円</div>
-              <div class="origin-product-links">
-                <a href="documents_v2_product_detail_celine_luggage.html">商品詳細</a>
-                <a href="documents_v2_client_delivery_takahashi.html">返送内容へ進む</a>
-              </div>
-            </div>
-          </div>
-          <div class="origin-product">
-            <div class="product-thumb has-image">
-              <img src="static/img_apparel_set.svg" alt="アパレル2点">
-              <div class="product-thumb-caption">申請画像 / アパレル2点</div>
-            </div>
-            <div class="origin-product-body">
-              <div class="product-title">アパレル 2点</div>
-              <div class="origin-meta">キャンセル / 返送書類には含めない</div>
-            </div>
-          </div>
-        </div>
-        <div class="card-actions" style="margin-top:16px;">
-          <a class="btn btn-primary" href="documents_v2_client_delivery_takahashi.html">返送内容を確認する</a>
-          <a class="btn btn-outline" href="documents_v2_client_statement_template_takahashi.html">買取明細書を開く</a>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
+    </body>
+    </html>
