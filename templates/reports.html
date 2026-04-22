@@ -344,6 +344,11 @@
     flex: 1 1 120px;
 }
 
+.report-control[hidden],
+.report-control.report-control--hidden {
+    display: none !important;
+}
+
 .report-control span {
     color: #64748b;
     font-size: 0.82rem;
@@ -950,6 +955,8 @@ function syncReportCardFilters(card) {
 
     if (monthControl) {
         monthControl.hidden = isYearly;
+        monthControl.classList.toggle('report-control--hidden', isYearly);
+        monthControl.style.display = isYearly ? 'none' : '';
     }
 }
 
