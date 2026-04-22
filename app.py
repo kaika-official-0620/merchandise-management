@@ -231,155 +231,751 @@ def hydrate_proxy_service_reflection_state(conn, items):
     return items
 
 
+def ensure_proxy_service_keisan_columns(conn=None, cur=None):
+    managed_conn = False
+    managed_cursor = False
+
+    if conn is None:
+        conn = get_db()
+        managed_conn = True
+    if cur is None:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
+        managed_cursor = True
+
+    try:
+        column_specs = [
+            (
+                'proxy_service_auction_id',
+                "ALTER TABLE user_keisan ADD COLUMN proxy_service_auction_id INTEGER",
+                "ALTER TABLE user_keisan ADD COLUMN proxy_service_auction_id INTEGER",
+            ),
+        ]
+        for column_name, pg_sql, sqlite_sql in column_specs:
+            if _docs_column_exists(cur, 'user_keisan', column_name):
+                continue
+            cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
+        if managed_conn:
+            conn.commit()
+    finally:
+        if managed_cursor:
+            cur.close()
+        if managed_conn:
+            conn.close()
+
+
+def sync_proxy_service_keisan_documents(conn):
+    ensure_proxy_service_keisan_columns(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
+
+    try:
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT k.id,
+                       k.user_id,
+                       k.proxy_service_auction_id,
+                       COUNT(DISTINCT src.auction_id) AS auction_count,
+                       MAX(src.auction_id) AS inferred_auction_id
+                FROM user_keisan k
+                LEFT JOIN user_keisan_items ki ON ki.keisan_id = k.id
+                LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+                LEFT JOIN merchandise src ON src.id = reflected.proxy_parent_item_id
+                WHERE k.is_admin_created = TRUE
+                GROUP BY k.id, k.user_id, k.proxy_service_auction_id
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT k.id,
+                       k.user_id,
+                       k.proxy_service_auction_id,
+                       COUNT(DISTINCT src.auction_id) AS auction_count,
+                       MAX(src.auction_id) AS inferred_auction_id
+                FROM user_keisan k
+                LEFT JOIN user_keisan_items ki ON ki.keisan_id = k.id
+                LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+                LEFT JOIN merchandise src ON src.id = reflected.proxy_parent_item_id
+                WHERE k.is_admin_created = 1
+                GROUP BY k.id, k.user_id, k.proxy_service_auction_id
+                """
+            )
+
+        for raw_doc in cur.fetchall():
+            doc = proxy_service_row_to_dict(raw_doc)
+            inferred_auction_id = doc.get('inferred_auction_id')
+            auction_count = int(doc.get('auction_count') or 0)
+            current_auction_id = doc.get('proxy_service_auction_id')
+            if not inferred_auction_id or auction_count != 1 or current_auction_id == inferred_auction_id:
+                continue
+
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    UPDATE user_keisan
+                    SET proxy_service_auction_id = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (inferred_auction_id, doc['id']),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE user_keisan
+                    SET proxy_service_auction_id = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (inferred_auction_id, doc['id']),
+                )
+
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT id, user_id, proxy_service_auction_id, status, created_at
+                FROM user_keisan
+                WHERE is_admin_created = TRUE
+                  AND proxy_service_auction_id IS NOT NULL
+                  AND status <> 'submitted'
+                ORDER BY created_at ASC, id ASC
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, user_id, proxy_service_auction_id, status, created_at
+                FROM user_keisan
+                WHERE is_admin_created = 1
+                  AND proxy_service_auction_id IS NOT NULL
+                  AND status <> 'submitted'
+                ORDER BY created_at ASC, id ASC
+                """
+            )
+
+        docs_by_group = {}
+        for raw_doc in cur.fetchall():
+            doc = proxy_service_row_to_dict(raw_doc)
+            docs_by_group.setdefault((doc.get('user_id'), doc.get('proxy_service_auction_id')), []).append(doc)
+
+        for group_docs in docs_by_group.values():
+            if len(group_docs) <= 1:
+                continue
+
+            primary_doc = group_docs[0]
+            primary_id = primary_doc['id']
+            duplicate_ids = [doc['id'] for doc in group_docs[1:]]
+            target_ids = [doc['id'] for doc in group_docs]
+
+            if DATABASE_URL:
+                placeholders = ','.join(['%s'] * len(target_ids))
+                cur.execute(
+                    f"""
+                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    FROM user_keisan_items
+                    WHERE keisan_id IN ({placeholders})
+                    ORDER BY keisan_id, item_no
+                    """,
+                    tuple(target_ids),
+                )
+            else:
+                placeholders = ','.join(['?'] * len(target_ids))
+                cur.execute(
+                    f"""
+                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    FROM user_keisan_items
+                    WHERE keisan_id IN ({placeholders})
+                    ORDER BY keisan_id, item_no
+                    """,
+                    tuple(target_ids),
+                )
+
+            combined_items = []
+            seen_merchandise_ids = set()
+            for raw_item in cur.fetchall():
+                item = proxy_service_row_to_dict(raw_item)
+                merchandise_id = item.get('merchandise_id')
+                if merchandise_id:
+                    if merchandise_id in seen_merchandise_ids:
+                        continue
+                    seen_merchandise_ids.add(merchandise_id)
+                combined_items.append(item)
+
+            if DATABASE_URL:
+                cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ANY(%s)", (target_ids,))
+            else:
+                placeholders = ','.join(['?'] * len(target_ids))
+                cur.execute(f"DELETE FROM user_keisan_items WHERE keisan_id IN ({placeholders})", tuple(target_ids))
+
+            total_amount = 0
+            for index, item in enumerate(combined_items, start=1):
+                quantity = int(item.get('quantity') or 1)
+                unit_price = int(item.get('unit_price') or 0)
+                amount = int(item.get('amount') or (quantity * unit_price))
+                total_amount += amount
+                if DATABASE_URL:
+                    cur.execute(
+                        """
+                        INSERT INTO user_keisan_items (
+                            keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            primary_id,
+                            index,
+                            item.get('item_name'),
+                            item.get('merchandise_id'),
+                            quantity,
+                            item.get('unit'),
+                            unit_price,
+                            amount,
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO user_keisan_items (
+                            keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            primary_id,
+                            index,
+                            item.get('item_name'),
+                            item.get('merchandise_id'),
+                            quantity,
+                            item.get('unit'),
+                            unit_price,
+                            amount,
+                        ),
+                    )
+
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    UPDATE user_keisan
+                    SET total_amount = %s,
+                        status = 'draft',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (total_amount, primary_id),
+                )
+                if duplicate_ids:
+                    cur.execute("DELETE FROM user_keisan WHERE id = ANY(%s)", (duplicate_ids,))
+            else:
+                cur.execute(
+                    """
+                    UPDATE user_keisan
+                    SET total_amount = ?,
+                        status = 'draft',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (total_amount, primary_id),
+                )
+                if duplicate_ids:
+                    placeholders = ','.join(['?'] * len(duplicate_ids))
+                    cur.execute(f"DELETE FROM user_keisan WHERE id IN ({placeholders})", tuple(duplicate_ids))
+    finally:
+        cur.close()
+
+
+def get_proxy_service_keisan_status_meta(status):
+    status_map = {
+        'draft': ('下書き', 'draft'),
+        'completed': ('送付準備完了', 'ready'),
+        'submitted': ('送付済み', 'sent'),
+    }
+    return status_map.get((status or 'draft').strip(), ('下書き', 'draft'))
+
+
+def fetch_proxy_service_keisan_doc_map(conn, auction_id=None):
+    ensure_proxy_service_keisan_columns(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        params = []
+        query = """
+            SELECT k.id, k.user_id, k.proxy_service_auction_id, k.document_no, k.issue_date,
+                   k.total_amount, k.status, COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
+            FROM user_keisan k
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+            WHERE k.is_admin_created = TRUE
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = %s"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC, k.id DESC
+        """
+        cur.execute(query, tuple(params))
+    else:
+        cur = conn.cursor()
+        params = []
+        query = """
+            SELECT k.id, k.user_id, k.proxy_service_auction_id, k.document_no, k.issue_date,
+                   k.total_amount, k.status, COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
+            FROM user_keisan k
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+            WHERE k.is_admin_created = 1
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = ?"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC, k.id DESC
+        """
+        cur.execute(query, tuple(params))
+
+    try:
+        doc_map = {}
+        for raw_doc in cur.fetchall():
+            doc = proxy_service_row_to_dict(raw_doc)
+            status_label, status_class = get_proxy_service_keisan_status_meta(doc.get('status'))
+            doc['status_label'] = status_label
+            doc['status_class'] = status_class
+            doc_map.setdefault((doc.get('user_id'), doc.get('proxy_service_auction_id')), doc)
+        return doc_map
+    finally:
+        cur.close()
+
+
+def upsert_proxy_service_keisan_document(
+    conn,
+    *,
+    auction_id,
+    auction_name,
+    winner_user_id,
+    winner_name,
+    reflected_item_id,
+    source_item,
+    amount,
+    now=None,
+    status='draft',
+):
+    now = now or get_jst_now()
+    ensure_proxy_service_keisan_columns(conn)
+
+    subject = f"{auction_name or '代行仕入れサービス'} 計算書"
+    today = now.strftime('%Y-%m-%d')
+    updated_at_value = now.strftime('%Y-%m-%d %H:%M:%S')
+    notes = '\n'.join([
+        '代行仕入れサービスの落札結果から作成した計算書です。',
+        f'オークションID: {auction_id}',
+        f'オークション名: {auction_name or "代行仕入れサービス"}',
+    ])
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        cur = conn.cursor()
+
+    try:
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT id, status
+                FROM user_keisan
+                WHERE user_id = %s
+                  AND is_admin_created = TRUE
+                  AND proxy_service_auction_id = %s
+                  AND status <> 'submitted'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (winner_user_id, auction_id),
+            )
+            keisan = proxy_service_row_to_dict(cur.fetchone())
+        else:
+            cur.execute(
+                """
+                SELECT id, status
+                FROM user_keisan
+                WHERE user_id = ?
+                  AND is_admin_created = 1
+                  AND proxy_service_auction_id = ?
+                  AND status <> 'submitted'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (winner_user_id, auction_id),
+            )
+            keisan = proxy_service_row_to_dict(cur.fetchone())
+
+        created_doc = False
+        item_added = False
+
+        if not keisan:
+            document_no = _generate_prefixed_document_no('AK', 'user_keisan', 'document_no')
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan (
+                        document_no, user_id, issue_date, recipient_name,
+                        subject, total_amount, notes, status, is_admin_created, proxy_service_auction_id
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, TRUE, %s
+                    )
+                    RETURNING id, status
+                    """,
+                    (
+                        document_no,
+                        winner_user_id,
+                        today,
+                        winner_name,
+                        subject,
+                        0,
+                        notes,
+                        status,
+                        auction_id,
+                    ),
+                )
+                keisan = proxy_service_row_to_dict(cur.fetchone())
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan (
+                        document_no, user_id, issue_date, recipient_name,
+                        subject, total_amount, notes, status, is_admin_created, proxy_service_auction_id
+                    ) VALUES (
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?, 1, ?
+                    )
+                    """,
+                    (
+                        document_no,
+                        winner_user_id,
+                        today,
+                        winner_name,
+                        subject,
+                        0,
+                        notes,
+                        status,
+                        auction_id,
+                    ),
+                )
+                keisan = {'id': cur.lastrowid, 'status': status}
+            created_doc = True
+
+        keisan_id = keisan['id']
+
+        if DATABASE_URL:
+            cur.execute(
+                """
+                SELECT id
+                FROM user_keisan_items
+                WHERE keisan_id = %s
+                  AND merchandise_id = %s
+                LIMIT 1
+                """,
+                (keisan_id, reflected_item_id),
+            )
+            existing_item = proxy_service_row_to_dict(cur.fetchone())
+        else:
+            cur.execute(
+                """
+                SELECT id
+                FROM user_keisan_items
+                WHERE keisan_id = ?
+                  AND merchandise_id = ?
+                LIMIT 1
+                """,
+                (keisan_id, reflected_item_id),
+            )
+            existing_item = proxy_service_row_to_dict(cur.fetchone())
+
+        if not existing_item:
+            if DATABASE_URL:
+                cur.execute("SELECT COALESCE(MAX(item_no), 0) AS max_item_no FROM user_keisan_items WHERE keisan_id = %s", (keisan_id,))
+                next_item_no = int((proxy_service_row_to_dict(cur.fetchone()) or {}).get('max_item_no') or 0) + 1
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        keisan_id,
+                        next_item_no,
+                        source_item.get('product_name', '商品'),
+                        reflected_item_id,
+                        1,
+                        '点',
+                        amount,
+                        amount,
+                    ),
+                )
+            else:
+                cur.execute("SELECT COALESCE(MAX(item_no), 0) AS max_item_no FROM user_keisan_items WHERE keisan_id = ?", (keisan_id,))
+                next_item_no = int((proxy_service_row_to_dict(cur.fetchone()) or {}).get('max_item_no') or 0) + 1
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        keisan_id,
+                        next_item_no,
+                        source_item.get('product_name', '商品'),
+                        reflected_item_id,
+                        1,
+                        '点',
+                        amount,
+                        amount,
+                    ),
+                )
+            item_added = True
+
+        if DATABASE_URL:
+            cur.execute("SELECT COALESCE(SUM(amount), 0) AS total_amount FROM user_keisan_items WHERE keisan_id = %s", (keisan_id,))
+            total_amount = int((proxy_service_row_to_dict(cur.fetchone()) or {}).get('total_amount') or 0)
+        else:
+            cur.execute("SELECT COALESCE(SUM(amount), 0) AS total_amount FROM user_keisan_items WHERE keisan_id = ?", (keisan_id,))
+            total_amount = int((proxy_service_row_to_dict(cur.fetchone()) or {}).get('total_amount') or 0)
+
+        next_status = keisan.get('status') or status
+        if item_added and next_status == 'completed':
+            next_status = 'draft'
+        if created_doc:
+            next_status = status
+
+        if DATABASE_URL:
+            cur.execute(
+                """
+                UPDATE user_keisan
+                SET recipient_name = %s,
+                    subject = %s,
+                    total_amount = %s,
+                    notes = %s,
+                    status = %s,
+                    proxy_service_auction_id = %s,
+                    updated_at = %s
+                WHERE id = %s
+                """,
+                (
+                    winner_name,
+                    subject,
+                    total_amount,
+                    notes,
+                    next_status,
+                    auction_id,
+                    updated_at_value,
+                    keisan_id,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE user_keisan
+                SET recipient_name = ?,
+                    subject = ?,
+                    total_amount = ?,
+                    notes = ?,
+                    status = ?,
+                    proxy_service_auction_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    winner_name,
+                    subject,
+                    total_amount,
+                    notes,
+                    next_status,
+                    auction_id,
+                    updated_at_value,
+                    keisan_id,
+                ),
+            )
+    finally:
+        cur.close()
+
+    return {
+        'keisan_id': keisan_id,
+        'created_doc': created_doc,
+        'item_added': item_added,
+    }
+
+
 def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=None):
     now = now or get_jst_now()
     original_item_id = item.get('id')
-    winner_user_id = item.get('winner_user_id')
+    winner_user_id = item.get('winner_user_id') or item.get('highest_bid_user_id')
     winner_name = item.get('winner_name') or item.get('highest_bidder') or ''
     winning_price = int(item.get('result_price') or item.get('highest_bid') or item.get('sale_price') or 0)
+    auction_id = item.get('auction_id')
+    auction_name = item.get('auction_name') or '代行仕入れサービス'
+    note_mode = 'fixed' if item.get('sale_mode') == 'fixed' or item.get('result_code') == 'fixed_sold' else 'auction'
 
     if not original_item_id or not winner_user_id or winning_price <= 0:
         raise ValueError('落札情報が不足しているため、クライアントへ反映できません')
 
-    reflected_notes = append_proxy_service_origin_note(item.get('notes'), original_item_id, mode='auction')
+    reflected_notes = append_proxy_service_origin_note(item.get('notes'), original_item_id, mode=note_mode)
     today = now.strftime('%Y-%m-%d')
     updated_at_value = now.strftime('%Y-%m-%d %H:%M:%S')
-    doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{original_item_id}"
 
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         existing_reflected = lookup_proxy_service_reflected_item(cur, original_item_id, winner_user_id=winner_user_id)
         if existing_reflected:
             if existing_reflected.get('proxy_parent_item_id') != original_item_id:
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE merchandise
                     SET proxy_parent_item_id = %s,
                         updated_by = %s,
                         updated_at = %s
                     WHERE id = %s
-                """, (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']))
-            cur.close()
-            return {
-                'created': False,
-                'reflected_item_id': existing_reflected['id'],
-                'winner_user_id': winner_user_id,
-                'winner_name': winner_name,
-            }
-
-        cur.execute("""
-            INSERT INTO merchandise (
-                user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
-                purchase_price, payment_method, listing_price, expected_shipping,
-                expected_commission, model_number, additional_photos, is_listed, notes,
-                proxy_parent_item_id, updated_by, updated_at
-            ) VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s
-            ) RETURNING id
-        """, (
-            winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
-            item.get('item_condition'), '代行仕入れサービス', '代行仕入れサービス', winning_price, 0,
-            winning_price, '代行仕入れ', item.get('listing_price') or 0, item.get('expected_shipping') or 0,
-            item.get('expected_commission') or 0, item.get('model_number'), item.get('additional_photos'), False, reflected_notes,
-            original_item_id, reflected_by_user_id, updated_at_value
-        ))
-        reflected_item_id = cur.fetchone()['id']
-
-        cur.execute("""
-            INSERT INTO user_keisan (
-                document_no, user_id, issue_date, recipient_name,
-                subject, total_amount, notes, status, is_admin_created
-            ) VALUES (
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s
-            ) RETURNING id
-        """, (
-            doc_no, winner_user_id, today, winner_name,
-            '代行仕入れサービス落札', winning_price,
-            f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_item_id}', 'draft', True
-        ))
-        keisan_id = cur.fetchone()['id']
-
-        cur.execute("""
-            INSERT INTO user_keisan_items (
-                keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (keisan_id, 1, item.get('product_name', '商品'), reflected_item_id, 1, '点', winning_price, winning_price))
+                    """,
+                    (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']),
+                )
+            reflected_item_id = existing_reflected['id']
+            created_reflected_item = False
+        else:
+            cur.execute(
+                """
+                INSERT INTO merchandise (
+                    user_id, purchase_date, photo_path, product_name, brand_name,
+                    item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
+                    purchase_price, payment_method, listing_price, expected_shipping,
+                    expected_commission, model_number, additional_photos, is_listed, notes,
+                    proxy_parent_item_id, updated_by, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s
+                ) RETURNING id
+                """,
+                (
+                    winner_user_id,
+                    today,
+                    item.get('photo_path'),
+                    item.get('product_name'),
+                    item.get('brand_name'),
+                    item.get('item_condition'),
+                    '代行仕入れサービス',
+                    '代行仕入れサービス',
+                    winning_price,
+                    0,
+                    winning_price,
+                    '代行仕入れ',
+                    item.get('listing_price') or 0,
+                    item.get('expected_shipping') or 0,
+                    item.get('expected_commission') or 0,
+                    item.get('model_number'),
+                    item.get('additional_photos'),
+                    False,
+                    reflected_notes,
+                    original_item_id,
+                    reflected_by_user_id,
+                    updated_at_value,
+                ),
+            )
+            reflected_item_id = cur.fetchone()['id']
+            created_reflected_item = True
         cur.close()
     else:
         cur = conn.cursor()
         existing_reflected = lookup_proxy_service_reflected_item(cur, original_item_id, winner_user_id=winner_user_id)
         if existing_reflected:
             if existing_reflected.get('proxy_parent_item_id') != original_item_id:
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE merchandise
                     SET proxy_parent_item_id = ?,
                         updated_by = ?,
                         updated_at = ?
                     WHERE id = ?
-                """, (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']))
-            cur.close()
-            return {
-                'created': False,
-                'reflected_item_id': existing_reflected['id'],
-                'winner_user_id': winner_user_id,
-                'winner_name': winner_name,
-            }
-
-        cur.execute("""
-            INSERT INTO merchandise (
-                user_id, purchase_date, photo_path, product_name, brand_name,
-                item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
-                purchase_price, payment_method, listing_price, expected_shipping,
-                expected_commission, model_number, additional_photos, is_listed, notes,
-                proxy_parent_item_id, updated_by, updated_at
-            ) VALUES (
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?
+                    """,
+                    (original_item_id, reflected_by_user_id, updated_at_value, existing_reflected['id']),
+                )
+            reflected_item_id = existing_reflected['id']
+            created_reflected_item = False
+        else:
+            cur.execute(
+                """
+                INSERT INTO merchandise (
+                    user_id, purchase_date, photo_path, product_name, brand_name,
+                    item_condition, store_name, supplier_detail, wholesale_price, wholesale_fee_rate,
+                    purchase_price, payment_method, listing_price, expected_shipping,
+                    expected_commission, model_number, additional_photos, is_listed, notes,
+                    proxy_parent_item_id, updated_by, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?
+                )
+                """,
+                (
+                    winner_user_id,
+                    today,
+                    item.get('photo_path'),
+                    item.get('product_name'),
+                    item.get('brand_name'),
+                    item.get('item_condition'),
+                    '代行仕入れサービス',
+                    '代行仕入れサービス',
+                    winning_price,
+                    0,
+                    winning_price,
+                    '代行仕入れ',
+                    item.get('listing_price') or 0,
+                    item.get('expected_shipping') or 0,
+                    item.get('expected_commission') or 0,
+                    item.get('model_number'),
+                    item.get('additional_photos'),
+                    0,
+                    reflected_notes,
+                    original_item_id,
+                    reflected_by_user_id,
+                    updated_at_value,
+                ),
             )
-        """, (
-            winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
-            item.get('item_condition'), '代行仕入れサービス', '代行仕入れサービス', winning_price, 0,
-            winning_price, '代行仕入れ', item.get('listing_price') or 0, item.get('expected_shipping') or 0,
-            item.get('expected_commission') or 0, item.get('model_number'), item.get('additional_photos'), 0, reflected_notes,
-            original_item_id, reflected_by_user_id, updated_at_value
-        ))
-        reflected_item_id = cur.lastrowid
-
-        cur.execute("""
-            INSERT INTO user_keisan (
-                document_no, user_id, issue_date, recipient_name,
-                subject, total_amount, notes, status, is_admin_created
-            ) VALUES (
-                ?, ?, ?, ?,
-                ?, ?, ?, ?, ?
-            )
-        """, (
-            doc_no, winner_user_id, today, winner_name,
-            '代行仕入れサービス落札', winning_price,
-            f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_item_id}', 'draft', 1
-        ))
-        keisan_id = cur.lastrowid
-
-        cur.execute("""
-            INSERT INTO user_keisan_items (
-                keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (keisan_id, 1, item.get('product_name', '商品'), reflected_item_id, 1, '点', winning_price, winning_price))
+            reflected_item_id = cur.lastrowid
+            created_reflected_item = True
         cur.close()
 
+    keisan_result = None
+    if auction_id and reflected_item_id:
+        keisan_result = upsert_proxy_service_keisan_document(
+            conn,
+            auction_id=auction_id,
+            auction_name=auction_name,
+            winner_user_id=winner_user_id,
+            winner_name=winner_name,
+            reflected_item_id=reflected_item_id,
+            source_item=item,
+            amount=winning_price,
+            now=now,
+            status='draft',
+        )
+
     return {
-        'created': True,
+        'created': created_reflected_item,
         'reflected_item_id': reflected_item_id,
         'winner_user_id': winner_user_id,
         'winner_name': winner_name,
+        'keisan_id': (keisan_result or {}).get('keisan_id'),
+        'keisan_created': (keisan_result or {}).get('created_doc', False),
+        'keisan_item_added': (keisan_result or {}).get('item_added', False),
     }
 
 
@@ -11816,6 +12412,30 @@ def admin_proxy_service_detail(auction_id):
             now=now,
             current_user_id=current_user.id,
         )
+        keisan_doc_map = fetch_proxy_service_keisan_doc_map(conn, auction_id=auction_id)
+        keisan_summary = {
+            'total_docs': 0,
+            'draft_count': 0,
+            'completed_count': 0,
+            'submitted_count': 0,
+        }
+        for doc in keisan_doc_map.values():
+            keisan_summary['total_docs'] += 1
+            if doc.get('status') == 'submitted':
+                keisan_summary['submitted_count'] += 1
+            elif doc.get('status') == 'completed':
+                keisan_summary['completed_count'] += 1
+            else:
+                keisan_summary['draft_count'] += 1
+
+        for item in result_items:
+            keisan_doc = keisan_doc_map.get((item.get('winner_user_id'), auction_id))
+            item['keisan_doc_id'] = keisan_doc.get('id') if keisan_doc else None
+            item['keisan_doc_no'] = keisan_doc.get('document_no') if keisan_doc else ''
+            item['keisan_status_label'] = keisan_doc.get('status_label') if keisan_doc else ('未作成' if item.get('is_reflected_to_client') else '未反映')
+            item['keisan_status_class'] = keisan_doc.get('status_class') if keisan_doc else ('scheduled' if item.get('is_reflected_to_client') else 'muted')
+            item['keisan_issue_date_display'] = keisan_doc.get('issue_date') if keisan_doc else '-'
+
         items = [item for item in result_items if not item.get('is_sold')]
         auction_state = get_proxy_service_auction_state(settings_dict, now=now)
 
@@ -11831,7 +12451,8 @@ def admin_proxy_service_detail(auction_id):
                              auction_id=auction_id,
                              auction_state=auction_state,
                              result_items=result_items,
-                             result_summary=result_summary)
+                             result_summary=result_summary,
+                             keisan_summary=keisan_summary)
     except Exception as e:
         import traceback
         print(f"Proxy service detail error: {e}")
@@ -12256,364 +12877,301 @@ def admin_proxy_service_bulk_toggle(auction_id):
 @app.route('/admin/proxy-service/history')
 @login_required
 def admin_proxy_service_history():
-    """代行サービス履歴（落札済み商品・入札履歴）"""
+    """代行仕入れサービスの履歴一覧"""
     if not (current_user.is_owner() or current_user.is_admin()):
-        flash('オーナーまたは管理者権限が必要です', 'error')
+        flash('オーナーまたは管理者のみ利用できます', 'error')
         return redirect(url_for('index'))
-    
-    result_items = []
-    bid_history = []
+
+    history_auctions = []
     history_summary = {
-        'result_count': 0,
+        'auction_count': 0,
+        'item_count': 0,
         'winner_count': 0,
-        'pending_finalize_count': 0,
-        'no_bid_count': 0,
         'bid_count': 0,
+        'pending_reflection_count': 0,
+        'draft_doc_count': 0,
+        'completed_doc_count': 0,
+        'submitted_doc_count': 0,
     }
-    
+
     try:
         conn = get_db()
         now = get_jst_now()
+        sync_proxy_service_keisan_documents(conn)
+        conn.commit()
+
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("""
-                SELECT *
-                FROM proxy_service_settings
-                ORDER BY id DESC
-            """)
+            cur.execute(
+                """
+                SELECT ps.*, 
+                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id) AS item_count,
+                       (SELECT COUNT(*) FROM proxy_service_bids b
+                        JOIN merchandise m ON b.merchandise_id = m.id
+                        WHERE m.auction_id = ps.id) AS bid_count
+                FROM proxy_service_settings ps
+                ORDER BY ps.id DESC
+                """
+            )
             auctions = [dict(row) for row in cur.fetchall()]
-            cur.execute("""
-                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name, pb.user_id,
-                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date, m.auction_id,
-                       ps.auction_name, ps.sale_mode, ps.end_datetime,
-                       u.display_name as user_display_name,
-                       (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winner_user_id,
-                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winning_bid
-                FROM proxy_service_bids pb
-                JOIN merchandise m ON pb.merchandise_id = m.id
-                LEFT JOIN proxy_service_settings ps ON m.auction_id = ps.id
-                LEFT JOIN users u ON pb.user_id = u.id
-                ORDER BY pb.created_at DESC
-                LIMIT 200
-            """)
-            bid_history = [dict(row) for row in cur.fetchall()]
         else:
             cur = conn.cursor()
-            cur.execute("""
-                SELECT *
-                FROM proxy_service_settings
-                ORDER BY id DESC
-            """)
+            cur.execute(
+                """
+                SELECT ps.*, 
+                       (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id) AS item_count,
+                       (SELECT COUNT(*) FROM proxy_service_bids b
+                        JOIN merchandise m ON b.merchandise_id = m.id
+                        WHERE m.auction_id = ps.id) AS bid_count
+                FROM proxy_service_settings ps
+                ORDER BY ps.id DESC
+                """
+            )
             auctions = [dict(row) for row in cur.fetchall()]
-            cur.execute("""
-                SELECT pb.id, pb.bid_amount, pb.created_at, pb.bidder_name, pb.user_id,
-                       m.id as merchandise_id, m.product_name, m.brand_name, m.photo_path, m.sale_date, m.auction_id,
-                       ps.auction_name, ps.sale_mode, ps.end_datetime,
-                       u.display_name as user_display_name,
-                       (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winner_user_id,
-                       (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) as winning_bid
-                FROM proxy_service_bids pb
-                JOIN merchandise m ON pb.merchandise_id = m.id
-                LEFT JOIN proxy_service_settings ps ON m.auction_id = ps.id
-                LEFT JOIN users u ON pb.user_id = u.id
-                ORDER BY pb.created_at DESC
-                LIMIT 200
-            """)
-            bid_history = [dict(row) for row in cur.fetchall()]
 
+        ended_auction_ids = []
         for auction in auctions:
             auction_state = get_proxy_service_auction_state(auction, now=now)
-            annotated_items, summary, _ = annotate_proxy_service_items(
+            if auction_state.get('status') != 'ended':
+                continue
+
+            _, summary, _ = annotate_proxy_service_items(
                 fetch_proxy_service_items(conn, auction['id']),
                 auction,
                 now=now,
             )
 
-            history_summary['winner_count'] += summary['winner_count']
-            history_summary['pending_finalize_count'] += summary['pending_finalize_count']
-            history_summary['no_bid_count'] += summary['no_bid_count']
+            card = dict(auction)
+            card['status'] = auction_state.get('status')
+            card['status_label'] = auction_state.get('status_label')
+            card['sale_mode'] = auction_state.get('sale_mode')
+            card['sale_mode_label'] = '早い者勝ち' if auction_state.get('sale_mode') == 'fixed' else 'オークション'
+            card['start_display'] = format_optional_datetime(auction_state.get('start_datetime'), fallback='未設定')
+            card['end_display'] = format_optional_datetime(auction_state.get('end_datetime'), fallback='未設定')
+            card['winner_count'] = summary.get('winner_count', 0)
+            card['pending_finalize_count'] = summary.get('pending_finalize_count', 0)
+            card['pending_reflection_count'] = summary.get('pending_reflection_count', 0)
+            card['reflected_count'] = summary.get('reflected_count', 0)
+            card['no_bid_count'] = summary.get('no_bid_count', 0)
+            card['draft_doc_count'] = 0
+            card['completed_doc_count'] = 0
+            card['submitted_doc_count'] = 0
+            history_auctions.append(card)
+            ended_auction_ids.append(card['id'])
 
-            for item in annotated_items:
-                if auction_state['status'] != 'ended' and not item.get('is_sold') and not item.get('has_bid'):
-                    continue
+            history_summary['item_count'] += int(card.get('item_count') or 0)
+            history_summary['winner_count'] += int(card.get('winner_count') or 0)
+            history_summary['bid_count'] += int(card.get('bid_count') or 0)
+            history_summary['pending_reflection_count'] += int(card.get('pending_reflection_count') or 0)
 
-                item['auction_name'] = auction.get('auction_name') or 'オークション'
-                item['auction_sale_mode'] = auction_state['sale_mode']
-                item['auction_status_label'] = auction_state['status_label']
-                item['auction_end_datetime'] = auction_state['end_datetime']
-                result_items.append(item)
-
-        for bid in bid_history:
-            end_dt = parse_proxy_service_datetime(bid.get('end_datetime'))
-            auction_ended = bool(end_dt and now > end_dt)
-            is_winner = bool(
-                bid.get('winner_user_id')
-                and bid.get('user_id') == bid.get('winner_user_id')
-                and bid.get('bid_amount') == bid.get('winning_bid')
-            )
-
-            if bid.get('sale_date') or auction_ended:
-                if is_winner:
-                    bid['bid_status'] = 'won'
-                    bid['bid_status_label'] = '落札'
-                else:
-                    bid['bid_status'] = 'lost'
-                    bid['bid_status_label'] = '不成立'
+        if ended_auction_ids:
+            if DATABASE_URL:
+                placeholders = ','.join(['%s'] * len(ended_auction_ids))
+                cur.execute(
+                    f"""
+                    SELECT proxy_service_auction_id, status, COUNT(*) AS doc_count
+                    FROM user_keisan
+                    WHERE is_admin_created = TRUE
+                      AND proxy_service_auction_id IN ({placeholders})
+                    GROUP BY proxy_service_auction_id, status
+                    """,
+                    tuple(ended_auction_ids),
+                )
+                doc_rows = [dict(row) for row in cur.fetchall()]
             else:
-                bid['bid_status'] = 'pending'
-                bid['bid_status_label'] = '受付中'
+                placeholders = ','.join(['?'] * len(ended_auction_ids))
+                cur.execute(
+                    f"""
+                    SELECT proxy_service_auction_id, status, COUNT(*) AS doc_count
+                    FROM user_keisan
+                    WHERE is_admin_created = 1
+                      AND proxy_service_auction_id IN ({placeholders})
+                    GROUP BY proxy_service_auction_id, status
+                    """,
+                    tuple(ended_auction_ids),
+                )
+                doc_rows = [dict(row) for row in cur.fetchall()]
 
-            created_at = bid.get('created_at')
-            if isinstance(created_at, datetime):
-                bid['created_at_display'] = created_at.strftime('%Y/%m/%d %H:%M')
-            elif created_at:
-                bid['created_at_display'] = str(created_at)[:16].replace('-', '/').replace('T', ' ')
-            else:
-                bid['created_at_display'] = '-'
+            doc_counts = {}
+            for row in doc_rows:
+                auction_id = row.get('proxy_service_auction_id')
+                status = row.get('status') or 'draft'
+                doc_counts.setdefault(auction_id, {})[status] = int(row.get('doc_count') or 0)
 
-        history_summary['result_count'] = len(result_items)
-        history_summary['bid_count'] = len(bid_history)
-        
+            for auction in history_auctions:
+                auction_docs = doc_counts.get(auction['id'], {})
+                auction['draft_doc_count'] = auction_docs.get('draft', 0)
+                auction['completed_doc_count'] = auction_docs.get('completed', 0)
+                auction['submitted_doc_count'] = auction_docs.get('submitted', 0)
+                history_summary['draft_doc_count'] += auction['draft_doc_count']
+                history_summary['completed_doc_count'] += auction['completed_doc_count']
+                history_summary['submitted_doc_count'] += auction['submitted_doc_count']
+
+        history_summary['auction_count'] = len(history_auctions)
         cur.close()
         conn.close()
     except Exception as e:
         print(f"Proxy service history error: {e}")
         import traceback
         traceback.print_exc()
-    
-    return render_template('admin/proxy_service_history.html',
-                         result_items=result_items,
-                         bid_history=bid_history,
-                         history_summary=history_summary)
+
+    return render_template(
+        'admin/proxy_service_history.html',
+        history_auctions=history_auctions,
+        history_summary=history_summary,
+    )
 
 @app.route('/admin/proxy-service/<int:auction_id>/finalize', methods=['POST'])
 @login_required
 def admin_proxy_service_finalize(auction_id):
-    """オークション終了・落札確定処理（特定オークション用）"""
+    """オークション終了後に落札結果を確定する"""
     if not (current_user.is_owner() or current_user.is_admin()):
-        return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+        return jsonify({'success': False, 'error': 'オーナーまたは管理者のみ利用できます'}), 403
 
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
-    
+
     conn = get_db()
     finalized_count = 0
     already_sold_count = 0
     unmatched_count = 0
-    today = datetime.now().strftime('%Y-%m-%d')
-    now = datetime.now()
-    
+    now = get_jst_now()
+    today = now.strftime('%Y-%m-%d')
+
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT COUNT(*) as count
+        cur.execute(
+            """
+            SELECT COUNT(*) AS count
             FROM merchandise
             WHERE auction_id = %s AND sale_date IS NOT NULL
-        """, (auction_id,))
-        already_sold_count = (cur.fetchone() or {}).get('count', 0)
-        
-        # このオークションで入札がある商品を取得（商品の全情報も取得）
-        cur.execute("""
+            """,
+            (auction_id,),
+        )
+        already_sold_count = int((cur.fetchone() or {}).get('count') or 0)
+        cur.execute(
+            """
             SELECT m.*,
-                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid,
-                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC LIMIT 1) as winner_name
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) AS winner_user_id,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) AS winning_bid,
+                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC, pb.id ASC LIMIT 1) AS winner_name
             FROM merchandise m
             WHERE m.auction_id = %s AND m.sale_date IS NULL
-        """, (auction_id,))
-        items = cur.fetchall()
+            """,
+            (auction_id,),
+        )
+        items = [dict(row) for row in cur.fetchall()]
         pending_item_count = len(items)
-        
+
         for item in items:
-            if item['winner_user_id'] and item['winning_bid']:
-                winner_user_id = item['winner_user_id']
-                winning_bid = item['winning_bid']
-                winner_name = item['winner_name'] or ''
-                original_id = item['id']
-                original_purchase_price = int(item.get('purchase_price') or 0)
-                client_wholesale_fee_rate = round(((winning_bid - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
-                
-                # 1. 管理者側の商品を「売却済み」にする
-                cur.execute("""
-                    UPDATE merchandise 
-                    SET sale_date = %s,
-                        sale_price = %s,
-                        sale_type = 'auction',
-                        sales_destination = %s,
-                        show_in_proxy_service = FALSE
-                    WHERE id = %s
-                """, (today, winning_bid, f'代行仕入れ落札: {winner_name}', original_id))
-                
-                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
-                cur.execute("""
-                    INSERT INTO merchandise (
-                        user_id, purchase_date, photo_path, product_name, brand_name,
-                        item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
-                        listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos, is_listed, notes
-                    ) VALUES (
-                        %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s, %s, %s
-                    ) RETURNING id
-                """, (
-                    winner_user_id, today, item.get('photo_path'), item.get('product_name'), item.get('brand_name'),
-                    item.get('item_condition'), '代行仕入れサービス', winning_bid, client_wholesale_fee_rate, winning_bid, '代行仕入れ',
-                    item.get('listing_price', 0), item.get('expected_shipping', 0), item.get('expected_commission', 0),
-                    item.get('model_number'), '代行仕入れサービス', item.get('additional_photos'), False, item.get('notes')
-                ))
-                new_item_id = cur.fetchone()['id']
-                
-                # 3. 計算書を自動作成（管理者作成フラグ付き、送信待ち）
-                doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
-                cur.execute("""
-                    INSERT INTO user_keisan (
-                        document_no, user_id, issue_date, recipient_name,
-                        subject, total_amount, notes, status, is_admin_created
-                    ) VALUES (
-                        %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s
-                    ) RETURNING id
-                """, (
-                    doc_no, winner_user_id, today, winner_name,
-                    '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item.get("product_name", "商品")}\n商品ID: {original_id}\n落札者: {winner_name}', 'submitted', True
-                ))
-                keisan_id = cur.fetchone()['id']
-                
-                # 計算書明細を追加
-                cur.execute("""
-                    INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (keisan_id, 1, item.get('product_name', '商品'), new_item_id, 1, winning_bid, winning_bid))
-                
-                # 4. 落札者の利用可能額を減算
-                cur.execute("""
-                    UPDATE users 
-                    SET proxy_service_budget = GREATEST(0, COALESCE(proxy_service_budget, 0) - %s)
-                    WHERE id = %s
-                """, (winning_bid, winner_user_id))
-                
-                finalized_count += 1
-        
-        # このオークションを非公開に
+            winner_user_id = item.get('winner_user_id')
+            winning_bid = item.get('winning_bid')
+            if not winner_user_id or not winning_bid:
+                continue
+
+            winner_name = item.get('winner_name') or ''
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET sale_date = %s,
+                    sale_price = %s,
+                    sale_type = 'auction',
+                    sales_destination = %s,
+                    show_in_proxy_service = FALSE,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND sale_date IS NULL
+                """,
+                (today, winning_bid, f'代行仕入れ落札: {winner_name}', current_user.id, item['id']),
+            )
+            if cur.rowcount == 0:
+                continue
+
+            cur.execute(
+                """
+                UPDATE users
+                SET proxy_service_budget = GREATEST(0, COALESCE(proxy_service_budget, 0) - %s)
+                WHERE id = %s
+                """,
+                (winning_bid, winner_user_id),
+            )
+            finalized_count += 1
+
         cur.execute("UPDATE proxy_service_settings SET is_public = FALSE WHERE id = %s", (auction_id,))
         unmatched_count = max(0, pending_item_count - finalized_count)
     else:
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT COUNT(*)
             FROM merchandise
             WHERE auction_id = ? AND sale_date IS NOT NULL
-        """, (auction_id,))
-        already_sold_count = cur.fetchone()[0]
-        
-        # このオークションで入札がある商品を取得（商品の全情報も取得）
-        cur.execute("""
+            """,
+            (auction_id,),
+        )
+        already_sold_count = int(cur.fetchone()[0] or 0)
+        cur.execute(
+            """
             SELECT m.*,
-                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winner_user_id,
-                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC LIMIT 1) as winning_bid,
-                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC LIMIT 1) as winner_name
+                   (SELECT user_id FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) AS winner_user_id,
+                   (SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = m.id ORDER BY bid_amount DESC, id ASC LIMIT 1) AS winning_bid,
+                   (SELECT u.display_name FROM proxy_service_bids pb JOIN users u ON pb.user_id = u.id WHERE pb.merchandise_id = m.id ORDER BY pb.bid_amount DESC, pb.id ASC LIMIT 1) AS winner_name
             FROM merchandise m
             WHERE m.auction_id = ? AND m.sale_date IS NULL
-        """, (auction_id,))
-        items = cur.fetchall()
+            """,
+            (auction_id,),
+        )
+        items = [dict(row) for row in cur.fetchall()]
         pending_item_count = len(items)
-        
+
         for item in items:
-            item_dict = dict(item)
-            winner_user_id = item_dict.get('winner_user_id')
-            winning_bid = item_dict.get('winning_bid')
-            
-            if winner_user_id and winning_bid:
-                winner_name = item_dict.get('winner_name') or ''
-                original_id = item_dict['id']
-                original_purchase_price = int(item_dict.get('purchase_price') or 0)
-                client_wholesale_fee_rate = round(((winning_bid - original_purchase_price) / original_purchase_price) * 100, 2) if original_purchase_price > 0 else 0
-                
-                # 1. 管理者側の商品を「売却済み」にする
-                cur.execute("""
-                    UPDATE merchandise 
-                    SET sale_date = ?,
-                        sale_price = ?,
-                        sale_type = 'auction',
-                        sales_destination = ?,
-                        show_in_proxy_service = 0
-                    WHERE id = ?
-                """, (today, winning_bid, f'代行仕入れ落札: {winner_name}', original_id))
-                
-                # 2. 落札者用に新しい商品レコードを作成（仕入れ日=今日、未出品状態）
-                cur.execute("""
-                    INSERT INTO merchandise (
-                        user_id, purchase_date, photo_path, product_name, brand_name,
-                        item_condition, store_name, wholesale_price, wholesale_fee_rate, purchase_price, payment_method,
-                        listing_price, expected_shipping, expected_commission,
-                        model_number, supplier_detail, additional_photos, is_listed, notes
-                    ) VALUES (
-                        ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?,
-                        ?, ?, ?,
-                        ?, ?, ?, ?, ?
-                    )
-                """, (
-                    winner_user_id, today, item_dict.get('photo_path'), item_dict.get('product_name'), item_dict.get('brand_name'),
-                    item_dict.get('item_condition'), '代行仕入れサービス', winning_bid, client_wholesale_fee_rate, winning_bid, '代行仕入れ',
-                    item_dict.get('listing_price') or 0, item_dict.get('expected_shipping') or 0, item_dict.get('expected_commission') or 0,
-                    item_dict.get('model_number'), '代行仕入れサービス', item_dict.get('additional_photos'), 0, item_dict.get('notes')
-                ))
-                new_item_id = cur.lastrowid
-                
-                # 3. 計算書を自動作成（管理者作成フラグ付き、送信待ち）
-                doc_no = f"AUC-{now.strftime('%Y%m%d%H%M%S')}-{finalized_count + 1}"
-                cur.execute("""
-                    INSERT INTO user_keisan (
-                        document_no, user_id, issue_date, recipient_name,
-                        subject, total_amount, notes, status, is_admin_created
-                    ) VALUES (
-                        ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?
-                    )
-                """, (
-                    doc_no, winner_user_id, today, winner_name,
-                    '代行仕入れサービス落札', winning_bid,
-                    f'商品名: {item_dict.get("product_name", "商品")}\n商品ID: {original_id}\n落札者: {winner_name}', 'submitted', 1
-                ))
-                keisan_id = cur.lastrowid
-                
-                # 計算書明細を追加
-                cur.execute("""
-                    INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit_price, amount
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (keisan_id, 1, item_dict.get('product_name', '商品'), new_item_id, 1, winning_bid, winning_bid))
-                
-                # 4. 落札者の利用可能額を減算
-                cur.execute("""
-                    UPDATE users 
-                    SET proxy_service_budget = MAX(0, COALESCE(proxy_service_budget, 0) - ?)
-                    WHERE id = ?
-                """, (winning_bid, winner_user_id))
-                
-                finalized_count += 1
-        
-        # このオークションを非公開に
+            winner_user_id = item.get('winner_user_id')
+            winning_bid = item.get('winning_bid')
+            if not winner_user_id or not winning_bid:
+                continue
+
+            winner_name = item.get('winner_name') or ''
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET sale_date = ?,
+                    sale_price = ?,
+                    sale_type = 'auction',
+                    sales_destination = ?,
+                    show_in_proxy_service = 0,
+                    updated_by = ?,
+                    updated_at = ?
+                WHERE id = ? AND sale_date IS NULL
+                """,
+                (today, winning_bid, f'代行仕入れ落札: {winner_name}', current_user.id, now.strftime('%Y-%m-%d %H:%M:%S'), item['id']),
+            )
+            if cur.rowcount == 0:
+                continue
+
+            cur.execute(
+                """
+                UPDATE users
+                SET proxy_service_budget = MAX(0, COALESCE(proxy_service_budget, 0) - ?)
+                WHERE id = ?
+                """,
+                (winning_bid, winner_user_id),
+            )
+            finalized_count += 1
+
         cur.execute("UPDATE proxy_service_settings SET is_public = 0 WHERE id = ?", (auction_id,))
         unmatched_count = max(0, pending_item_count - finalized_count)
-    
+
     conn.commit()
     cur.close()
     conn.close()
-    
+
     return jsonify({
-        'success': True, 
-        'message': f'落札確定 {finalized_count}件 / 即決購入済み {already_sold_count}件 / 成約なし {unmatched_count}件 を反映しました。',
+        'success': True,
+        'message': f'落札確定 {finalized_count}件 / 既に販売済み {already_sold_count}件 / 入札なし {unmatched_count}件 を処理しました',
         'finalized_count': finalized_count,
         'already_sold_count': already_sold_count,
-        'unmatched_count': unmatched_count
+        'unmatched_count': unmatched_count,
     })
-
 
 @app.route('/admin/proxy-service/<int:auction_id>/reflect-all', methods=['POST'])
 @login_required
@@ -12652,17 +13210,29 @@ def admin_proxy_service_reflect_all(auction_id):
             return jsonify({'success': True, 'message': 'クライアントに反映する商品はありませんでした。', 'reflected_count': 0})
 
         reflected_count = 0
+        created_keisan_count = 0
+        updated_keisan_count = 0
         for item in reflectable_items:
-            create_proxy_service_reflected_item(conn, item, current_user.id, now=now)
+            reflection_result = create_proxy_service_reflected_item(conn, item, current_user.id, now=now)
             reflected_count += 1
+            if reflection_result.get('keisan_created'):
+                created_keisan_count += 1
+            elif reflection_result.get('keisan_item_added'):
+                updated_keisan_count += 1
 
         conn.commit()
         conn.close()
 
+        message = f'{reflected_count}件の商品をクライアントの商品一覧へ反映しました。'
+        if created_keisan_count or updated_keisan_count:
+            message += f' 計算書は新規 {created_keisan_count}件 / 追記 {updated_keisan_count}件 です。'
+
         return jsonify({
             'success': True,
-            'message': f'{reflected_count}件の商品をクライアントの商品一覧へ反映しました。',
+            'message': message,
             'reflected_count': reflected_count,
+            'created_keisan_count': created_keisan_count,
+            'updated_keisan_count': updated_keisan_count,
         })
     except Exception as e:
         conn.rollback()
@@ -12727,10 +13297,23 @@ def admin_proxy_service_reflect_item(auction_id, item_id):
 
         return jsonify({
             'success': True,
-            'message': f'「{target_item.get("product_name") or "商品"}」を{reflection_result.get("winner_name") or "クライアント"}の商品一覧へ反映しました。',
+            'message': (
+                f'「{target_item.get("product_name") or "商品"}」を'
+                f'{reflection_result.get("winner_name") or "クライアント"}の商品一覧へ反映しました。'
+                + (
+                    ' 新しい計算書を作成しました。'
+                    if reflection_result.get('keisan_created')
+                    else ' 既存の計算書へ追加しました。'
+                    if reflection_result.get('keisan_item_added')
+                    else ''
+                )
+            ),
             'reflected_item_id': reflection_result.get('reflected_item_id'),
             'winner_user_id': reflection_result.get('winner_user_id'),
             'created': reflection_result.get('created', False),
+            'keisan_id': reflection_result.get('keisan_id'),
+            'keisan_created': reflection_result.get('keisan_created', False),
+            'keisan_item_added': reflection_result.get('keisan_item_added', False),
         })
     except Exception as e:
         conn.rollback()
@@ -12834,62 +13417,150 @@ def admin_proxy_service_update_item_pricing(auction_id, item_id):
 @login_required
 @admin_required
 def admin_auction_keisan_list():
-    """管理者用：オークション落札計算書一覧"""
+    """代行仕入れのクライアント別計算書一覧"""
+    auction_id = request.args.get('auction_id', type=int)
     conn = get_db()
-    
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT k.*, u.display_name as user_name, u.username
-            FROM user_keisan k
-            JOIN users u ON k.user_id = u.id
-            WHERE k.is_admin_created = TRUE
-            ORDER BY k.created_at DESC
-        """)
-        keisan_list = [dict(row) for row in cur.fetchall()]
-    else:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT k.*, u.display_name as user_name, u.username
-            FROM user_keisan k
-            JOIN users u ON k.user_id = u.id
-            WHERE k.is_admin_created = 1
-            ORDER BY k.created_at DESC
-        """)
-        keisan_list = [dict(row) for row in cur.fetchall()]
+    keisan_list = []
+    stats = {
+        'total_docs': 0,
+        'draft_count': 0,
+        'completed_count': 0,
+        'submitted_count': 0,
+        'total_amount': 0,
+    }
+    auction_filter = None
 
-    keisan_ids = [doc.get('id') for doc in keisan_list if doc.get('id')]
-    item_map = {}
-    if keisan_ids:
+    try:
+        sync_proxy_service_keisan_documents(conn)
+        conn.commit()
+
         if DATABASE_URL:
-            placeholders = ','.join(['%s'] * len(keisan_ids))
-            cur.execute(
-                f"SELECT keisan_id, item_name, merchandise_id FROM user_keisan_items WHERE keisan_id IN ({placeholders}) ORDER BY keisan_id, item_no",
-                tuple(keisan_ids)
-            )
-            item_rows = [dict(row) for row in cur.fetchall()]
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            params = []
+            query = """
+                SELECT k.*, u.display_name AS user_name, u.username,
+                       ps.auction_name, ps.sale_mode, ps.end_datetime
+                FROM user_keisan k
+                JOIN users u ON k.user_id = u.id
+                LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+                WHERE k.is_admin_created = TRUE
+                  AND k.proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                query += " AND k.proxy_service_auction_id = %s"
+                params.append(auction_id)
+            query += """
+                ORDER BY CASE k.status WHEN 'draft' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END,
+                         COALESCE(k.updated_at, k.created_at) DESC,
+                         k.id DESC
+            """
+            cur.execute(query, tuple(params))
+            keisan_list = [dict(row) for row in cur.fetchall()]
         else:
-            placeholders = ','.join(['?'] * len(keisan_ids))
-            cur.execute(
-                f"SELECT keisan_id, item_name, merchandise_id FROM user_keisan_items WHERE keisan_id IN ({placeholders}) ORDER BY keisan_id, item_no",
-                tuple(keisan_ids)
-            )
-            item_rows = [dict(row) for row in cur.fetchall()]
+            cur = conn.cursor()
+            params = []
+            query = """
+                SELECT k.*, u.display_name AS user_name, u.username,
+                       ps.auction_name, ps.sale_mode, ps.end_datetime
+                FROM user_keisan k
+                JOIN users u ON k.user_id = u.id
+                LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+                WHERE k.is_admin_created = 1
+                  AND k.proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                query += " AND k.proxy_service_auction_id = ?"
+                params.append(auction_id)
+            query += """
+                ORDER BY CASE k.status WHEN 'draft' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END,
+                         COALESCE(k.updated_at, k.created_at) DESC,
+                         k.id DESC
+            """
+            cur.execute(query, tuple(params))
+            keisan_list = [dict(row) for row in cur.fetchall()]
 
-        for row in item_rows:
-            item_map.setdefault(row['keisan_id'], []).append(row)
+        keisan_ids = [doc.get('id') for doc in keisan_list if doc.get('id')]
+        item_map = {}
+        if keisan_ids:
+            if DATABASE_URL:
+                placeholders = ','.join(['%s'] * len(keisan_ids))
+                cur.execute(
+                    f"""
+                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    FROM user_keisan_items
+                    WHERE keisan_id IN ({placeholders})
+                    ORDER BY keisan_id, item_no
+                    """,
+                    tuple(keisan_ids),
+                )
+                item_rows = [dict(row) for row in cur.fetchall()]
+            else:
+                placeholders = ','.join(['?'] * len(keisan_ids))
+                cur.execute(
+                    f"""
+                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    FROM user_keisan_items
+                    WHERE keisan_id IN ({placeholders})
+                    ORDER BY keisan_id, item_no
+                    """,
+                    tuple(keisan_ids),
+                )
+                item_rows = [dict(row) for row in cur.fetchall()]
 
-    for doc in keisan_list:
-        doc_items = item_map.get(doc.get('id'), [])
-        doc['item_rows'] = doc_items
-        doc['item_names'] = ' / '.join(
-            [row.get('item_name') for row in doc_items if row.get('item_name')]
-        ) or '-'
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('admin/auction_keisan_list.html', keisan_list=keisan_list)
+            for row in item_rows:
+                item_map.setdefault(row['keisan_id'], []).append(row)
+
+        for doc in keisan_list:
+            doc_items = item_map.get(doc.get('id'), [])
+            doc['item_rows'] = doc_items
+            doc['item_count'] = len(doc_items)
+            item_names = [row.get('item_name') for row in doc_items if row.get('item_name')]
+            if len(item_names) > 3:
+                doc['item_summary'] = ' / '.join(item_names[:3]) + f' ほか{len(item_names) - 3}件'
+            else:
+                doc['item_summary'] = ' / '.join(item_names) or '-'
+            doc['auction_name_display'] = doc.get('auction_name') or f"オークション #{doc.get('proxy_service_auction_id')}"
+            doc['end_display'] = format_optional_datetime(doc.get('end_datetime'), fallback='-')
+            doc['issue_date_display'] = doc.get('issue_date') or '-'
+            status_label, status_class = get_proxy_service_keisan_status_meta(doc.get('status'))
+            doc['status_label'] = status_label
+            doc['status_class'] = status_class
+            amount_value = int(doc.get('total_amount') or 0)
+            stats['total_amount'] += amount_value
+            if doc.get('status') == 'submitted':
+                stats['submitted_count'] += 1
+            elif doc.get('status') == 'completed':
+                stats['completed_count'] += 1
+            else:
+                stats['draft_count'] += 1
+
+        stats['total_docs'] = len(keisan_list)
+
+        if auction_id:
+            if DATABASE_URL:
+                cur.execute("SELECT id, auction_name, sale_mode, end_datetime FROM proxy_service_settings WHERE id = %s", (auction_id,))
+                filter_row = cur.fetchone()
+                auction_filter = dict(filter_row) if filter_row else None
+            else:
+                cur.execute("SELECT id, auction_name, sale_mode, end_datetime FROM proxy_service_settings WHERE id = ?", (auction_id,))
+                filter_row = cur.fetchone()
+                auction_filter = dict(filter_row) if filter_row else None
+
+            if auction_filter:
+                auction_filter['sale_mode_label'] = '早い者勝ち' if auction_filter.get('sale_mode') == 'fixed' else 'オークション'
+                auction_filter['end_display'] = format_optional_datetime(auction_filter.get('end_datetime'), fallback='-')
+
+        cur.close()
+    finally:
+        conn.close()
+
+    return render_template(
+        'admin/auction_keisan_list.html',
+        keisan_list=keisan_list,
+        stats=stats,
+        auction_filter=auction_filter,
+        auction_id=auction_id,
+    )
 
 @app.route('/admin/auction-keisan/<int:id>')
 @login_required
@@ -12901,9 +13572,11 @@ def admin_auction_keisan_view(id):
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
-            SELECT k.*, u.display_name as user_name, u.username, u.email
+            SELECT k.*, u.display_name as user_name, u.username, u.email,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
             WHERE k.id = %s AND k.is_admin_created = TRUE
         """, (id,))
         keisan = cur.fetchone()
@@ -12914,9 +13587,11 @@ def admin_auction_keisan_view(id):
     else:
         cur = conn.cursor()
         cur.execute("""
-            SELECT k.*, u.display_name as user_name, u.username, u.email
+            SELECT k.*, u.display_name as user_name, u.username, u.email,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
             WHERE k.id = ? AND k.is_admin_created = 1
         """, (id,))
         keisan = cur.fetchone()
@@ -12931,6 +13606,13 @@ def admin_auction_keisan_view(id):
     if not keisan:
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('admin_auction_keisan_list'))
+
+    keisan['status_label'], keisan['status_class'] = get_proxy_service_keisan_status_meta(keisan.get('status'))
+    keisan['auction_name_display'] = keisan.get('auction_name') or (
+        f"オークション #{keisan.get('proxy_service_auction_id')}" if keisan.get('proxy_service_auction_id') else '-'
+    )
+    keisan['sale_mode_label'] = '早い者勝ち' if keisan.get('sale_mode') == 'fixed' else 'オークション'
+    keisan['auction_end_display'] = format_optional_datetime(keisan.get('end_datetime'), fallback='-')
     
     return render_template('admin/auction_keisan_view.html', keisan=keisan, items=items)
 
@@ -12938,17 +13620,22 @@ def admin_auction_keisan_view(id):
 @login_required
 @admin_required
 def admin_auction_keisan_edit(id):
-    """管理者用：オークション落札計算書編集"""
+    """代行仕入れ計算書の編集"""
     conn = get_db()
-    
+
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT k.*, u.display_name as user_name
+        cur.execute(
+            """
+            SELECT k.*, u.display_name AS user_name,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
             WHERE k.id = %s AND k.is_admin_created = TRUE
-        """, (id,))
+            """,
+            (id,),
+        )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
@@ -12956,111 +13643,186 @@ def admin_auction_keisan_edit(id):
             items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT k.*, u.display_name as user_name
+        cur.execute(
+            """
+            SELECT k.*, u.display_name AS user_name,
+                   ps.auction_name, ps.sale_mode, ps.end_datetime
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
             WHERE k.id = ? AND k.is_admin_created = 1
-        """, (id,))
+            """,
+            (id,),
+        )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
             cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
             items = [dict(row) for row in cur.fetchall()]
-    
+
     if not keisan:
+        cur.close()
+        conn.close()
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('admin_auction_keisan_list'))
-    
+
+    keisan['auction_name_display'] = keisan.get('auction_name') or (
+        f"オークション #{keisan.get('proxy_service_auction_id')}" if keisan.get('proxy_service_auction_id') else '-'
+    )
+    keisan['sale_mode_label'] = '早い者勝ち' if keisan.get('sale_mode') == 'fixed' else 'オークション'
+    keisan['auction_end_display'] = format_optional_datetime(keisan.get('end_datetime'), fallback='-')
+
     if request.method == 'POST':
-        issue_date = request.form.get('issue_date')
-        recipient_name = request.form.get('recipient_name', '')
-        subject = request.form.get('subject', '')
+        issue_date = request.form.get('issue_date') or keisan.get('issue_date')
+        recipient_name = (request.form.get('recipient_name') or '').strip()
+        subject = (request.form.get('subject') or '').strip()
         notes = request.form.get('notes', '')
-        
-        # 明細を取得
+        next_status = request.form.get('status', 'draft')
+        if next_status not in {'draft', 'completed'}:
+            next_status = 'draft'
+
         item_names = request.form.getlist('item_name[]')
         merchandise_ids = request.form.getlist('merchandise_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
-        
+
         total_amount = 0
         new_items = []
-        for i, (name, qty, unit, price) in enumerate(zip(item_names, quantities, units, unit_prices), start=1):
-            if name.strip():
-                qty = int(qty) if qty else 1
-                price = int(price) if price else 0
-                amount = qty * price
-                total_amount += amount
-                new_items.append((i, name, qty, unit, price, amount))
-        
+        for index, name in enumerate(item_names, start=1):
+            clean_name = (name or '').strip()
+            if not clean_name:
+                continue
+
+            raw_merchandise_id = merchandise_ids[index - 1] if index - 1 < len(merchandise_ids) else ''
+            try:
+                merchandise_id = int(raw_merchandise_id) if raw_merchandise_id else None
+            except (TypeError, ValueError):
+                merchandise_id = None
+
+            raw_qty = quantities[index - 1] if index - 1 < len(quantities) else '1'
+            raw_unit = units[index - 1] if index - 1 < len(units) else ''
+            raw_price = unit_prices[index - 1] if index - 1 < len(unit_prices) else '0'
+
+            try:
+                quantity = max(1, int(raw_qty or 1))
+            except (TypeError, ValueError):
+                quantity = 1
+            try:
+                unit_price = max(0, int(raw_price or 0))
+            except (TypeError, ValueError):
+                unit_price = 0
+
+            amount = quantity * unit_price
+            total_amount += amount
+            new_items.append((len(new_items) + 1, clean_name, merchandise_id, quantity, raw_unit, unit_price, amount))
+
         if DATABASE_URL:
-            cur.execute("""
-                UPDATE user_keisan SET
-                    issue_date = %s, recipient_name = %s, subject = %s,
-                    notes = %s, total_amount = %s, updated_at = CURRENT_TIMESTAMP
+            cur.execute(
+                """
+                UPDATE user_keisan
+                SET issue_date = %s,
+                    recipient_name = %s,
+                    subject = %s,
+                    notes = %s,
+                    total_amount = %s,
+                    status = %s,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
-            """, (issue_date, recipient_name, subject, notes, total_amount, id))
-            
+                """,
+                (issue_date, recipient_name, subject, notes, total_amount, next_status, id),
+            )
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
             for item in new_items:
-                cur.execute("""
-                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (id, *item))
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (id, *item),
+                )
         else:
-            cur.execute("""
-                UPDATE user_keisan SET
-                    issue_date = ?, recipient_name = ?, subject = ?,
-                    notes = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP
+            cur.execute(
+                """
+                UPDATE user_keisan
+                SET issue_date = ?,
+                    recipient_name = ?,
+                    subject = ?,
+                    notes = ?,
+                    total_amount = ?,
+                    status = ?,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (issue_date, recipient_name, subject, notes, total_amount, id))
-            
+                """,
+                (issue_date, recipient_name, subject, notes, total_amount, next_status, id),
+            )
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
             for item in new_items:
-                cur.execute("""
-                    INSERT INTO user_keisan_items (keisan_id, item_no, item_name, quantity, unit, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id, *item))
-        
+                cur.execute(
+                    """
+                    INSERT INTO user_keisan_items (
+                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (id, *item),
+                )
+
         conn.commit()
         cur.close()
         conn.close()
-        
         flash('計算書を更新しました', 'success')
         return redirect(url_for('admin_auction_keisan_view', id=id))
-    
+
     cur.close()
     conn.close()
-    
+
     return render_template('admin/auction_keisan_edit.html', keisan=keisan, items=items)
 
 @app.route('/admin/auction-keisan/<int:id>/submit', methods=['POST'])
 @login_required
 @admin_required
 def admin_auction_keisan_submit(id):
-    """管理者用：計算書をユーザーに送信（ステータスを submitted に変更）"""
+    """計算書をクライアントへ送付済みにする"""
+    redirect_auction_id = request.form.get('auction_id', type=int) or request.args.get('auction_id', type=int)
     conn = get_db()
-    
+
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            UPDATE user_keisan SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+        if redirect_auction_id is None:
+            cur.execute("SELECT proxy_service_auction_id FROM user_keisan WHERE id = %s AND is_admin_created = TRUE", (id,))
+            row = cur.fetchone()
+            redirect_auction_id = (row or {}).get('proxy_service_auction_id') if row else None
+        cur.execute(
+            """
+            UPDATE user_keisan
+            SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND is_admin_created = TRUE
-        """, (id,))
+            """,
+            (id,),
+        )
     else:
         cur = conn.cursor()
-        cur.execute("""
-            UPDATE user_keisan SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+        if redirect_auction_id is None:
+            cur.execute("SELECT proxy_service_auction_id FROM user_keisan WHERE id = ? AND is_admin_created = 1", (id,))
+            row = cur.fetchone()
+            redirect_auction_id = dict(row).get('proxy_service_auction_id') if row else None
+        cur.execute(
+            """
+            UPDATE user_keisan
+            SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND is_admin_created = 1
-        """, (id,))
-    
+            """,
+            (id,),
+        )
+
     conn.commit()
     cur.close()
     conn.close()
-    
-    flash('計算書をユーザーに送信しました', 'success')
+
+    flash('計算書をクライアントへ送付しました', 'success')
+    if redirect_auction_id:
+        return redirect(url_for('admin_auction_keisan_list', auction_id=redirect_auction_id))
     return redirect(url_for('admin_auction_keisan_list'))
 
 @app.route('/admin/auction-keisan/<int:id>/pdf')
@@ -13718,7 +14480,7 @@ def proxy_service_purchase():
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s, %s, %s
-            )
+            ) RETURNING id
         """, (
             user_id,
             now.date(),
@@ -13743,6 +14505,28 @@ def proxy_service_purchase():
             current_user.id,
             now.strftime('%Y-%m-%d %H:%M:%S'),
         ))
+        reflected_item_id = cur.fetchone()['id']
+        upsert_proxy_service_keisan_document(
+            conn,
+            auction_id=auction_id,
+            auction_name=settings.get('auction_name') or '代行仕入れサービス',
+            winner_user_id=user_id,
+            winner_name=buyer_name,
+            reflected_item_id=reflected_item_id,
+            source_item={
+                **dict(item),
+                'auction_id': auction_id,
+                'auction_name': settings.get('auction_name') or '代行仕入れサービス',
+                'sale_mode': 'fixed',
+                'result_code': 'fixed_sold',
+                'winner_user_id': user_id,
+                'winner_name': buyer_name,
+                'result_price': purchase_price,
+            },
+            amount=purchase_price,
+            now=now,
+            status='draft',
+        )
     else:
         cur = conn.cursor()
         
@@ -13881,6 +14665,28 @@ def proxy_service_purchase():
             current_user.id,
             now.strftime('%Y-%m-%d %H:%M:%S'),
         ))
+        reflected_item_id = cur.lastrowid
+        upsert_proxy_service_keisan_document(
+            conn,
+            auction_id=auction_id,
+            auction_name=(dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
+            winner_user_id=user_id,
+            winner_name=buyer_name,
+            reflected_item_id=reflected_item_id,
+            source_item={
+                **item_dict,
+                'auction_id': auction_id,
+                'auction_name': (dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
+                'sale_mode': 'fixed',
+                'result_code': 'fixed_sold',
+                'winner_user_id': user_id,
+                'winner_name': buyer_name,
+                'result_price': purchase_price,
+            },
+            amount=purchase_price,
+            now=now,
+            status='draft',
+        )
     
     conn.commit()
     cur.close()
@@ -30419,18 +31225,32 @@ def admin_auction_keisan_send_bulk():
             continue
 
     send_scope = request.form.get('send_scope', 'selected')
+    auction_id = request.form.get('auction_id', type=int)
     conn = get_db()
     updated_count = 0
+
     try:
         if DATABASE_URL:
             cur = conn.cursor()
+            params = []
+            where_sql = """
+                WHERE is_admin_created = TRUE
+                  AND status = 'completed'
+                  AND proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                where_sql += " AND proxy_service_auction_id = %s"
+                params.append(auction_id)
+
             if send_scope == 'all':
-                cur.execute("""
+                cur.execute(
+                    f"""
                     UPDATE user_keisan
                     SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                    WHERE is_admin_created = TRUE
-                      AND status = 'completed'
-                """)
+                    {where_sql}
+                    """,
+                    tuple(params),
+                )
                 updated_count = cur.rowcount
             elif selected_ids:
                 placeholders = ','.join(['%s'] * len(selected_ids))
@@ -30438,22 +31258,33 @@ def admin_auction_keisan_send_bulk():
                     f"""
                     UPDATE user_keisan
                     SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                    WHERE is_admin_created = TRUE
-                      AND status = 'completed'
+                    {where_sql}
                       AND id IN ({placeholders})
                     """,
-                    tuple(selected_ids),
+                    tuple(params + selected_ids),
                 )
                 updated_count = cur.rowcount
         else:
             cur = conn.cursor()
+            params = []
+            where_sql = """
+                WHERE is_admin_created = 1
+                  AND status = 'completed'
+                  AND proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                where_sql += " AND proxy_service_auction_id = ?"
+                params.append(auction_id)
+
             if send_scope == 'all':
-                cur.execute("""
+                cur.execute(
+                    f"""
                     UPDATE user_keisan
                     SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                    WHERE is_admin_created = 1
-                      AND status = 'completed'
-                """)
+                    {where_sql}
+                    """,
+                    tuple(params),
+                )
                 updated_count = cur.rowcount
             elif selected_ids:
                 placeholders = ','.join(['?'] * len(selected_ids))
@@ -30461,11 +31292,10 @@ def admin_auction_keisan_send_bulk():
                     f"""
                     UPDATE user_keisan
                     SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
-                    WHERE is_admin_created = 1
-                      AND status = 'completed'
+                    {where_sql}
                       AND id IN ({placeholders})
                     """,
-                    tuple(selected_ids),
+                    tuple(params + selected_ids),
                 )
                 updated_count = cur.rowcount
 
@@ -30475,13 +31305,15 @@ def admin_auction_keisan_send_bulk():
         conn.close()
 
     if send_scope != 'all' and not selected_ids:
-        flash('送信する計算書を選択してください', 'error')
+        flash('送付する計算書を選択してください', 'error')
     elif updated_count:
-        flash(f'{updated_count}件の計算書を送信しました', 'success')
+        flash(f'{updated_count}件の計算書を送付しました', 'success')
     else:
-        flash('送信対象の計算書はありませんでした', 'info')
-    return redirect(url_for('admin_auction_keisan_list'))
+        flash('送付対象の計算書はありませんでした', 'info')
 
+    if auction_id:
+        return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+    return redirect(url_for('admin_auction_keisan_list'))
 
 @app.route('/admin/user-kaitori-shoudaku/<int:id>')
 @login_required

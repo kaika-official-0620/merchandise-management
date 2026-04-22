@@ -1,28 +1,46 @@
 {% extends "base.html" %}
-{% block title %}代行サービス履歴 - 株式会社 開花{% endblock %}
+{% block title %}代行仕入れ履歴 - 株式会社開花{% endblock %}
 
 {% block content %}
 <style>
-.proxy-history-container {
-    max-width: 1200px;
+.history-page {
+    max-width: 1180px;
     margin: 0 auto;
 }
 
-.back-link {
+.history-back {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     color: #64748b;
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
 }
 
-.back-link:hover {
-    color: #374151;
+.history-back:hover {
+    color: #1f2937;
 }
 
-.stats-summary {
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.history-header h1 {
+    margin: 0;
+}
+
+.history-header p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1rem;
@@ -30,407 +48,283 @@
 }
 
 .stat-card {
-    background: white;
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    text-align: center;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
 }
 
 .stat-label {
-    font-size: 0.85rem;
+    display: block;
     color: #64748b;
-    margin-bottom: 0.5rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
 }
 
 .stat-value {
-    font-size: 1.9rem;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #0f172a;
 }
 
-.history-tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e2e8f0;
-}
-
-.history-tab {
-    padding: 0.75rem 1.25rem;
-    background: transparent;
-    border: none;
-    color: #64748b;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-}
-
-.history-tab.active {
-    color: #059669;
-    border-bottom-color: #059669;
-}
-
-.history-section {
-    display: none;
-}
-
-.history-section.active {
-    display: block;
-}
-
-.result-grid {
+.history-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
     gap: 1rem;
 }
 
-.result-card {
-    background: white;
+.history-card {
+    background: #fff;
     border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 1rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-radius: 18px;
+    padding: 1.1rem;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
 }
 
-.result-card.won {
-    border-color: #bfdbfe;
-}
-
-.result-card.closed {
-    border-color: #cbd5e1;
-}
-
-.result-card.muted {
-    border-color: #e5e7eb;
-}
-
-.result-header {
+.history-card-head {
     display: flex;
-    gap: 0.9rem;
-    margin-bottom: 0.9rem;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
 }
 
-.result-photo {
-    width: 72px;
-    height: 72px;
-    border-radius: 10px;
-    background: #f1f5f9;
-    overflow: hidden;
-    flex-shrink: 0;
+.history-card h2 {
+    margin: 0;
+    font-size: 1.15rem;
 }
 
-.result-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.result-name {
-    font-weight: 700;
-    color: #1e293b;
-}
-
-.result-brand,
-.result-auction {
-    font-size: 0.85rem;
+.history-card-subtitle {
+    margin: 0.3rem 0 0;
     color: #64748b;
+    font-size: 0.92rem;
 }
 
-.result-status {
+.history-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.history-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.65rem;
+    padding: 0.28rem 0.7rem;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 700;
-    margin-top: 0.45rem;
 }
 
-.result-status.won {
-    background: #dbeafe;
-    color: #1d4ed8;
+.history-badge.mode-auction {
+    background: #eef2ff;
+    color: #4338ca;
 }
 
-.result-status.closed {
+.history-badge.mode-fixed {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.history-badge.status-ended {
     background: #e2e8f0;
     color: #334155;
 }
 
-.result-status.muted {
-    background: #f1f5f9;
-    color: #64748b;
-}
-
-.result-meta {
+.history-meta {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
+    margin-top: 1rem;
 }
 
-.meta-block {
+.history-meta-item {
     background: #f8fafc;
-    border-radius: 10px;
-    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
 }
 
-.meta-block .label {
-    display: block;
+.history-meta-item dt {
     font-size: 0.72rem;
     color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.history-meta-item dd {
+    margin: 0;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.doc-summary {
+    margin-top: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+    border: 1px solid #fdba74;
+}
+
+.doc-summary-title {
+    margin: 0 0 0.55rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #9a3412;
+}
+
+.doc-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.doc-summary-grid div {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    padding: 0.65rem 0.7rem;
+}
+
+.doc-summary-grid span {
+    display: block;
+    font-size: 0.72rem;
+    color: #9a3412;
     margin-bottom: 0.2rem;
 }
 
-.meta-block .value {
-    font-size: 0.88rem;
-    color: #1e293b;
-    font-weight: 600;
+.doc-summary-grid strong {
+    color: #7c2d12;
 }
 
-.bid-history-table {
-    width: 100%;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    overflow: hidden;
-}
-
-.bid-history-table table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.bid-history-table th {
-    background: #f8fafc;
-    padding: 0.75rem 1rem;
-    text-align: left;
-    font-weight: 600;
-    color: #374151;
-    font-size: 0.85rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.bid-history-table td {
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 0.9rem;
-}
-
-.bid-item-info {
+.history-actions {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
     gap: 0.75rem;
+    margin-top: 1rem;
 }
 
-.bid-item-info img {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 6px;
-}
-
-.bid-item-name {
-    font-weight: 500;
-    color: #1e293b;
-}
-
-.bid-item-sub {
-    font-size: 0.8rem;
-    color: #64748b;
-}
-
-.bid-amount {
-    font-weight: 700;
-    color: #059669;
-}
-
-.bid-status {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 700;
-}
-
-.bid-status.won {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.bid-status.lost {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.bid-status.pending {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.no-data {
+.empty-state {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 3rem 1.5rem;
     text-align: center;
-    padding: 3rem;
-    background: white;
-    border-radius: 12px;
     color: #64748b;
 }
 
 @media (max-width: 768px) {
-    .result-grid {
+    .history-header,
+    .history-card-head,
+    .history-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .history-meta,
+    .doc-summary-grid {
         grid-template-columns: 1fr;
-    }
-
-    .result-meta {
-        grid-template-columns: 1fr;
-    }
-
-    .bid-history-table {
-        overflow-x: auto;
-    }
-
-    .bid-history-table table {
-        min-width: 720px;
     }
 }
 </style>
 
-<div class="page-header">
-    <h1>代行サービス履歴</h1>
-</div>
+<div class="history-page">
+    <a href="{{ url_for('admin_proxy_service') }}" class="history-back">← 代行仕入れサービス管理へ戻る</a>
 
-<div class="proxy-history-container">
-    {% if current_user.is_owner() %}
-    <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 代行サービス管理に戻る</a>
-    {% endif %}
-    
-    <div class="stats-summary">
+    <div class="history-header">
+        <div>
+            <h1>代行仕入れ履歴</h1>
+            <p>終了したオークションを一覧で確認できます。各ページから終了結果、入札履歴、クライアント別計算書の確認へ進めます。</p>
+        </div>
+    </div>
+
+    <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-label">結果表示中</div>
-            <div class="stat-value">{{ history_summary.result_count }}</div>
+            <span class="stat-label">終了済みオークション</span>
+            <div class="stat-value">{{ history_summary.auction_count }}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">落札 / 成立</div>
+            <span class="stat-label">落札成立</span>
             <div class="stat-value">{{ history_summary.winner_count }}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">未確定落札</div>
-            <div class="stat-value">{{ history_summary.pending_finalize_count }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">入札なし終了</div>
-            <div class="stat-value">{{ history_summary.no_bid_count }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">入札件数</div>
+            <span class="stat-label">入札件数</span>
             <div class="stat-value">{{ history_summary.bid_count }}</div>
         </div>
+        <div class="stat-card">
+            <span class="stat-label">計算書下書き</span>
+            <div class="stat-value">{{ history_summary.draft_doc_count }}</div>
+        </div>
     </div>
-    
-    <div class="history-tabs">
-        <button class="history-tab active" onclick="showTab(event, 'results')">終了結果</button>
-        <button class="history-tab" onclick="showTab(event, 'bids')">入札履歴</button>
-    </div>
-    
-    <div id="results-section" class="history-section active">
-        {% if result_items %}
-        <div class="result-grid">
-            {% for item in result_items %}
-            <div class="result-card {{ item.status_class }}">
-                <div class="result-header">
-                    <div class="result-photo">
-                        {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
-                        {% endif %}
+
+    {% if history_auctions %}
+    <div class="history-grid">
+        {% for auction in history_auctions %}
+        <article class="history-card">
+            <div class="history-card-head">
+                <div>
+                    <h2>{{ auction.auction_name or ('オークション #' ~ auction.id) }}</h2>
+                    <p class="history-card-subtitle">{{ auction.page_title or '代行仕入れサービス' }}</p>
+                </div>
+                <div class="history-badges">
+                    <span class="history-badge mode-{{ auction.sale_mode }}">{{ auction.sale_mode_label }}</span>
+                    <span class="history-badge status-ended">{{ auction.status_label }}</span>
+                </div>
+            </div>
+
+            <dl class="history-meta">
+                <div class="history-meta-item">
+                    <dt>開始日時</dt>
+                    <dd>{{ auction.start_display }}</dd>
+                </div>
+                <div class="history-meta-item">
+                    <dt>終了日時</dt>
+                    <dd>{{ auction.end_display }}</dd>
+                </div>
+                <div class="history-meta-item">
+                    <dt>掲載商品</dt>
+                    <dd>{{ auction.item_count or 0 }}件</dd>
+                </div>
+                <div class="history-meta-item">
+                    <dt>入札件数</dt>
+                    <dd>{{ auction.bid_count or 0 }}件</dd>
+                </div>
+                <div class="history-meta-item">
+                    <dt>落札成立</dt>
+                    <dd>{{ auction.winner_count or 0 }}件</dd>
+                </div>
+                <div class="history-meta-item">
+                    <dt>未反映</dt>
+                    <dd>{{ auction.pending_reflection_count or 0 }}件</dd>
+                </div>
+            </dl>
+
+            <div class="doc-summary">
+                <p class="doc-summary-title">計算書の状態</p>
+                <div class="doc-summary-grid">
+                    <div>
+                        <span>下書き</span>
+                        <strong>{{ auction.draft_doc_count or 0 }}件</strong>
                     </div>
                     <div>
-                        <div class="result-auction">{{ item.auction_name }}</div>
-                        <div class="result-name">{{ item.product_name }}</div>
-                        <div class="result-brand">{{ item.brand_name or '-' }}</div>
-                        <span class="result-status {{ item.status_class }}">{{ item.status_label }}</span>
+                        <span>送付準備完了</span>
+                        <strong>{{ auction.completed_doc_count or 0 }}件</strong>
                     </div>
-                </div>
-                <div class="result-meta">
-                    <div class="meta-block">
-                        <span class="label">終了方法</span>
-                        <span class="value">{{ item.ended_method_label or '公開中' }}</span>
-                    </div>
-                    <div class="meta-block">
-                        <span class="label">結果</span>
-                        <span class="value">{{ item.winner_name or '入札なし / 成立なし' }}</span>
-                    </div>
-                    <div class="meta-block">
-                        <span class="label">金額</span>
-                        <span class="value">{% if item.result_price %}¥{{ "{:,}".format(item.result_price) }}{% else %}-{% endif %}</span>
-                    </div>
-                    <div class="meta-block">
-                        <span class="label">入札件数</span>
-                        <span class="value">{{ item.bid_count or 0 }}件</span>
+                    <div>
+                        <span>送付済み</span>
+                        <strong>{{ auction.submitted_doc_count or 0 }}件</strong>
                     </div>
                 </div>
             </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="no-data">
-            <p>終了結果はまだありません</p>
-        </div>
-        {% endif %}
+
+            <div class="history-actions">
+                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary">終了結果 / 入札履歴</a>
+                <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction.id) }}" class="btn btn-secondary">クライアント別計算書</a>
+            </div>
+        </article>
+        {% endfor %}
     </div>
-    
-    <div id="bids-section" class="history-section">
-        {% if bid_history %}
-        <div class="bid-history-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>商品</th>
-                        <th>入札者</th>
-                        <th>入札金額</th>
-                        <th>入札日時</th>
-                        <th>状態</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for bid in bid_history %}
-                    <tr>
-                        <td>
-                            <div class="bid-item-info">
-                                {% if bid.photo_path %}
-                                <img src="{{ url_for('static', filename=bid.photo_path) }}" alt="">
-                                {% endif %}
-                                <div>
-                                    <div class="bid-item-name">{{ bid.product_name }}</div>
-                                    <div class="bid-item-sub">{{ bid.auction_name or 'オークション' }}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>{{ bid.user_display_name or bid.bidder_name or '-' }}</td>
-                        <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
-                        <td>{{ bid.created_at_display }}</td>
-                        <td><span class="bid-status {{ bid.bid_status }}">{{ bid.bid_status_label }}</span></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="no-data">
-            <p>入札履歴はありません</p>
-        </div>
-        {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <h2>履歴はまだありません</h2>
+        <p>終了したオークションができると、ここに表示されます。</p>
     </div>
+    {% endif %}
 </div>
-
-<script>
-function showTab(event, tab) {
-    document.querySelectorAll('.history-tab').forEach((button) => button.classList.remove('active'));
-    event.target.classList.add('active');
-
-    document.querySelectorAll('.history-section').forEach((section) => section.classList.remove('active'));
-    document.getElementById(tab + '-section').classList.add('active');
-}
-</script>
 {% endblock %}

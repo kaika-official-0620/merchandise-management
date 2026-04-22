@@ -291,7 +291,16 @@
         <div class="results-header">
             <div>
                 <h2>終了結果 / 購入者一覧 <span class="item-count">{{ result_items|length }}件</span></h2>
-                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけクライアントの商品一覧へ反映できます。</p>
+                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけクライアントの商品一覧へ反映できます。反映した商品はクライアント別計算書にもまとまります。</p>
+                {% if keisan_summary.total_docs > 0 %}
+                <div class="results-keisan-summary">
+                    <span>計算書 {{ keisan_summary.total_docs }}件</span>
+                    <span>下書き {{ keisan_summary.draft_count }}件</span>
+                    <span>送付準備完了 {{ keisan_summary.completed_count }}件</span>
+                    <span>送付済み {{ keisan_summary.submitted_count }}件</span>
+                    <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction_id) }}">このオークションの計算書を見る</a>
+                </div>
+                {% endif %}
             </div>
             {% if result_summary.pending_reflection_count > 0 %}
             <button type="button" class="btn btn-primary" onclick="reflectAllWinnerItems()">
@@ -311,6 +320,7 @@
                         <th>金額</th>
                         <th>入札</th>
                         <th>クライアント反映</th>
+                        <th>計算書</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -374,11 +384,31 @@
                             </div>
                         </td>
                         <td>
+                            <div class="result-keisan-cell">
+                                {% if item.keisan_doc_id %}
+                                <span class="result-status-badge {{ item.keisan_status_class }}">{{ item.keisan_status_label }}</span>
+                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}">{{ item.keisan_doc_no }}</a>
+                                <span>{{ item.keisan_issue_date_display }}</span>
+                                {% elif item.is_reflected_to_client %}
+                                <span class="result-status-badge scheduled">作成待ち</span>
+                                <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction_id) }}">計算書一覧を見る</a>
+                                {% elif item.can_reflect_to_client %}
+                                <span class="result-empty-text">反映後に作成</span>
+                                {% else %}
+                                <span class="result-empty-text">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
                             <div class="result-action-cell">
                                 {% if item.can_reflect_to_client %}
                                 <button type="button" class="btn btn-sm btn-primary" onclick="reflectWinnerItem({{ item.id }}, this)">
                                     クライアントに反映
                                 </button>
+                                {% elif item.keisan_doc_id %}
+                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}" class="btn btn-sm btn-secondary">
+                                    計算書を見る
+                                </a>
                                 {% elif item.is_reflected_to_client and item.winner_user_id %}
                                 <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}" class="btn btn-sm btn-secondary">
                                     商品一覧を見る
@@ -842,6 +872,35 @@
     line-height: 1.6;
 }
 
+.results-keisan-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    align-items: center;
+}
+
+.results-keisan-summary span,
+.results-keisan-summary a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.8rem;
+    text-decoration: none;
+}
+
+.results-keisan-summary a {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 700;
+}
+
 .results-table-container {
     overflow-x: auto;
 }
@@ -887,6 +946,7 @@
 
 .result-person-cell,
 .result-reflection-cell,
+.result-keisan-cell,
 .result-action-cell {
     display: flex;
     flex-direction: column;
@@ -2136,7 +2196,7 @@ function reflectWinnerItem(itemId, btn) {
 }
 
 function reflectAllWinnerItems() {
-    if (!confirm('落札確定済みの商品を一括でクライアントの商品一覧へ反映しますか？')) {
+    if (!confirm('落札確定済みの商品を一括でクライアントの商品一覧へ反映しますか？\n\n反映した商品はクライアント別計算書にも追加されます。')) {
         return;
     }
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}代行仕入れサービス管理 - 株式会社開花{% endblock %}
 
-{% macro render_auction_card(auction, public_label='ユーザー画面を確認', show_public_link=True) -%}
+{% macro render_auction_card(auction, public_label='公開ページ', show_public_link=True) -%}
 <article class="auction-card {{ auction.status }}">
     <div class="auction-card-head">
         <div class="auction-badges">
@@ -38,15 +38,15 @@
         </dl>
     </div>
     <div class="auction-card-actions">
-        <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary btn-sm">詳細を開く</a>
+        <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary btn-sm">詳細を見る</a>
         {% if show_public_link %}
-        <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="btn btn-secondary btn-sm" target="_blank">{{ public_label }}</a>
+        <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">{{ public_label }}</a>
         {% endif %}
     </div>
 </article>
 {%- endmacro %}
 
-{% macro render_section(section_id, title, lead, auctions, empty_title, empty_copy, public_label='ユーザー画面を確認', show_public_link=True) -%}
+{% macro render_section(section_id, title, lead, auctions, empty_title, empty_copy, public_label='公開ページ', show_public_link=True) -%}
 <section class="management-section" id="{{ section_id }}">
     <div class="section-header">
         <div>
@@ -74,45 +74,44 @@
 <div class="page-header proxy-page-header">
     <div>
         <h1>代行仕入れサービス管理</h1>
-        <p class="page-lead">公開中、公開前、保存済みのページをここで整理して管理できます。履歴は別ページにまとめ、公開前の準備に集中しやすい構成にしています。</p>
+        <p class="page-lead">公開中、公開前、保存済みのページをここで管理します。終了したオークションは履歴ページにまとめてあり、結果確認や計算書確認へ進めます。</p>
     </div>
     <div class="header-actions compact-actions">
-        <a href="{{ url_for('public_proxy_service_list') }}" class="btn btn-secondary btn-compact" target="_blank">公開一覧を確認</a>
+        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary btn-compact">履歴を見る</a>
         <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary btn-compact">新規ページを作成</a>
     </div>
 </div>
 
 <div class="management-summary">
-    <a href="#current" class="summary-card summary-link">
+    <div class="summary-card">
         <span class="summary-label">公開中</span>
         <strong>{{ current_auctions|length }}件</strong>
-        <small>現在公開中のページ</small>
-    </a>
-    <a href="#upcoming" class="summary-card summary-link">
+        <small>今見えている募集ページ</small>
+    </div>
+    <div class="summary-card">
         <span class="summary-label">公開前</span>
         <strong>{{ upcoming_auctions|length }}件</strong>
         <small>開始日時を設定済み</small>
-    </a>
-    <a href="#draft" class="summary-card summary-link">
+    </div>
+    <div class="summary-card">
         <span class="summary-label">保存済み</span>
         <strong>{{ draft_auctions|length }}件</strong>
         <small>まだ公開していないページ</small>
-    </a>
-    <a href="{{ url_for('admin_proxy_service_history') }}" class="summary-card summary-link summary-link-history">
+    </div>
+    <div class="summary-card summary-card-history">
         <span class="summary-label">履歴</span>
         <strong>{{ history_auctions|length }}件</strong>
-        <small>終了済みページを確認</small>
-    </a>
+        <small>終了済みのオークション</small>
+    </div>
 </div>
 
 <details class="guide-toggle">
     <summary>使い方を見る</summary>
     <div class="guide-content">
         <ol class="guide-list">
-            <li>まず「新規ページを作成」で下書きを作成します。</li>
-            <li>詳細画面で商品を選び、開始価格や販売価格、最高価格を設定します。</li>
-            <li>公開前のページは開始日時を入れるか、「今すぐ公開する」で公開します。</li>
-            <li>終了後の履歴確認とクライアント反映は、履歴ページと詳細画面から行います。</li>
+            <li>「新規ページを作成」でページを用意し、詳細画面から掲載商品を選びます。</li>
+            <li>公開前に価格、開始日時、終了日時、販売方式を整えて保存します。</li>
+            <li>終了したページは「履歴を見る」から開き、結果確認とクライアント反映、計算書確認へ進みます。</li>
         </ol>
     </div>
 </details>
@@ -120,27 +119,27 @@
 {{ render_section(
     'current',
     '公開中',
-    'ユーザー側に表示されているページです。公開状態や掲載内容をここから確認できます。',
+    '現在ユーザーに表示されているページです。入札状況や終了時刻を見ながら管理できます。',
     current_auctions,
     '公開中のページはありません',
-    'これから公開するページを作成すると、ここに表示されます。',
-    public_label='ユーザー画面を確認'
+    '公開設定を保存すると、ここに表示されます。',
+    public_label='公開ページ'
 ) }}
 
 {{ render_section(
     'upcoming',
     '公開前',
-    '開始日時を設定しているページです。時間になると自動で公開されます。',
+    '開始日時を設定済みのページです。開始前の最終確認に使えます。',
     upcoming_auctions,
     '公開前のページはありません',
-    '開始日時を設定したページがここに表示されます。',
-    public_label='開始前ページを確認'
+    '開始日時を入れて公開すると、ここに表示されます。',
+    public_label='開始前ページ'
 ) }}
 
 {{ render_section(
     'draft',
     '保存済み',
-    'まだ公開していない下書きページです。商品選定や価格調整に使えます。',
+    'まだ公開していないページです。商品追加や説明文の調整に使えます。',
     draft_auctions,
     '保存済みのページはありません',
     '新規ページを作成すると、ここに表示されます。',
@@ -159,9 +158,9 @@
 
 .compact-actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.65rem;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .btn-compact {
@@ -184,19 +183,7 @@
     padding: 1rem 1.1rem;
 }
 
-.summary-link {
-    color: inherit;
-    text-decoration: none;
-    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.summary-link:hover {
-    transform: translateY(-1px);
-    border-color: #cbd5e1;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-}
-
-.summary-link-history {
+.summary-card-history {
     background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
     border-color: #fdba74;
 }
@@ -262,31 +249,28 @@
 .guide-list {
     margin: 0;
     padding-left: 1.2rem;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    line-height: 1.8;
 }
 
-.guide-list li + li {
-    margin-top: 0.45rem;
-}
-
-.management-section {
-    margin-bottom: 2rem;
+.management-section + .management-section {
+    margin-top: 1.5rem;
 }
 
 .section-header {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: flex-end;
+    align-items: flex-start;
     margin-bottom: 1rem;
 }
 
 .section-header h2 {
-    margin: 0 0 0.3rem;
+    margin: 0;
 }
 
 .section-header p {
-    margin: 0;
+    margin: 0.35rem 0 0;
     color: var(--text-secondary);
 }
 
@@ -294,125 +278,105 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 62px;
-    height: 36px;
-    padding: 0 0.85rem;
+    min-width: 64px;
+    padding: 0.45rem 0.8rem;
     border-radius: 999px;
-    background: var(--bg-main);
-    color: var(--text-primary);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     font-weight: 700;
 }
 
 .auction-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
 }
 
 .auction-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
-.auction-card.open {
-    border-color: #86efac;
-}
-
-.auction-card.scheduled {
-    border-color: #fcd34d;
-}
-
-.auction-card.private {
-    border-color: #cbd5e1;
-}
-
-.auction-card.ended {
-    border-color: #fecaca;
-    background: #fff7f7;
-}
-
-.auction-card-head {
+.auction-card-head,
+.auction-card-actions {
     display: flex;
-    justify-content: space-between;
-    gap: 1rem;
     align-items: center;
-    padding: 0.9rem 1rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-main);
+    justify-content: space-between;
+    gap: 0.75rem;
 }
 
 .auction-badges {
     display: flex;
-    gap: 0.45rem;
     flex-wrap: wrap;
-}
-
-.auction-id {
-    color: var(--text-muted);
-    font-size: 0.8rem;
+    gap: 0.5rem;
 }
 
 .status-badge,
 .mode-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 0.32rem 0.65rem;
+    padding: 0.28rem 0.7rem;
     border-radius: 999px;
-    font-size: 0.76rem;
+    font-size: 0.75rem;
     font-weight: 700;
 }
 
 .status-badge.open {
-    background: #10b981;
-    color: white;
+    background: #dcfce7;
+    color: #166534;
 }
 
 .status-badge.scheduled {
-    background: #f59e0b;
-    color: white;
-}
-
-.status-badge.private {
-    background: #64748b;
-    color: white;
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .status-badge.ended {
-    background: #ef4444;
-    color: white;
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.status-badge.draft {
+    background: #fef3c7;
+    color: #92400e;
 }
 
 .mode-badge.auction {
-    background: #2563eb;
-    color: white;
+    background: #eef2ff;
+    color: #4338ca;
 }
 
 .mode-badge.fixed {
-    background: #ea580c;
-    color: white;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.auction-id {
+    color: var(--text-muted);
+    font-size: 0.85rem;
 }
 
 .auction-card-body {
-    padding: 1rem;
+    margin: 0.9rem 0 1rem;
 }
 
 .auction-card-body h3 {
     margin: 0;
-    font-size: 1.1rem;
 }
 
 .auction-title {
-    margin: 0.25rem 0 0;
+    margin: 0.35rem 0 0;
     color: var(--text-secondary);
+    font-weight: 600;
 }
 
 .auction-description {
-    margin: 0.75rem 0 0;
+    margin: 0.7rem 0 0;
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    line-height: 1.7;
 }
 
 .auction-meta {
@@ -423,15 +387,15 @@
 }
 
 .auction-meta div {
-    background: var(--bg-main);
-    border-radius: 10px;
-    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 0.8rem 0.9rem;
 }
 
 .auction-meta dt {
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     color: var(--text-muted);
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.25rem;
 }
 
 .auction-meta dd {
@@ -440,44 +404,12 @@
     color: var(--text-primary);
 }
 
-.auction-card-actions {
-    display: flex;
-    gap: 0.75rem;
-    padding: 0 1rem 1rem;
-}
-
-.compact {
-    padding: 1.4rem;
-    background: var(--bg-card);
-    border: 1px dashed var(--border);
-    border-radius: var(--radius);
-}
-
-.compact h3 {
-    margin: 0 0 0.4rem;
-}
-
-.compact p {
-    margin: 0;
-    color: var(--text-secondary);
-}
-
 @media (max-width: 768px) {
+    .compact-actions,
     .section-header,
-    .page-header {
+    .auction-card-actions {
         flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .auction-card-actions,
-    .compact-actions {
-        width: 100%;
-        flex-direction: column;
-    }
-
-    .auction-card-actions .btn,
-    .compact-actions .btn {
-        width: 100%;
+        align-items: stretch;
     }
 
     .auction-meta {
