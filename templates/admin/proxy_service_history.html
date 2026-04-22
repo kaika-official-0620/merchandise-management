@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}代行仕入れ履歴 - 株式会社開花{% endblock %}
+{% block title %}{% if is_archive %}代行仕入れ 過去履歴{% else %}代行仕入れ 履歴対応{% endif %} - 株式会社開花{% endblock %}
 
 {% block content %}
 <style>
@@ -8,21 +8,7 @@
     margin: 0 auto;
 }
 
-.history-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    color: #64748b;
-    text-decoration: none;
-    font-size: 0.92rem;
-}
-
-.history-back:hover {
-    color: #1f2937;
-}
-
-.history-header {
+.history-topbar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -30,21 +16,27 @@
     margin-bottom: 1.25rem;
 }
 
-.history-header h1 {
+.history-topbar h1 {
     margin: 0;
 }
 
-.history-header p {
+.history-topbar p {
     margin: 0.45rem 0 0;
     color: #64748b;
     line-height: 1.7;
+}
+
+.topbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
 }
 
 .stat-card {
@@ -68,9 +60,34 @@
     color: #0f172a;
 }
 
+.filter-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    margin-bottom: 1.25rem;
+}
+
+.filter-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 220px) auto auto;
+    gap: 0.75rem;
+}
+
+.filter-form input,
+.filter-form select {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.95rem;
+}
+
 .history-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 1rem;
 }
 
@@ -79,7 +96,7 @@
     border: 1px solid #e2e8f0;
     border-radius: 18px;
     padding: 1.1rem;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
 }
 
 .history-card-head {
@@ -91,11 +108,11 @@
 
 .history-card h2 {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: 1.1rem;
 }
 
-.history-card-subtitle {
-    margin: 0.3rem 0 0;
+.history-subtitle {
+    margin: 0.35rem 0 0;
     color: #64748b;
     font-size: 0.92rem;
 }
@@ -109,9 +126,9 @@
 .history-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.28rem 0.7rem;
     border-radius: 999px;
-    font-size: 0.75rem;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.76rem;
     font-weight: 700;
 }
 
@@ -130,67 +147,54 @@
     color: #334155;
 }
 
-.history-meta {
+.history-badge.attention {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.meta-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
     margin-top: 1rem;
 }
 
-.history-meta-item {
+.meta-box {
     background: #f8fafc;
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
 }
 
-.history-meta-item dt {
+.meta-box dt {
     font-size: 0.72rem;
     color: #64748b;
     margin-bottom: 0.25rem;
 }
 
-.history-meta-item dd {
+.meta-box dd {
     margin: 0;
     font-weight: 700;
     color: #0f172a;
 }
 
-.doc-summary {
+.summary-box {
     margin-top: 1rem;
-    padding: 0.9rem 1rem;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
     border: 1px solid #fdba74;
+    background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
 }
 
-.doc-summary-title {
-    margin: 0 0 0.55rem;
-    font-size: 0.9rem;
-    font-weight: 700;
+.summary-box h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.92rem;
     color: #9a3412;
 }
 
-.doc-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.6rem;
-}
-
-.doc-summary-grid div {
-    background: rgba(255, 255, 255, 0.8);
-    border-radius: 10px;
-    padding: 0.65rem 0.7rem;
-}
-
-.doc-summary-grid span {
-    display: block;
-    font-size: 0.72rem;
-    color: #9a3412;
-    margin-bottom: 0.2rem;
-}
-
-.doc-summary-grid strong {
+.summary-box p {
+    margin: 0;
     color: #7c2d12;
+    line-height: 1.7;
 }
 
 .history-actions {
@@ -209,48 +213,82 @@
     color: #64748b;
 }
 
+@media (max-width: 900px) {
+    .filter-form {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 768px) {
-    .history-header,
+    .history-topbar,
     .history-card-head,
     .history-actions {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .history-meta,
-    .doc-summary-grid {
+    .meta-grid {
         grid-template-columns: 1fr;
     }
 }
 </style>
 
 <div class="history-page">
-    <a href="{{ url_for('admin_proxy_service') }}" class="history-back">← 代行仕入れサービス管理へ戻る</a>
-
-    <div class="history-header">
+    <div class="history-topbar">
         <div>
-            <h1>代行仕入れ履歴</h1>
-            <p>終了したオークションを一覧で確認できます。各ページから終了結果、入札履歴、クライアント別計算書の確認へ進めます。</p>
+            <h1>{% if is_archive %}代行仕入れ 過去履歴{% else %}代行仕入れ 履歴対応{% endif %}</h1>
+            <p>
+                {% if is_archive %}
+                送付まで対応済みの代行仕入れ履歴です。必要なときに過去案件を検索して確認できます。
+                {% else %}
+                まだ対応が残っている終了案件だけを表示しています。終了結果、入札履歴、クライアント別計算書の確認に進めます。
+                {% endif %}
+            </p>
+        </div>
+        <div class="topbar-actions">
+            <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">管理一覧へ戻る</a>
+            {% if is_archive %}
+            <a href="{{ url_for('admin_proxy_service_history', keyword=filters.keyword, sale_mode=filters.sale_mode) }}" class="btn btn-secondary">未対応履歴を見る</a>
+            {% else %}
+            <a href="{{ url_for('admin_proxy_service_history_archive', keyword=filters.keyword, sale_mode=filters.sale_mode) }}" class="btn btn-secondary">過去履歴を見る</a>
+            {% endif %}
         </div>
     </div>
 
     <div class="stats-grid">
         <div class="stat-card">
-            <span class="stat-label">終了済みオークション</span>
-            <div class="stat-value">{{ history_summary.auction_count }}</div>
+            <span class="stat-label">{% if is_archive %}過去履歴件数{% else %}未対応履歴件数{% endif %}</span>
+            <div class="stat-value">{% if is_archive %}{{ history_summary.archive_auction_count or history_auctions|length }}{% else %}{{ history_summary.pending_auction_count or history_auctions|length }}{% endif %}</div>
         </div>
         <div class="stat-card">
-            <span class="stat-label">落札成立</span>
-            <div class="stat-value">{{ history_summary.winner_count }}</div>
+            <span class="stat-label">{% if is_archive %}送付済み件数{% else %}対応待ちアクション{% endif %}</span>
+            <div class="stat-value">{% if is_archive %}{{ history_summary.submitted_count or 0 }}{% else %}{{ history_summary.pending_attention_count or 0 }}{% endif %}</div>
         </div>
         <div class="stat-card">
-            <span class="stat-label">入札件数</span>
-            <div class="stat-value">{{ history_summary.bid_count }}</div>
+            <span class="stat-label">落札クライアント数</span>
+            <div class="stat-value">{{ history_summary.winner_count or 0 }}</div>
         </div>
         <div class="stat-card">
-            <span class="stat-label">計算書下書き</span>
-            <div class="stat-value">{{ history_summary.draft_doc_count }}</div>
+            <span class="stat-label">{% if is_archive %}未対応履歴件数{% else %}過去履歴件数{% endif %}</span>
+            <div class="stat-value">{% if is_archive %}{{ history_summary.pending_auction_count or 0 }}{% else %}{{ history_summary.archive_auction_count or 0 }}{% endif %}</div>
         </div>
+    </div>
+
+    <div class="filter-card">
+        <form method="GET" class="filter-form">
+            <input type="text" name="keyword" value="{{ filters.keyword or '' }}" placeholder="オークション名、ページ名、クライアント名で検索">
+            <select name="sale_mode">
+                <option value="all" {% if (filters.sale_mode or 'all') == 'all' %}selected{% endif %}>すべての形式</option>
+                <option value="auction" {% if filters.sale_mode == 'auction' %}selected{% endif %}>オークション</option>
+                <option value="fixed" {% if filters.sale_mode == 'fixed' %}selected{% endif %}>早い者勝ち</option>
+            </select>
+            <button type="submit" class="btn btn-primary">絞り込む</button>
+            {% if is_archive %}
+            <a href="{{ url_for('admin_proxy_service_history_archive') }}" class="btn btn-secondary">クリア</a>
+            {% else %}
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">クリア</a>
+            {% endif %}
+        </form>
     </div>
 
     {% if history_auctions %}
@@ -260,61 +298,63 @@
             <div class="history-card-head">
                 <div>
                     <h2>{{ auction.auction_name or ('オークション #' ~ auction.id) }}</h2>
-                    <p class="history-card-subtitle">{{ auction.page_title or '代行仕入れサービス' }}</p>
+                    <p class="history-subtitle">{{ auction.page_title or '代行仕入れサービス' }}</p>
                 </div>
                 <div class="history-badges">
                     <span class="history-badge mode-{{ auction.sale_mode }}">{{ auction.sale_mode_label }}</span>
                     <span class="history-badge status-ended">{{ auction.status_label }}</span>
+                    {% if not is_archive and (auction.attention_count or 0) > 0 %}
+                    <span class="history-badge attention">未対応 {{ auction.attention_count }}</span>
+                    {% endif %}
                 </div>
             </div>
 
-            <dl class="history-meta">
-                <div class="history-meta-item">
+            <dl class="meta-grid">
+                <div class="meta-box">
                     <dt>開始日時</dt>
                     <dd>{{ auction.start_display }}</dd>
                 </div>
-                <div class="history-meta-item">
+                <div class="meta-box">
                     <dt>終了日時</dt>
                     <dd>{{ auction.end_display }}</dd>
                 </div>
-                <div class="history-meta-item">
-                    <dt>掲載商品</dt>
+                <div class="meta-box">
+                    <dt>掲載商品数</dt>
                     <dd>{{ auction.item_count or 0 }}件</dd>
                 </div>
-                <div class="history-meta-item">
-                    <dt>入札件数</dt>
+                <div class="meta-box">
+                    <dt>入札数</dt>
                     <dd>{{ auction.bid_count or 0 }}件</dd>
                 </div>
-                <div class="history-meta-item">
-                    <dt>落札成立</dt>
+                <div class="meta-box">
+                    <dt>落札クライアント</dt>
                     <dd>{{ auction.winner_count or 0 }}件</dd>
                 </div>
-                <div class="history-meta-item">
-                    <dt>未反映</dt>
-                    <dd>{{ auction.pending_reflection_count or 0 }}件</dd>
+                <div class="meta-box">
+                    <dt>計算書</dt>
+                    <dd>下書き {{ auction.draft_doc_count or 0 }} / 完了 {{ auction.completed_doc_count or 0 }} / 送付済み {{ auction.submitted_doc_count or 0 }}</dd>
                 </div>
             </dl>
 
-            <div class="doc-summary">
-                <p class="doc-summary-title">計算書の状態</p>
-                <div class="doc-summary-grid">
-                    <div>
-                        <span>下書き</span>
-                        <strong>{{ auction.draft_doc_count or 0 }}件</strong>
-                    </div>
-                    <div>
-                        <span>送付準備完了</span>
-                        <strong>{{ auction.completed_doc_count or 0 }}件</strong>
-                    </div>
-                    <div>
-                        <span>送付済み</span>
-                        <strong>{{ auction.submitted_doc_count or 0 }}件</strong>
-                    </div>
-                </div>
+            <div class="summary-box">
+                <h3>対応状況</h3>
+                <p>
+                    {% if auction.winner_names_summary and auction.winner_names_summary != '-' %}
+                    落札クライアント: {{ auction.winner_names_summary }}
+                    {% else %}
+                    落札クライアントはまだいません。
+                    {% endif %}
+                    {% if auction.item_names_summary and auction.item_names_summary != '-' %}
+                    <br>対象商品: {{ auction.item_names_summary }}
+                    {% endif %}
+                    {% if not is_archive %}
+                    <br>落札確定待ち {{ auction.pending_finalize_count or 0 }}件 / 計算書未追加 {{ auction.pending_prepare_count or 0 }}件 / 送付準備完了 {{ auction.prepared_count or 0 }}件
+                    {% endif %}
+                </p>
             </div>
 
             <div class="history-actions">
-                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary">終了結果 / 入札履歴</a>
+                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary">終了結果を見る</a>
                 <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction.id) }}" class="btn btn-secondary">クライアント別計算書</a>
             </div>
         </article>
@@ -322,8 +362,11 @@
     </div>
     {% else %}
     <div class="empty-state">
-        <h2>履歴はまだありません</h2>
-        <p>終了したオークションができると、ここに表示されます。</p>
+        {% if is_archive %}
+        条件に一致する過去履歴はありません。
+        {% else %}
+        まだ未対応の履歴はありません。
+        {% endif %}
     </div>
     {% endif %}
 </div>

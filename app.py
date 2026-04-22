@@ -257,6 +257,18 @@ def ensure_proxy_service_keisan_columns(conn=None, cur=None):
             if _docs_column_exists(cur, 'user_keisan', column_name):
                 continue
             cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
+
+        item_column_specs = [
+            (
+                'proxy_source_item_id',
+                "ALTER TABLE user_keisan_items ADD COLUMN proxy_source_item_id INTEGER REFERENCES merchandise(id)",
+                "ALTER TABLE user_keisan_items ADD COLUMN proxy_source_item_id INTEGER REFERENCES merchandise(id)",
+            ),
+        ]
+        for column_name, pg_sql, sqlite_sql in item_column_specs:
+            if _docs_column_exists(cur, 'user_keisan_items', column_name):
+                continue
+            cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
         if managed_conn:
             conn.commit()
     finally:
@@ -264,6 +276,198 @@ def ensure_proxy_service_keisan_columns(conn=None, cur=None):
             cur.close()
         if managed_conn:
             conn.close()
+
+
+def ensure_proxy_service_auction_user_table(conn=None, cur=None):
+    managed_conn = False
+    managed_cursor = False
+
+    if conn is None:
+        conn = get_db()
+        managed_conn = True
+    if cur is None:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
+        managed_cursor = True
+
+    try:
+        source_item_id = source_item.get('id')
+
+        if DATABASE_URL:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS proxy_service_auction_users (
+                    id SERIAL PRIMARY KEY,
+                    auction_id INTEGER REFERENCES proxy_service_settings(id) ON DELETE CASCADE,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    is_enabled BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(auction_id, user_id)
+                )
+                """
+            )
+        else:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS proxy_service_auction_users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    auction_id INTEGER REFERENCES proxy_service_settings(id) ON DELETE CASCADE,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    is_enabled INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(auction_id, user_id)
+                )
+                """
+            )
+        if managed_conn:
+            conn.commit()
+    finally:
+        if managed_cursor:
+            cur.close()
+        if managed_conn:
+            conn.close()
+
+
+def _proxy_service_auction_user_count(conn, auction_id):
+    ensure_proxy_service_auction_user_table(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM proxy_service_auction_users
+            WHERE auction_id = %s
+              AND COALESCE(is_enabled, TRUE) = TRUE
+            """,
+            (auction_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        return int((row or {}).get('count') or 0)
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM proxy_service_auction_users
+        WHERE auction_id = ?
+          AND COALESCE(is_enabled, 1) = 1
+        """,
+        (auction_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    return int((dict(row).get('count') if row else 0) or 0)
+
+
+def proxy_service_auction_has_target_users(conn, auction_id):
+    return _proxy_service_auction_user_count(conn, auction_id) > 0
+
+
+def proxy_service_auction_has_user_config(conn, auction_id):
+    ensure_proxy_service_auction_user_table(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM proxy_service_auction_users
+            WHERE auction_id = %s
+            """,
+            (auction_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        return int((row or {}).get('count') or 0) > 0
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM proxy_service_auction_users
+        WHERE auction_id = ?
+        """,
+        (auction_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    return int((dict(row).get('count') if row else 0) or 0) > 0
+
+
+def is_proxy_service_user_allowed(conn, user_id, auction_id):
+    if not user_id or not auction_id:
+        return False
+
+    ensure_proxy_service_auction_user_table(conn)
+
+    if proxy_service_auction_has_user_config(conn, auction_id):
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT 1
+                FROM proxy_service_auction_users
+                WHERE auction_id = %s
+                  AND user_id = %s
+                  AND COALESCE(is_enabled, TRUE) = TRUE
+                LIMIT 1
+                """,
+                (auction_id, user_id),
+            )
+            allowed = cur.fetchone() is not None
+            cur.close()
+            return allowed
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1
+            FROM proxy_service_auction_users
+            WHERE auction_id = ?
+              AND user_id = ?
+              AND COALESCE(is_enabled, 1) = 1
+            LIMIT 1
+            """,
+            (auction_id, user_id),
+        )
+        allowed = cur.fetchone() is not None
+        cur.close()
+        return allowed
+
+    if DATABASE_URL:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1
+            FROM proxy_service_users
+            WHERE user_id = %s
+              AND COALESCE(is_enabled, TRUE) = TRUE
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        allowed = cur.fetchone() is not None
+        cur.close()
+        return allowed
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM proxy_service_users
+        WHERE user_id = ?
+          AND COALESCE(is_enabled, 1) = 1
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    allowed = cur.fetchone() is not None
+    cur.close()
+    return allowed
 
 
 def sync_proxy_service_keisan_documents(conn):
@@ -286,7 +490,7 @@ def sync_proxy_service_keisan_documents(conn):
                 FROM user_keisan k
                 LEFT JOIN user_keisan_items ki ON ki.keisan_id = k.id
                 LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
-                LEFT JOIN merchandise src ON src.id = reflected.proxy_parent_item_id
+                LEFT JOIN merchandise src ON src.id = COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id)
                 WHERE k.is_admin_created = TRUE
                 GROUP BY k.id, k.user_id, k.proxy_service_auction_id
                 """
@@ -302,7 +506,7 @@ def sync_proxy_service_keisan_documents(conn):
                 FROM user_keisan k
                 LEFT JOIN user_keisan_items ki ON ki.keisan_id = k.id
                 LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
-                LEFT JOIN merchandise src ON src.id = reflected.proxy_parent_item_id
+                LEFT JOIN merchandise src ON src.id = COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id)
                 WHERE k.is_admin_created = 1
                 GROUP BY k.id, k.user_id, k.proxy_service_auction_id
                 """
@@ -378,7 +582,7 @@ def sync_proxy_service_keisan_documents(conn):
                 placeholders = ','.join(['%s'] * len(target_ids))
                 cur.execute(
                     f"""
-                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    SELECT keisan_id, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
                     FROM user_keisan_items
                     WHERE keisan_id IN ({placeholders})
                     ORDER BY keisan_id, item_no
@@ -389,7 +593,7 @@ def sync_proxy_service_keisan_documents(conn):
                 placeholders = ','.join(['?'] * len(target_ids))
                 cur.execute(
                     f"""
-                    SELECT keisan_id, item_name, merchandise_id, quantity, unit, unit_price, amount
+                    SELECT keisan_id, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
                     FROM user_keisan_items
                     WHERE keisan_id IN ({placeholders})
                     ORDER BY keisan_id, item_no
@@ -398,14 +602,14 @@ def sync_proxy_service_keisan_documents(conn):
                 )
 
             combined_items = []
-            seen_merchandise_ids = set()
+            seen_item_keys = set()
             for raw_item in cur.fetchall():
                 item = proxy_service_row_to_dict(raw_item)
-                merchandise_id = item.get('merchandise_id')
-                if merchandise_id:
-                    if merchandise_id in seen_merchandise_ids:
+                item_key = item.get('proxy_source_item_id') or item.get('merchandise_id')
+                if item_key:
+                    if item_key in seen_item_keys:
                         continue
-                    seen_merchandise_ids.add(merchandise_id)
+                    seen_item_keys.add(item_key)
                 combined_items.append(item)
 
             if DATABASE_URL:
@@ -424,14 +628,15 @@ def sync_proxy_service_keisan_documents(conn):
                     cur.execute(
                         """
                         INSERT INTO user_keisan_items (
-                            keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             primary_id,
                             index,
                             item.get('item_name'),
                             item.get('merchandise_id'),
+                            item.get('proxy_source_item_id'),
                             quantity,
                             item.get('unit'),
                             unit_price,
@@ -442,14 +647,15 @@ def sync_proxy_service_keisan_documents(conn):
                     cur.execute(
                         """
                         INSERT INTO user_keisan_items (
-                            keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             primary_id,
                             index,
                             item.get('item_name'),
                             item.get('merchandise_id'),
+                            item.get('proxy_source_item_id'),
                             quantity,
                             item.get('unit'),
                             unit_price,
@@ -552,6 +758,185 @@ def fetch_proxy_service_keisan_doc_map(conn, auction_id=None):
         cur.close()
 
 
+def fetch_proxy_service_keisan_item_map(conn, auction_id=None):
+    ensure_proxy_service_keisan_columns(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        params = []
+        query = """
+            SELECT k.id AS keisan_id,
+                   k.user_id,
+                   k.proxy_service_auction_id,
+                   k.document_no,
+                   k.issue_date,
+                   k.status,
+                   COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ki.id AS keisan_item_id,
+                   ki.item_name,
+                   ki.merchandise_id,
+                   ki.proxy_source_item_id,
+                   COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan k
+            JOIN user_keisan_items ki ON ki.keisan_id = k.id
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE k.is_admin_created = TRUE
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = %s"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC,
+                     CASE k.status WHEN 'submitted' THEN 2 WHEN 'completed' THEN 1 ELSE 0 END DESC,
+                     k.id DESC,
+                     ki.item_no ASC
+        """
+        cur.execute(query, tuple(params))
+        if item_sold:
+            prepare_proxy_service_keisan_for_item(
+                conn,
+                {
+                    **dict(item),
+                    'auction_id': auction_id,
+                    'auction_name': settings.get('auction_name') or f'オークション #{auction_id}',
+                    'sale_mode': 'auction',
+                    'winner_user_id': user_id,
+                    'winner_name': bidder_name,
+                    'result_price': accepted_bid_amount,
+                },
+                now=now,
+            )
+    else:
+        cur = conn.cursor()
+        params = []
+        query = """
+            SELECT k.id AS keisan_id,
+                   k.user_id,
+                   k.proxy_service_auction_id,
+                   k.document_no,
+                   k.issue_date,
+                   k.status,
+                   COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ki.id AS keisan_item_id,
+                   ki.item_name,
+                   ki.merchandise_id,
+                   ki.proxy_source_item_id,
+                   COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan k
+            JOIN user_keisan_items ki ON ki.keisan_id = k.id
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE k.is_admin_created = 1
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = ?"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC,
+                     CASE k.status WHEN 'submitted' THEN 2 WHEN 'completed' THEN 1 ELSE 0 END DESC,
+                     k.id DESC,
+                     ki.item_no ASC
+        """
+        cur.execute(query, tuple(params))
+
+    try:
+        item_map = {}
+        for raw_item in cur.fetchall():
+            item = proxy_service_row_to_dict(raw_item)
+            source_item_id = item.get('source_item_id')
+            if not source_item_id:
+                continue
+            status_label, status_class = get_proxy_service_keisan_status_meta(item.get('status'))
+            item['status_label'] = status_label
+            item['status_class'] = status_class
+            item_map.setdefault(source_item_id, item)
+        return item_map
+    finally:
+        cur.close()
+
+
+def fetch_proxy_service_keisan_item_map(conn, auction_id=None):
+    ensure_proxy_service_keisan_columns(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        params = []
+        query = """
+            SELECT k.id AS keisan_id,
+                   k.user_id,
+                   k.proxy_service_auction_id,
+                   k.document_no,
+                   k.issue_date,
+                   k.status,
+                   COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ki.id AS keisan_item_id,
+                   ki.item_name,
+                   ki.merchandise_id,
+                   ki.proxy_source_item_id,
+                   COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan k
+            JOIN user_keisan_items ki ON ki.keisan_id = k.id
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE k.is_admin_created = TRUE
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = %s"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC,
+                     CASE k.status WHEN 'submitted' THEN 2 WHEN 'completed' THEN 1 ELSE 0 END DESC,
+                     k.id DESC,
+                     ki.item_no ASC
+        """
+        cur.execute(query, tuple(params))
+    else:
+        cur = conn.cursor()
+        params = []
+        query = """
+            SELECT k.id AS keisan_id,
+                   k.user_id,
+                   k.proxy_service_auction_id,
+                   k.document_no,
+                   k.issue_date,
+                   k.status,
+                   COALESCE(k.updated_at, k.created_at) AS updated_at,
+                   ki.id AS keisan_item_id,
+                   ki.item_name,
+                   ki.merchandise_id,
+                   ki.proxy_source_item_id,
+                   COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan k
+            JOIN user_keisan_items ki ON ki.keisan_id = k.id
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE k.is_admin_created = 1
+              AND k.proxy_service_auction_id IS NOT NULL
+        """
+        if auction_id:
+            query += " AND k.proxy_service_auction_id = ?"
+            params.append(auction_id)
+        query += """
+            ORDER BY COALESCE(k.updated_at, k.created_at) DESC,
+                     CASE k.status WHEN 'submitted' THEN 2 WHEN 'completed' THEN 1 ELSE 0 END DESC,
+                     k.id DESC,
+                     ki.item_no ASC
+        """
+        cur.execute(query, tuple(params))
+
+    try:
+        item_map = {}
+        for raw_row in cur.fetchall():
+            row = proxy_service_row_to_dict(raw_row)
+            status_label, status_class = get_proxy_service_keisan_status_meta(row.get('status'))
+            row['status_label'] = status_label
+            row['status_class'] = status_class
+            item_map[row.get('source_item_id')] = row
+        return item_map
+    finally:
+        cur.close()
+
+
 def upsert_proxy_service_keisan_document(
     conn,
     *,
@@ -559,9 +944,9 @@ def upsert_proxy_service_keisan_document(
     auction_name,
     winner_user_id,
     winner_name,
-    reflected_item_id,
     source_item,
     amount,
+    reflected_item_id=None,
     now=None,
     status='draft',
 ):
@@ -672,29 +1057,55 @@ def upsert_proxy_service_keisan_document(
 
         keisan_id = keisan['id']
 
-        if DATABASE_URL:
-            cur.execute(
-                """
-                SELECT id
-                FROM user_keisan_items
-                WHERE keisan_id = %s
-                  AND merchandise_id = %s
-                LIMIT 1
-                """,
-                (keisan_id, reflected_item_id),
-            )
+        existing_item = None
+        if source_item_id:
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM user_keisan_items
+                    WHERE keisan_id = %s
+                      AND proxy_source_item_id = %s
+                    LIMIT 1
+                    """,
+                    (keisan_id, source_item_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM user_keisan_items
+                    WHERE keisan_id = ?
+                      AND proxy_source_item_id = ?
+                    LIMIT 1
+                    """,
+                    (keisan_id, source_item_id),
+                )
             existing_item = proxy_service_row_to_dict(cur.fetchone())
-        else:
-            cur.execute(
-                """
-                SELECT id
-                FROM user_keisan_items
-                WHERE keisan_id = ?
-                  AND merchandise_id = ?
-                LIMIT 1
-                """,
-                (keisan_id, reflected_item_id),
-            )
+
+        if not existing_item and reflected_item_id:
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM user_keisan_items
+                    WHERE keisan_id = %s
+                      AND merchandise_id = %s
+                    LIMIT 1
+                    """,
+                    (keisan_id, reflected_item_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM user_keisan_items
+                    WHERE keisan_id = ?
+                      AND merchandise_id = ?
+                    LIMIT 1
+                    """,
+                    (keisan_id, reflected_item_id),
+                )
             existing_item = proxy_service_row_to_dict(cur.fetchone())
 
         if not existing_item:
@@ -704,14 +1115,15 @@ def upsert_proxy_service_keisan_document(
                 cur.execute(
                     """
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         keisan_id,
                         next_item_no,
                         source_item.get('product_name', '商品'),
                         reflected_item_id,
+                        source_item_id,
                         1,
                         '点',
                         amount,
@@ -724,14 +1136,15 @@ def upsert_proxy_service_keisan_document(
                 cur.execute(
                     """
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         keisan_id,
                         next_item_no,
                         source_item.get('product_name', '商品'),
                         reflected_item_id,
+                        source_item_id,
                         1,
                         '点',
                         amount,
@@ -811,7 +1224,7 @@ def upsert_proxy_service_keisan_document(
     }
 
 
-def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=None):
+def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=None, skip_keisan=False):
     now = now or get_jst_now()
     original_item_id = item.get('id')
     winner_user_id = item.get('winner_user_id') or item.get('highest_bid_user_id')
@@ -954,7 +1367,7 @@ def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=No
         cur.close()
 
     keisan_result = None
-    if auction_id and reflected_item_id:
+    if not skip_keisan and auction_id and reflected_item_id:
         keisan_result = upsert_proxy_service_keisan_document(
             conn,
             auction_id=auction_id,
@@ -977,6 +1390,333 @@ def create_proxy_service_reflected_item(conn, item, reflected_by_user_id, now=No
         'keisan_created': (keisan_result or {}).get('created_doc', False),
         'keisan_item_added': (keisan_result or {}).get('item_added', False),
     }
+
+
+def fetch_proxy_service_source_item_map(conn, item_ids):
+    item_ids = [int(item_id) for item_id in set(item_ids or []) if item_id]
+    if not item_ids:
+        return {}
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        placeholders = ','.join(['%s'] * len(item_ids))
+        cur.execute(
+            f"""
+            SELECT m.id, m.auction_id, m.photo_path, m.additional_photos, m.product_name, m.brand_name,
+                   m.item_condition, m.purchase_price, m.listing_price, m.model_number, m.sale_date, m.sale_price,
+                   m.sale_type, m.sales_destination, m.show_in_proxy_service, m.expected_shipping,
+                   m.expected_commission, m.notes, ps.auction_name, COALESCE(ps.sale_mode, 'auction') AS sale_mode
+            FROM merchandise m
+            LEFT JOIN proxy_service_settings ps ON ps.id = m.auction_id
+            WHERE m.id IN ({placeholders})
+            """,
+            tuple(item_ids),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        placeholders = ','.join(['?'] * len(item_ids))
+        cur.execute(
+            f"""
+            SELECT m.id, m.auction_id, m.photo_path, m.additional_photos, m.product_name, m.brand_name,
+                   m.item_condition, m.purchase_price, m.listing_price, m.model_number, m.sale_date, m.sale_price,
+                   m.sale_type, m.sales_destination, m.show_in_proxy_service, m.expected_shipping,
+                   m.expected_commission, m.notes, ps.auction_name, COALESCE(ps.sale_mode, 'auction') AS sale_mode
+            FROM merchandise m
+            LEFT JOIN proxy_service_settings ps ON ps.id = m.auction_id
+            WHERE m.id IN ({placeholders})
+            """,
+            tuple(item_ids),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+    return {row['id']: row for row in rows}
+
+
+def submit_proxy_service_keisan_document(conn, keisan_id, actor_user_id, now=None):
+    now = now or get_jst_now()
+    ensure_proxy_service_keisan_columns(conn)
+    today = now.strftime('%Y-%m-%d')
+    updated_at_value = now.strftime('%Y-%m-%d %H:%M:%S')
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT k.*, u.display_name AS user_name, u.username,
+                   ps.auction_name, COALESCE(ps.sale_mode, 'auction') AS sale_mode
+            FROM user_keisan k
+            JOIN users u ON u.id = k.user_id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+            WHERE k.id = %s AND k.is_admin_created = TRUE
+            """,
+            (keisan_id,),
+        )
+        keisan = proxy_service_row_to_dict(cur.fetchone())
+        if not keisan:
+            cur.close()
+            raise ValueError('計算書が見つかりません')
+        cur.execute(
+            """
+            SELECT ki.*, COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan_items ki
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE ki.keisan_id = %s
+            ORDER BY ki.item_no
+            """,
+            (keisan_id,),
+        )
+        items = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT k.*, u.display_name AS user_name, u.username,
+                   ps.auction_name, COALESCE(ps.sale_mode, 'auction') AS sale_mode
+            FROM user_keisan k
+            JOIN users u ON u.id = k.user_id
+            LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+            WHERE k.id = ? AND k.is_admin_created = 1
+            """,
+            (keisan_id,),
+        )
+        keisan = proxy_service_row_to_dict(cur.fetchone())
+        if not keisan:
+            cur.close()
+            raise ValueError('計算書が見つかりません')
+        cur.execute(
+            """
+            SELECT ki.*, COALESCE(ki.proxy_source_item_id, reflected.proxy_parent_item_id) AS source_item_id
+            FROM user_keisan_items ki
+            LEFT JOIN merchandise reflected ON reflected.id = ki.merchandise_id
+            WHERE ki.keisan_id = ?
+            ORDER BY ki.item_no
+            """,
+            (keisan_id,),
+        )
+        items = [dict(row) for row in cur.fetchall()]
+
+    if not items:
+        cur.close()
+        raise ValueError('計算書に商品が入っていません')
+
+    source_item_ids = [item.get('source_item_id') for item in items if item.get('source_item_id')]
+    source_item_map = fetch_proxy_service_source_item_map(conn, source_item_ids)
+    missing_source_ids = [item_id for item_id in source_item_ids if item_id not in source_item_map]
+    if missing_source_ids:
+        cur.close()
+        raise ValueError('元商品が見つからないため送付できません')
+
+    winner_name = keisan.get('recipient_name') or keisan.get('user_name') or keisan.get('username') or ''
+    reflected_count = 0
+    updated_source_ids = set()
+
+    for item in items:
+        source_item_id = item.get('source_item_id')
+        if not source_item_id:
+            continue
+
+        reflected_item_id = item.get('merchandise_id')
+        if reflected_item_id:
+            if DATABASE_URL:
+                cur.execute("SELECT id FROM merchandise WHERE id = %s", (reflected_item_id,))
+                existing_reflected = proxy_service_row_to_dict(cur.fetchone())
+            else:
+                cur.execute("SELECT id FROM merchandise WHERE id = ?", (reflected_item_id,))
+                existing_reflected = proxy_service_row_to_dict(cur.fetchone())
+            if not existing_reflected:
+                reflected_item_id = None
+
+        if not reflected_item_id:
+            unit_price = int(item.get('unit_price') or 0)
+            amount = int(item.get('amount') or 0)
+            result_price = unit_price or amount
+            source_item = dict(source_item_map.get(source_item_id) or {})
+            source_item.update({
+                'winner_user_id': keisan.get('user_id'),
+                'winner_name': winner_name,
+                'result_price': result_price,
+                'auction_id': keisan.get('proxy_service_auction_id') or source_item.get('auction_id'),
+                'auction_name': keisan.get('auction_name') or source_item.get('auction_name') or '代行仕入れサービス',
+                'sale_mode': keisan.get('sale_mode') or source_item.get('sale_mode') or 'auction',
+            })
+            reflection_result = create_proxy_service_reflected_item(
+                conn,
+                source_item,
+                actor_user_id,
+                now=now,
+                skip_keisan=True,
+            )
+            reflected_item_id = reflection_result.get('reflected_item_id')
+            if reflection_result.get('created'):
+                reflected_count += 1
+
+        source_sale_price = int(item.get('unit_price') or item.get('amount') or 0)
+        sales_destination = winner_name or keisan.get('user_name') or keisan.get('username') or ''
+
+        if DATABASE_URL:
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET purchase_date = %s,
+                    proxy_parent_item_id = %s,
+                    wholesale_price = CASE
+                        WHEN COALESCE(wholesale_price, 0) <= 0 THEN %s
+                        ELSE wholesale_price
+                    END,
+                    purchase_price = CASE
+                        WHEN COALESCE(purchase_price, 0) <= 0 THEN %s
+                        ELSE purchase_price
+                    END,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (today, source_item_id, source_sale_price, source_sale_price, actor_user_id, reflected_item_id),
+            )
+            cur.execute(
+                """
+                UPDATE user_keisan_items
+                SET merchandise_id = %s,
+                    proxy_source_item_id = %s
+                WHERE id = %s
+                """,
+                (reflected_item_id, source_item_id, item['id']),
+            )
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET sale_date = %s,
+                    sale_price = COALESCE(sale_price, %s),
+                    sales_destination = COALESCE(sales_destination, %s),
+                    show_in_proxy_service = FALSE,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (today, source_sale_price, sales_destination, actor_user_id, source_item_id),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET purchase_date = ?,
+                    proxy_parent_item_id = ?,
+                    wholesale_price = CASE
+                        WHEN COALESCE(wholesale_price, 0) <= 0 THEN ?
+                        ELSE wholesale_price
+                    END,
+                    purchase_price = CASE
+                        WHEN COALESCE(purchase_price, 0) <= 0 THEN ?
+                        ELSE purchase_price
+                    END,
+                    updated_by = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    today,
+                    source_item_id,
+                    source_sale_price,
+                    source_sale_price,
+                    actor_user_id,
+                    updated_at_value,
+                    reflected_item_id,
+                ),
+            )
+            cur.execute(
+                """
+                UPDATE user_keisan_items
+                SET merchandise_id = ?,
+                    proxy_source_item_id = ?
+                WHERE id = ?
+                """,
+                (reflected_item_id, source_item_id, item['id']),
+            )
+            cur.execute(
+                """
+                UPDATE merchandise
+                SET sale_date = ?,
+                    sale_price = COALESCE(sale_price, ?),
+                    sales_destination = COALESCE(sales_destination, ?),
+                    show_in_proxy_service = 0,
+                    updated_by = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (today, source_sale_price, sales_destination, actor_user_id, updated_at_value, source_item_id),
+            )
+        updated_source_ids.add(source_item_id)
+
+    if DATABASE_URL:
+        cur.execute(
+            """
+            UPDATE user_keisan
+            SET status = 'submitted',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND is_admin_created = TRUE
+            """,
+            (keisan_id,),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE user_keisan
+            SET status = 'submitted',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_admin_created = 1
+            """,
+            (keisan_id,),
+        )
+
+    cur.close()
+    return {
+        'reflected_count': reflected_count,
+        'updated_source_count': len(updated_source_ids),
+        'auction_id': keisan.get('proxy_service_auction_id'),
+    }
+
+
+def prepare_proxy_service_keisan_for_item(conn, item, now=None, status='draft'):
+    now = now or get_jst_now()
+    item_dict = dict(item or {})
+    auction_id = item_dict.get('auction_id')
+    winner_user_id = item_dict.get('winner_user_id') or item_dict.get('highest_bid_user_id')
+    winner_name = (
+        item_dict.get('winner_name')
+        or item_dict.get('highest_bidder')
+        or extract_proxy_service_purchase_buyer_name(item_dict.get('sales_destination'))
+        or ''
+    )
+    amount = normalize_proxy_service_price_value(
+        item_dict.get('result_price')
+        or item_dict.get('highest_bid')
+        or item_dict.get('sale_price')
+        or item_dict.get('listing_price')
+        or item_dict.get('purchase_price')
+    )
+    auction_name = item_dict.get('auction_name') or '代行仕入れサービス'
+
+    if not auction_id:
+        raise ValueError('オークション情報が不足しているため、計算書へ追加できません')
+    if not winner_user_id:
+        raise ValueError('落札ユーザーが確定していないため、計算書へ追加できません')
+    if amount <= 0:
+        raise ValueError('落札金額が不足しているため、計算書へ追加できません')
+
+    return upsert_proxy_service_keisan_document(
+        conn,
+        auction_id=auction_id,
+        auction_name=auction_name,
+        winner_user_id=winner_user_id,
+        winner_name=winner_name,
+        source_item=item_dict,
+        amount=amount,
+        reflected_item_id=None,
+        now=now,
+        status=status,
+    )
 
 
 def get_proxy_service_auction_state(settings, now=None):
@@ -1351,6 +2091,81 @@ def annotate_proxy_service_items(items, settings, now=None, current_user_id=None
     return annotated_items, summary, winner_results
 
 
+def fetch_proxy_service_target_users(conn, auction_id):
+    ensure_proxy_service_auction_user_table(conn)
+    use_auction_scope = proxy_service_auction_has_user_config(conn, auction_id)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if use_auction_scope:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE
+                           WHEN psu.user_id IS NOT NULL AND COALESCE(psu.is_enabled, TRUE) = TRUE THEN TRUE
+                           ELSE FALSE
+                       END AS is_selected
+                FROM users u
+                LEFT JOIN proxy_service_auction_users psu
+                  ON u.id = psu.user_id
+                 AND psu.auction_id = %s
+                ORDER BY
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+                """,
+                (auction_id,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+                """
+            )
+        users = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        if use_auction_scope:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE
+                           WHEN psu.user_id IS NOT NULL AND COALESCE(psu.is_enabled, 1) = 1 THEN 1
+                           ELSE 0
+                       END AS is_selected
+                FROM users u
+                LEFT JOIN proxy_service_auction_users psu
+                  ON u.id = psu.user_id
+                 AND psu.auction_id = ?
+                ORDER BY
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+                """,
+                (auction_id,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.display_name, u.role,
+                       CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END AS is_selected
+                FROM users u
+                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
+                ORDER BY
+                    CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+                    u.id
+                """
+            )
+        users = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+    return users, use_auction_scope
+
+
 def build_proxy_service_live_snapshot(items, auction_state):
     snapshot_items = []
     for item in items or []:
@@ -1373,7 +2188,243 @@ def build_proxy_service_live_snapshot(items, auction_state):
     }
 
 
-def build_public_proxy_service_sections(conn, now=None, current_user_id=None):
+def decorate_proxy_service_result_items(conn, auction_id, result_items):
+    keisan_doc_map = fetch_proxy_service_keisan_doc_map(conn, auction_id=auction_id)
+    keisan_item_map = fetch_proxy_service_keisan_item_map(conn, auction_id=auction_id)
+    keisan_summary = {
+        'total_docs': 0,
+        'draft_count': 0,
+        'completed_count': 0,
+        'submitted_count': 0,
+    }
+    action_summary = {
+        'pending_prepare_count': 0,
+        'prepared_count': 0,
+        'submitted_count': 0,
+        'needs_attention_count': 0,
+    }
+
+    for doc in keisan_doc_map.values():
+        keisan_summary['total_docs'] += 1
+        if doc.get('status') == 'submitted':
+            keisan_summary['submitted_count'] += 1
+        elif doc.get('status') == 'completed':
+            keisan_summary['completed_count'] += 1
+        else:
+            keisan_summary['draft_count'] += 1
+
+    for item in result_items:
+        keisan_item = keisan_item_map.get(item.get('id'))
+        item['is_in_keisan_doc'] = bool(keisan_item)
+        item['keisan_doc_id'] = keisan_item.get('keisan_id') if keisan_item else None
+        item['keisan_doc_no'] = keisan_item.get('document_no') if keisan_item else ''
+        item['keisan_status_label'] = keisan_item.get('status_label') if keisan_item else ''
+        item['keisan_status_class'] = keisan_item.get('status_class') if keisan_item else 'muted'
+        item['keisan_issue_date_display'] = keisan_item.get('issue_date') if keisan_item else '-'
+        item['can_prepare_keisan'] = bool(
+            item.get('result_code') in ('auction_finalized', 'fixed_sold')
+            and not keisan_item
+            and not item.get('is_reflected_to_client')
+        )
+
+        if item.get('is_reflected_to_client'):
+            item['reflection_status_label'] = '反映済み'
+            item['reflection_status_class'] = 'won'
+            if item.get('result_code') in ('auction_finalized', 'fixed_sold'):
+                action_summary['submitted_count'] += 1
+        elif keisan_item and keisan_item.get('status') == 'submitted':
+            item['reflection_status_label'] = '送付済み'
+            item['reflection_status_class'] = 'won'
+            if item.get('result_code') in ('auction_finalized', 'fixed_sold'):
+                action_summary['submitted_count'] += 1
+        elif keisan_item and keisan_item.get('status') == 'completed':
+            item['reflection_status_label'] = '送付待ち'
+            item['reflection_status_class'] = 'scheduled'
+            action_summary['prepared_count'] += 1
+            action_summary['needs_attention_count'] += 1
+        elif keisan_item:
+            item['reflection_status_label'] = '計算書作成中'
+            item['reflection_status_class'] = 'scheduled'
+            action_summary['pending_prepare_count'] += 1
+            action_summary['needs_attention_count'] += 1
+        elif item.get('result_code') == 'auction_finalized':
+            item['reflection_status_label'] = '計算書未追加'
+            item['reflection_status_class'] = 'scheduled'
+            action_summary['pending_prepare_count'] += 1
+            action_summary['needs_attention_count'] += 1
+        elif item.get('result_code') == 'fixed_sold':
+            item['reflection_status_label'] = '計算書未作成'
+            item['reflection_status_class'] = 'scheduled'
+            action_summary['pending_prepare_count'] += 1
+            action_summary['needs_attention_count'] += 1
+        elif item.get('result_code') == 'auction_closed_with_bid':
+            item['reflection_status_label'] = '落札確定待ち'
+            item['reflection_status_class'] = 'muted'
+        else:
+            item['reflection_status_label'] = item.get('reflection_status_label') or '対象外'
+            item['reflection_status_class'] = item.get('reflection_status_class') or 'muted'
+
+    for item in result_items:
+        keisan_item = keisan_item_map.get(item.get('id'))
+        if item.get('is_reflected_to_client'):
+            item['reflection_status_label'] = '商品反映済み'
+            item['reflection_status_class'] = 'won'
+        elif keisan_item and keisan_item.get('status') == 'submitted':
+            item['reflection_status_label'] = '計算書送付済み'
+            item['reflection_status_class'] = 'won'
+        elif keisan_item and keisan_item.get('status') == 'completed':
+            item['reflection_status_label'] = '送付準備完了'
+            item['reflection_status_class'] = 'scheduled'
+        elif keisan_item:
+            item['reflection_status_label'] = '計算書下書き'
+            item['reflection_status_class'] = 'scheduled'
+        elif item.get('result_code') in ('auction_finalized', 'fixed_sold'):
+            item['reflection_status_label'] = '計算書未作成'
+            item['reflection_status_class'] = 'scheduled'
+        elif item.get('result_code') == 'auction_closed_with_bid':
+            item['reflection_status_label'] = '落札確定待ち'
+            item['reflection_status_class'] = 'muted'
+        else:
+            item['reflection_status_label'] = item.get('reflection_status_label') or '対象外'
+            item['reflection_status_class'] = item.get('reflection_status_class') or 'muted'
+
+    return result_items, keisan_summary, action_summary
+
+
+def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='all'):
+    now = now or get_jst_now()
+    keyword = (keyword or '').strip().lower()
+    sale_mode = sale_mode if sale_mode in {'all', 'auction', 'fixed'} else 'all'
+
+    sync_proxy_service_keisan_documents(conn)
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT ps.*,
+                   (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id) AS item_count,
+                   (SELECT COUNT(*) FROM proxy_service_bids b
+                    JOIN merchandise m ON b.merchandise_id = m.id
+                    WHERE m.auction_id = ps.id) AS bid_count
+            FROM proxy_service_settings ps
+            ORDER BY ps.id DESC
+            """
+        )
+        auctions = [dict(row) for row in cur.fetchall()]
+    else:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT ps.*,
+                   (SELECT COUNT(*) FROM merchandise m WHERE m.auction_id = ps.id) AS item_count,
+                   (SELECT COUNT(*) FROM proxy_service_bids b
+                    JOIN merchandise m ON b.merchandise_id = m.id
+                    WHERE m.auction_id = ps.id) AS bid_count
+            FROM proxy_service_settings ps
+            ORDER BY ps.id DESC
+            """
+        )
+        auctions = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+
+    pending_history = []
+    archived_history = []
+    overall_summary = {
+        'pending_auction_count': 0,
+        'pending_attention_count': 0,
+        'archive_auction_count': 0,
+        'winner_count': 0,
+        'submitted_count': 0,
+    }
+
+    for auction in auctions:
+        auction_state = get_proxy_service_auction_state(auction, now=now)
+        if auction_state.get('status') != 'ended':
+            continue
+
+        result_items, result_summary, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction['id']),
+            auction,
+            now=now,
+        )
+        result_items, keisan_summary, action_summary = decorate_proxy_service_result_items(conn, auction['id'], result_items)
+
+        winner_names = []
+        item_names = []
+        for item in result_items:
+            if item.get('winner_name'):
+                winner_names.append(item.get('winner_name'))
+            if item.get('product_name'):
+                item_names.append(item.get('product_name'))
+
+        search_blob = ' '.join(
+            [
+                str(auction.get('id') or ''),
+                auction.get('auction_name') or '',
+                auction.get('page_title') or '',
+                ' '.join(winner_names),
+                ' '.join(item_names),
+            ]
+        ).lower()
+
+        if keyword and keyword not in search_blob:
+            continue
+        if sale_mode != 'all' and (auction.get('sale_mode') or 'auction') != sale_mode:
+            continue
+
+        card = dict(auction)
+        card['status'] = auction_state.get('status')
+        card['status_label'] = auction_state.get('status_label')
+        card['sale_mode'] = auction_state.get('sale_mode')
+        card['sale_mode_label'] = '早い者勝ち' if auction_state.get('sale_mode') == 'fixed' else 'オークション'
+        card['start_display'] = format_optional_datetime(auction_state.get('start_datetime'), fallback='未設定')
+        card['end_display'] = format_optional_datetime(auction_state.get('end_datetime'), fallback='未設定')
+        card['winner_count'] = result_summary.get('winner_count', 0)
+        card['pending_finalize_count'] = result_summary.get('pending_finalize_count', 0)
+        card['pending_prepare_count'] = action_summary.get('pending_prepare_count', 0)
+        card['prepared_count'] = action_summary.get('prepared_count', 0)
+        card['submitted_count'] = action_summary.get('submitted_count', 0)
+        card['attention_count'] = (
+            int(card.get('pending_finalize_count') or 0)
+            + int(card.get('pending_prepare_count') or 0)
+            + int(card.get('prepared_count') or 0)
+        )
+        card['draft_doc_count'] = keisan_summary.get('draft_count', 0)
+        card['completed_doc_count'] = keisan_summary.get('completed_count', 0)
+        card['submitted_doc_count'] = keisan_summary.get('submitted_count', 0)
+        card['winner_names'] = winner_names[:5]
+        card['winner_names_summary'] = ' / '.join(winner_names[:3]) if winner_names else '-'
+        card['item_names_summary'] = ' / '.join(item_names[:3]) if item_names else '-'
+        card['is_pending_followup'] = card['attention_count'] > 0
+
+        overall_summary['winner_count'] += int(card.get('winner_count') or 0)
+        overall_summary['submitted_count'] += int(card.get('submitted_count') or 0)
+
+        if card['is_pending_followup']:
+            pending_history.append(card)
+            overall_summary['pending_auction_count'] += 1
+            overall_summary['pending_attention_count'] += int(card.get('attention_count') or 0)
+        else:
+            archived_history.append(card)
+            overall_summary['archive_auction_count'] += 1
+
+    pending_history.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
+    archived_history.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
+
+    return {
+        'pending_history': pending_history,
+        'archived_history': archived_history,
+        'summary': overall_summary,
+        'filters': {
+            'keyword': keyword,
+            'sale_mode': sale_mode,
+        },
+    }
+
+
+def build_public_proxy_service_sections(conn, now=None, current_user_id=None, allow_all=False):
     now = now or get_jst_now()
 
     if DATABASE_URL:
@@ -1400,6 +2451,12 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None):
     history_auctions = []
 
     for auction in raw_auctions:
+        if not allow_all:
+            if current_user_id:
+                if not is_proxy_service_user_allowed(conn, current_user_id, auction.get('id')):
+                    continue
+            elif proxy_service_auction_has_user_config(conn, auction.get('id')):
+                continue
         auction_state = get_proxy_service_auction_state(auction, now=now)
         annotated_items, summary, winner_results = annotate_proxy_service_items(
             fetch_proxy_service_items(conn, auction['id']),
@@ -4143,7 +5200,79 @@ def resolve_default_proxy_auction_id(item_id=None):
         return None, '掲載先オークションの判定中にエラーが発生しました'
 
 def get_user_record_by_username(username):
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
     conn = get_db()
+    ensure_proxy_service_keisan_columns(conn)
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
+        settings = proxy_service_row_to_dict(cur.fetchone())
+        cur.close()
+
+        if not settings:
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+        result_items, _, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction_id),
+            settings,
+            now=now,
+        )
+        result_items, _, _ = decorate_proxy_service_result_items(conn, auction_id, result_items)
+        prepare_items = [item for item in result_items if item.get('can_prepare_keisan')]
+
+        if not prepare_items:
+            conn.close()
+            return jsonify({'success': True, 'message': '計算書へ追加できる商品はありません', 'prepared_count': 0})
+
+        created_doc_count = 0
+        prepared_count = 0
+        for item in prepare_items:
+            keisan_result = prepare_proxy_service_keisan_for_item(conn, item, now=now)
+            if keisan_result.get('created_doc'):
+                created_doc_count += 1
+            if keisan_result.get('item_added'):
+                prepared_count += 1
+
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': f'{prepared_count}件をクライアント別計算書へ追加しました',
+            'prepared_count': prepared_count,
+            'created_keisan_count': created_doc_count,
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'計算書追加中にエラーが発生しました: {str(e)}'}), 500
+
+    conn = get_db()
+    ensure_proxy_service_auction_user_table(conn)
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    return user
+
+def get_user_record_by_username(username):
+    conn = get_db()
+    ensure_proxy_service_auction_user_table(conn)
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM users WHERE username = %s", (username,))
@@ -13681,14 +14810,10 @@ def admin_proxy_service():
             """)
             users = [dict(u) for u in cur.fetchall()]
 
-        cur.close()
-        conn.close()
-
         now = get_jst_now()
         current_auctions = []
         upcoming_auctions = []
         draft_auctions = []
-        history_auctions = []
         for auction in auctions:
             auction_state = get_proxy_service_auction_state(auction, now=now)
             auction['is_ended'] = auction_state.get('is_ended')
@@ -13703,15 +14828,16 @@ def admin_proxy_service():
                 current_auctions.append(auction)
             elif auction_state.get('status') == 'scheduled':
                 upcoming_auctions.append(auction)
-            elif auction_state.get('status') == 'ended':
-                history_auctions.append(auction)
-            else:
+            elif auction_state.get('status') == 'private':
                 draft_auctions.append(auction)
 
         current_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0))
         upcoming_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('start_datetime')) or now, auction.get('id') or 0))
         draft_auctions.sort(key=lambda auction: auction.get('id') or 0, reverse=True)
-        history_auctions.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
+        history_datasets = build_proxy_service_history_datasets(conn, now=now)
+
+        cur.close()
+        conn.close()
 
         return render_template(
             'admin/proxy_service_list.html',
@@ -13720,7 +14846,8 @@ def admin_proxy_service():
             current_auctions=current_auctions,
             upcoming_auctions=upcoming_auctions,
             draft_auctions=draft_auctions,
-            history_auctions=history_auctions,
+            history_auctions=history_datasets.get('pending_history', []),
+            history_summary=history_datasets.get('summary', {}),
         )
     except Exception as e:
         import traceback
@@ -13808,6 +14935,7 @@ def admin_proxy_service_detail(auction_id):
     try:
         conn = get_db()
         now = get_jst_now()
+        ensure_proxy_service_keisan_columns(conn)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
@@ -13819,17 +14947,10 @@ def admin_proxy_service_detail(auction_id):
                 return redirect(url_for('admin_proxy_service'))
 
             settings_dict = dict(settings)
-            cur.execute("""
-                SELECT u.id, u.username, u.display_name, u.role,
-                       CASE WHEN psu.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_selected
-                FROM users u
-                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-                ORDER BY 
-                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                     u.id
-            """)
-            users = [dict(row) for row in cur.fetchall()]
+            cur.close()
+            users, use_auction_user_scope = fetch_proxy_service_target_users(conn, auction_id)
 
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 SELECT b.*, m.product_name, u.display_name as user_display_name
                 FROM proxy_service_bids b
@@ -13867,17 +14988,10 @@ def admin_proxy_service_detail(auction_id):
                 return redirect(url_for('admin_proxy_service'))
 
             settings_dict = dict(settings)
-            cur.execute("""
-                SELECT u.id, u.username, u.display_name, u.role,
-                       CASE WHEN psu.user_id IS NOT NULL THEN 1 ELSE 0 END as is_selected
-                FROM users u
-                LEFT JOIN proxy_service_users psu ON u.id = psu.user_id
-                ORDER BY 
-                     CASE u.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-                     u.id
-            """)
-            users = [dict(row) for row in cur.fetchall()]
+            cur.close()
+            users, use_auction_user_scope = fetch_proxy_service_target_users(conn, auction_id)
 
+            cur = conn.cursor()
             cur.execute("""
                 SELECT b.*, m.product_name, u.display_name as user_display_name
                 FROM proxy_service_bids b
@@ -13947,6 +15061,9 @@ def admin_proxy_service_detail(auction_id):
             item['keisan_status_class'] = keisan_doc.get('status_class') if keisan_doc else ('scheduled' if item.get('is_reflected_to_client') else 'muted')
             item['keisan_issue_date_display'] = keisan_doc.get('issue_date') if keisan_doc else '-'
 
+        result_items, keisan_summary, action_summary = decorate_proxy_service_result_items(conn, auction_id, result_items)
+        result_summary['pending_reflection_count'] = int(action_summary.get('needs_attention_count') or 0)
+        result_summary['reflected_count'] = int(action_summary.get('submitted_count') or 0)
         items = [item for item in result_items if not item.get('is_sold')]
         auction_state = get_proxy_service_auction_state(settings_dict, now=now)
 
@@ -13963,7 +15080,9 @@ def admin_proxy_service_detail(auction_id):
                              auction_state=auction_state,
                              result_items=result_items,
                              result_summary=result_summary,
-                             keisan_summary=keisan_summary)
+                             keisan_summary=keisan_summary,
+                             action_summary=action_summary,
+                             use_auction_user_scope=use_auction_user_scope)
     except Exception as e:
         import traceback
         print(f"Proxy service detail error: {e}")
@@ -14145,9 +15264,25 @@ def admin_proxy_service_settings(auction_id):
         """, (is_public, auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, current_user.id, auction_id))
         
         # ユーザー選択を更新（共通）
-        cur.execute("DELETE FROM proxy_service_users")
-        for user_id in selected_users:
-            cur.execute("INSERT INTO proxy_service_users (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (int(user_id),))
+        cur.execute("DELETE FROM proxy_service_auction_users WHERE auction_id = %s", (auction_id,))
+        if selected_users:
+            for user_id in selected_users:
+                cur.execute(
+                    """
+                    INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (%s, %s, TRUE)
+                    ON CONFLICT (auction_id, user_id) DO UPDATE SET is_enabled = EXCLUDED.is_enabled
+                    """,
+                    (auction_id, int(user_id)),
+                )
+        else:
+            cur.execute(
+                """
+                INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                VALUES (%s, NULL, FALSE)
+                """,
+                (auction_id,),
+            )
     else:
         cur = conn.cursor()
         cur.execute("""
@@ -14158,9 +15293,24 @@ def admin_proxy_service_settings(auction_id):
             WHERE id = ?
         """, (1 if is_public else 0, auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, current_user.id, auction_id))
         
-        cur.execute("DELETE FROM proxy_service_users")
-        for user_id in selected_users:
-            cur.execute("INSERT OR IGNORE INTO proxy_service_users (user_id) VALUES (?)", (int(user_id),))
+        cur.execute("DELETE FROM proxy_service_auction_users WHERE auction_id = ?", (auction_id,))
+        if selected_users:
+            for user_id in selected_users:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (?, ?, 1)
+                    """,
+                    (auction_id, int(user_id)),
+                )
+        else:
+            cur.execute(
+                """
+                INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                VALUES (?, NULL, 0)
+                """,
+                (auction_id,),
+            )
     
     conn.commit()
     cur.close()
@@ -14393,6 +15543,37 @@ def admin_proxy_service_history():
         flash('オーナーまたは管理者のみ利用できます', 'error')
         return redirect(url_for('index'))
 
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
+
+    keyword = (request.args.get('keyword') or '').strip()
+    sale_mode = request.args.get('sale_mode', 'all')
+
+    try:
+        conn = get_db()
+        datasets = build_proxy_service_history_datasets(
+            conn,
+            now=get_jst_now(),
+            keyword=keyword,
+            sale_mode=sale_mode,
+        )
+        conn.commit()
+        conn.close()
+        return render_template(
+            'admin/proxy_service_history.html',
+            history_auctions=datasets.get('pending_history', []),
+            archived_history=datasets.get('archived_history', []),
+            history_summary=datasets.get('summary', {}),
+            filters=datasets.get('filters', {}),
+            is_archive=False,
+        )
+    except Exception as e:
+        print(f"Proxy service history error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('履歴の読み込みに失敗しました', 'error')
+        return redirect(url_for('admin_proxy_service'))
+
     history_auctions = []
     history_summary = {
         'auction_count': 0,
@@ -14532,6 +15713,47 @@ def admin_proxy_service_history():
         history_summary=history_summary,
     )
 
+@app.route('/admin/proxy-service/history/archive')
+@login_required
+def admin_proxy_service_history_archive():
+    """代行仕入れ過去履歴一覧"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        flash('この機能は管理者のみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
+
+    keyword = (request.args.get('keyword') or '').strip()
+    sale_mode = request.args.get('sale_mode', 'all')
+
+    try:
+        conn = get_db()
+        datasets = build_proxy_service_history_datasets(
+            conn,
+            now=get_jst_now(),
+            keyword=keyword,
+            sale_mode=sale_mode,
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Proxy service history archive error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('過去履歴の読み込みに失敗しました', 'error')
+        return redirect(url_for('admin_proxy_service'))
+
+    return render_template(
+        'admin/proxy_service_history.html',
+        history_auctions=datasets.get('archived_history', []),
+        archived_history=datasets.get('archived_history', []),
+        history_summary=datasets.get('summary', {}),
+        filters=datasets.get('filters', {}),
+        is_archive=True,
+    )
+
+
 @app.route('/admin/proxy-service/<int:auction_id>/finalize', methods=['POST'])
 @login_required
 def admin_proxy_service_finalize(auction_id):
@@ -14546,6 +15768,8 @@ def admin_proxy_service_finalize(auction_id):
     finalized_count = 0
     already_sold_count = 0
     unmatched_count = 0
+    prepared_doc_count = 0
+    prepared_item_count = 0
     now = get_jst_now()
     today = now.strftime('%Y-%m-%d')
 
@@ -14606,6 +15830,23 @@ def admin_proxy_service_finalize(auction_id):
                 """,
                 (winning_bid, winner_user_id),
             )
+            keisan_result = prepare_proxy_service_keisan_for_item(
+                conn,
+                {
+                    **item,
+                    'auction_id': auction_id,
+                    'auction_name': f'オークション #{auction_id}',
+                    'winner_user_id': winner_user_id,
+                    'winner_name': winner_name,
+                    'result_price': winning_bid,
+                    'sale_mode': 'auction',
+                },
+                now=now,
+            )
+            if keisan_result.get('created_doc'):
+                prepared_doc_count += 1
+            if keisan_result.get('item_added'):
+                prepared_item_count += 1
             finalized_count += 1
 
         cur.execute("UPDATE proxy_service_settings SET is_public = FALSE WHERE id = %s", (auction_id,))
@@ -14667,6 +15908,23 @@ def admin_proxy_service_finalize(auction_id):
                 """,
                 (winning_bid, winner_user_id),
             )
+            keisan_result = prepare_proxy_service_keisan_for_item(
+                conn,
+                {
+                    **item,
+                    'auction_id': auction_id,
+                    'auction_name': f'オークション #{auction_id}',
+                    'winner_user_id': winner_user_id,
+                    'winner_name': winner_name,
+                    'result_price': winning_bid,
+                    'sale_mode': 'auction',
+                },
+                now=now,
+            )
+            if keisan_result.get('created_doc'):
+                prepared_doc_count += 1
+            if keisan_result.get('item_added'):
+                prepared_item_count += 1
             finalized_count += 1
 
         cur.execute("UPDATE proxy_service_settings SET is_public = 0 WHERE id = ?", (auction_id,))
@@ -14678,7 +15936,7 @@ def admin_proxy_service_finalize(auction_id):
 
     return jsonify({
         'success': True,
-        'message': f'落札確定 {finalized_count}件 / 既に販売済み {already_sold_count}件 / 入札なし {unmatched_count}件 を処理しました',
+        'message': f'落札確定 {finalized_count}件 / 既に販売済み {already_sold_count}件 / 入札なし {unmatched_count}件 を処理しました。計算書下書き {prepared_item_count}件 / 新規計算書 {prepared_doc_count}件 を準備しました',
         'finalized_count': finalized_count,
         'already_sold_count': already_sold_count,
         'unmatched_count': unmatched_count,
@@ -14687,9 +15945,65 @@ def admin_proxy_service_finalize(auction_id):
 @app.route('/admin/proxy-service/<int:auction_id>/reflect-all', methods=['POST'])
 @login_required
 def admin_proxy_service_reflect_all(auction_id):
-    """落札確定済みの商品を一括でクライアントの商品一覧へ反映"""
+    """落札確定済みの商品を一括でクライアント別計算書へ追加"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    conn = get_db()
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
+        settings = proxy_service_row_to_dict(cur.fetchone())
+        cur.close()
+
+        if not settings:
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+        result_items, _, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction_id),
+            settings,
+            now=now,
+        )
+        result_items, _, _ = decorate_proxy_service_result_items(conn, auction_id, result_items)
+        prepare_items = [item for item in result_items if item.get('can_prepare_keisan')]
+
+        if not prepare_items:
+            conn.close()
+            return jsonify({'success': True, 'message': '計算書へ追加できる商品はありません', 'prepared_count': 0})
+
+        created_doc_count = 0
+        prepared_count = 0
+        for item in prepare_items:
+            keisan_result = prepare_proxy_service_keisan_for_item(conn, item, now=now)
+            if keisan_result.get('created_doc'):
+                created_doc_count += 1
+            if keisan_result.get('item_added'):
+                prepared_count += 1
+
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': f'{prepared_count}件をクライアント別計算書へ追加しました',
+            'prepared_count': prepared_count,
+            'created_keisan_count': created_doc_count,
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'計算書追加中にエラーが発生しました: {str(e)}'}), 500
 
     conn = get_db()
     now = get_jst_now()
@@ -14756,9 +16070,67 @@ def admin_proxy_service_reflect_all(auction_id):
 @app.route('/admin/proxy-service/<int:auction_id>/reflect-item/<int:item_id>', methods=['POST'])
 @login_required
 def admin_proxy_service_reflect_item(auction_id, item_id):
-    """落札確定済みの商品をクライアントの商品一覧へ反映"""
+    """落札確定済みの商品をクライアント別計算書へ追加"""
     if not (current_user.is_owner() or current_user.is_admin()):
         return jsonify({'success': False, 'error': 'オーナーまたは管理者権限が必要です'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    conn = get_db()
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
+        settings = proxy_service_row_to_dict(cur.fetchone())
+        cur.close()
+
+        if not settings:
+            conn.close()
+            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+        result_items, _, _ = annotate_proxy_service_items(
+            fetch_proxy_service_items(conn, auction_id),
+            settings,
+            now=now,
+        )
+        result_items, _, _ = decorate_proxy_service_result_items(conn, auction_id, result_items)
+        target_item = next((item for item in result_items if item.get('id') == item_id), None)
+
+        if not target_item:
+            conn.close()
+            return jsonify({'success': False, 'error': '対象商品が見つかりません'}), 404
+        if target_item.get('is_reflected_to_client'):
+            conn.close()
+            return jsonify({'success': True, 'message': 'この商品はすでに送付済みです', 'already_reflected': True})
+        if target_item.get('keisan_doc_id'):
+            conn.close()
+            return jsonify({'success': True, 'message': 'この商品はすでに計算書へ追加済みです', 'already_prepared': True, 'keisan_id': target_item.get('keisan_doc_id')})
+        if not target_item.get('can_prepare_keisan'):
+            conn.close()
+            return jsonify({'success': False, 'error': 'この商品はまだ計算書へ追加できません'}), 400
+
+        keisan_result = prepare_proxy_service_keisan_for_item(conn, target_item, now=now)
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': f'{target_item.get("product_name") or "商品"} をクライアント別計算書へ追加しました',
+            'keisan_id': keisan_result.get('keisan_id'),
+            'keisan_created': keisan_result.get('created_doc', False),
+            'keisan_item_added': keisan_result.get('item_added', False),
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'計算書追加中にエラーが発生しました: {str(e)}'}), 500
 
     conn = get_db()
     now = get_jst_now()
@@ -14848,6 +16220,11 @@ def admin_proxy_service_update_item_pricing(auction_id, item_id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT sale_mode FROM proxy_service_settings WHERE id = %s", (auction_id,))
         settings = cur.fetchone()
+        if settings and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
         sale_mode = (settings or {}).get('sale_mode') or 'auction'
         cur.execute("""
             SELECT id, purchase_price, listing_price, proxy_auction_max_price, sale_date, auction_id
@@ -15133,6 +16510,7 @@ def admin_auction_keisan_view(id):
 def admin_auction_keisan_edit(id):
     """代行仕入れ計算書の編集"""
     conn = get_db()
+    ensure_proxy_service_keisan_columns(conn)
 
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -15194,6 +16572,7 @@ def admin_auction_keisan_edit(id):
 
         item_names = request.form.getlist('item_name[]')
         merchandise_ids = request.form.getlist('merchandise_id[]')
+        proxy_source_item_ids = request.form.getlist('proxy_source_item_id[]')
         quantities = request.form.getlist('quantity[]')
         units = request.form.getlist('unit[]')
         unit_prices = request.form.getlist('unit_price[]')
@@ -15211,6 +16590,12 @@ def admin_auction_keisan_edit(id):
             except (TypeError, ValueError):
                 merchandise_id = None
 
+            raw_proxy_source_item_id = proxy_source_item_ids[index - 1] if index - 1 < len(proxy_source_item_ids) else ''
+            try:
+                proxy_source_item_id = int(raw_proxy_source_item_id) if raw_proxy_source_item_id else None
+            except (TypeError, ValueError):
+                proxy_source_item_id = None
+
             raw_qty = quantities[index - 1] if index - 1 < len(quantities) else '1'
             raw_unit = units[index - 1] if index - 1 < len(units) else ''
             raw_price = unit_prices[index - 1] if index - 1 < len(unit_prices) else '0'
@@ -15226,7 +16611,7 @@ def admin_auction_keisan_edit(id):
 
             amount = quantity * unit_price
             total_amount += amount
-            new_items.append((len(new_items) + 1, clean_name, merchandise_id, quantity, raw_unit, unit_price, amount))
+            new_items.append((len(new_items) + 1, clean_name, merchandise_id, proxy_source_item_id, quantity, raw_unit, unit_price, amount))
 
         if DATABASE_URL:
             cur.execute(
@@ -15248,8 +16633,8 @@ def admin_auction_keisan_edit(id):
                 cur.execute(
                     """
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (id, *item),
                 )
@@ -15273,8 +16658,8 @@ def admin_auction_keisan_edit(id):
                 cur.execute(
                     """
                     INSERT INTO user_keisan_items (
-                        keisan_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        keisan_id, item_no, item_name, merchandise_id, proxy_source_item_id, quantity, unit, unit_price, amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (id, *item),
                 )
@@ -15297,6 +16682,24 @@ def admin_auction_keisan_submit(id):
     """計算書をクライアントへ送付済みにする"""
     redirect_auction_id = request.form.get('auction_id', type=int) or request.args.get('auction_id', type=int)
     conn = get_db()
+    now = get_jst_now()
+
+    try:
+        result = submit_proxy_service_keisan_document(conn, id, current_user.id, now=now)
+        redirect_auction_id = redirect_auction_id or result.get('auction_id')
+        conn.commit()
+        conn.close()
+        flash(f"計算書を送付し、{result.get('reflected_count', 0)}件をクライアント商品へ反映しました", 'success')
+        if redirect_auction_id:
+            return redirect(url_for('admin_auction_keisan_list', auction_id=redirect_auction_id))
+        return redirect(url_for('admin_auction_keisan_list'))
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        flash(f'計算書送付中にエラーが発生しました: {str(e)}', 'error')
+        if redirect_auction_id:
+            return redirect(url_for('admin_auction_keisan_list', auction_id=redirect_auction_id))
+        return redirect(url_for('admin_auction_keisan_list'))
 
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -15390,30 +16793,19 @@ def public_proxy_service_list():
     now = get_jst_now()
     
     # サービス利用対象ユーザーかチェック（ログイン時のみ）
-    if current_user.is_authenticated:
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            cur.close()
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            cur.close()
-        
-        if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
-            conn.close()
-            return render_template('proxy_service_closed.html', reason='not_allowed')
-    
     sections = build_public_proxy_service_sections(
         conn,
         now=now,
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
+    all_sections = None
+    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+        all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     conn.close()
 
     if not sections['current_auctions'] and not sections['upcoming_auctions'] and not sections['history_auctions']:
+        if all_sections and (all_sections['current_auctions'] or all_sections['upcoming_auctions'] or all_sections['history_auctions']):
+            return render_template('proxy_service_closed.html', reason='not_allowed')
         return render_template('proxy_service_closed.html', reason='disabled')
 
     return render_template(
@@ -15430,28 +16822,18 @@ def public_proxy_service_history():
     conn = get_db()
     now = get_jst_now()
 
-    if current_user.is_authenticated:
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            cur.close()
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            cur.close()
-
-        if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
-            conn.close()
-            return render_template('proxy_service_closed.html', reason='not_allowed')
-
     sections = build_public_proxy_service_sections(
         conn,
         now=now,
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
+    all_sections = None
+    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+        all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     conn.close()
+
+    if not sections['history_auctions'] and all_sections and all_sections['history_auctions']:
+        return render_template('proxy_service_closed.html', reason='not_allowed')
 
     return render_template(
         'proxy_service_history_public.html',
@@ -15464,6 +16846,10 @@ def public_proxy_service(auction_id):
     conn = get_db()
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
+
+    if not current_user.is_authenticated and proxy_service_auction_has_user_config(conn, auction_id):
+        conn.close()
+        return render_template('proxy_service_closed.html', reason='not_allowed')
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -15477,10 +16863,9 @@ def public_proxy_service(auction_id):
 
         settings_dict = dict(settings)
 
-        if current_user.is_authenticated:
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+        if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
+            if not is_allowed_user:
                 cur.close()
                 conn.close()
                 return render_template('proxy_service_closed.html', reason='not_allowed')
@@ -15488,6 +16873,26 @@ def public_proxy_service(auction_id):
         cur = conn.cursor()
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         row = cur.fetchone()
+        if row and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+        if row and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+        if row and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+        if row and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
 
         if not row:
             cur.close()
@@ -15498,10 +16903,9 @@ def public_proxy_service(auction_id):
         if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
             settings_dict['sale_mode'] = 'auction'
 
-        if current_user.is_authenticated:
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
-            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
+        if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
+            if not is_allowed_user:
                 cur.close()
                 conn.close()
                 return render_template('proxy_service_closed.html', reason='not_allowed')
@@ -15553,6 +16957,10 @@ def public_proxy_service_status(auction_id):
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
 
+    if not current_user.is_authenticated and proxy_service_auction_has_user_config(conn, auction_id):
+        conn.close()
+        return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
@@ -15565,8 +16973,8 @@ def public_proxy_service_status(auction_id):
 
         settings_dict = dict(settings)
         if current_user.is_authenticated:
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
+            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
+            is_allowed_user = bool(is_allowed_user)
             if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
                 cur.close()
                 conn.close()
@@ -15586,8 +16994,8 @@ def public_proxy_service_status(auction_id):
             settings_dict['sale_mode'] = 'auction'
 
         if current_user.is_authenticated:
-            cur.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
-            is_allowed_user = cur.fetchone() is not None
+            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
+            is_allowed_user = bool(is_allowed_user)
             if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
                 cur.close()
                 conn.close()
@@ -15634,21 +17042,6 @@ def proxy_service_bid():
     if not current_user.can_participate_auction():
         return jsonify({'success': False, 'error': '月謝のお支払いが確認できていないため、入札できません'}), 403
     
-    # サービス利用対象ユーザーかチェック（管理者/オーナーは除外）
-    if not current_user.is_admin() and not current_user.is_owner():
-        conn_check = get_db()
-        if DATABASE_URL:
-            cur_check = conn_check.cursor()
-            cur_check.execute("SELECT 1 FROM proxy_service_users WHERE user_id = %s", (current_user.id,))
-        else:
-            cur_check = conn_check.cursor()
-            cur_check.execute("SELECT 1 FROM proxy_service_users WHERE user_id = ?", (current_user.id,))
-        is_allowed = cur_check.fetchone() is not None
-        cur_check.close()
-        conn_check.close()
-        if not is_allowed:
-            return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
-    
     data = request.get_json(silent=True) or request.form
     
     merchandise_id = data.get('merchandise_id')
@@ -15670,6 +17063,7 @@ def proxy_service_bid():
     
     conn = get_db()
     now = get_jst_now()
+    keisan_source_item = None
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -15697,6 +17091,16 @@ def proxy_service_bid():
         else:
             cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         settings = cur.fetchone()
+        if settings and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+        if settings and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
         
         if not settings or not settings['is_public']:
             cur.close()
@@ -15749,6 +17153,16 @@ def proxy_service_bid():
                    (merchandise_id, user_id, bidder_name, accepted_bid_amount))
 
         item_sold = bool(max_price and bid_amount >= max_price)
+        if item_sold:
+            keisan_source_item = {
+                **dict(item),
+                'auction_id': auction_id,
+                'auction_name': settings.get('auction_name') or f'オークション #{auction_id}',
+                'sale_mode': 'auction',
+                'winner_user_id': user_id,
+                'winner_name': bidder_name,
+                'result_price': accepted_bid_amount,
+            }
         if item_sold and not finalize_proxy_service_buyout(
             cur,
             merchandise_id,
@@ -15790,6 +17204,11 @@ def proxy_service_bid():
         else:
             cur.execute("SELECT * FROM proxy_service_settings LIMIT 1")
         row = cur.fetchone()
+        if row and not current_user.is_admin() and not current_user.is_owner():
+            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
         
         if not row or not row[1]:
             cur.close()
@@ -15843,6 +17262,16 @@ def proxy_service_bid():
                    (merchandise_id, user_id, bidder_name, accepted_bid_amount))
 
         item_sold = bool(max_price and bid_amount >= max_price)
+        if item_sold:
+            keisan_source_item = {
+                **item_dict,
+                'auction_id': auction_id,
+                'auction_name': (dict(row).get('auction_name') if row else None) or f'オークション #{auction_id}',
+                'sale_mode': 'auction',
+                'winner_user_id': user_id,
+                'winner_name': bidder_name,
+                'result_price': accepted_bid_amount,
+            }
         if item_sold and not finalize_proxy_service_buyout(
             cur,
             merchandise_id,
@@ -15858,6 +17287,9 @@ def proxy_service_bid():
             conn.close()
             return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
     
+    if item_sold and keisan_source_item:
+        prepare_proxy_service_keisan_for_item(conn, keisan_source_item, now=now)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -15893,6 +17325,30 @@ def proxy_service_purchase():
     
     conn = get_db()
     now = get_jst_now()
+
+    if not current_user.is_admin() and not current_user.is_owner():
+        if DATABASE_URL:
+            access_cur = conn.cursor(cursor_factory=RealDictCursor)
+            access_cur.execute(
+                "SELECT auction_id FROM merchandise WHERE id = %s AND show_in_proxy_service = TRUE",
+                (merchandise_id,),
+            )
+            access_row = access_cur.fetchone()
+            access_cur.close()
+            access_auction_id = (access_row or {}).get('auction_id') if access_row else None
+        else:
+            access_cur = conn.cursor()
+            access_cur.execute(
+                "SELECT auction_id FROM merchandise WHERE id = ? AND show_in_proxy_service = 1",
+                (merchandise_id,),
+            )
+            access_row = access_cur.fetchone()
+            access_cur.close()
+            access_auction_id = dict(access_row).get('auction_id') if access_row else None
+
+        if access_auction_id and not is_proxy_service_user_allowed(conn, current_user.id, access_auction_id):
+            conn.close()
+            return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -15977,6 +17433,36 @@ def proxy_service_purchase():
         # 入札履歴にも記録（購入記録として）
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+
+        upsert_proxy_service_keisan_document(
+            conn,
+            auction_id=auction_id,
+            auction_name=settings.get('auction_name') or '代行仕入れサービス',
+            winner_user_id=user_id,
+            winner_name=buyer_name,
+            source_item={
+                **dict(item),
+                'auction_id': auction_id,
+                'auction_name': settings.get('auction_name') or '代行仕入れサービス',
+                'sale_mode': 'fixed',
+                'result_code': 'fixed_sold',
+                'winner_user_id': user_id,
+                'winner_name': buyer_name,
+                'result_price': purchase_price,
+            },
+            amount=purchase_price,
+            now=now,
+            status='draft',
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': '購入が完了しました',
+            'purchase_price': purchase_price,
+            'buyer_name': buyer_name
+        })
 
         buyer_notes = append_proxy_service_origin_note(item.get('notes'), merchandise_id, mode='fixed')
 
@@ -16137,6 +17623,36 @@ def proxy_service_purchase():
         # 入札履歴にも記録
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+
+        upsert_proxy_service_keisan_document(
+            conn,
+            auction_id=auction_id,
+            auction_name=(dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
+            winner_user_id=user_id,
+            winner_name=buyer_name,
+            source_item={
+                **item_dict,
+                'auction_id': auction_id,
+                'auction_name': (dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
+                'sale_mode': 'fixed',
+                'result_code': 'fixed_sold',
+                'winner_user_id': user_id,
+                'winner_name': buyer_name,
+                'result_price': purchase_price,
+            },
+            amount=purchase_price,
+            now=now,
+            status='draft',
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'message': '購入が完了しました',
+            'purchase_price': purchase_price,
+            'buyer_name': buyer_name
+        })
 
         buyer_notes = append_proxy_service_origin_note(item_dict.get('notes'), merchandise_id, mode='fixed')
 
@@ -32739,6 +34255,92 @@ def admin_auction_keisan_send_bulk():
     auction_id = request.form.get('auction_id', type=int)
     conn = get_db()
     updated_count = 0
+    reflected_count = 0
+
+    try:
+        now = get_jst_now()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            params = []
+            query = """
+                SELECT id, proxy_service_auction_id
+                FROM user_keisan
+                WHERE is_admin_created = TRUE
+                  AND status = 'completed'
+                  AND proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                query += " AND proxy_service_auction_id = %s"
+                params.append(auction_id)
+            if send_scope != 'all':
+                if not selected_ids:
+                    flash('送付する計算書を選択してください', 'error')
+                    cur.close()
+                    conn.close()
+                    if auction_id:
+                        return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+                    return redirect(url_for('admin_auction_keisan_list'))
+                placeholders = ','.join(['%s'] * len(selected_ids))
+                query += f" AND id IN ({placeholders})"
+                params.extend(selected_ids)
+            query += " ORDER BY id"
+            cur.execute(query, tuple(params))
+            target_docs = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            params = []
+            query = """
+                SELECT id, proxy_service_auction_id
+                FROM user_keisan
+                WHERE is_admin_created = 1
+                  AND status = 'completed'
+                  AND proxy_service_auction_id IS NOT NULL
+            """
+            if auction_id:
+                query += " AND proxy_service_auction_id = ?"
+                params.append(auction_id)
+            if send_scope != 'all':
+                if not selected_ids:
+                    flash('送付する計算書を選択してください', 'error')
+                    cur.close()
+                    conn.close()
+                    if auction_id:
+                        return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+                    return redirect(url_for('admin_auction_keisan_list'))
+                placeholders = ','.join(['?'] * len(selected_ids))
+                query += f" AND id IN ({placeholders})"
+                params.extend(selected_ids)
+            query += " ORDER BY id"
+            cur.execute(query, tuple(params))
+            target_docs = [dict(row) for row in cur.fetchall()]
+
+        if not target_docs:
+            cur.close()
+            conn.close()
+            flash('送付対象の計算書はありませんでした', 'info')
+            if auction_id:
+                return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+            return redirect(url_for('admin_auction_keisan_list'))
+
+        for doc in target_docs:
+            result = submit_proxy_service_keisan_document(conn, doc.get('id'), current_user.id, now=now)
+            updated_count += 1
+            reflected_count += int(result.get('reflected_count') or 0)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f'{updated_count}件の計算書を送付し、{reflected_count}件をクライアント商品へ反映しました', 'success')
+        if auction_id:
+            return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+        return redirect(url_for('admin_auction_keisan_list'))
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        flash(f'一括送付中にエラーが発生しました: {str(e)}', 'error')
+        if auction_id:
+            return redirect(url_for('admin_auction_keisan_list', auction_id=auction_id))
+        return redirect(url_for('admin_auction_keisan_list'))
 
     try:
         if DATABASE_URL:

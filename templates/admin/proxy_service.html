@@ -291,7 +291,7 @@
         <div class="results-header">
             <div>
                 <h2>終了結果 / 購入者一覧 <span class="item-count">{{ result_items|length }}件</span></h2>
-                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけクライアントの商品一覧へ反映できます。反映した商品はクライアント別計算書にもまとまります。</p>
+                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけ計算書へ追加できます。クライアントの商品一覧への反映と開花側在庫の売り切れ処理は、計算書を送付したタイミングで実行されます。</p>
                 {% if keisan_summary.total_docs > 0 %}
                 <div class="results-keisan-summary">
                     <span>計算書 {{ keisan_summary.total_docs }}件</span>
@@ -304,7 +304,7 @@
             </div>
             {% if result_summary.pending_reflection_count > 0 %}
             <button type="button" class="btn btn-primary" onclick="reflectAllWinnerItems()">
-                落札商品を一括でクライアントに反映
+                落札商品を一括で計算書に追加
             </button>
             {% endif %}
         </div>
@@ -319,7 +319,7 @@
                         <th>落札者 / 購入者</th>
                         <th>金額</th>
                         <th>入札</th>
-                        <th>クライアント反映</th>
+                        <th>送付状況</th>
                         <th>計算書</th>
                         <th>操作</th>
                     </tr>
@@ -376,8 +376,8 @@
                                 {% if item.is_reflected_to_client %}
                                 <span>{{ item.reflected_user_name or '-' }}</span>
                                 <span>{{ item.reflected_at_display }}</span>
-                                {% elif item.can_reflect_to_client %}
-                                <span>落札者の商品一覧へ未登録です</span>
+                                {% elif item.can_prepare_keisan %}
+                                <span>計算書にまだ追加されていません</span>
                                 {% elif item.result_code == 'auction_closed_with_bid' %}
                                 <span>先に落札確定を行ってください</span>
                                 {% endif %}
@@ -390,10 +390,10 @@
                                 <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}">{{ item.keisan_doc_no }}</a>
                                 <span>{{ item.keisan_issue_date_display }}</span>
                                 {% elif item.is_reflected_to_client %}
-                                <span class="result-status-badge scheduled">作成待ち</span>
+                                <span class="result-status-badge scheduled">送付済み</span>
                                 <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction_id) }}">計算書一覧を見る</a>
-                                {% elif item.can_reflect_to_client %}
-                                <span class="result-empty-text">反映後に作成</span>
+                                {% elif item.can_prepare_keisan %}
+                                <span class="result-empty-text">計算書へ追加してください</span>
                                 {% else %}
                                 <span class="result-empty-text">-</span>
                                 {% endif %}
@@ -401,9 +401,9 @@
                         </td>
                         <td>
                             <div class="result-action-cell">
-                                {% if item.can_reflect_to_client %}
+                                {% if item.can_prepare_keisan %}
                                 <button type="button" class="btn btn-sm btn-primary" onclick="reflectWinnerItem({{ item.id }}, this)">
-                                    クライアントに反映
+                                    計算書に追加
                                 </button>
                                 {% elif item.keisan_doc_id %}
                                 <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}" class="btn btn-sm btn-secondary">
@@ -2184,19 +2184,19 @@ function reflectWinnerItem(itemId, btn) {
             if (button) {
                 button.disabled = false;
             }
-            alert(data.error || 'クライアント反映に失敗しました');
+            alert(data.error || '計算書への追加に失敗しました');
         }
     })
     .catch(() => {
         if (button) {
             button.disabled = false;
         }
-        alert('クライアント反映中にエラーが発生しました');
+        alert('計算書への追加中にエラーが発生しました');
     });
 }
 
 function reflectAllWinnerItems() {
-    if (!confirm('落札確定済みの商品を一括でクライアントの商品一覧へ反映しますか？\n\n反映した商品はクライアント別計算書にも追加されます。')) {
+    if (!confirm('落札確定済みの商品を一括で計算書へ追加しますか？\n\nクライアントの商品一覧への反映は、各クライアントへ計算書を送付したタイミングで実行されます。')) {
         return;
     }
 
@@ -2212,11 +2212,11 @@ function reflectAllWinnerItems() {
             alert(data.message);
             location.reload();
         } else {
-            alert(data.error || '一括反映に失敗しました');
+            alert(data.error || '一括追加に失敗しました');
         }
     })
     .catch(() => {
-        alert('一括反映中にエラーが発生しました');
+        alert('一括追加中にエラーが発生しました');
     });
 }
 </script>

@@ -68,6 +68,7 @@
                         <td class="item-no">{{ loop.index }}</td>
                         <td>
                             <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}" class="item-merchandise-id">
+                            <input type="hidden" name="proxy_source_item_id[]" value="{{ item.proxy_source_item_id or '' }}" class="item-source-id">
                             <input type="text" name="item_name[]" value="{{ item.item_name }}" class="item-name" required>
                         </td>
                         <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="item-qty" min="1"></td>
@@ -81,6 +82,7 @@
                         <td class="item-no">1</td>
                         <td>
                             <input type="hidden" name="merchandise_id[]" value="" class="item-merchandise-id">
+                            <input type="hidden" name="proxy_source_item_id[]" value="" class="item-source-id">
                             <input type="text" name="item_name[]" class="item-name" required>
                         </td>
                         <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
@@ -343,6 +345,7 @@ function addRow() {
         <td class="item-no"></td>
         <td>
             <input type="hidden" name="merchandise_id[]" value="" class="item-merchandise-id">
+            <input type="hidden" name="proxy_source_item_id[]" value="" class="item-source-id">
             <input type="text" name="item_name[]" class="item-name" required>
         </td>
         <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
