@@ -1,14 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from dataclasses import dataclass
 from html import escape
 from pathlib import Path
+import shutil
+import sqlite3
 from textwrap import dedent
 
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / ".preview-site-documents-clean"
 STATIC_DIR = OUTPUT_DIR / "static"
+PREVIEW_SOURCE_STATIC_DIR = BASE_DIR / ".preview-site-docs" / "static"
 
 
 SERVICE_LABELS = {
@@ -172,6 +174,251 @@ VENDORS = [
 ]
 
 
+def _safe_slug(value: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_")
+
+
+def _fallback_svg(brand_name: str | None, service: str) -> str:
+    brand = (brand_name or "").lower()
+    if "louis vuitton" in brand:
+        return "static/img_lv_alma.svg"
+    if "chanel" in brand:
+        return "static/img_chanel_wallet.svg"
+    if "hermes" in brand:
+        return "static/img_hermes_scarf.svg"
+    if "rolex" in brand:
+        return "static/img_rolex_dj.svg"
+    if "celine" in brand or "balenciaga" in brand or "prada" in brand or "gucci" in brand or "loewe" in brand or "fendi" in brand:
+        return "static/img_celine_luggage.svg"
+    if service == "auction":
+        return "static/img_rolex_dj.svg"
+    if service == "simultaneous":
+        return "static/img_celine_luggage.svg"
+    return "static/img_lv_alma.svg"
+
+
+def _category_from_name(product_name: str) -> str:
+    text = product_name or ""
+    if any(word in text for word in ["財布", "ウォレット"]):
+        return "財布"
+    if any(word in text for word in ["ショルダー", "トート", "ハンドバッグ", "バッグ"]):
+        return "バッグ"
+    if "スカーフ" in text:
+        return "スカーフ"
+    if any(word in text for word in ["時計", "ロレックス"]):
+        return "時計"
+    return "バッグ"
+
+
+def _service_for_item(merchandise_id: int) -> str:
+    if merchandise_id in {145, 146, 151}:
+        return "wholesale"
+    if merchandise_id == 147:
+        return "auction"
+    return "simultaneous"
+
+
+def _status_for_item(merchandise_id: int, service: str) -> str:
+    if service == "wholesale":
+        return "査定中" if merchandise_id in {145, 151} else "認証待ち"
+    if service == "auction":
+        return "認証済み"
+    if service == "simultaneous":
+        return "入金待ち" if merchandise_id == 148 else "認証待ち"
+    return "認証待ち"
+
+
+def _price_for_item(merchandise_id: int, fallback: int) -> int:
+    prices = {
+        145: 185000,
+        146: 72000,
+        147: 710000,
+        148: 148000,
+        149: 128000,
+        151: 58000,
+    }
+    return prices.get(merchandise_id, fallback)
+
+
+def _copy_preview_image(photo_path: str | None, service: str, brand_name: str | None) -> str:
+    if photo_path:
+        normalized = photo_path.replace("\\", "/").lstrip("/")
+        source = PREVIEW_SOURCE_STATIC_DIR / normalized
+        if source.exists():
+            destination = STATIC_DIR / normalized
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            return f"static/{normalized}"
+    return _fallback_svg(brand_name, service)
+
+
+def _load_preview_data():
+    db_path = BASE_DIR / "merchandise.db"
+    if not db_path.exists():
+        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+
+    preferred_ids = [145, 146, 151, 147, 148, 149]
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    user_row = cur.execute(
+        """
+        SELECT id, COALESCE(NULLIF(display_name, ''), NULLIF(username, ''), 'テストユーザー') AS name
+        FROM users
+        WHERE id = 18
+        """
+    ).fetchone()
+
+    if not user_row:
+        conn.close()
+        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+
+    placeholders = ",".join("?" for _ in preferred_ids)
+    rows = cur.execute(
+        f"""
+        SELECT id, user_id, product_name, brand_name, item_condition, photo_path, purchase_price
+               , purchase_date, model_number, notes
+        FROM merchandise
+        WHERE user_id = ? AND id IN ({placeholders})
+        ORDER BY CASE id
+            WHEN 145 THEN 1
+            WHEN 146 THEN 2
+            WHEN 151 THEN 3
+            WHEN 147 THEN 4
+            WHEN 148 THEN 5
+            WHEN 149 THEN 6
+            ELSE 99
+        END
+        """,
+        (user_row["id"], *preferred_ids),
+    ).fetchall()
+
+    if not rows:
+        rows = cur.execute(
+            """
+            SELECT id, user_id, product_name, brand_name, item_condition, photo_path, purchase_price
+                   , purchase_date, model_number, notes
+            FROM merchandise
+            WHERE user_id = ? AND COALESCE(photo_path, '') != ''
+            ORDER BY id DESC
+            LIMIT 6
+            """,
+            (user_row["id"],),
+        ).fetchall()
+
+    conn.close()
+
+    if not rows:
+        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+
+    client_key = "test_client"
+    clients = {
+        client_key: {
+            "name": user_row["name"],
+            "request_id": f"REQ-TEST-{user_row['id']:03d}",
+            "received_at": "2026/04/23",
+        }
+    }
+
+    products = {}
+    wholesale_items = []
+    sold_items = []
+
+    for row in rows:
+        service = _service_for_item(row["id"])
+        status = _status_for_item(row["id"], service)
+        slug = f"item_{row['id']}_{_safe_slug(row['product_name'] or '')}"[:64]
+        detail_page = f"documents_v2_product_detail_{slug}.html"
+        amount = _price_for_item(row["id"], int(row["purchase_price"] or 0) or 50000)
+        product = {
+            "client": client_key,
+            "name": row["product_name"] or f"商品 {row['id']}",
+            "brand": row["brand_name"] or "ブランド未設定",
+            "service": service,
+            "status": status,
+            "image": _copy_preview_image(row["photo_path"], service, row["brand_name"]),
+            "category": _category_from_name(row["product_name"] or ""),
+            "code": f"KAIKA-{row['id']}",
+            "condition": row["item_condition"] or "A",
+            "detail_page": detail_page,
+            "request_detail": f"documents_v2_request_detail_{client_key}.html",
+            "model": row["product_name"] or f"商品 {row['id']}",
+            "real_item_id": row["id"],
+            "amount": amount,
+            "purchase_date": row["purchase_date"] or "未登録",
+            "notes": row["notes"] or "特記事項はありません",
+            "model_number": row["model_number"] or "未登録",
+        }
+        products[slug] = product
+        if service == "wholesale" and status == "査定中":
+            wholesale_items.append((slug, product))
+        if status in {"査定中", "認証済み", "入金待ち"}:
+            sold_items.append((slug, product))
+
+    vendor_files = []
+    for index, (product_key, product) in enumerate(wholesale_items, start=1):
+        vendor = VENDORS[(index - 1) % len(VENDORS)]
+        vendor_files.append(
+            {
+                "slug": f"documents_v2_vendor_response_file_{product_key}.html",
+                "label": f"2026/04/{7 + index:02d} {vendor['name']} 回答書 No.{40 + index:03d}",
+                "month": "2026/04",
+                "partner": vendor["name"],
+                "items": [
+                    {
+                        "product": product_key,
+                        "price": product["amount"],
+                        "result": "成約",
+                        "assigned_client": clients[client_key]["name"],
+                    }
+                ],
+            }
+        )
+
+    return_items = []
+    for file_info in vendor_files:
+        for item in file_info["items"]:
+            return_items.append(
+                {
+                    "product": item["product"],
+                    "price": item["price"],
+                    "source": file_info["label"],
+                }
+            )
+
+    for product_key, product in sold_items:
+        if product["service"] == "auction":
+            return_items.append(
+                {
+                    "product": product_key,
+                    "price": product["amount"],
+                    "source": "業者オークション 落札結果",
+                }
+            )
+        if product["service"] == "simultaneous":
+            return_items.append(
+                {
+                    "product": product_key,
+                    "price": product["amount"],
+                    "source": "同時出品 売却完了",
+                }
+            )
+
+    return_groups = {
+        client_key: {
+            "slug": f"documents_v2_client_delivery_{client_key}.html",
+            "template": f"documents_v2_client_statement_template_{client_key}.html",
+            "items": return_items,
+        }
+    }
+
+    return clients, products, vendor_files, return_groups
+
+
+CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS = _load_preview_data()
+
+
 def money(value: int) -> str:
     return f"¥{value:,}"
 
@@ -242,6 +489,10 @@ def back_bar() -> str:
 
 
 def top_cards() -> str:
+    stage1_count = sum(len(client_products(client_id)) for client_id in CLIENTS)
+    stage2_count = len(outgoing_products())
+    stage3_count = len(VENDOR_FILES)
+    stage4_count = len(RETURN_GROUPS)
     cards = [
         ("1", "クライアントから受付", "どのクライアントから何の商品が届いたかを、名前単位で確認します。", "documents_v2_client_incoming.html"),
         ("2", "開花から業者へ依頼", "査定中に切り替えた業者卸販売の商品だけをまとめて業者へ流します。", "documents_v2_vendor_outgoing.html"),
@@ -250,7 +501,12 @@ def top_cards() -> str:
     ]
     inner = []
     for step, heading, desc, href in cards:
-        count = {"1": "4件受付中", "2": "2件準備中", "3": "3ファイル受領", "4": "4名へ返送準備"}.get(step, "")
+        count = {
+            "1": f"{stage1_count}点受付中",
+            "2": f"{stage2_count}点準備中",
+            "3": f"{stage3_count}ファイル受領",
+            "4": f"{stage4_count}名へ返送準備",
+        }.get(step, "")
         inner.append(
             f"""
             <a class="flow-card" href="{href}">
@@ -278,23 +534,49 @@ def service_tabs(current: str) -> str:
     return f'<div class="service-tabs">{"".join(parts)}</div>'
 
 
-def client_summary_card(client_id: str, products: list[dict], *, service_label: str) -> str:
+def request_detail_filename(client_id: str, service: str | None = None) -> str:
+    if service and service != "all":
+        return f"documents_v2_request_detail_{client_id}_{service}.html"
+    return f"documents_v2_request_detail_{client_id}.html"
+
+
+def product_detail_href(product: dict) -> str:
+    real_item_id = product.get("real_item_id")
+    if real_item_id:
+        return f"/view/{real_item_id}"
+    return product["detail_page"]
+
+
+def service_summary_label(products: list[dict], service_filter: str | None) -> str:
+    if service_filter and service_filter != "all":
+        return SERVICE_LABELS[service_filter]
+
+    summary = []
+    for service_key in ("wholesale", "auction", "simultaneous"):
+        count = sum(1 for product in products if product["service"] == service_key)
+        if count:
+            summary.append(f"{SERVICE_LABELS[service_key]} {count}点")
+    return " / ".join(summary) or "認証申請一式"
+
+
+def client_summary_card(client_id: str, products: list[dict], *, service_filter: str | None = None) -> str:
     client = CLIENTS[client_id]
-    status_summary = " / ".join(f"{p['status']} 1" for p in products)
     product_names = " / ".join(p["name"] for p in products)
-    request_detail = products[0]["request_detail"] if products else "documents_v2_client_incoming.html"
+    request_detail = request_detail_filename(client_id, service_filter)
+    status_badge = products[0]["status"] if products else "認証待ち"
+    request_kind = service_summary_label(products, service_filter)
     return f"""
     <div class="summary-card">
       <div class="summary-head">
         <div>
           <div class="summary-client">{client["name"]}</div>
-          <div class="summary-meta">{client["request_id"]} / 受付日 {client["received_at"]} / {service_label}</div>
+          <div class="summary-meta">{client["request_id"]} / 受付日 {client["received_at"]}</div>
         </div>
-        <span class="pill {status_class(products[0]["status"])}">{products[0]["status"]}</span>
+        <span class="pill {status_class(status_badge)}">{status_badge}</span>
       </div>
       <div class="summary-card-grid">
         <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">{len(products)}点</div></div>
-        <div class="field-block"><div class="field-label">依頼書</div><div class="field-value">認証申請一式</div></div>
+        <div class="field-block"><div class="field-label">依頼形式</div><div class="field-value">{request_kind}</div></div>
         <div class="field-block"><div class="field-label">商品名</div><div class="field-value">{product_names}</div></div>
         <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
       </div>
@@ -310,7 +592,7 @@ def stage1_page(service: str | None) -> str:
     for client_id in CLIENTS:
         items = client_products(client_id, service if service not in (None, "all") else None)
         if items:
-            filtered_clients.append(client_summary_card(client_id, items, service_label=SERVICE_LABELS.get(service or "all", "すべてのサービス")))
+            filtered_clients.append(client_summary_card(client_id, items, service_filter=service or "all"))
     label = SERVICE_LABELS.get(service or "all", "すべてのサービス")
     return page(
         f"1. クライアントから受付 - {label}",
@@ -400,10 +682,10 @@ def product_card(product_id: str) -> str:
     """
 
 
-def request_detail_page(client_id: str) -> str:
+def request_detail_page(client_id: str, service: str | None = None) -> str:
     client = CLIENTS[client_id]
-    products = client_products(client_id)
-    service_summary = " / ".join(sorted({SERVICE_LABELS[p["service"]] for p in products}))
+    products = client_products(client_id, service if service not in (None, "all") else None)
+    service_summary = service_summary_label(products, service)
     return page(
         f"{client['name']} さんの受付詳細",
         f"""
@@ -433,22 +715,7 @@ def request_detail_page(client_id: str) -> str:
 
 def product_detail_page(product_id: str) -> str:
     product = PRODUCTS[product_id]
-    client = CLIENTS[product["client"]]
-    detail_rows = [
-        ("クライアント名", client["name"]),
-        ("サービス", SERVICE_LABELS[product["service"]]),
-        ("商品ID", product["code"]),
-        ("ブランド", product["brand"]),
-        ("商品名", product["name"]),
-        ("カテゴリ", product["category"]),
-        ("状態", product["condition"]),
-        ("現在の進行状態", product["status"]),
-        ("メモ", "商品一覧に登録済みの内容を、そのまま受付画面から確認できる想定です。"),
-    ]
-    rows_html = "".join(
-        f'<div class="detail-row"><div class="field-label">{label}</div><div class="field-value">{value}</div></div>'
-        for label, value in detail_rows
-    )
+    detail_href = product_detail_href(product)
     return page(
         f"{product['name']} の商品詳細",
         f"""
@@ -457,23 +724,28 @@ def product_detail_page(product_id: str) -> str:
           <div class="page-head">
             <div>
               <h1>商品詳細</h1>
-              <p>{product['name']} の登録内容を、そのまま確認するための画面です。</p>
+              <p>{product['name']} の登録内容を、商品一覧で確認するイメージに近い形で preview しています。必要であれば実際の商品詳細画面も開けます。</p>
             </div>
           </div>
-          <div class="detail-layout">
-            <div class="detail-image-card">
-              <img src="{product['image']}" alt="{escape(product['name'])}">
-            </div>
-            <div class="section detail-section">
-              <div class="section-head">
-                <div>
-                  <h3>{product['name']}</h3>
-                  <p class="section-note">クライアント申請と商品一覧を照らし合わせるための詳細です。</p>
-                </div>
+          <div class="section">
+            <div class="detail-layout">
+              <div class="detail-image-card">
+                <img src="{product['image']}" alt="{escape(product['name'])}">
               </div>
               <div class="detail-list">
-                {rows_html}
+                <div class="detail-row"><strong>商品名</strong><span>{product['name']}</span></div>
+                <div class="detail-row"><strong>ブランド</strong><span>{product['brand']}</span></div>
+                <div class="detail-row"><strong>カテゴリ</strong><span>{product['category']}</span></div>
+                <div class="detail-row"><strong>型番 / モデル</strong><span>{product['model_number']}</span></div>
+                <div class="detail-row"><strong>状態</strong><span>{product['condition']}</span></div>
+                <div class="detail-row"><strong>管理コード</strong><span>{product['code']}</span></div>
+                <div class="detail-row"><strong>仕入参考額</strong><span>{money(product['amount'])}</span></div>
+                <div class="detail-row"><strong>登録日</strong><span>{product['purchase_date']}</span></div>
+                <div class="detail-row"><strong>メモ</strong><span>{product['notes']}</span></div>
               </div>
+            </div>
+            <div class="card-actions" style="margin-top:18px;">
+              <a class="btn btn-primary" href="{detail_href}">実際の商品詳細を開く</a>
             </div>
           </div>
         </div>
@@ -483,10 +755,12 @@ def product_detail_page(product_id: str) -> str:
 
 def outgoing_products() -> list[dict]:
     items = []
-    for product_id in ["lv_alma", "hermes_scarf"]:
-        product = dict(PRODUCTS[product_id])
-        product["id"] = product_id
-        items.append(product)
+    for product_id, product in PRODUCTS.items():
+        if product["service"] != "wholesale" or product["status"] != "査定中":
+            continue
+        item = dict(product)
+        item["id"] = product_id
+        items.append(item)
     return items
 
 
@@ -653,6 +927,7 @@ def doc_rows(items: list[dict], *, price_key: str = "price") -> str:
         item = items[idx] if idx < len(items) else None
         if item:
             product = PRODUCTS[item["product"]]
+            amount = item.get(price_key, product.get("amount", 0))
             rows.append(
                 f"""
                 <tr>
@@ -661,8 +936,8 @@ def doc_rows(items: list[dict], *, price_key: str = "price") -> str:
                   <td class="doc-col-brand">{product['brand']}</td>
                   <td class="doc-col-condition">{product['condition']}</td>
                   <td class="doc-col-qty">1</td>
-                  <td class="doc-col-price doc-cell-price" data-amount="{item[price_key]}">{money(item[price_key])}</td>
-                  <td class="doc-col-price doc-cell-amount" data-amount="{item[price_key]}">{money(item[price_key])}</td>
+                  <td class="doc-col-price doc-cell-price" data-amount="{amount}">{money(amount)}</td>
+                  <td class="doc-col-price doc-cell-amount" data-amount="{amount}">{money(amount)}</td>
                 </tr>
                 """
             )
@@ -684,12 +959,9 @@ def doc_rows(items: list[dict], *, price_key: str = "price") -> str:
 
 
 def estimate_template_page() -> str:
-    items = [
-        {"product": "lv_alma", "price": 185000},
-        {"product": "hermes_scarf", "price": 58000},
-        {"product": "chanel_wallet", "price": 72000},
-    ]
+    items = [{"product": product["id"], "price": product["amount"]} for product in outgoing_products()]
     total = sum(item["price"] for item in items)
+    vendor_name = VENDORS[0]["name"] if VENDORS else "取引先業者"
     return page(
         "見積依頼書",
         f"""
@@ -706,7 +978,7 @@ def estimate_template_page() -> str:
             <div class="doc-title">見積依頼書</div>
             <div class="doc-meta">
               <div><strong>発行日</strong> 2026年4月23日</div>
-              <div><strong>送付先</strong> ブランドセンター 御中</div>
+              <div><strong>送付先</strong> {vendor_name} 御中</div>
               <div><strong>差出人</strong> 株式会社開花</div>
             </div>
             <div class="doc-message">下記の商品について、見積のご確認をお願いいたします。</div>
@@ -1291,6 +1563,9 @@ def write_text(path: Path, content: str) -> None:
 
 
 def build() -> None:
+    if OUTPUT_DIR.exists():
+        for stale_html in OUTPUT_DIR.rglob("*.html"):
+            stale_html.unlink(missing_ok=True)
     write_text(STATIC_DIR / "preview_v2.css", PREVIEW_CSS)
     write_text(STATIC_DIR / "preview_v2.js", PREVIEW_JS)
     write_text(STATIC_DIR / "doc_editor.js", DOC_EDITOR_JS)
@@ -1317,7 +1592,10 @@ def build() -> None:
     write_text(OUTPUT_DIR / "documents_v2_client_incoming_simultaneous.html", stage1_page("simultaneous"))
 
     for client_id in CLIENTS:
-        write_text(OUTPUT_DIR / f"documents_v2_request_detail_{client_id}.html", request_detail_page(client_id))
+        write_text(OUTPUT_DIR / request_detail_filename(client_id), request_detail_page(client_id))
+        write_text(OUTPUT_DIR / request_detail_filename(client_id, "wholesale"), request_detail_page(client_id, "wholesale"))
+        write_text(OUTPUT_DIR / request_detail_filename(client_id, "auction"), request_detail_page(client_id, "auction"))
+        write_text(OUTPUT_DIR / request_detail_filename(client_id, "simultaneous"), request_detail_page(client_id, "simultaneous"))
 
     for product_id in PRODUCTS:
         write_text(OUTPUT_DIR / PRODUCTS[product_id]["detail_page"], product_detail_page(product_id))

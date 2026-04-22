@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>テスト さんの受付詳細</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>テスト さんの受付詳細</h1>
+          <p>REQ-TEST-018 / 受付日 2026/04/23 / 業者卸販売。ここで商品ごとに、認証済み・査定中・入金待ち・受付不可通知を切り替えます。査定中にした業者卸販売の商品だけが 2番へ進みます。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>商品ごとの確認</h3>
+            <p class="section-note">商品名を押すと、商品一覧で登録している内容をそのまま確認できます。</p>
+          </div>
+        </div>
+        <div class="stack">
+
+<div class="product-card">
+  <div class="product-thumb">
+    <img src="static/uploads/1769878374_2260000373889-1-snziwxjfcrlohbuqdpgkavyemt.jpg" alt="アズール サリナPM トートバッグ">
+  </div>
+  <div class="product-body">
+    <div class="product-top">
+      <div>
+        <div class="product-title"><a href="documents_v2_product_detail_item_145_アズール_サリナpm_トートバッグ.html">アズール サリナPM トートバッグ</a></div>
+        <div class="product-meta">テスト / 業者卸販売 / Louis Vuitton / 商品ID KAIKA-145</div>
+      </div>
+      <span id="badge-item_145_アズール_サリナpm_トートバッグ" class="pill appraising">査定中</span>
+    </div>
+    <div class="detail-grid">
+      <div class="field-block"><div class="field-label">カテゴリ</div><div class="field-value">バッグ</div></div>
+      <div class="field-block"><div class="field-label">ブランド</div><div class="field-value">Louis Vuitton</div></div>
+      <div class="field-block"><div class="field-label">モデル</div><div class="field-value">アズール サリナPM トートバッグ</div></div>
+      <div class="field-block"><div class="field-label">状態</div><div class="field-value">AB</div></div>
+    </div>
+    <div class="card-actions">
+      <a class="btn btn-soft" href="documents_v2_product_detail_item_145_アズール_サリナpm_トートバッグ.html">商品詳細を見る</a>
+    </div>
+
+<div class="status-box">
+  <div class="status-row">
+    <span class="field-label">現在の状態</span>
+    <span id="state-item_145_アズール_サリナpm_トートバッグ" class="field-value">査定中</span>
+  </div>
+  <div class="status-row">
+    <select id="status-item_145_アズール_サリナpm_トートバッグ" class="status-select">
+      <option value="認証済み" >認証済み</option><option value="査定中" selected>査定中</option><option value="入金待ち" >入金待ち</option>
+    </select>
+    <button class="btn btn-primary" type="button" onclick="applyStatus('status-item_145_アズール_サリナpm_トートバッグ','badge-item_145_アズール_サリナpm_トートバッグ','state-item_145_アズール_サリナpm_トートバッグ','notice-item_145_アズール_サリナpm_トートバッグ','アズール サリナPM トートバッグ')">状態を更新して通知</button>
+  </div>
+  <div class="status-row">
+    <button class="btn btn-outline" type="button" onclick="notifyUnavailable('notice-item_145_アズール_サリナpm_トートバッグ','badge-item_145_アズール_サリナpm_トートバッグ','state-item_145_アズール_サリナpm_トートバッグ','アズール サリナPM トートバッグ')">受付不可を通知する</button>
+  </div>
+  <p id="notice-item_145_アズール_サリナpm_トートバッグ" class="inline-notice" hidden></p>
+</div>
+
+  </div>
+</div>
+
+<div class="product-card">
+  <div class="product-thumb">
+    <img src="static/uploads/1769878780_2260000364344-1-yrldpgkwiuzabomtvhcnsqfjex.jpg" alt="レザー ムーンサイド ショルダーバッグ">
+  </div>
+  <div class="product-body">
+    <div class="product-top">
+      <div>
+        <div class="product-title"><a href="documents_v2_product_detail_item_146_レザー_ムーンサイド_ショルダーバッグ.html">レザー ムーンサイド ショルダーバッグ</a></div>
+        <div class="product-meta">テスト / 業者卸販売 / Gucci / 商品ID KAIKA-146</div>
+      </div>
+      <span id="badge-item_146_レザー_ムーンサイド_ショルダーバッグ" class="pill pending">認証待ち</span>
+    </div>
+    <div class="detail-grid">
+      <div class="field-block"><div class="field-label">カテゴリ</div><div class="field-value">バッグ</div></div>
+      <div class="field-block"><div class="field-label">ブランド</div><div class="field-value">Gucci</div></div>
+      <div class="field-block"><div class="field-label">モデル</div><div class="field-value">レザー ムーンサイド ショルダーバッグ</div></div>
+      <div class="field-block"><div class="field-label">状態</div><div class="field-value">AB</div></div>
+    </div>
+    <div class="card-actions">
+      <a class="btn btn-soft" href="documents_v2_product_detail_item_146_レザー_ムーンサイド_ショルダーバッグ.html">商品詳細を見る</a>
+    </div>
+
+<div class="status-box">
+  <div class="status-row">
+    <span class="field-label">現在の状態</span>
+    <span id="state-item_146_レザー_ムーンサイド_ショルダーバッグ" class="field-value">認証待ち</span>
+  </div>
+  <div class="status-row">
+    <select id="status-item_146_レザー_ムーンサイド_ショルダーバッグ" class="status-select">
+      <option value="認証済み" >認証済み</option><option value="査定中" >査定中</option><option value="入金待ち" >入金待ち</option>
+    </select>
+    <button class="btn btn-primary" type="button" onclick="applyStatus('status-item_146_レザー_ムーンサイド_ショルダーバッグ','badge-item_146_レザー_ムーンサイド_ショルダーバッグ','state-item_146_レザー_ムーンサイド_ショルダーバッグ','notice-item_146_レザー_ムーンサイド_ショルダーバッグ','レザー ムーンサイド ショルダーバッグ')">状態を更新して通知</button>
+  </div>
+  <div class="status-row">
+    <button class="btn btn-outline" type="button" onclick="notifyUnavailable('notice-item_146_レザー_ムーンサイド_ショルダーバッグ','badge-item_146_レザー_ムーンサイド_ショルダーバッグ','state-item_146_レザー_ムーンサイド_ショルダーバッグ','レザー ムーンサイド ショルダーバッグ')">受付不可を通知する</button>
+  </div>
+  <p id="notice-item_146_レザー_ムーンサイド_ショルダーバッグ" class="inline-notice" hidden></p>
+</div>
+
+  </div>
+</div>
+
+<div class="product-card">
+  <div class="product-thumb">
+    <img src="static/img_celine_luggage.svg" alt="ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ">
+  </div>
+  <div class="product-body">
+    <div class="product-top">
+      <div>
+        <div class="product-title"><a href="documents_v2_product_detail_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.html">ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</a></div>
+        <div class="product-meta">テスト / 業者卸販売 / Fendi / 商品ID KAIKA-151</div>
+      </div>
+      <span id="badge-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" class="pill appraising">査定中</span>
+    </div>
+    <div class="detail-grid">
+      <div class="field-block"><div class="field-label">カテゴリ</div><div class="field-value">バッグ</div></div>
+      <div class="field-block"><div class="field-label">ブランド</div><div class="field-value">Fendi</div></div>
+      <div class="field-block"><div class="field-label">モデル</div><div class="field-value">ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</div></div>
+      <div class="field-block"><div class="field-label">状態</div><div class="field-value">B</div></div>
+    </div>
+    <div class="card-actions">
+      <a class="btn btn-soft" href="documents_v2_product_detail_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.html">商品詳細を見る</a>
+    </div>
+
+<div class="status-box">
+  <div class="status-row">
+    <span class="field-label">現在の状態</span>
+    <span id="state-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" class="field-value">査定中</span>
+  </div>
+  <div class="status-row">
+    <select id="status-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" class="status-select">
+      <option value="認証済み" >認証済み</option><option value="査定中" selected>査定中</option><option value="入金待ち" >入金待ち</option>
+    </select>
+    <button class="btn btn-primary" type="button" onclick="applyStatus('status-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','badge-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','state-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','notice-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ')">状態を更新して通知</button>
+  </div>
+  <div class="status-row">
+    <button class="btn btn-outline" type="button" onclick="notifyUnavailable('notice-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','badge-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','state-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ','ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ')">受付不可を通知する</button>
+  </div>
+  <p id="notice-item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" class="inline-notice" hidden></p>
+</div>
+
+  </div>
+</div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>
