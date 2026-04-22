@@ -1,121 +1,211 @@
 {% extends "base.html" %}
-{% block title %}レポート・CSV - 物販管理{% endblock %}
+{% block title %}
+{% if is_admin_report_view %}
+    {% if selected_client_name %}{{ selected_client_name }} のレポート{% else %}クライアントレポート{% endif %} - 株式会社開花
+{% else %}
+    レポート・CSV - 株式会社開花
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="reports-page">
+<div class="reports-page" data-report-client-id="{{ selected_client_id if is_admin_report_view and selected_client_id else '' }}">
     <div class="page-header">
         <div>
+            {% if is_admin_report_view %}
+                {% if selected_client_name %}
+                <h1>{{ selected_client_name }} のレポート</h1>
+                <p class="page-desc">売上推移や平均販売日数の分析と、売上・仕入・手数料・在庫のCSV・PDF出力を、このクライアント単位で確認できます。</p>
+                {% else %}
+                <h1>クライアントレポート</h1>
+                <p class="page-desc">クライアント名からレポートを開くと、各クライアントの売上推移・分析と、CSV・PDF出力を確認できます。</p>
+                {% endif %}
+            {% else %}
             <h1>レポート・CSV</h1>
-            <p class="page-desc">売上推移や在庫回転の分析と、売上・仕入・手数料・在庫のCSV出力をまとめています。</p>
+            <p class="page-desc">売上推移や平均販売日数の分析と、売上・仕入・手数料・在庫のCSV・PDF出力をまとめています。</p>
+            {% endif %}
         </div>
-        <a href="{{ url_for('user_analytics') }}" class="report-link-button">My分析を見る</a>
+        <div class="page-header-actions">
+            {% if is_admin_report_view and selected_client_id %}
+            <a href="{{ url_for('reports') }}" class="report-link-button report-link-button--subtle">クライアント一覧へ戻る</a>
+            {% elif not is_admin_report_view %}
+            <a href="{{ url_for('user_analytics') }}" class="report-link-button">My分析を見る</a>
+            {% endif %}
+        </div>
     </div>
 
+    {% if is_admin_report_view and show_client_list %}
     <section class="report-section">
         <div class="section-header">
-            <h2>売上推移・分析</h2>
-            <p>売上推移、利益、在庫回転など、今の状況を分析しやすい一覧です。</p>
+            <h2>クライアント一覧</h2>
+            <p>「レポートを見る」から、そのクライアントの売上推移・分析と各CSV・PDFに進めます。</p>
         </div>
-        <div class="report-grid">
-            {% for card in management_cards %}
-            <article class="report-card" data-report-type="{{ card.type }}">
-                <div class="report-card-head">
-                    <h3>{{ card.title }}</h3>
-                    <p>{{ card.description }}</p>
-                </div>
-                <div class="report-controls">
-                    {% if 'year' in card.filters %}
-                    <label class="report-control">
-                        <span>年</span>
-                        <select class="report-select" data-filter="year">
-                            {% for y in years %}
-                            <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    {% endif %}
-                    {% if 'month' in card.filters %}
-                    <label class="report-control">
-                        <span>月</span>
-                        <select class="report-select" data-filter="month">
-                            <option value="0">通年</option>
-                            {% for m in range(1, 13) %}
-                            <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    {% endif %}
-                </div>
-                <div class="report-actions">
-                    <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
-                    <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
-                </div>
-            </article>
-            {% endfor %}
-        </div>
-    </section>
 
-    <section class="report-section">
-        <div class="section-header">
-            <h2>各項目ごと</h2>
-            <p>売上、仕入、手数料、在庫を項目ごとにプレビューして、そのままCSV出力できます。</p>
-        </div>
-        <div class="report-grid">
-            {% for card in export_cards %}
-            <article class="report-card" data-report-type="{{ card.type }}">
-                <div class="report-card-head">
-                    <h3>{{ card.title }}</h3>
-                    <p>{{ card.description }}</p>
-                </div>
-                <div class="report-controls">
-                    {% if 'year' in card.filters %}
-                    <label class="report-control">
-                        <span>年</span>
-                        <select class="report-select" data-filter="year">
-                            {% for y in years %}
-                            <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+        {% if report_clients %}
+        <div class="report-table-shell">
+            <div class="report-table-wrapper report-table-wrapper--static">
+                <div class="report-table-track report-table-track--fit">
+                    <table class="report-table report-table--clients">
+                        <thead>
+                            <tr>
+                                <th>クライアント名</th>
+                                <th>ユーザー名</th>
+                                <th class="text-right">商品数</th>
+                                <th class="text-center">レポート</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in report_clients %}
+                            <tr>
+                                <td>{{ client.display_name }}</td>
+                                <td>{{ client.username }}</td>
+                                <td class="text-right">{{ client.item_count }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('reports', client_id=client.id) }}" class="client-report-link">レポートを見る</a>
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </select>
-                    </label>
-                    {% endif %}
-                    {% if 'month' in card.filters %}
-                    <label class="report-control">
-                        <span>月</span>
-                        <select class="report-select" data-filter="month">
-                            <option value="0">通年</option>
-                            {% for m in range(1, 13) %}
-                            <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    {% endif %}
+                        </tbody>
+                    </table>
                 </div>
-                <div class="report-actions">
-                    <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
-                    <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
-                </div>
-            </article>
-            {% endfor %}
+            </div>
         </div>
+        {% else %}
+        <div class="empty-state">表示できるクライアントがまだありません。</div>
+        {% endif %}
     </section>
+    {% else %}
+        {% if is_admin_report_view and selected_client_name %}
+        <section class="selected-client-panel">
+            <span class="selected-client-chip">対象クライアント</span>
+            <strong>{{ selected_client_name }}</strong>
+        </section>
+        {% endif %}
+
+        <section class="report-section">
+            <div class="section-header">
+                <h2>売上推移・分析</h2>
+                <p>年次は年だけ、月次は年と月を選びながら、売上推移と在庫回転分析を確認できます。</p>
+            </div>
+            <div class="report-grid">
+                {% for card in management_cards %}
+                <article class="report-card" data-report-type="{{ card.type }}">
+                    <div class="report-card-head">
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
+                    </div>
+                    <div class="report-controls">
+                        {% if 'aggregation' in card.filters %}
+                        <label class="report-control" data-control="aggregation">
+                            <span>集計単位</span>
+                            <select class="report-select" data-filter="aggregation">
+                                <option value="yearly">年次</option>
+                                <option value="monthly">月次</option>
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'year' in card.filters %}
+                        <label class="report-control" data-control="year">
+                            <span>年</span>
+                            <select class="report-select" data-filter="year">
+                                {% for y in years %}
+                                <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'month' in card.filters %}
+                        <label class="report-control" data-control="month" {% if 'aggregation' in card.filters %}hidden{% endif %}>
+                            <span>月</span>
+                            <select class="report-select" data-filter="month">
+                                {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                    </div>
+                    <div class="report-actions">
+                        <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                        <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                        <button type="button" class="btn btn-primary" data-action="pdf">PDF</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="report-section">
+            <div class="section-header">
+                <h2>各項目ごと</h2>
+                <p>売上、仕入、在庫、手数料の各一覧も、年次は年だけ、月次は年と月を選んで出力できます。</p>
+            </div>
+            <div class="report-grid">
+                {% for card in export_cards %}
+                <article class="report-card" data-report-type="{{ card.type }}">
+                    <div class="report-card-head">
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
+                    </div>
+                    <div class="report-controls">
+                        {% if 'aggregation' in card.filters %}
+                        <label class="report-control" data-control="aggregation">
+                            <span>集計単位</span>
+                            <select class="report-select" data-filter="aggregation">
+                                <option value="yearly">年次</option>
+                                <option value="monthly">月次</option>
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'year' in card.filters %}
+                        <label class="report-control" data-control="year">
+                            <span>年</span>
+                            <select class="report-select" data-filter="year">
+                                {% for y in years %}
+                                <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}年</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                        {% if 'month' in card.filters %}
+                        <label class="report-control" data-control="month" {% if 'aggregation' in card.filters %}hidden{% endif %}>
+                            <span>月</span>
+                            <select class="report-select" data-filter="month">
+                                {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}月</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+                    </div>
+                    <div class="report-actions">
+                        <button type="button" class="btn btn-info" data-action="preview">プレビュー</button>
+                        <button type="button" class="btn btn-secondary" data-action="csv">CSV</button>
+                        <button type="button" class="btn btn-primary" data-action="pdf">PDF</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
 </div>
 
 <div class="report-modal" id="reportModal">
-    <div class="report-modal-overlay" onclick="closeReportModal()"></div>
-    <div class="report-modal-content">
+    <div class="report-modal-overlay"></div>
+    <div class="report-modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="report-modal-header">
             <div>
                 <h2 id="modalTitle">レポートプレビュー</h2>
                 <p id="modalDescription" class="modal-description"></p>
             </div>
-            <button type="button" class="report-modal-close" onclick="closeReportModal()">×</button>
+            <button type="button" class="report-modal-close" id="closeReportModalBtn" aria-label="閉じる">×</button>
         </div>
         <div class="report-modal-body" id="modalBody">
             <div class="loading">読み込み中...</div>
         </div>
         <div class="report-modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="closeReportModal()">閉じる</button>
-            <button type="button" id="downloadCsvBtn" class="btn btn-primary">CSVダウンロード</button>
+            <button type="button" class="btn btn-light" id="cancelReportModalBtn">閉じる</button>
+            <button type="button" id="downloadCsvBtn" class="btn btn-secondary">CSV</button>
+            <button type="button" id="downloadPdfBtn" class="btn btn-primary">PDF</button>
         </div>
     </div>
 </div>
@@ -131,7 +221,6 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 0;
 }
 
 .page-header h1 {
@@ -143,21 +232,57 @@
 .page-desc {
     margin: 0;
     color: #64748b;
-    line-height: 1.7;
+    line-height: 1.75;
+}
+
+.page-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 .report-link-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.8rem 1rem;
+    padding: 0.82rem 1rem;
     border-radius: 999px;
     background: #eff6ff;
-    color: #1d4ed8;
     border: 1px solid #bfdbfe;
+    color: #1d4ed8;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
+}
+
+.report-link-button--subtle {
+    background: #fff;
+    border-color: #cbd5e1;
+    color: #334155;
+}
+
+.selected-client-panel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: fit-content;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    color: #0f172a;
+}
+
+.selected-client-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.8rem;
+    font-weight: 700;
 }
 
 .report-section {
@@ -174,6 +299,7 @@
 .section-header p {
     margin: 0.35rem 0 0;
     color: #64748b;
+    line-height: 1.75;
 }
 
 .report-grid {
@@ -183,13 +309,14 @@
 }
 
 .report-card {
+    display: grid;
+    gap: 1rem;
     padding: 1.2rem;
     border-radius: 18px;
     border: 1px solid #e2e8f0;
     background: #fff;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-    display: grid;
-    gap: 1rem;
+    min-width: 0;
 }
 
 .report-card-head h3 {
@@ -201,14 +328,14 @@
 .report-card-head p {
     margin: 0;
     color: #64748b;
-    line-height: 1.65;
-    min-height: 3.2rem;
+    line-height: 1.7;
+    min-height: 3.4rem;
 }
 
 .report-controls {
     display: flex;
-    gap: 0.75rem;
     flex-wrap: wrap;
+    gap: 0.75rem;
 }
 
 .report-control {
@@ -224,7 +351,7 @@
 
 .report-select {
     width: 100%;
-    padding: 0.7rem 0.85rem;
+    padding: 0.72rem 0.85rem;
     border-radius: 10px;
     border: 1px solid #d1d5db;
     background: #fff;
@@ -234,8 +361,8 @@
 
 .report-actions {
     display: flex;
-    gap: 0.6rem;
     flex-wrap: wrap;
+    gap: 0.6rem;
 }
 
 .btn {
@@ -262,6 +389,11 @@
     color: #fff;
 }
 
+.btn-light {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
 .report-modal {
     display: none;
     position: fixed;
@@ -284,7 +416,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(1100px, 94vw);
+    width: min(1120px, 94vw);
     max-height: 92vh;
     display: flex;
     flex-direction: column;
@@ -322,6 +454,7 @@
     margin: 0.35rem 0 0;
     color: #64748b;
     font-size: 0.9rem;
+    line-height: 1.7;
 }
 
 .report-modal-close {
@@ -354,6 +487,32 @@
 .report-preview {
     display: grid;
     gap: 1rem;
+}
+
+.report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
+}
+
+.summary-item {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.summary-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.summary-value {
+    color: #0f172a;
+    font-size: 1.05rem;
+    font-weight: 700;
 }
 
 .report-notes {
@@ -408,53 +567,52 @@
     line-height: 1.7;
 }
 
-.report-summary {
+.report-table-shell {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.8rem;
+    gap: 0.55rem;
 }
 
-.summary-item {
-    padding: 0.95rem 1rem;
-    border-radius: 14px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-}
-
-.summary-label {
-    display: block;
-    margin-bottom: 0.35rem;
+.report-table-scroll-note {
     color: #64748b;
-    font-size: 0.8rem;
-}
-
-.summary-value {
-    color: #0f172a;
-    font-size: 1.05rem;
-    font-weight: 700;
+    font-size: 0.82rem;
 }
 
 .report-table-wrapper {
     overflow-x: auto;
+    overflow-y: hidden;
     border-radius: 16px;
     border: 1px solid #e2e8f0;
     background: #fff;
     cursor: grab;
-    padding-right: 0.2rem;
+    overscroll-behavior-x: contain;
     scrollbar-gutter: stable both-edges;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
+}
+
+.report-table-wrapper--static {
+    cursor: default;
 }
 
 .report-table-track {
+    display: inline-block;
     min-width: 100%;
-    padding-right: 1rem;
-    box-sizing: content-box;
+    padding-right: 1.25rem;
+    box-sizing: border-box;
+}
+
+.report-table-track--fit {
+    padding-right: 0;
 }
 
 .report-table {
     width: 100%;
     min-width: 760px;
     border-collapse: collapse;
+}
+
+.report-table--clients {
+    min-width: 620px;
 }
 
 .report-table th,
@@ -479,19 +637,23 @@
     border-bottom: none;
 }
 
-.report-table-shell {
-    display: grid;
-    gap: 0.55rem;
-}
-
-.report-table-scroll-note {
-    color: #64748b;
-    font-size: 0.82rem;
-}
-
 .report-table-wrapper.dragging {
     cursor: grabbing;
     user-select: none;
+}
+
+.client-report-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 112px;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    font-weight: 700;
+    text-decoration: none;
 }
 
 .text-right {
@@ -506,6 +668,10 @@
     .page-header {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .page-header-actions {
+        justify-content: flex-start;
     }
 
     .report-link-button {
@@ -535,9 +701,6 @@
 </style>
 
 <script>
-let currentReportType = '';
-let currentReportParams = {};
-
 function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -547,11 +710,27 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function getReportPage() {
+    return document.querySelector('.reports-page');
+}
+
 function collectCardParams(card) {
     const params = {};
+    const aggregationInput = card.querySelector('[data-filter="aggregation"]');
+    const aggregationValue = aggregationInput ? aggregationInput.value : '';
     card.querySelectorAll('[data-filter]').forEach((input) => {
+        if (input.dataset.filter === 'month' && aggregationValue === 'yearly') {
+            params[input.dataset.filter] = '0';
+            return;
+        }
         params[input.dataset.filter] = input.value;
     });
+
+    const reportPage = getReportPage();
+    const clientId = reportPage ? reportPage.dataset.reportClientId : '';
+    if (clientId) {
+        params.client_id = clientId;
+    }
     return params;
 }
 
@@ -560,25 +739,26 @@ function getQueryString(params) {
 }
 
 function openReportModal(type, params) {
-    currentReportType = type;
-    currentReportParams = params;
-
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalDescription = document.getElementById('modalDescription');
     const modalBody = document.getElementById('modalBody');
-    const downloadBtn = document.getElementById('downloadCsvBtn');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    const queryString = getQueryString(params);
+    const requestUrl = queryString ? `/api/report-v2/${type}?${queryString}` : `/api/report-v2/${type}`;
 
     modalTitle.textContent = 'レポートプレビュー';
     modalDescription.textContent = '';
     modalBody.innerHTML = '<div class="loading">読み込み中...</div>';
-    downloadBtn.onclick = () => downloadReport(type, params);
+    downloadCsvBtn.onclick = () => downloadReport(type, params, 'csv');
+    downloadPdfBtn.onclick = () => downloadReport(type, params, 'pdf');
     modal.classList.add('open');
 
-    fetch(`/api/report-v2/${type}?${getQueryString(params)}`)
+    fetch(requestUrl)
         .then((response) => {
             if (!response.ok) {
-                throw new Error('レポートの取得に失敗しました。');
+                throw new Error('レポートの読み込みに失敗しました。');
             }
             return response.json();
         })
@@ -597,8 +777,11 @@ function closeReportModal() {
     document.getElementById('reportModal').classList.remove('open');
 }
 
-function downloadReport(type, params) {
-    window.location.href = `/api/report-v2/${type}/download?${getQueryString(params)}`;
+function downloadReport(type, params, formatType = 'csv') {
+    const queryString = getQueryString({ ...params, format: formatType });
+    window.location.href = queryString
+        ? `/api/report-v2/${type}/download?${queryString}`
+        : `/api/report-v2/${type}/download`;
 }
 
 function renderReportPreview(report) {
@@ -628,7 +811,11 @@ function renderReportPreview(report) {
         `
         : '';
 
-    const tableHtml = renderReportTable(report.columns || [], report.rows || [], report.empty_message || 'データがありません。');
+    const tableHtml = renderReportTable(
+        report.columns || [],
+        report.rows || [],
+        report.empty_message || 'データがありません。'
+    );
 
     return `
         <div class="report-preview">
@@ -648,13 +835,13 @@ function renderReportTable(columns, rows, emptyText) {
         return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
     }
 
-    const minWidth = Math.max(columns.length * 150, 820);
+    const minWidth = `${Math.max(columns.length * 150, 820)}px`;
 
     return `
         <div class="report-table-shell">
-            <div class="report-table-scroll-note">表は左右にスライドして確認できます。</div>
+            <div class="report-table-scroll-note">左右へドラッグして確認できます。</div>
             <div class="report-table-wrapper" data-draggable-scroll="true">
-                <div class="report-table-track" style="min-width: ${minWidth}px;">
+                <div class="report-table-track" style="min-width: max(100%, ${minWidth});">
                     <table class="report-table">
                         <thead>
                             <tr>
@@ -728,13 +915,6 @@ function enableDraggableTable(wrapper) {
     wrapper.addEventListener('pointerup', stopDragging);
     wrapper.addEventListener('pointercancel', stopDragging);
     wrapper.addEventListener('pointerleave', stopDragging);
-    wrapper.addEventListener('wheel', (event) => {
-        if (wrapper.scrollWidth <= wrapper.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-            return;
-        }
-        event.preventDefault();
-        wrapper.scrollLeft += event.deltaY;
-    }, { passive: false });
 }
 
 function setupReportTableInteractions(scope) {
@@ -743,18 +923,77 @@ function setupReportTableInteractions(scope) {
     });
 }
 
+function syncReportCardFilters(card) {
+    const aggregationSelect = card.querySelector('[data-filter="aggregation"]');
+    if (!aggregationSelect) {
+        return;
+    }
+
+    const isYearly = aggregationSelect.value === 'yearly';
+    const yearInput = card.querySelector('[data-filter="year"]');
+    const monthInput = card.querySelector('[data-filter="month"]');
+    const monthControl = card.querySelector('[data-control="month"]');
+
+    if (yearInput) {
+        yearInput.disabled = false;
+    }
+
+    if (monthInput) {
+        monthInput.disabled = isYearly;
+        if (!isYearly && (!monthInput.value || monthInput.value === '0')) {
+            const currentMonthOption = monthInput.querySelector('option[selected]') || monthInput.querySelector('option');
+            if (currentMonthOption) {
+                monthInput.value = currentMonthOption.value;
+            }
+        }
+    }
+
+    if (monthControl) {
+        monthControl.hidden = isYearly;
+    }
+}
+
 document.querySelectorAll('.report-card').forEach((card) => {
     const type = card.dataset.reportType;
     const previewButton = card.querySelector('[data-action="preview"]');
     const csvButton = card.querySelector('[data-action="csv"]');
+    const pdfButton = card.querySelector('[data-action="pdf"]');
+    const aggregationSelect = card.querySelector('[data-filter="aggregation"]');
 
-    previewButton.addEventListener('click', () => {
-        openReportModal(type, collectCardParams(card));
-    });
+    syncReportCardFilters(card);
 
-    csvButton.addEventListener('click', () => {
-        downloadReport(type, collectCardParams(card));
-    });
+    if (aggregationSelect) {
+        aggregationSelect.addEventListener('change', () => {
+            syncReportCardFilters(card);
+        });
+    }
+
+    if (previewButton) {
+        previewButton.addEventListener('click', () => {
+            openReportModal(type, collectCardParams(card));
+        });
+    }
+
+    if (csvButton) {
+        csvButton.addEventListener('click', () => {
+            downloadReport(type, collectCardParams(card), 'csv');
+        });
+    }
+
+    if (pdfButton) {
+        pdfButton.addEventListener('click', () => {
+            downloadReport(type, collectCardParams(card), 'pdf');
+        });
+    }
+});
+
+document.getElementById('closeReportModalBtn').addEventListener('click', closeReportModal);
+document.getElementById('cancelReportModalBtn').addEventListener('click', closeReportModal);
+document.querySelector('.report-modal-overlay').addEventListener('click', closeReportModal);
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeReportModal();
+    }
 });
 </script>
 {% endblock %}

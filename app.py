@@ -17,7 +17,7 @@ import calendar
 import traceback
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
-from urllib.parse import urlparse, urlsplit, urlunsplit
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 
 # Stripe連携
 try:
@@ -5798,7 +5798,7 @@ REPORT_V2_CARD_DEFINITIONS = [
         'description': '売却日、販売先、売上、仕入、利益をそのままExcelに落とせます。',
         'badge': 'CSV',
         'category': 'export',
-        'filters': ['year', 'month'],
+        'filters': ['aggregation', 'year', 'month'],
     },
     {
         'type': 'purchase_ledger',
@@ -5806,7 +5806,7 @@ REPORT_V2_CARD_DEFINITIONS = [
         'description': '仕入日、仕入先、支払方法、仕入額を一覧で落とせます。',
         'badge': 'CSV',
         'category': 'export',
-        'filters': ['year', 'month'],
+        'filters': ['aggregation', 'year', 'month'],
     },
     {
         'type': 'inventory_snapshot',
@@ -5814,7 +5814,7 @@ REPORT_V2_CARD_DEFINITIONS = [
         'description': '現時点の在庫件数、在庫原価、出品状況を一覧で出力します。',
         'badge': 'CSV',
         'category': 'export',
-        'filters': ['year'],
+        'filters': ['aggregation', 'year', 'month'],
     },
     {
         'type': 'expense_ledger',
@@ -5822,29 +5822,123 @@ REPORT_V2_CARD_DEFINITIONS = [
         'description': '販売にひも付く手数料と送料をまとめて出力できます。',
         'badge': 'CSV',
         'category': 'export',
-        'filters': ['year', 'month'],
+        'filters': ['aggregation', 'year', 'month'],
     },
     {
         'type': 'management_summary',
         'title': '売上推移・分析',
-        'description': '月ごとの売上、仕入、手数料、利益、在庫推移をまとめて確認できます。',
+        'description': '年ごとにも、月ごと・日ごとにも売上、仕入、利益、在庫推移を確認できます。',
         'badge': '分析',
         'category': 'management',
-        'filters': ['year'],
+        'filters': ['aggregation', 'year', 'month'],
     },
     {
         'type': 'inventory_turnover',
         'title': '在庫回転分析',
-        'description': '平均販売日数、在庫回転率、消化率を月ごとに確認できます。',
+        'description': '年ごとにも、月ごと・日ごとにも在庫数、在庫原価、平均販売日数、消化率を分析できます。',
         'badge': '分析',
         'category': 'management',
-        'filters': ['year'],
+        'filters': ['aggregation', 'year', 'month'],
     },
 ]
+
+REPORT_V2_CARD_DEFINITION_MAP = {
+    card['type']: card for card in REPORT_V2_CARD_DEFINITIONS
+}
 
 
 def can_view_all_reports():
     return current_user.is_admin() or current_user.is_owner()
+
+
+def parse_report_client_id(raw_value):
+    if raw_value in (None, ''):
+        return None
+    try:
+        parsed_value = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return parsed_value if parsed_value > 0 else None
+
+
+def fetch_report_available_users():
+    conn = get_db()
+    cur = None
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT u.id,
+                       u.username,
+                       COALESCE(u.display_name, u.username) AS display_name,
+                       COUNT(m.id) AS item_count
+                FROM users u
+                LEFT JOIN merchandise m ON m.user_id = u.id
+                WHERE u.role = 'user'
+                GROUP BY u.id, u.username, COALESCE(u.display_name, u.username)
+                ORDER BY COALESCE(u.display_name, u.username), u.id
+            """)
+            users = [dict(row) for row in cur.fetchall()]
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT u.id,
+                       u.username,
+                       COALESCE(u.display_name, u.username) AS display_name,
+                       COUNT(m.id) AS item_count
+                FROM users u
+                LEFT JOIN merchandise m ON m.user_id = u.id
+                WHERE u.role = 'user'
+                GROUP BY u.id, u.username, COALESCE(u.display_name, u.username)
+                ORDER BY COALESCE(u.display_name, u.username), u.id
+            """)
+            users = [dict(row) for row in cur.fetchall()]
+    finally:
+        if cur is not None:
+            cur.close()
+        conn.close()
+
+    for user in users:
+        user['item_count'] = safe_int(user.get('item_count'))
+    return users
+
+
+def resolve_report_target_context(client_id_value=None, require_selected_client=False):
+    is_admin_view = can_view_all_reports()
+    available_users = fetch_report_available_users() if is_admin_view else []
+    available_user_map = {user['id']: user for user in available_users}
+
+    if is_admin_view:
+        selected_client_id = parse_report_client_id(client_id_value)
+        selected_client = available_user_map.get(selected_client_id) if selected_client_id else None
+        if require_selected_client and not selected_client:
+            raise LookupError('client_id required')
+
+        return {
+            'is_admin_view': True,
+            'available_users': available_users,
+            'selected_client_id': selected_client['id'] if selected_client else None,
+            'selected_client_name': (selected_client.get('display_name') or selected_client.get('username')) if selected_client else '',
+            'selected_client': selected_client,
+            'target_user_id': selected_client['id'] if selected_client else None,
+            'show_client_list': selected_client is None,
+        }
+
+    return {
+        'is_admin_view': False,
+        'available_users': [],
+        'selected_client_id': current_user.id,
+        'selected_client_name': current_user.display_name or current_user.username,
+        'selected_client': {
+            'id': current_user.id,
+            'username': current_user.username,
+            'display_name': current_user.display_name or current_user.username,
+        },
+        'target_user_id': current_user.id,
+        'show_client_list': False,
+    }
 
 
 def format_report_currency(value):
@@ -5863,13 +5957,35 @@ def format_report_percent(value):
     return f"{float(value or 0):.1f}%"
 
 
+def calculate_report_percentage(numerator, denominator):
+    denominator_value = float(denominator or 0)
+    if denominator_value <= 0:
+        return 0.0
+    return round((float(numerator or 0) / denominator_value) * 100, 1)
+
+
+def count_stale_inventory_rows(rows, snapshot_date, threshold_days=90):
+    stale_threshold = snapshot_date - timedelta(days=threshold_days)
+    snapshot_rows = get_inventory_snapshot_rows(rows, snapshot_date)
+    return len([
+        row for row in snapshot_rows
+        if row.get('purchase_date_value') and row['purchase_date_value'] <= stale_threshold
+    ])
+
+
 def format_report_date(value):
     normalized = normalize_date_value(value)
     return normalized.strftime('%Y-%m-%d') if normalized else '-'
 
 
 def get_report_period_label(year, month=0):
-    return f'{year}年通年' if not month else f'{year}年{month}月'
+    return f'{year}年' if not month else f'{year}年{month}月'
+
+
+def get_report_period_label_for_aggregation(rows, year, month=0, aggregation='monthly'):
+    if aggregation == 'yearly' or not month:
+        return f'{year}年'
+    return get_report_period_label(year, month)
 
 
 def is_value_in_report_period(value, year, month=0):
@@ -5886,7 +6002,76 @@ def get_report_month_end(year, month):
     return date(year, month, calendar.monthrange(year, month)[1])
 
 
-def build_report_merchandise_row(row):
+def get_report_available_years(rows):
+    year_values = set()
+    for row in rows:
+        for key in ('purchase_date_value', 'sale_date_value'):
+            value = row.get(key)
+            if value:
+                year_values.add(value.year)
+    if not year_values:
+        year_values.add(datetime.now().year)
+    return sorted(year_values, reverse=True)
+
+
+def build_report_year_slices(rows):
+    today = datetime.now().date()
+    time_slices = []
+    for year_value in get_report_available_years(rows):
+        period_end = today if year_value == today.year else date(year_value, 12, 31)
+        time_slices.append({
+            'label': f'{year_value}年',
+            'display_label': f'{year_value}年',
+            'start': date(year_value, 1, 1),
+            'end': period_end,
+        })
+    return time_slices
+
+
+def build_report_time_slices(year, month=0):
+    today = datetime.now().date()
+
+    if month in (None, 0):
+        month_limit = 12 if year < today.year else today.month
+        slices = []
+        for month_number in range(1, month_limit + 1):
+            period_start = date(year, month_number, 1)
+            period_end = get_report_month_end(year, month_number)
+            if year == today.year and month_number == today.month and period_end > today:
+                period_end = today
+            slices.append({
+                'label': f'{month_number}月',
+                'display_label': f'{month_number}月',
+                'start': period_start,
+                'end': period_end,
+            })
+        return slices
+
+    try:
+        period_start = date(year, month, 1)
+    except ValueError:
+        return []
+
+    period_end = get_report_month_end(year, month)
+    if year == today.year and month == today.month and period_end > today:
+        period_end = today
+    if period_start > period_end:
+        return []
+
+    slices = []
+    current_day = period_start
+    while current_day <= period_end:
+        slices.append({
+            'label': f'{month}月{current_day.day}日',
+            'display_label': f'{current_day.day}日',
+            'start': current_day,
+            'end': current_day,
+        })
+        current_day += timedelta(days=1)
+    return slices
+
+
+def build_report_merchandise_row(row, scope='user', fee_settings=None):
     purchase_date_value = normalize_date_value(row.get('purchase_date') or row.get('created_at'))
     sale_date_value = normalize_date_value(row.get('sale_date'))
     purchase_price = safe_int(row.get('purchase_price'))
@@ -5924,23 +6109,35 @@ def build_report_merchandise_row(row):
         'notes_preview': notes_text,
         'days_to_sell': days_to_sell,
     })
+    item = apply_inventory_display_metrics(item, scope=scope, fee_settings=fee_settings)
+    item['report_cost_value'] = safe_int(item.get('display_purchase_price') if scope == 'user' else item.get('purchase_price'))
+    item['report_sales_destination'] = item.get('sales_destination_display') or item['sales_destination']
+    item['report_sale_type_label'] = item.get('sale_type_summary') or item['sale_type_label']
+    fee_breakdown_details = [
+        detail for detail in (item.get('fee_breakdown_details') or [])
+        if detail and detail != '追加手数料はありません。'
+    ]
+    item['fee_breakdown_display'] = ' / '.join(fee_breakdown_details) if fee_breakdown_details else 'なし'
+    item['commission_breakdown_display'] = ' / '.join(
+        detail for detail in fee_breakdown_details if not str(detail).startswith('送料')
+    ) or 'なし'
     return item
 
 
-def fetch_report_merchandise_rows(include_all=False):
+def fetch_report_merchandise_rows(target_user_id=None, scope='user'):
     conn = get_db()
     cur = None
 
     try:
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            user_filter = 'TRUE' if include_all else 'user_id = %s'
+            user_filter = 'user_id = %s'
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            user_filter = '1=1' if include_all else 'user_id = ?'
+            user_filter = 'user_id = ?'
 
-        params = () if include_all else (current_user.id,)
+        params = (target_user_id if target_user_id is not None else current_user.id,)
         cur.execute(f"""
             SELECT id, user_id, purchase_date, sale_date, product_name, brand_name, store_name,
                    supplier_detail, item_condition, purchase_price, listing_price, sale_price,
@@ -5956,7 +6153,8 @@ def fetch_report_merchandise_rows(include_all=False):
             cur.close()
         conn.close()
 
-    return [build_report_merchandise_row(row) for row in rows]
+    fee_settings = get_fee_settings() if scope == 'user' else None
+    return [build_report_merchandise_row(row, scope=scope, fee_settings=fee_settings) for row in rows]
 
 
 def build_report_overview(rows):
@@ -6012,7 +6210,7 @@ def calculate_turnover_ratio(opening_value, closing_value, sold_purchase_total):
     return round(sold_purchase_total / average_inventory_value, 2)
 
 
-def build_inventory_turnover_metrics(rows, period_start, period_end):
+def build_inventory_turnover_metrics(rows, period_start, period_end, cost_key='report_cost_value'):
     sold_rows = [
         row for row in rows
         if row.get('sale_date_value')
@@ -6026,9 +6224,9 @@ def build_inventory_turnover_metrics(rows, period_start, period_end):
     opening_rows = get_inventory_snapshot_rows(rows, period_start - timedelta(days=1))
     closing_rows = get_inventory_snapshot_rows(rows, period_end)
 
-    opening_value = sum(row['purchase_price'] for row in opening_rows)
-    closing_value = sum(row['purchase_price'] for row in closing_rows)
-    sold_purchase_total = sum(row['purchase_price'] for row in sold_rows)
+    opening_value = sum(safe_int(row.get(cost_key, row.get('purchase_price'))) for row in opening_rows)
+    closing_value = sum(safe_int(row.get(cost_key, row.get('purchase_price'))) for row in closing_rows)
+    sold_purchase_total = sum(safe_int(row.get(cost_key, row.get('purchase_price'))) for row in sold_rows)
     sold_count = len(sold_rows)
     available_count = len(opening_rows) + len(purchased_rows)
     sell_through_rate = round((sold_count / available_count) * 100, 1) if available_count else 0.0
@@ -6172,7 +6370,7 @@ def build_sales_ledger_report(rows, year, month):
 
     return {
         'title': '売上一覧',
-        'description': f'{get_report_period_label(year, month)} の売上一覧です。',
+        'description': f'{get_report_period_label(year, month)}の売上一覧です。',
         'summary': [
             {'label': '件数', 'value': format_report_count(len(filtered_rows))},
             {'label': '売上合計', 'value': format_report_currency(total_sales)},
@@ -6198,10 +6396,10 @@ def build_sales_ledger_report(rows, year, month):
             str(row.get('id') or ''),
             row.get('product_name') or '-',
             row.get('brand_name') or '-',
-            row['sales_destination'],
-            row['sale_type_label'],
+            row['report_sales_destination'],
+            row['report_sale_type_label'],
             format_report_currency(row['sale_price']),
-            format_report_currency(row['purchase_price']),
+            format_report_currency(row['report_cost_value']),
             format_report_currency(row['shipping_cost']),
             format_report_currency(row['commission']),
             format_report_currency(row['profit']),
@@ -6217,10 +6415,10 @@ def build_sales_ledger_report(rows, year, month):
                     row.get('id') or '',
                     row.get('product_name') or '',
                     row.get('brand_name') or '',
-                    row['sales_destination'],
-                    row['sale_type_label'],
+                    row['report_sales_destination'],
+                    row['report_sale_type_label'],
                     row['sale_price'],
-                    row['purchase_price'],
+                    row['report_cost_value'],
                     row['shipping_cost'],
                     row['commission'],
                     row['profit'],
@@ -6236,16 +6434,14 @@ def build_purchase_ledger_report(rows, year, month):
         key=lambda row: (row.get('purchase_date_value') or date.min, row.get('id') or 0)
     )
 
-    total_purchase = sum(row['purchase_price'] for row in filtered_rows)
-    total_listing = sum(row['listing_price'] for row in filtered_rows)
+    total_purchase = sum(row['report_cost_value'] for row in filtered_rows)
 
     return {
         'title': '仕入一覧',
-        'description': f'{get_report_period_label(year, month)} の仕入一覧です。',
+        'description': f'{get_report_period_label(year, month)}の仕入一覧です。',
         'summary': [
             {'label': '件数', 'value': format_report_count(len(filtered_rows))},
             {'label': '仕入合計', 'value': format_report_currency(total_purchase)},
-            {'label': '出品価格合計', 'value': format_report_currency(total_listing)},
         ],
         'notes': ['日付、仕入先、支払方法、金額をまとめて確認できます。'],
         'columns': [
@@ -6257,7 +6453,6 @@ def build_purchase_ledger_report(rows, year, month):
             {'label': '支払方法', 'align': 'left'},
             {'label': '状態', 'align': 'left'},
             {'label': '仕入額', 'align': 'right'},
-            {'label': '出品価格', 'align': 'right'},
         ],
         'rows': [[
             row['purchase_date_display'],
@@ -6267,15 +6462,14 @@ def build_purchase_ledger_report(rows, year, month):
             row['supplier_name'],
             row.get('payment_method') or '-',
             row.get('item_condition') or '-',
-            format_report_currency(row['purchase_price']),
-            format_report_currency(row['listing_price']),
+            format_report_currency(row['report_cost_value']),
         ] for row in filtered_rows],
         'empty_message': '対象期間の仕入データはありません。',
         'filename': f'purchase_ledger_{year}_{"all" if month == 0 else str(month).zfill(2)}.csv',
         'csv_sections': [
             {
                 'title': '仕入一覧',
-                'columns': ['仕入日', '商品ID', '商品名', 'ブランド', '仕入先', '支払方法', '状態', '仕入額', '出品価格'],
+                'columns': ['仕入日', '商品ID', '商品名', 'ブランド', '仕入先', '支払方法', '状態', '仕入額'],
                 'rows': [[
                     row['purchase_date_display'],
                     row.get('id') or '',
@@ -6284,17 +6478,21 @@ def build_purchase_ledger_report(rows, year, month):
                     row['supplier_name'],
                     row.get('payment_method') or '',
                     row.get('item_condition') or '',
-                    row['purchase_price'],
-                    row['listing_price'],
+                    row['report_cost_value'],
                 ] for row in filtered_rows],
             }
         ],
     }
 
 
-def build_inventory_snapshot_report(rows, year):
+def build_inventory_snapshot_report(rows, year, month=0):
     today = datetime.now().date()
-    snapshot_date = date(year, 12, 31) if year < today.year else today
+    if month in (None, 0):
+        snapshot_date = date(year, 12, 31) if year < today.year else today
+    else:
+        snapshot_date = get_report_month_end(year, month)
+        if year == today.year and month == today.month and snapshot_date > today:
+            snapshot_date = today
     filtered_rows = sorted(
         [
             row for row in rows
@@ -6305,11 +6503,11 @@ def build_inventory_snapshot_report(rows, year):
         key=lambda row: (row.get('purchase_date_value') or date.min, row.get('id') or 0)
     )
 
-    total_purchase = sum(row['purchase_price'] for row in filtered_rows)
+    total_purchase = sum(row['report_cost_value'] for row in filtered_rows)
     total_listing = sum(row['listing_price'] for row in filtered_rows)
 
     note = f'{snapshot_date.strftime("%Y-%m-%d")} 時点の在庫です。'
-    if year >= today.year:
+    if year >= today.year and month in (None, 0):
         note += ' 当年分は現時点の暫定棚卸として扱ってください。'
 
     return {
@@ -6340,12 +6538,12 @@ def build_inventory_snapshot_report(rows, year):
             row.get('brand_name') or '-',
             row['supplier_name'],
             row.get('item_condition') or '-',
-            format_report_currency(row['purchase_price']),
+            format_report_currency(row['report_cost_value']),
             format_report_currency(row['listing_price']),
             row['status_label'],
         ] for row in filtered_rows],
         'empty_message': '基準日時点の在庫データはありません。',
-        'filename': f'inventory_snapshot_{year}.csv',
+        'filename': f'inventory_snapshot_{year}_{"all" if month in (None, 0) else str(month).zfill(2)}.csv',
         'csv_sections': [
             {
                 'title': '在庫一覧',
@@ -6357,7 +6555,7 @@ def build_inventory_snapshot_report(rows, year):
                     row.get('brand_name') or '',
                     row['supplier_name'],
                     row.get('item_condition') or '',
-                    row['purchase_price'],
+                    row['report_cost_value'],
                     row['listing_price'],
                     row['status_label'],
                 ] for row in filtered_rows],
@@ -6382,7 +6580,7 @@ def build_expense_ledger_report(rows, year, month):
 
     return {
         'title': '手数料・送料',
-        'description': f'{get_report_period_label(year, month)} の手数料・送料一覧です。',
+        'description': f'{get_report_period_label(year, month)}の手数料・送料一覧です。',
         'summary': [
             {'label': '件数', 'value': format_report_count(len(filtered_rows))},
             {'label': '送料合計', 'value': format_report_currency(total_shipping)},
@@ -6397,17 +6595,17 @@ def build_expense_ledger_report(rows, year, month):
             {'label': '販売先', 'align': 'left'},
             {'label': '売却区分', 'align': 'left'},
             {'label': '送料', 'align': 'right'},
-            {'label': '手数料', 'align': 'right'},
+            {'label': '手数料内訳', 'align': 'left'},
             {'label': '経費計', 'align': 'right'},
         ],
         'rows': [[
             row['sale_date_display'],
             str(row.get('id') or ''),
             row.get('product_name') or '-',
-            row['sales_destination'],
-            row['sale_type_label'],
+            row['report_sales_destination'],
+            row['report_sale_type_label'],
             format_report_currency(row['shipping_cost']),
-            format_report_currency(row['commission']),
+            row['commission_breakdown_display'],
             format_report_currency(row['expense_total']),
         ] for row in filtered_rows],
         'empty_message': '対象期間の経費データはありません。',
@@ -6415,15 +6613,15 @@ def build_expense_ledger_report(rows, year, month):
         'csv_sections': [
             {
                 'title': '手数料・送料一覧',
-                'columns': ['売却日', '商品ID', '商品名', '販売先', '売却区分', '送料', '手数料', '経費計'],
+                'columns': ['売却日', '商品ID', '商品名', '販売先', '売却区分', '送料', '手数料内訳', '経費計'],
                 'rows': [[
                     row['sale_date_display'],
                     row.get('id') or '',
                     row.get('product_name') or '',
-                    row['sales_destination'],
-                    row['sale_type_label'],
+                    row['report_sales_destination'],
+                    row['report_sale_type_label'],
                     row['shipping_cost'],
-                    row['commission'],
+                    row['commission_breakdown_display'],
                     row['expense_total'],
                 ] for row in filtered_rows],
             }
@@ -6431,272 +6629,323 @@ def build_expense_ledger_report(rows, year, month):
     }
 
 
-def build_inventory_turnover_report(rows, year):
-    today = datetime.now().date()
-    month_limit = 12 if year < today.year else today.month
+def build_inventory_turnover_report(rows, year, month=0):
+    time_slices = build_report_time_slices(year, month)
+    first_column_label = '月' if month in (None, 0) else '日'
+    description = (
+        f'{year}年の在庫回転分析です。'
+        if month in (None, 0)
+        else f'{year}年{month}月の在庫回転分析です。'
+    )
 
-    visible_months = []
-    for month_number in range(1, month_limit + 1):
-        month_end = get_report_month_end(year, month_number)
-        if year == today.year and month_end > today:
-            month_end = today
-        month_start = date(year, month_number, 1)
-        metrics = build_inventory_turnover_metrics(rows, month_start, month_end)
+    visible_rows = []
+    for time_slice in time_slices:
+        metrics = build_inventory_turnover_metrics(rows, time_slice['start'], time_slice['end'])
 
-        visible_months.append({
-            'month_label': f'{month_number}月',
+        visible_rows.append({
+            'period_label': time_slice['display_label'],
             'opening_count': metrics['opening_count'],
             'sold_count': metrics['sold_count'],
             'closing_count': metrics['closing_count'],
             'closing_value': metrics['closing_value'],
+            'sell_through_rate': metrics['sell_through_rate'],
             'avg_days_to_sell': metrics['avg_days_to_sell'],
             'turnover_ratio': metrics['turnover_ratio'],
-            'sell_through_rate': metrics['sell_through_rate'],
         })
 
-    period_end = today if year == today.year else date(year, 12, 31)
-    year_metrics = build_inventory_turnover_metrics(rows, date(year, 1, 1), period_end)
+    if time_slices:
+        period_start = min(time_slice['start'] for time_slice in time_slices)
+        period_end = max(time_slice['end'] for time_slice in time_slices)
+    elif month in (None, 0):
+        period_start = date(year, 1, 1)
+        period_end = period_start
+    else:
+        period_start = date(year, month, 1)
+        period_end = period_start
+    period_metrics = build_inventory_turnover_metrics(rows, period_start, period_end) if time_slices else {
+        'sold_count': 0,
+        'sell_through_rate': 0.0,
+        'avg_days_to_sell': 0.0,
+        'turnover_ratio': 0.0,
+        'closing_count': 0,
+    }
+    stale_inventory_count = count_stale_inventory_rows(rows, period_end, threshold_days=90) if time_slices else 0
 
     return {
         'title': '在庫回転分析',
-        'description': f'{year}年の在庫回転分析です。',
+        'description': description,
         'summary': [
-            {'label': '販売件数', 'value': format_report_count(year_metrics['sold_count'])},
-            {'label': '平均販売日数', 'value': f"{year_metrics['avg_days_to_sell']:.1f}日"},
-            {'label': '在庫回転率', 'value': format_report_rate(year_metrics['turnover_ratio'])},
-            {'label': '消化率', 'value': format_report_percent(year_metrics['sell_through_rate'])},
-            {'label': '現在在庫数', 'value': format_report_count(year_metrics['closing_count'])},
+            {'label': '販売件数', 'value': format_report_count(period_metrics['sold_count'])},
+            {'label': '消化率', 'value': format_report_percent(period_metrics['sell_through_rate'])},
+            {'label': '平均販売日数', 'value': f"{period_metrics['avg_days_to_sell']:.1f}日"},
+            {'label': '在庫回転率', 'value': format_report_rate(period_metrics['turnover_ratio'])},
+            {'label': '現在在庫数', 'value': format_report_count(period_metrics['closing_count'])},
+            {'label': '90日超在庫数', 'value': format_report_count(stale_inventory_count)},
         ],
         'notes': [
             '在庫回転率は、売れた商品の仕入原価 ÷ 平均在庫原価で計算しています。',
             '消化率は、販売件数 ÷（月初在庫件数 + 当月仕入件数）で計算しています。',
+            '90日超在庫数は、各時点で90日以上保有している未売却在庫の件数です。',
         ],
         'columns': [
-            {'label': '月', 'align': 'center'},
+            {'label': first_column_label, 'align': 'center'},
             {'label': '月初在庫数', 'align': 'right'},
             {'label': '販売件数', 'align': 'right'},
             {'label': '月末在庫数', 'align': 'right'},
             {'label': '月末在庫原価', 'align': 'right'},
+            {'label': '消化率', 'align': 'right'},
             {'label': '平均販売日数', 'align': 'right'},
             {'label': '在庫回転率', 'align': 'right'},
-            {'label': '消化率', 'align': 'right'},
         ],
         'rows': [[
-            month['month_label'],
-            str(month['opening_count']),
-            str(month['sold_count']),
-            str(month['closing_count']),
-            format_report_currency(month['closing_value']),
-            f"{month['avg_days_to_sell']:.1f}日",
-            format_report_rate(month['turnover_ratio']),
-            format_report_percent(month['sell_through_rate']),
-        ] for month in visible_months],
-        'empty_message': '対象年の回転データはありません。',
-        'filename': f'inventory_turnover_{year}.csv',
+            row['period_label'],
+            str(row['opening_count']),
+            str(row['sold_count']),
+            str(row['closing_count']),
+            format_report_currency(row['closing_value']),
+            format_report_percent(row['sell_through_rate']),
+            f"{row['avg_days_to_sell']:.1f}日",
+            format_report_rate(row['turnover_ratio']),
+        ] for row in visible_rows],
+        'empty_message': '対象期間の回転データはありません。',
+        'filename': f'inventory_turnover_{year}_{"all" if month in (None, 0) else str(month).zfill(2)}.csv',
         'csv_sections': [
             {
                 'title': '在庫回転分析',
-                'columns': ['月', '月初在庫数', '販売件数', '月末在庫数', '月末在庫原価', '平均販売日数', '在庫回転率', '消化率'],
+                'columns': [first_column_label, '月初在庫数', '販売件数', '月末在庫数', '月末在庫原価', '消化率', '平均販売日数', '在庫回転率'],
                 'rows': [[
-                    month['month_label'],
-                    month['opening_count'],
-                    month['sold_count'],
-                    month['closing_count'],
-                    month['closing_value'],
-                    month['avg_days_to_sell'],
-                    month['turnover_ratio'],
-                    month['sell_through_rate'],
-                ] for month in visible_months],
+                    row['period_label'],
+                    row['opening_count'],
+                    row['sold_count'],
+                    row['closing_count'],
+                    row['closing_value'],
+                    row['sell_through_rate'],
+                    row['avg_days_to_sell'],
+                    row['turnover_ratio'],
+                ] for row in visible_rows],
             }
         ],
     }
 
 
-def build_management_summary_report(rows, year):
-    today = datetime.now().date()
-    month_limit = 12 if year < today.year else today.month
+def build_management_summary_report(rows, year, month=0):
+    time_slices = build_report_time_slices(year, month)
+    first_column_label = '月' if month in (None, 0) else '日'
+    description = (
+        f'{year}年の売上推移と分析一覧です。'
+        if month in (None, 0)
+        else f'{year}年{month}月の売上推移と分析一覧です。'
+    )
+    notes_text = (
+        '売上、仕入、手数料、利益、利益率、平均販売日数、月末在庫原価を月ごとに確認できる分析用レポートです。'
+        if month in (None, 0)
+        else '売上、仕入、手数料、利益、利益率、平均販売日数、在庫推移を日ごとに確認できる分析用レポートです。'
+    )
 
-    visible_months = []
-    for month_number in range(1, month_limit + 1):
-        month_end = get_report_month_end(year, month_number)
-        if year == today.year and month_end > today:
-            month_end = today
-        month_start = date(year, month_number, 1)
-
-        month_sales_items = [
+    visible_rows = []
+    for time_slice in time_slices:
+        sales_items = [
             row for row in rows
-            if is_value_in_report_period(row.get('sale_date_value'), year, month_number)
+            if row.get('sale_date_value')
+            and time_slice['start'] <= row['sale_date_value'] <= time_slice['end']
         ]
-        month_purchase_items = [
+        purchase_items = [
             row for row in rows
-            if is_value_in_report_period(row.get('purchase_date_value'), year, month_number)
+            if row.get('purchase_date_value')
+            and time_slice['start'] <= row['purchase_date_value'] <= time_slice['end']
         ]
-        turnover_metrics = build_inventory_turnover_metrics(rows, month_start, month_end)
+        turnover_metrics = build_inventory_turnover_metrics(rows, time_slice['start'], time_slice['end'])
 
-        total_sales = sum(row['sale_price'] for row in month_sales_items)
-        total_purchase = sum(row['purchase_price'] for row in month_purchase_items)
-        total_expenses = sum(row['expense_total'] for row in month_sales_items)
-        total_profit = sum(row['profit'] for row in month_sales_items)
-        sold_count = len(month_sales_items)
-        avg_sale = int(round(total_sales / sold_count)) if sold_count else 0
-        avg_profit = int(round(total_profit / sold_count)) if sold_count else 0
+        total_sales = sum(row['sale_price'] for row in sales_items)
+        total_purchase = sum(row['report_cost_value'] for row in purchase_items)
+        total_expenses = sum(row['expense_total'] for row in sales_items)
+        total_profit = sum(row['profit'] for row in sales_items)
+        sold_count = len(sales_items)
+        fee_ratio = calculate_report_percentage(total_expenses, total_sales)
+        profit_margin = calculate_report_percentage(total_profit, total_sales)
 
-        visible_months.append({
-            'month_label': f'{month_number}月',
+        visible_rows.append({
+            'period_label': time_slice['display_label'],
             'sold_count': sold_count,
             'total_sales': total_sales,
             'total_purchase': total_purchase,
             'total_expenses': total_expenses,
+            'fee_ratio': fee_ratio,
             'total_profit': total_profit,
-            'avg_sale': avg_sale,
-            'avg_profit': avg_profit,
+            'profit_margin': profit_margin,
             'avg_days_to_sell': turnover_metrics['avg_days_to_sell'],
-            'turnover_ratio': turnover_metrics['turnover_ratio'],
             'inventory_count': turnover_metrics['closing_count'],
             'inventory_total': turnover_metrics['closing_value'],
         })
 
-    total_sales = sum(month['total_sales'] for month in visible_months)
-    total_purchase = sum(month['total_purchase'] for month in visible_months)
-    total_expenses = sum(month['total_expenses'] for month in visible_months)
-    total_profit = sum(month['total_profit'] for month in visible_months)
-    current_inventory_total = visible_months[-1]['inventory_total'] if visible_months else 0
-    avg_days = round(sum(month['avg_days_to_sell'] for month in visible_months) / len(visible_months), 1) if visible_months else 0.0
-    avg_turnover = round(sum(month['turnover_ratio'] for month in visible_months) / len(visible_months), 2) if visible_months else 0.0
+    total_sales = sum(row['total_sales'] for row in visible_rows)
+    total_purchase = sum(row['total_purchase'] for row in visible_rows)
+    total_expenses = sum(row['total_expenses'] for row in visible_rows)
+    total_profit = sum(row['total_profit'] for row in visible_rows)
+    current_inventory_total = visible_rows[-1]['inventory_total'] if visible_rows else 0
+    current_inventory_count = visible_rows[-1]['inventory_count'] if visible_rows else 0
+    avg_days = round(sum(row['avg_days_to_sell'] for row in visible_rows) / len(visible_rows), 1) if visible_rows else 0.0
+    profit_margin_total = calculate_report_percentage(total_profit, total_sales)
+    fee_ratio_total = calculate_report_percentage(total_expenses, total_sales)
+    if time_slices:
+        snapshot_date = max(time_slice['end'] for time_slice in time_slices)
+    elif month not in (None, 0):
+        snapshot_date = date(year, month, 1)
+    else:
+        snapshot_date = date(year, 12, 31)
+    stale_inventory_count = count_stale_inventory_rows(rows, snapshot_date, threshold_days=90)
 
     return {
         'title': '売上推移・分析',
-        'description': f'{year}年の売上推移と分析一覧です。',
+        'description': description,
         'summary': [
             {'label': '売上合計', 'value': format_report_currency(total_sales)},
             {'label': '仕入合計', 'value': format_report_currency(total_purchase)},
             {'label': '手数料・送料合計', 'value': format_report_currency(total_expenses)},
+            {'label': '手数料率', 'value': format_report_percent(fee_ratio_total)},
             {'label': '利益合計', 'value': format_report_currency(total_profit)},
+            {'label': '利益率', 'value': format_report_percent(profit_margin_total)},
             {'label': '平均販売日数', 'value': f'{avg_days:.1f}日'},
-            {'label': '平均在庫回転率', 'value': format_report_rate(avg_turnover)},
+            {'label': '最新在庫数', 'value': format_report_count(current_inventory_count)},
             {'label': '最新在庫原価', 'value': format_report_currency(current_inventory_total)},
+            {'label': '90日超在庫数', 'value': format_report_count(stale_inventory_count)},
         ],
-        'notes': ['売上、仕入、手数料、利益、在庫、回転を月ごとに並べた分析用のCSVです。'],
+        'notes': [notes_text],
         'columns': [
-            {'label': '月', 'align': 'center'},
+            {'label': first_column_label, 'align': 'center'},
             {'label': '販売件数', 'align': 'right'},
             {'label': '売上', 'align': 'right'},
             {'label': '仕入', 'align': 'right'},
             {'label': '手数料・送料', 'align': 'right'},
             {'label': '利益', 'align': 'right'},
-            {'label': '平均売上', 'align': 'right'},
-            {'label': '平均利益', 'align': 'right'},
+            {'label': '利益率', 'align': 'right'},
             {'label': '平均販売日数', 'align': 'right'},
-            {'label': '在庫回転率', 'align': 'right'},
             {'label': '月末在庫数', 'align': 'right'},
             {'label': '月末在庫原価', 'align': 'right'},
         ],
         'rows': [[
-            month['month_label'],
-            str(month['sold_count']),
-            format_report_currency(month['total_sales']),
-            format_report_currency(month['total_purchase']),
-            format_report_currency(month['total_expenses']),
-            format_report_currency(month['total_profit']),
-            format_report_currency(month['avg_sale']),
-            format_report_currency(month['avg_profit']),
-            f"{month['avg_days_to_sell']:.1f}日",
-            format_report_rate(month['turnover_ratio']),
-            str(month['inventory_count']),
-            format_report_currency(month['inventory_total']),
-        ] for month in visible_months],
-        'empty_message': '対象年の経営データはありません。',
-        'filename': f'management_summary_{year}.csv',
+            row['period_label'],
+            str(row['sold_count']),
+            format_report_currency(row['total_sales']),
+            format_report_currency(row['total_purchase']),
+            format_report_currency(row['total_expenses']),
+            format_report_currency(row['total_profit']),
+            format_report_percent(row['profit_margin']),
+            f"{row['avg_days_to_sell']:.1f}日",
+            str(row['inventory_count']),
+            format_report_currency(row['inventory_total']),
+        ] for row in visible_rows],
+        'empty_message': '対象期間の経営データはありません。',
+        'filename': f'management_summary_{year}_{"all" if month in (None, 0) else str(month).zfill(2)}.csv',
         'csv_sections': [
             {
                 'title': '売上推移・分析',
-                'columns': ['月', '販売件数', '売上', '仕入', '手数料・送料', '利益', '平均売上', '平均利益', '平均販売日数', '在庫回転率', '月末在庫数', '月末在庫原価'],
+                'columns': [first_column_label, '販売件数', '売上', '仕入', '手数料・送料', '利益', '利益率', '平均販売日数', '月末在庫数', '月末在庫原価'],
                 'rows': [[
-                    month['month_label'],
-                    month['sold_count'],
-                    month['total_sales'],
-                    month['total_purchase'],
-                    month['total_expenses'],
-                    month['total_profit'],
-                    month['avg_sale'],
-                    month['avg_profit'],
-                    month['avg_days_to_sell'],
-                    month['turnover_ratio'],
-                    month['inventory_count'],
-                    month['inventory_total'],
-                ] for month in visible_months],
+                    row['period_label'],
+                    row['sold_count'],
+                    row['total_sales'],
+                    row['total_purchase'],
+                    row['total_expenses'],
+                    row['total_profit'],
+                    row['profit_margin'],
+                    row['avg_days_to_sell'],
+                    row['inventory_count'],
+                    row['inventory_total'],
+                ] for row in visible_rows],
             }
         ],
     }
 
 
-def build_report_v2_payload(report_type, year, month=0):
-    rows = fetch_report_merchandise_rows(include_all=can_view_all_reports())
+def build_report_v2_payload(report_type, year, month=0, client_id=None):
+    aggregation = 'monthly'
+    if has_request_context():
+        aggregation = (request.args.get('aggregation', 'monthly') or 'monthly').strip().lower()
+    if aggregation not in {'yearly', 'monthly'}:
+        aggregation = 'monthly'
+
+    card_definition = REPORT_V2_CARD_DEFINITION_MAP.get(report_type, {})
+    card_filters = card_definition.get('filters') or []
+    if 'aggregation' in card_filters:
+        if aggregation == 'yearly':
+            month = 0
+        elif month in (None, 0):
+            month = datetime.now().month
+    elif 'month' not in card_filters:
+        month = 0
+
+    report_context = resolve_report_target_context(
+        client_id_value=client_id,
+        require_selected_client=can_view_all_reports(),
+    )
+    rows = fetch_report_merchandise_rows(
+        target_user_id=report_context['target_user_id'],
+        scope='user',
+    )
 
     if report_type == 'sales_ledger':
-        return build_sales_ledger_report(rows, year, month)
-    if report_type == 'purchase_ledger':
-        return build_purchase_ledger_report(rows, year, month)
-    if report_type == 'inventory_snapshot':
-        return build_inventory_snapshot_report(rows, year)
-    if report_type == 'expense_ledger':
-        return build_expense_ledger_report(rows, year, month)
-    if report_type == 'management_summary':
-        return build_management_summary_report(rows, year)
-    if report_type == 'inventory_turnover':
-        return build_inventory_turnover_report(rows, year)
+        payload = build_sales_ledger_report(rows, year, month)
+    elif report_type == 'purchase_ledger':
+        payload = build_purchase_ledger_report(rows, year, month)
+    elif report_type == 'inventory_snapshot':
+        payload = build_inventory_snapshot_report(rows, year, month)
+    elif report_type == 'expense_ledger':
+        payload = build_expense_ledger_report(rows, year, month)
+    elif report_type == 'management_summary':
+        payload = build_management_summary_report(rows, year, month)
+    elif report_type == 'inventory_turnover':
+        payload = build_inventory_turnover_report(rows, year, month)
+    else:
+        raise ValueError('unsupported report type')
 
-    raise ValueError('unsupported report type')
+    if report_context.get('is_admin_view') and report_context.get('selected_client_name'):
+        payload = dict(payload)
+        payload['client_name'] = report_context['selected_client_name']
+        description = payload.get('description') or ''
+        payload['description'] = (
+            f"対象クライアント: {report_context['selected_client_name']} / {description}"
+            if description else
+            f"対象クライアント: {report_context['selected_client_name']}"
+        )
+    else:
+        payload = dict(payload)
 
-@app.route('/reports')
-@login_required
-def reports():
-    """レポートページ"""
-    from datetime import datetime
-    ensure_line_multi_account_schema()
-
-    current_year = datetime.now().year
-    current_month = datetime.now().month
-    years = list(range(current_year - 5, current_year + 1))
-
-    export_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'export']
-    management_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'management']
-
-    return render_template('reports.html',
-                          years=years,
-                          current_year=current_year,
-                          current_month=current_month,
-                          export_cards=export_cards,
-                          management_cards=management_cards)
+    payload['report_target_name'] = report_context.get('selected_client_name') or (current_user.display_name or current_user.username)
+    payload['report_period_label'] = get_report_period_label_for_aggregation(rows, year, month, aggregation)
+    payload['report_generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+    return payload
 
 
-@app.route('/api/report-v2/<report_type>')
-@login_required
-def api_report_v2(report_type):
-    year = request.args.get('year', datetime.now().year, type=int)
-    month = request.args.get('month', 0, type=int)
-
-    try:
-        payload = build_report_v2_payload(report_type, year, month)
-    except ValueError:
-        return jsonify({'error': 'unsupported report type'}), 404
-
-    return jsonify(payload)
+def get_report_download_filename(payload, extension):
+    original_name = (payload.get('filename') or 'report.csv').strip() or 'report.csv'
+    if '.' in original_name:
+        original_name = original_name.rsplit('.', 1)[0]
+    target_name = (payload.get('report_target_name') or '').strip()
+    if target_name:
+        original_name = f'{target_name}_{original_name}'
+    return f'{original_name}.{extension}'
 
 
-@app.route('/api/report-v2/<report_type>/download')
-@login_required
-def api_report_v2_download(report_type):
-    year = request.args.get('year', datetime.now().year, type=int)
-    month = request.args.get('month', 0, type=int)
+def build_download_content_disposition(filename):
+    if '.' in filename:
+        stem, ext = filename.rsplit('.', 1)
+        fallback_stem = secure_filename(stem) or 'report'
+        fallback_name = f'{fallback_stem}.{ext}'
+    else:
+        fallback_name = secure_filename(filename) or 'report'
+    return f"attachment; filename={fallback_name}; filename*=UTF-8''{quote(filename)}"
 
-    try:
-        payload = build_report_v2_payload(report_type, year, month)
-    except ValueError:
-        return redirect(url_for('reports'))
 
+def build_report_csv_content(payload):
     output = io.StringIO()
     writer = csv.writer(output)
+
+    writer.writerow([payload.get('title') or 'レポート'])
+    writer.writerow(['クライアント名', payload.get('report_target_name') or '-'])
+    writer.writerow(['対象期間', payload.get('report_period_label') or '-'])
+    writer.writerow(['出力日時', payload.get('report_generated_at') or '-'])
+    writer.writerow([])
 
     for section_index, section in enumerate(payload.get('csv_sections') or []):
         title = section.get('title')
@@ -6708,9 +6957,303 @@ def api_report_v2_download(report_type):
         if section_index != len(payload.get('csv_sections') or []) - 1:
             writer.writerow([])
 
-    response = make_response('\ufeff' + output.getvalue())
+    return '\ufeff' + output.getvalue()
+
+
+def build_report_pdf_bytes(payload):
+    from xml.sax.saxutils import escape
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    font_name = 'HeiseiKakuGo-W5'
+    try:
+        pdfmetrics.getFont(font_name)
+    except KeyError:
+        pdfmetrics.registerFont(UnicodeCIDFont(font_name))
+
+    def pdf_text(value):
+        text = '' if value is None else str(value)
+        return escape(text).replace('\n', '<br/>')
+
+    page_size = landscape(A4)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=page_size,
+        leftMargin=20,
+        rightMargin=20,
+        topMargin=20,
+        bottomMargin=20,
+        title=(payload.get('title') or 'レポート'),
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'ReportTitle',
+        parent=styles['Heading1'],
+        fontName=font_name,
+        fontSize=15,
+        leading=20,
+        textColor=colors.HexColor('#0f172a'),
+        spaceAfter=6,
+    )
+    description_style = ParagraphStyle(
+        'ReportDescription',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=8.8,
+        leading=13,
+        textColor=colors.HexColor('#475569'),
+        spaceAfter=6,
+    )
+    section_title_style = ParagraphStyle(
+        'ReportSectionTitle',
+        parent=styles['Heading2'],
+        fontName=font_name,
+        fontSize=10.5,
+        leading=14,
+        textColor=colors.HexColor('#0f172a'),
+        spaceAfter=4,
+        spaceBefore=6,
+    )
+    label_style = ParagraphStyle(
+        'ReportLabel',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=7.8,
+        leading=10,
+        textColor=colors.HexColor('#64748b'),
+    )
+    value_style = ParagraphStyle(
+        'ReportValue',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=9.3,
+        leading=12,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    note_style = ParagraphStyle(
+        'ReportNote',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=8.2,
+        leading=11.5,
+        textColor=colors.HexColor('#334155'),
+        leftIndent=10,
+        bulletIndent=0,
+    )
+    header_style = ParagraphStyle(
+        'ReportHeaderCell',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=7.6,
+        leading=10,
+        textColor=colors.white,
+        alignment=1,
+    )
+    body_style = ParagraphStyle(
+        'ReportBodyCell',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=7.2,
+        leading=9.4,
+        textColor=colors.HexColor('#0f172a'),
+    )
+
+    elements = [Paragraph(pdf_text(payload.get('title') or 'レポート'), title_style)]
+
+    description = payload.get('description')
+    if description:
+        elements.append(Paragraph(pdf_text(description), description_style))
+
+    meta_rows = [
+        [
+            Paragraph('クライアント名', label_style),
+            Paragraph(pdf_text(payload.get('report_target_name') or '-'), value_style),
+            Paragraph('対象期間', label_style),
+            Paragraph(pdf_text(payload.get('report_period_label') or '-'), value_style),
+        ],
+        [
+            Paragraph('出力日時', label_style),
+            Paragraph(pdf_text(payload.get('report_generated_at') or '-'), value_style),
+            Paragraph('レポート名', label_style),
+            Paragraph(pdf_text(payload.get('title') or 'レポート'), value_style),
+        ],
+    ]
+    meta_table = Table(meta_rows, colWidths=[80, 150, 80, 150], hAlign='LEFT')
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.extend([meta_table, Spacer(1, 8)])
+
+    summary_items = payload.get('summary') or []
+    if summary_items:
+        elements.append(Paragraph('概要', section_title_style))
+        summary_rows = []
+        for index in range(0, len(summary_items), 2):
+            left_item = summary_items[index]
+            right_item = summary_items[index + 1] if index + 1 < len(summary_items) else None
+            row = [
+                Paragraph(pdf_text(left_item.get('label') or ''), label_style),
+                Paragraph(pdf_text(left_item.get('value') or ''), value_style),
+            ]
+            if right_item:
+                row.extend([
+                    Paragraph(pdf_text(right_item.get('label') or ''), label_style),
+                    Paragraph(pdf_text(right_item.get('value') or ''), value_style),
+                ])
+            else:
+                row.extend(['', ''])
+            summary_rows.append(row)
+
+        summary_table = Table(summary_rows, colWidths=[80, 150, 80, 150], hAlign='LEFT')
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.whitesmoke),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.extend([summary_table, Spacer(1, 8)])
+
+    notes = payload.get('notes') or []
+    if notes:
+        elements.append(Paragraph('確認ポイント', section_title_style))
+        for note in notes:
+            elements.append(Paragraph(pdf_text(note), note_style, bulletText='-'))
+        elements.append(Spacer(1, 8))
+
+    columns = payload.get('columns') or []
+    rows = payload.get('rows') or []
+    if columns and rows:
+        content_width = page_size[0] - doc.leftMargin - doc.rightMargin
+        col_count = max(len(columns), 1)
+        col_widths = [content_width / col_count] * col_count
+        table_data = [[Paragraph(pdf_text(column.get('label') or ''), header_style) for column in columns]]
+        for row in rows:
+            table_data.append([Paragraph(pdf_text(cell), body_style) for cell in row])
+
+        report_table = Table(
+            table_data,
+            colWidths=col_widths,
+            repeatRows=1,
+            splitByRow=1,
+        )
+        report_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1d4ed8')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(report_table)
+    else:
+        elements.append(Paragraph(pdf_text(payload.get('empty_message') or 'データがありません。'), description_style))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+@app.route('/reports')
+@login_required
+def reports():
+    """レポートページ"""
+    from datetime import datetime
+    ensure_line_multi_account_schema()
+
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    report_context = resolve_report_target_context(request.args.get('client_id', ''))
+
+    if report_context.get('target_user_id'):
+        report_rows = fetch_report_merchandise_rows(
+            target_user_id=report_context['target_user_id'],
+            scope='user',
+        )
+        years = get_report_available_years(report_rows)
+        if current_year not in years:
+            years = sorted(set(years + [current_year]), reverse=True)
+    else:
+        years = list(range(current_year - 5, current_year + 1))
+
+    export_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'export']
+    management_cards = [card for card in REPORT_V2_CARD_DEFINITIONS if card.get('category') == 'management']
+
+    return render_template('reports.html',
+                          years=years,
+                           current_year=current_year,
+                           current_month=current_month,
+                           export_cards=export_cards,
+                           management_cards=management_cards,
+                           is_admin_report_view=report_context['is_admin_view'],
+                           report_clients=report_context['available_users'],
+                           selected_client_id=report_context['selected_client_id'],
+                           selected_client_name=report_context['selected_client_name'],
+                           show_client_list=report_context['show_client_list'])
+
+
+@app.route('/api/report-v2/<report_type>')
+@login_required
+def api_report_v2(report_type):
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', 0, type=int)
+    client_id = request.args.get('client_id', '')
+
+    try:
+        payload = build_report_v2_payload(report_type, year, month, client_id=client_id)
+    except ValueError:
+        return jsonify({'error': 'unsupported report type'}), 404
+    except LookupError:
+        return jsonify({'error': 'client_id required'}), 400
+
+    return jsonify(payload)
+
+
+@app.route('/api/report-v2/<report_type>/download')
+@login_required
+def api_report_v2_download(report_type):
+    year = request.args.get('year', datetime.now().year, type=int)
+    month = request.args.get('month', 0, type=int)
+    client_id = request.args.get('client_id', '')
+    format_type = (request.args.get('format', 'csv') or 'csv').strip().lower()
+
+    try:
+        payload = build_report_v2_payload(report_type, year, month, client_id=client_id)
+    except ValueError:
+        return redirect(url_for('reports'))
+    except LookupError:
+        return redirect(url_for('reports'))
+
+    if format_type == 'pdf':
+        filename = get_report_download_filename(payload, "pdf")
+        response = make_response(build_report_pdf_bytes(payload))
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = build_download_content_disposition(filename)
+        return response
+
+    filename = get_report_download_filename(payload, "csv")
+    csv_content = build_report_csv_content(payload)
+    response = make_response(csv_content)
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-    response.headers['Content-Disposition'] = f'attachment; filename={payload.get("filename", "report.csv")}'
+    response.headers['Content-Disposition'] = build_download_content_disposition(filename)
     return response
 
 
