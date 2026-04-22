@@ -28,6 +28,17 @@ button,input,select,textarea{font:inherit}
 .summary-client,.client-title,.file-title{font-size:20px;font-weight:800;line-height:1.45}
 .summary-meta,.product-meta,.origin-meta,.file-meta{margin-top:4px;color:#64748b;font-size:13px;line-height:1.7}
 .summary-card-grid,.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.service-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.service-chip{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+.service-chip-wholesale{background:#eff6ff;color:#1d4ed8}
+.service-chip-auction{background:#fef3c7;color:#92400e}
+.service-chip-simultaneous{background:#ecfdf5;color:#047857}
+.service-panel{display:grid;gap:14px;margin-bottom:18px}
+.service-panel:last-child{margin-bottom:0}
+.service-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.service-panel-head h4{margin:0;font-size:18px;line-height:1.45}
+.service-panel-head p{margin:6px 0 0;color:#64748b;font-size:14px;line-height:1.8}
+.service-panel-count{display:inline-flex;align-items:center;justify-content:center;padding:7px 12px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:12px;font-weight:800;white-space:nowrap}
 .field-block,.field{display:grid;gap:6px}
 .field-label{font-size:12px;font-weight:700;color:#64748b;letter-spacing:.02em}
 .field-value{font-size:14px;line-height:1.8;color:#0f172a}

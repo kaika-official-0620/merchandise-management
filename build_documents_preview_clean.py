@@ -624,11 +624,44 @@ def service_summary_label(products: list[dict], service_filter: str | None) -> s
     return " / ".join(summary) or "認証申請一式"
 
 
+def service_chips(products: list[dict]) -> str:
+    chips = []
+    for service_key in ("wholesale", "auction", "simultaneous"):
+        count = sum(1 for product in products if product["service"] == service_key)
+        if not count:
+            continue
+        chips.append(
+            f'<span class="service-chip service-chip-{service_key}">{SERVICE_LABELS[service_key]} {count}件</span>'
+        )
+    return "".join(chips)
+
+
+def compact_product_names(products: list[dict], limit: int = 3) -> str:
+    names = [product["name"] for product in products]
+    if len(names) <= limit:
+        return " / ".join(names)
+    remaining = len(names) - limit
+    return f"{' / '.join(names[:limit])} / ほか {remaining}件"
+
+
+def client_overview_status(products: list[dict]) -> str:
+    statuses = [product["status"] for product in products]
+    if any(status == "認証待ち" for status in statuses):
+        return "認証待ち"
+    if any(status in {"査定中", "出品中"} for status in statuses):
+        return "査定中"
+    if any(status == "入金待ち" for status in statuses):
+        return "入金待ち"
+    if all(status == "完了" for status in statuses):
+        return "完了"
+    return statuses[0] if statuses else "認証待ち"
+
+
 def client_summary_card(client_id: str, products: list[dict], *, service_filter: str | None = None) -> str:
     client = CLIENTS[client_id]
-    product_names = " / ".join(p["name"] for p in products)
+    product_names = compact_product_names(products)
     request_detail = request_detail_filename(client_id, service_filter)
-    status_badge = products[0]["status"] if products else "認証待ち"
+    status_badge = client_overview_status(products)
     request_kind = service_summary_label(products, service_filter)
     return f"""
     <div class="summary-card">
@@ -642,9 +675,10 @@ def client_summary_card(client_id: str, products: list[dict], *, service_filter:
       <div class="summary-card-grid">
         <div class="field-block"><div class="field-label">申請商品数</div><div class="field-value">{len(products)}点</div></div>
         <div class="field-block"><div class="field-label">依頼形式</div><div class="field-value">{request_kind}</div></div>
-        <div class="field-block"><div class="field-label">商品名</div><div class="field-value">{product_names}</div></div>
+        <div class="field-block"><div class="field-label">代表商品</div><div class="field-value">{product_names}</div></div>
         <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
       </div>
+      <div class="service-chip-row">{service_chips(products)}</div>
       <div class="card-actions">
         <a class="btn btn-soft" href="{request_detail}">詳細を確認する</a>
       </div>
@@ -765,6 +799,32 @@ def request_detail_page(client_id: str, service: str | None = None) -> str:
     client = CLIENTS[client_id]
     products = client_products(client_id, service if service not in (None, "all") else None)
     service_summary = service_summary_label(products, service)
+    sections = []
+    for service_key in ("wholesale", "auction", "simultaneous"):
+        service_items = [item for item in products if item["service"] == service_key]
+        if not service_items:
+            continue
+        guidance = {
+            "wholesale": "業者卸販売の申請です。認証後に査定中へ進めた商品だけが 2番 の業者依頼へ反映されます。",
+            "auction": "業者オークションの申請です。認証後に査定中へ進めた商品だけが 2番 のオークション依頼へ反映されます。",
+            "simultaneous": "同時出品の申請です。認証後は出品中へ進め、売却履歴が出たら 3番 と 4番 へ進みます。",
+        }[service_key]
+        sections.append(
+            f"""
+            <div class="service-panel">
+              <div class="service-panel-head">
+                <div>
+                  <h4>{SERVICE_LABELS[service_key]}</h4>
+                  <p>{guidance}</p>
+                </div>
+                <span class="service-panel-count">{len(service_items)}件</span>
+              </div>
+              <div class="stack">
+                {''.join(product_card(item['id']) for item in service_items)}
+              </div>
+            </div>
+            """
+        )
     return page(
         f"{client['name']} さんの受付詳細",
         f"""
@@ -780,12 +840,10 @@ def request_detail_page(client_id: str, service: str | None = None) -> str:
             <div class="section-head">
               <div>
                 <h3>商品ごとの確認</h3>
-                <p class="section-note">商品名を押すと、商品一覧で登録している内容をそのまま確認できます。</p>
+                <p class="section-note">商品名を押すと、商品一覧で登録している内容をそのまま確認できます。商品ごとに申請形式と現在状態を見ながら、認証・査定・入金待ち・受付不可通知を行います。</p>
               </div>
             </div>
-            <div class="stack">
-              {''.join(product_card(item['id']) for item in products)}
-            </div>
+            {''.join(sections)}
           </div>
         </div>
         """,
@@ -851,9 +909,9 @@ def outgoing_button_label(service: str) -> str:
 
 def outgoing_section(service: str) -> str:
     descriptions = {
-        "wholesale": "査定中にした業者卸販売の商品をまとめて選択し、複数の業者へ流す見積依頼書を作成します。",
+        "wholesale": "査定中にした業者卸販売の商品を、複数商品まとめて業者へ流すための見積依頼書に差し込みます。",
         "auction": "査定中にした業者オークションの商品をまとめて選択し、オークション出品用の依頼書を作成します。",
-        "simultaneous": "出品中にした同時出品の商品を選択し、出品管理用の書類を作成します。",
+        "simultaneous": "出品中にした同時出品の商品を選択し、開花側で使う出品管理シートを作成します。",
     }
     cards = []
     for product in products_for_outgoing(service):
@@ -876,6 +934,7 @@ def outgoing_section(service: str) -> str:
                 <div class="detail-grid">
                   <div class="field-block"><div class="field-label">画像確認</div><div class="field-value"><a href="{detail_href}">商品詳細を見る</a></div></div>
                   <div class="field-block"><div class="field-label">申請元クライアント</div><div class="field-value">{client['name']}</div></div>
+                  <div class="field-block"><div class="field-label">処理部門</div><div class="field-value">{SERVICE_LABELS[service]}</div></div>
                   <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">{descriptions[service]}</div></div>
                 </div>
               </div>
@@ -911,7 +970,7 @@ def stage2_page() -> str:
           <div class="page-head">
             <div>
               <h1>2. 開花から業者へ依頼</h1>
-              <p>ここでは、1番で進行可能にした商品を部門ごとに整理して、まとめて書類を作成します。却下していない商品だけを選び、複数商品・複数取引先へ流せる前提の画面です。</p>
+              <p>ここでは、1番で進行可能にした商品を 3部門に分けて整理し、まとめて書類を作成します。商品単位で確認しながら、業者卸販売・業者オークション・同時出品の流れを分けて扱います。</p>
             </div>
           </div>
           {outgoing_section("wholesale")}
@@ -1131,6 +1190,11 @@ def estimate_template_page() -> str:
 def stage3_page() -> str:
     sections = []
     for service in ("wholesale", "auction", "simultaneous"):
+        service_note = {
+            "wholesale": "業者卸販売の回答書類です。ファイルを1件ずつ開いて、商品ごとの売却額と返送先を確認します。",
+            "auction": "業者オークションの回答書類です。落札結果を確認し、商品ごとに返送先を整理します。",
+            "simultaneous": "同時出品の売却履歴やスクリーンショットを登録し、どの商品が売れたかを確認します。",
+        }[service]
         cards = []
         for file_info in [item for item in RESPONSE_FILES if item["service"] == service]:
             products = " / ".join(PRODUCTS[item["product"]]["name"] for item in file_info["items"])
@@ -1158,7 +1222,7 @@ def stage3_page() -> str:
               <div class="section-head">
                 <div>
                   <h3>{SERVICE_LABELS[service]} の回答書類</h3>
-                  <p class="section-note">届いた書類を1件ずつ開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
+                  <p class="section-note">{service_note}</p>
                 </div>
               </div>
               <div class="stack">{''.join(cards)}</div>
@@ -1177,14 +1241,14 @@ def stage3_page() -> str:
             </div>
           </div>
           <div class="section">
-            <div class="section-head">
-              <div>
-                <h3>回答ファイルを登録する</h3>
-                <p class="section-note">届いた書類を登録すると、下の一覧から開く・ダウンロードする想定です。</p>
+              <div class="section-head">
+                <div>
+                  <h3>回答ファイルを登録する</h3>
+                  <p class="section-note">届いたファイルをサービス別に登録し、下の一覧から開く・ダウンロードして中身を確認する想定です。</p>
+                </div>
               </div>
-            </div>
-            <div class="form-inline">
-              <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
+              <div class="form-inline">
+                <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
               <label class="field"><span>書類区分</span><select id="vendor-file-service"><option value="wholesale">業者卸販売</option><option value="auction">業者オークション</option><option value="simultaneous">同時出品</option></select></label>
               <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
               <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
@@ -1219,7 +1283,7 @@ def vendor_file_page(file_info: dict) -> str:
               </td>
             </tr>
             <tr class="note-row">
-              <td colspan="6"><p id="assign-note-{item['product']}" class="inline-note">この商品は 4番でクライアント返送書類を作るための候補です。</p></td>
+              <td colspan="6"><p id="assign-note-{item['product']}" class="inline-note">この商品をどのクライアントの {SERVICE_LABELS[file_info['service']]} 返送へつなぐか、ここで決めます。</p></td>
             </tr>
             """
         )
@@ -1243,7 +1307,7 @@ def vendor_file_page(file_info: dict) -> str:
               <div class="section-head">
                 <div>
                   <h3>ファイルの中身を確認</h3>
-                  <p class="section-note">この書類は別タブで開く・ダウンロードする想定です。</p>
+                  <p class="section-note">登録したファイルを確認し、商品名・売却額・結果を見ながら、4番へ渡す準備をします。</p>
                 </div>
                 <a class="btn btn-outline" href="{file_info['download']}" download>ダウンロード</a>
               </div>
@@ -1282,14 +1346,14 @@ def stage4_page() -> str:
           <div class="page-head">
             <div>
               <h1>4. クライアントへ返送</h1>
-              <p>クライアント名ごとに返送対象をまとめ、売却済みの商品だけを選んで買取明細書を作成します。商品名ではなくクライアント名単位で表示します。</p>
+              <p>3番で振り分けた回答内容と、完了した案件をもとに、クライアント名ごと・サービス別に返送書類を作成します。1人に対してもサービスごとに別書類で返送する前提です。</p>
             </div>
           </div>
           <div class="section">
             <div class="section-head">
               <div>
                 <h3>返送対象のクライアント一覧</h3>
-                <p class="section-note">業者から回答が来て振り分けた商品と、完了したオークション・同時出品の商品だけを、クライアント名 × サービス別にまとめて表示します。</p>
+                <p class="section-note">業者から回答が来て振り分けた商品と、完了したオークション・同時出品の商品を、クライアント名 × サービス別に分けて表示します。</p>
               </div>
             </div>
             <div id="client-outgoing-groups" class="summary-grid"></div>
@@ -1412,6 +1476,17 @@ button,input,select,textarea{font:inherit}
 .summary-client,.client-title,.file-title{font-size:20px;font-weight:800;line-height:1.45}
 .summary-meta,.product-meta,.origin-meta,.file-meta{margin-top:4px;color:#64748b;font-size:13px;line-height:1.7}
 .summary-card-grid,.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.service-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.service-chip{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+.service-chip-wholesale{background:#eff6ff;color:#1d4ed8}
+.service-chip-auction{background:#fef3c7;color:#92400e}
+.service-chip-simultaneous{background:#ecfdf5;color:#047857}
+.service-panel{display:grid;gap:14px;margin-bottom:18px}
+.service-panel:last-child{margin-bottom:0}
+.service-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.service-panel-head h4{margin:0;font-size:18px;line-height:1.45}
+.service-panel-head p{margin:6px 0 0;color:#64748b;font-size:14px;line-height:1.8}
+.service-panel-count{display:inline-flex;align-items:center;justify-content:center;padding:7px 12px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:12px;font-weight:800;white-space:nowrap}
 .field-block,.field{display:grid;gap:6px}
 .field-label{font-size:12px;font-weight:700;color:#64748b;letter-spacing:.02em}
 .field-value{font-size:14px;line-height:1.8;color:#0f172a}
