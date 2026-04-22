@@ -1,10 +1,28 @@
-const PREVIEW_STORAGE_KEY = "documentsPreviewStateV3";
+const PREVIEW_STORAGE_KEY = "documentsPreviewStateV4";
+
+function previewData() {
+  return window.DOCUMENTS_PREVIEW_DATA || { clients: {}, products: {}, vendors: [], vendorFiles: [], serviceLabels: {} };
+}
+
+function normalizeState(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { items: {}, assignments: {}, vendorDraft: null };
+  }
+  if (raw.items || raw.assignments || Object.prototype.hasOwnProperty.call(raw, "vendorDraft")) {
+    return {
+      items: raw.items || {},
+      assignments: raw.assignments || {},
+      vendorDraft: raw.vendorDraft || null,
+    };
+  }
+  return { items: raw, assignments: {}, vendorDraft: null };
+}
 
 function loadPreviewState() {
   try {
-    return JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) || "{}");
+    return normalizeState(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) || "{}"));
   } catch (error) {
-    return {};
+    return { items: {}, assignments: {}, vendorDraft: null };
   }
 }
 
@@ -14,21 +32,54 @@ function savePreviewState(state) {
 
 function getItemState(productId, fallbackStatus = "認証待ち") {
   const state = loadPreviewState();
-  return state[productId] || { status: fallbackStatus, unavailable: false };
+  return state.items[productId] || { status: fallbackStatus, unavailable: false };
 }
 
 function setItemState(productId, patch) {
   const state = loadPreviewState();
-  const current = state[productId] || {};
-  state[productId] = { ...current, ...patch };
+  const current = state.items[productId] || {};
+  state.items[productId] = { ...current, ...patch };
   savePreviewState(state);
-  return state[productId];
+  return state.items[productId];
 }
 
-function togglePanel(id) {
-  const panel = document.getElementById(id);
-  if (!panel) return;
-  panel.hidden = !panel.hidden;
+function setVendorDraft(vendorDraft) {
+  const state = loadPreviewState();
+  state.vendorDraft = vendorDraft;
+  savePreviewState(state);
+}
+
+function getVendorDraft() {
+  return loadPreviewState().vendorDraft || null;
+}
+
+function setAssignment(productId, assignment) {
+  const state = loadPreviewState();
+  state.assignments[productId] = assignment;
+  savePreviewState(state);
+}
+
+function getAssignments() {
+  return loadPreviewState().assignments || {};
+}
+
+function defaultAssignments() {
+  const assignments = {};
+  (previewData().vendorFiles || []).forEach((fileInfo) => {
+    (fileInfo.items || []).forEach((item) => {
+      const selected = findClientByName(item.assigned_client || "");
+      if (!selected) return;
+      const [clientId, client] = selected;
+      assignments[item.product] = {
+        clientId,
+        clientName: client.name,
+        service: "wholesale",
+        source: fileInfo.label,
+        price: item.price,
+      };
+    });
+  });
+  return assignments;
 }
 
 function showInlineNotice(id, message) {
@@ -51,11 +102,111 @@ function statusClass(label) {
   }
 }
 
+function serviceLabel(service) {
+  return previewData().serviceLabels?.[service] || service;
+}
+
+function formatYen(value) {
+  const amount = Number(value) || 0;
+  return `¥${amount.toLocaleString("ja-JP")}`;
+}
+
+function findClientByName(name) {
+  const normalized = (name || "").trim();
+  return Object.entries(previewData().clients || {}).find(([, client]) => client.name === normalized) || null;
+}
+
+function buildDocRows(items) {
+  const products = previewData().products || {};
+  const rows = [];
+  for (let index = 0; index < 15; index += 1) {
+    const item = items[index];
+    if (!item) {
+      rows.push(`
+        <tr>
+          <td class="doc-col-no">&nbsp;</td>
+          <td class="doc-col-name"></td>
+          <td class="doc-col-brand"></td>
+          <td class="doc-col-condition"></td>
+          <td class="doc-col-qty"></td>
+          <td class="doc-col-price"></td>
+          <td class="doc-col-price"></td>
+        </tr>
+      `);
+      continue;
+    }
+    const product = products[item.product];
+    if (!product) continue;
+    rows.push(`
+      <tr>
+        <td class="doc-col-no">${index + 1}</td>
+        <td class="doc-col-name">${product.name}</td>
+        <td class="doc-col-brand">${product.brand}</td>
+        <td class="doc-col-condition">${product.condition}</td>
+        <td class="doc-col-qty">1</td>
+        <td class="doc-col-price doc-cell-price" data-amount="${item.price}">${formatYen(item.price)}</td>
+        <td class="doc-col-price doc-cell-amount" data-amount="${item.price}">${formatYen(item.price)}</td>
+      </tr>
+    `);
+  }
+  return rows.join("");
+}
+
+function buildReturnGroups() {
+  const data = previewData();
+  const assignments = { ...defaultAssignments(), ...getAssignments() };
+  const groups = {};
+
+  Object.entries(data.products || {}).forEach(([productId, product]) => {
+    const current = getItemState(productId, product.status || "認証待ち");
+    if (current.unavailable) return;
+
+    let clientId = product.client;
+    let service = product.service;
+    let source = "";
+    let price = Number(product.amount) || 0;
+
+    if (service === "wholesale") {
+      const assignment = assignments[productId];
+      if (!assignment) return;
+      clientId = assignment.clientId || product.client;
+      source = assignment.source || "業者回答書";
+      price = Number(assignment.price) || price;
+    } else if (service === "auction") {
+      if (current.status !== "完了") return;
+      source = "業者オークション 落札結果";
+    } else if (service === "simultaneous") {
+      if (current.status !== "完了") return;
+      source = "同時出品 売却完了";
+    } else {
+      return;
+    }
+
+    const key = `${clientId}__${service}`;
+    if (!groups[key]) {
+      groups[key] = {
+        key,
+        client: clientId,
+        service,
+        items: [],
+      };
+    }
+    groups[key].items.push({ product: productId, price, source });
+  });
+
+  return Object.values(groups).sort((left, right) => {
+    const a = `${previewData().clients[left.client]?.name || ""}-${left.service}`;
+    const b = `${previewData().clients[right.client]?.name || ""}-${right.service}`;
+    return a.localeCompare(b, "ja");
+  });
+}
+
 function applyStatus(selectId, badgeId, stateId, noticeId, productName, service) {
   const select = document.getElementById(selectId);
   const badge = document.getElementById(badgeId);
   const state = document.getElementById(stateId);
   if (!select || !badge || !state) return;
+
   const next = select.value;
   const card = select.closest("[data-product-id]");
   const productId = card ? card.dataset.productId : "";
@@ -65,8 +216,7 @@ function applyStatus(selectId, badgeId, stateId, noticeId, productName, service)
   if (productId) {
     setItemState(productId, { status: next, unavailable: false });
   }
-  const serviceLabel = service === "simultaneous" ? "同時出品" : (service === "auction" ? "業者オークション" : "業者卸販売");
-  showInlineNotice(noticeId, `${productName}（${serviceLabel}）の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
+  showInlineNotice(noticeId, `${productName}（${serviceLabel(service)}）の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
 }
 
 function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
@@ -107,19 +257,218 @@ function registerVendorFile() {
   showInlineNotice("vendor-file-notice", `${dateLabel} の回答ファイル「${fileName}」を登録する想定です。`);
 }
 
-function assignClient(inputId, noticeId, productName) {
+function assignClient(inputId, noticeId, productId, productName, price, source) {
   const input = document.getElementById(inputId);
   if (!input) return;
-  const client = input.value || "未選択";
-  showInlineNotice(noticeId, `${productName} を「${client}」の返送候補へ振り分ける想定です。`);
+  const selected = findClientByName(input.value);
+  if (!selected) {
+    showInlineNotice(noticeId, "返送先クライアント名を一覧から選択してください。");
+    return;
+  }
+  const [clientId, client] = selected;
+  setAssignment(productId, {
+    clientId,
+    clientName: client.name,
+    service: "wholesale",
+    source,
+    price,
+  });
+  showInlineNotice(noticeId, `${productName} を「${client.name}」の業者卸販売返送候補へ振り分けました。4番で確認できます。`);
+}
+
+function syncVendorSelectionUI() {
+  const rows = Array.from(document.querySelectorAll(".js-vendor-select-row[data-product-id]"));
+  const summary = document.getElementById("vendor-selected-summary");
+  const empty = document.getElementById("vendor-selection-empty");
+
+  rows.forEach((row) => {
+    const productId = row.dataset.productId;
+    const product = previewData().products?.[productId];
+    const current = getItemState(productId, row.dataset.defaultStatus || product?.status || "認証待ち");
+    const visible = !current.unavailable && current.status === "査定中";
+    row.style.display = visible ? "" : "none";
+    const checkbox = row.querySelector(".vendor-check");
+    if (!visible && checkbox) checkbox.checked = false;
+  });
+
+  if (empty) {
+    const visibleRows = rows.filter((row) => row.style.display !== "none");
+    empty.hidden = visibleRows.length > 0;
+  }
+
+  if (summary) {
+    const names = Array.from(document.querySelectorAll(".vendor-check:checked"))
+      .map((node) => node.dataset.summary || node.dataset.product)
+      .filter(Boolean);
+    summary.textContent = names.length ? names.join(" / ") : "まだ商品を選択していません";
+  }
+}
+
+function prepareEstimateDraft(targetHref) {
+  const selectedProducts = Array.from(document.querySelectorAll(".vendor-check:checked"))
+    .map((node) => node.dataset.productId)
+    .filter(Boolean);
+  const vendorSelect = document.getElementById("vendor-target");
+  const vendorName = vendorSelect ? vendorSelect.value : "";
+  if (!selectedProducts.length) {
+    showInlineNotice("vendor-draft-notice", "見積依頼書に入れる商品を1点以上選択してください。");
+    return;
+  }
+  if (!vendorName) {
+    showInlineNotice("vendor-draft-notice", "送付先業者を選択してください。");
+    return;
+  }
+  setVendorDraft({
+    vendorName,
+    selectedProducts,
+    createdAt: new Date().toISOString(),
+  });
+  window.location.href = targetHref;
+}
+
+function renderVendorEstimateTemplate() {
+  const rowsTarget = document.getElementById("vendor-estimate-rows");
+  if (!rowsTarget) return;
+  const draft = getVendorDraft();
+  const vendorName = document.querySelector("[data-vendor-name]");
+  if (!draft || !draft.selectedProducts?.length) {
+    rowsTarget.innerHTML = buildDocRows([]);
+    if (vendorName) vendorName.textContent = "取引先業者 御中";
+    return;
+  }
+  const items = draft.selectedProducts.map((productId) => {
+    const product = previewData().products?.[productId];
+    return { product: productId, price: Number(product?.amount) || 0 };
+  });
+  rowsTarget.innerHTML = buildDocRows(items);
+  if (vendorName) vendorName.textContent = `${draft.vendorName} 御中`;
+  const total = items.reduce((sum, item) => sum + item.price, 0);
+  document.querySelectorAll("[data-total-output]").forEach((node) => {
+    node.textContent = formatYen(total);
+  });
+}
+
+function renderStage4Summary() {
+  const container = document.getElementById("client-outgoing-groups");
+  if (!container) return;
+  const groups = buildReturnGroups();
+  const empty = document.getElementById("client-outgoing-empty");
+  if (!groups.length) {
+    container.innerHTML = "";
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  container.innerHTML = groups.map((group) => {
+    const client = previewData().clients?.[group.client];
+    const total = group.items.reduce((sum, item) => sum + item.price, 0);
+    const names = group.items.map((item) => previewData().products?.[item.product]?.name).filter(Boolean).join(" / ");
+    const sources = group.items.map((item) => item.source).join(" / ");
+    const query = encodeURIComponent(group.key);
+    return `
+      <div class="summary-card">
+        <div class="summary-head">
+          <div>
+            <div class="summary-client">${client?.name || "クライアント"} / ${serviceLabel(group.service)}</div>
+            <div class="summary-meta">${group.items.length}点 / 返送書類をサービス別に分けて作成します</div>
+          </div>
+          <span class="pill payment">返送準備中</span>
+        </div>
+        <div class="summary-card-grid">
+          <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">${names}</div></div>
+          <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">${formatYen(total)}</div></div>
+          <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
+          <div class="field-block"><div class="field-label">元データ</div><div class="field-value">${sources}</div></div>
+        </div>
+        <div class="card-actions">
+          <a class="btn btn-soft" href="documents_v2_client_delivery.html?group=${query}">返送内容を確認する</a>
+          <a class="btn btn-primary" href="documents_v2_client_statement_template.html?group=${query}">買取明細書を作成する</a>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function getGroupFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get("group");
+  if (!key) return null;
+  return buildReturnGroups().find((group) => group.key === key) || null;
+}
+
+function renderClientDelivery() {
+  const container = document.getElementById("client-delivery-items");
+  if (!container) return;
+  const group = getGroupFromQuery();
+  const empty = document.getElementById("client-delivery-empty");
+  const title = document.getElementById("client-delivery-title");
+  const description = document.getElementById("client-delivery-description");
+  const templateLink = document.getElementById("client-delivery-template-link");
+  if (!group) {
+    container.innerHTML = "";
+    if (empty) empty.hidden = false;
+    return;
+  }
+  const client = previewData().clients?.[group.client];
+  if (title) title.textContent = `${client?.name || "クライアント"} / ${serviceLabel(group.service)} の返送内容`;
+  if (description) description.textContent = `ここでどの商品を返送書類に含めるかを確認し、${serviceLabel(group.service)} 用の買取明細書へ進みます。`;
+  if (templateLink) templateLink.href = `documents_v2_client_statement_template.html?group=${encodeURIComponent(group.key)}`;
+  if (empty) empty.hidden = group.items.length > 0;
+  container.innerHTML = group.items.map((item) => {
+    const product = previewData().products?.[item.product];
+    if (!product) return "";
+    const detailHref = product.real_item_id ? `/view/${product.real_item_id}` : product.detail_page;
+    return `
+      <div class="product-card js-product-card" data-product-id="${item.product}" data-service="${product.service}" data-default-status="${product.status}" data-stage="client-outgoing">
+        <div class="product-thumb">
+          <img src="${product.image}" alt="${product.name}">
+        </div>
+        <div class="product-body">
+          <div class="product-top">
+            <div>
+              <div class="product-title">${product.name}</div>
+              <div class="product-meta">${serviceLabel(product.service)} / ${item.source}</div>
+            </div>
+            <span class="pill payment">返送予定</span>
+          </div>
+          <div class="detail-grid">
+            <div class="field-block"><div class="field-label">売却額</div><div class="field-value">${formatYen(item.price)}</div></div>
+            <div class="field-block"><div class="field-label">商品詳細</div><div class="field-value"><a href="${detailHref}">商品詳細を見る</a></div></div>
+            <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書へ反映</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderStatementTemplate() {
+  const rowsTarget = document.getElementById("client-statement-rows");
+  if (!rowsTarget) return;
+  const group = getGroupFromQuery();
+  const clientName = document.querySelector("[data-client-name]");
+  const clientService = document.querySelector("[data-client-service]");
+  const backLink = document.getElementById("statement-back-link");
+  if (!group) {
+    rowsTarget.innerHTML = buildDocRows([]);
+    return;
+  }
+  const client = previewData().clients?.[group.client];
+  if (clientName) clientName.textContent = client?.name || "クライアント名";
+  if (clientService) clientService.textContent = serviceLabel(group.service);
+  if (backLink) backLink.href = `documents_v2_client_delivery.html?group=${encodeURIComponent(group.key)}`;
+  rowsTarget.innerHTML = buildDocRows(group.items);
+  const total = group.items.reduce((sum, item) => sum + item.price, 0);
+  document.querySelectorAll("[data-total-output]").forEach((node) => {
+    node.textContent = formatYen(total);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const state = loadPreviewState();
-
   document.querySelectorAll(".js-product-card[data-product-id]").forEach((card) => {
     const productId = card.dataset.productId;
-    const fallbackStatus = card.dataset.defaultStatus || "認証待ち";
+    const product = previewData().products?.[productId];
+    const fallbackStatus = card.dataset.defaultStatus || product?.status || "認証待ち";
     const current = getItemState(productId, fallbackStatus);
     const badge = card.querySelector(`[id^="badge-"]`);
     const stateTarget = card.querySelector(`[id^="state-"]`);
@@ -155,12 +504,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.querySelectorAll(".vendor-check").forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      const names = Array.from(document.querySelectorAll(".vendor-check:checked")).map((node) => node.dataset.product);
-      const summary = document.getElementById("vendor-selected-summary");
-      if (summary) {
-        summary.textContent = names.length ? names.join(" / ") : "まだ商品を選択していません";
-      }
-    });
+    checkbox.addEventListener("change", syncVendorSelectionUI);
   });
+
+  document.querySelectorAll(".assign-input[data-product-id]").forEach((input) => {
+    const assignment = getAssignments()[input.dataset.productId];
+    if (assignment?.clientName) {
+      input.value = assignment.clientName;
+    }
+  });
+
+  syncVendorSelectionUI();
+  renderVendorEstimateTemplate();
+  renderStage4Summary();
+  renderClientDelivery();
+  renderStatementTemplate();
 });

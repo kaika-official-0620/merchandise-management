@@ -26,23 +26,30 @@
         <div class="section">
           <div class="section-head"><h3>見積依頼書に入れる商品</h3></div>
           <div class="select-grid">
-        <label class="select-row">
-          <input class="vendor-check" type="checkbox" data-product="アズール サリナPM トートバッグ" data-summary="テスト / アズール サリナPM トートバッグ / Louis Vuitton">
+        <label class="select-row js-vendor-select-row" data-product-id="item_145_アズール_サリナpm_トートバッグ" data-default-status="査定中">
+          <input class="vendor-check" type="checkbox" data-product-id="item_145_アズール_サリナpm_トートバッグ" data-product="アズール サリナPM トートバッグ" data-summary="テスト / アズール サリナPM トートバッグ / Louis Vuitton" data-brand="Louis Vuitton">
           <span class="select-main">テスト / アズール サリナPM トートバッグ</span>
-          <span class="select-sub">Louis Vuitton / 商品ID KAIKA-145</span>
+          <span class="select-sub">Louis Vuitton / 商品ID KAIKA-145 / <a href="/view/145">商品詳細を見る</a></span>
         </label>
 
-        <label class="select-row">
-          <input class="vendor-check" type="checkbox" data-product="ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ" data-summary="テスト / ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ / Fendi">
+        <label class="select-row js-vendor-select-row" data-product-id="item_146_レザー_ムーンサイド_ショルダーバッグ" data-default-status="認証待ち">
+          <input class="vendor-check" type="checkbox" data-product-id="item_146_レザー_ムーンサイド_ショルダーバッグ" data-product="レザー ムーンサイド ショルダーバッグ" data-summary="テスト / レザー ムーンサイド ショルダーバッグ / Gucci" data-brand="Gucci">
+          <span class="select-main">テスト / レザー ムーンサイド ショルダーバッグ</span>
+          <span class="select-sub">Gucci / 商品ID KAIKA-146 / <a href="/view/146">商品詳細を見る</a></span>
+        </label>
+
+        <label class="select-row js-vendor-select-row" data-product-id="item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" data-default-status="査定中">
+          <input class="vendor-check" type="checkbox" data-product-id="item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" data-product="ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ" data-summary="テスト / ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ / Fendi" data-brand="Fendi">
           <span class="select-main">テスト / ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</span>
-          <span class="select-sub">Fendi / 商品ID KAIKA-151</span>
+          <span class="select-sub">Fendi / 商品ID KAIKA-151 / <a href="/view/151">商品詳細を見る</a></span>
         </label>
         </div>
+          <p id="vendor-selection-empty" class="section-note" hidden>査定中の業者卸販売商品がないため、選択できる商品はありません。</p>
         </div>
         <div class="section">
           <div class="section-head"><h3>見積依頼書の設定</h3></div>
           <div class="form-grid">
-            <label class="field"><span>送付先業者</span><select><option>選択してください</option><option>ブランドセンター</option><option>ブランド市場</option><option>Luxe Gate</option></select></label>
+            <label class="field"><span>送付先業者</span><select id="vendor-target"><option value="">選択してください</option><option>ブランドセンター</option><option>ブランド市場</option><option>Luxe Gate</option></select></label>
             <label class="field"><span>書類種別</span><select><option>見積依頼書</option></select></label>
             <label class="field field-wide"><span>備考</span><textarea rows="4" placeholder="必要な場合だけ備考を入力"></textarea></label>
           </div>
@@ -50,14 +57,16 @@
             <strong>選択中の商品</strong>
             <div id="vendor-selected-summary" style="margin-top:8px;color:#475569;">まだ商品を選択していません</div>
           </div>
+          <p id="vendor-draft-notice" class="inline-notice" hidden></p>
           <div class="card-actions" style="margin-top: 16px;">
             <a class="btn btn-outline" href="vendor_partner_registry.html">送付先業者を登録・編集する</a>
-            <a class="btn btn-primary" href="documents_v2_vendor_estimate_template.html">テンプレートへ差し込む</a>
+            <button class="btn btn-primary" type="button" onclick="prepareEstimateDraft('documents_v2_vendor_estimate_template.html')">テンプレートへ差し込む</button>
           </div>
         </div>
       </div>
     </div>
 
+    <script src="static/preview_data.js"></script>
     <script src="static/preview_v2.js"></script>
 
     </body>

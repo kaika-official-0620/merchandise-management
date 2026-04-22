@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>クライアント返送内容</title>
+      <link rel="stylesheet" href="static/preview_v2.css">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1 id="client-delivery-title">クライアント返送内容</h1>
+          <p id="client-delivery-description">ここでどの商品を返送書類に含めるかを確認し、サービス別の買取明細書へ進みます。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>返送する商品</h3>
+            <p class="section-note">キャンセル済みの商品は含めず、売却済みの商品のみを返送対象にします。</p>
+          </div>
+        </div>
+        <div id="client-delivery-items" class="stack"></div>
+        <p id="client-delivery-empty" class="section-note" hidden>このクライアント / サービスで返送対象の商品はありません。</p>
+        <div class="card-actions" style="margin-top: 18px;">
+          <a id="client-delivery-template-link" class="btn btn-primary" href="documents_v2_client_statement_template.html">買取明細書を作成する</a>
+        </div>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js"></script>
+    <script src="static/preview_v2.js"></script>
+
+    </body>
+    </html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>見積依頼書</title>
+  <title>クライアント向け買取明細書</title>
   <link rel="stylesheet" href="static/preview_v2.css">
 
 </head>
@@ -11,21 +11,22 @@
 
 <div class="page page-narrow">
   <div class="doc-toolbar">
-    <div class="doc-toolbar-copy">2番で選んだ商品と送付先業者を、既存の見積依頼書テンプレートへ差し込む preview です。</div>
+    <div class="doc-toolbar-copy">既存の買取明細書テンプレートに、クライアント返送対象の商品をサービス別で差し込んだ preview です。</div>
     <div class="doc-toolbar-actions">
-      <a class="btn btn-outline" href="documents_v2_vendor_outgoing.html">一覧へ戻る</a>
+      <a id="statement-back-link" class="btn btn-outline" href="documents_v2_client_delivery.html">返送一覧へ戻る</a>
       <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
       <button class="btn btn-outline" type="button" data-action="reset-doc">入力を元に戻す</button>
     </div>
   </div>
   <div class="doc-page" data-doc-editor>
-    <div class="doc-title">見積依頼書</div>
+    <div class="doc-title">買取明細書</div>
     <div class="doc-meta">
       <div><strong>発行日</strong> 2026年4月23日</div>
-      <div><strong>送付先</strong> <span data-vendor-name>取引先業者 御中</span></div>
-      <div><strong>差出人</strong> 株式会社開花</div>
+      <div><strong>宛名</strong> <span data-client-name>クライアント名</span> 様</div>
+      <div><strong>発行者</strong> 株式会社開花</div>
+      <div><strong>対象サービス</strong> <span data-client-service>サービス名</span></div>
     </div>
-    <div class="doc-message">下記の商品について、見積のご確認をお願いいたします。</div>
+    <div class="doc-message">下記の通り、買取明細をご案内いたします。</div>
     <table class="doc-table">
       <thead>
         <tr>
@@ -38,7 +39,7 @@
           <th class="doc-col-price">金額</th>
         </tr>
       </thead>
-      <tbody id="vendor-estimate-rows">
+      <tbody id="client-statement-rows">
 <tr>
   <td class="doc-col-no">&nbsp;</td>
   <td class="doc-col-name"></td>
@@ -196,7 +197,7 @@
     </div>
     <div class="doc-note">
       <strong>備考</strong>
-      <p>選択した商品をもとに、必要に応じて書類内容を編集してから業者へ送付します。</p>
+      <p>必要に応じて、ここで備考や金額を修正してからクライアントへ返送する想定です。</p>
     </div>
   </div>
 </div>
