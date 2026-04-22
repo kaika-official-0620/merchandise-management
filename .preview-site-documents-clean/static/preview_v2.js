@@ -1,7 +1,7 @@
 const PREVIEW_STORAGE_KEY = "documentsPreviewStateV4";
 
 function previewData() {
-  return window.DOCUMENTS_PREVIEW_DATA || { clients: {}, products: {}, vendors: [], vendorFiles: [], serviceLabels: {} };
+  return window.DOCUMENTS_PREVIEW_DATA || { clients: {}, products: {}, vendors: [], responseFiles: [], serviceLabels: {} };
 }
 
 function normalizeState(raw) {
@@ -65,7 +65,7 @@ function getAssignments() {
 
 function defaultAssignments() {
   const assignments = {};
-  (previewData().vendorFiles || []).forEach((fileInfo) => {
+  (previewData().responseFiles || []).forEach((fileInfo) => {
     (fileInfo.items || []).forEach((item) => {
       const selected = findClientByName(item.assigned_client || "");
       if (!selected) return;
@@ -73,13 +73,18 @@ function defaultAssignments() {
       assignments[item.product] = {
         clientId,
         clientName: client.name,
-        service: "wholesale",
+        service: fileInfo.service,
         source: fileInfo.label,
         price: item.price,
       };
     });
   });
   return assignments;
+}
+
+function getQueryParam(name) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(name) || "";
 }
 
 function showInlineNotice(id, message) {
@@ -153,35 +158,15 @@ function buildDocRows(items) {
 }
 
 function buildReturnGroups() {
-  const data = previewData();
   const assignments = { ...defaultAssignments(), ...getAssignments() };
   const groups = {};
-
-  Object.entries(data.products || {}).forEach(([productId, product]) => {
+  Object.entries(assignments).forEach(([productId, assignment]) => {
+    const product = previewData().products?.[productId];
+    if (!product) return;
     const current = getItemState(productId, product.status || "認証待ち");
     if (current.unavailable) return;
-
-    let clientId = product.client;
-    let service = product.service;
-    let source = "";
-    let price = Number(product.amount) || 0;
-
-    if (service === "wholesale") {
-      const assignment = assignments[productId];
-      if (!assignment) return;
-      clientId = assignment.clientId || product.client;
-      source = assignment.source || "業者回答書";
-      price = Number(assignment.price) || price;
-    } else if (service === "auction") {
-      if (current.status !== "完了") return;
-      source = "業者オークション 落札結果";
-    } else if (service === "simultaneous") {
-      if (current.status !== "完了") return;
-      source = "同時出品 売却完了";
-    } else {
-      return;
-    }
-
+    const clientId = assignment.clientId || product.client;
+    const service = assignment.service || product.service;
     const key = `${clientId}__${service}`;
     if (!groups[key]) {
       groups[key] = {
@@ -191,7 +176,11 @@ function buildReturnGroups() {
         items: [],
       };
     }
-    groups[key].items.push({ product: productId, price, source });
+    groups[key].items.push({
+      product: productId,
+      price: Number(assignment.price) || Number(product.amount) || 0,
+      source: assignment.source || "回答書類",
+    });
   });
 
   return Object.values(groups).sort((left, right) => {
@@ -244,9 +233,21 @@ function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
   }
 }
 
+function sendMemo(textareaId, noticeId, productId, productName) {
+  const textarea = document.getElementById(textareaId);
+  const message = (textarea?.value || "").trim();
+  if (!message) {
+    showInlineNotice(noticeId, "送信するメモを入力してください。");
+    return;
+  }
+  setItemState(productId, { memo: message });
+  showInlineNotice(noticeId, `${productName} についてクライアントへメモを送信する想定です。内容: ${message}`);
+}
+
 function registerVendorFile() {
   const fileInput = document.getElementById("vendor-file");
   const dateInput = document.getElementById("vendor-file-date");
+  const serviceInput = document.getElementById("vendor-file-service");
   if (!fileInput) return;
   const fileName = (fileInput.value || "").split("\\").pop();
   if (!fileName) {
@@ -254,10 +255,11 @@ function registerVendorFile() {
     return;
   }
   const dateLabel = dateInput && dateInput.value ? dateInput.value : "未設定";
-  showInlineNotice("vendor-file-notice", `${dateLabel} の回答ファイル「${fileName}」を登録する想定です。`);
+  const service = serviceInput ? serviceLabel(serviceInput.value) : "業者卸販売";
+  showInlineNotice("vendor-file-notice", `${dateLabel} の ${service} 回答ファイル「${fileName}」を登録する想定です。`);
 }
 
-function assignClient(inputId, noticeId, productId, productName, price, source) {
+function assignClient(inputId, noticeId, productId, productName, price, source, service) {
   const input = document.getElementById(inputId);
   if (!input) return;
   const selected = findClientByName(input.value);
@@ -269,23 +271,25 @@ function assignClient(inputId, noticeId, productId, productName, price, source) 
   setAssignment(productId, {
     clientId,
     clientName: client.name,
-    service: "wholesale",
+    service,
     source,
     price,
   });
-  showInlineNotice(noticeId, `${productName} を「${client.name}」の業者卸販売返送候補へ振り分けました。4番で確認できます。`);
+  showInlineNotice(noticeId, `${productName} を「${client.name}」の ${serviceLabel(service)} 返送候補へ振り分けました。4番で確認できます。`);
 }
 
 function syncVendorSelectionUI() {
   const rows = Array.from(document.querySelectorAll(".js-vendor-select-row[data-product-id]"));
   const summary = document.getElementById("vendor-selected-summary");
   const empty = document.getElementById("vendor-selection-empty");
+  const service = getQueryParam("service") || "wholesale";
+  const expectedStatus = service === "simultaneous" ? "出品中" : "査定中";
 
   rows.forEach((row) => {
     const productId = row.dataset.productId;
     const product = previewData().products?.[productId];
     const current = getItemState(productId, row.dataset.defaultStatus || product?.status || "認証待ち");
-    const visible = !current.unavailable && current.status === "査定中";
+    const visible = !current.unavailable && row.dataset.service === service && current.status === expectedStatus;
     row.style.display = visible ? "" : "none";
     const checkbox = row.querySelector(".vendor-check");
     if (!visible && checkbox) checkbox.checked = false;
@@ -305,6 +309,7 @@ function syncVendorSelectionUI() {
 }
 
 function prepareEstimateDraft(targetHref) {
+  const service = getQueryParam("service") || "wholesale";
   const selectedProducts = Array.from(document.querySelectorAll(".vendor-check:checked"))
     .map((node) => node.dataset.productId)
     .filter(Boolean);
@@ -321,6 +326,8 @@ function prepareEstimateDraft(targetHref) {
   setVendorDraft({
     vendorName,
     selectedProducts,
+    service,
+    documentType: document.getElementById("document-type")?.value || "",
     createdAt: new Date().toISOString(),
   });
   window.location.href = targetHref;
@@ -331,6 +338,8 @@ function renderVendorEstimateTemplate() {
   if (!rowsTarget) return;
   const draft = getVendorDraft();
   const vendorName = document.querySelector("[data-vendor-name]");
+  const title = document.querySelector(".doc-title");
+  const message = document.querySelector(".doc-message");
   if (!draft || !draft.selectedProducts?.length) {
     rowsTarget.innerHTML = buildDocRows([]);
     if (vendorName) vendorName.textContent = "取引先業者 御中";
@@ -342,6 +351,16 @@ function renderVendorEstimateTemplate() {
   });
   rowsTarget.innerHTML = buildDocRows(items);
   if (vendorName) vendorName.textContent = `${draft.vendorName} 御中`;
+  if (title) {
+    title.textContent = draft.service === "auction" ? "オークション依頼書" : (draft.service === "simultaneous" ? "出品管理シート" : "見積依頼書");
+  }
+  if (message) {
+    message.textContent = draft.service === "auction"
+      ? "下記の商品について、オークション出品のご確認をお願いいたします。"
+      : (draft.service === "simultaneous"
+          ? "下記の商品について、同時出品の管理内容をご確認ください。"
+          : "下記の商品について、見積のご確認をお願いいたします。");
+  }
   const total = items.reduce((sum, item) => sum + item.price, 0);
   document.querySelectorAll("[data-total-output]").forEach((node) => {
     node.textContent = formatYen(total);
@@ -359,31 +378,39 @@ function renderStage4Summary() {
     return;
   }
   if (empty) empty.hidden = true;
-  container.innerHTML = groups.map((group) => {
-    const client = previewData().clients?.[group.client];
-    const total = group.items.reduce((sum, item) => sum + item.price, 0);
-    const names = group.items.map((item) => previewData().products?.[item.product]?.name).filter(Boolean).join(" / ");
-    const sources = group.items.map((item) => item.source).join(" / ");
-    const query = encodeURIComponent(group.key);
+  const byClient = {};
+  groups.forEach((group) => {
+    if (!byClient[group.client]) byClient[group.client] = [];
+    byClient[group.client].push(group);
+  });
+  container.innerHTML = Object.entries(byClient).map(([clientId, clientGroups]) => {
+    const client = previewData().clients?.[clientId];
+    const serviceCards = clientGroups.map((group) => {
+      const total = group.items.reduce((sum, item) => sum + item.price, 0);
+      const names = group.items.map((item) => previewData().products?.[item.product]?.name).filter(Boolean).join(" / ");
+      const query = encodeURIComponent(group.key);
+      return `
+        <div class="compact-item">
+          <strong>${serviceLabel(group.service)}</strong>
+          <span>${group.items.length}点 / ${names}</span>
+          <span>合計予定金額 ${formatYen(total)}</span>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery.html?group=${query}">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template.html?group=${query}">買取明細書を作成する</a>
+          </div>
+        </div>
+      `;
+    }).join("");
     return `
       <div class="summary-card">
         <div class="summary-head">
           <div>
-            <div class="summary-client">${client?.name || "クライアント"} / ${serviceLabel(group.service)}</div>
-            <div class="summary-meta">${group.items.length}点 / 返送書類をサービス別に分けて作成します</div>
+            <div class="summary-client">${client?.name || "クライアント"}</div>
+            <div class="summary-meta">クライアントごとに、業者卸販売 / 業者オークション / 同時出品を分けて返送書類を作成します。</div>
           </div>
           <span class="pill payment">返送準備中</span>
         </div>
-        <div class="summary-card-grid">
-          <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">${names}</div></div>
-          <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">${formatYen(total)}</div></div>
-          <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
-          <div class="field-block"><div class="field-label">元データ</div><div class="field-value">${sources}</div></div>
-        </div>
-        <div class="card-actions">
-          <a class="btn btn-soft" href="documents_v2_client_delivery.html?group=${query}">返送内容を確認する</a>
-          <a class="btn btn-primary" href="documents_v2_client_statement_template.html?group=${query}">買取明細書を作成する</a>
-        </div>
+        <div class="compact-list" style="margin-top:14px;">${serviceCards}</div>
       </div>
     `;
   }).join("");
@@ -464,6 +491,50 @@ function renderStatementTemplate() {
   });
 }
 
+function renderBatchCreateMeta() {
+  const title = document.getElementById("batch-create-title");
+  if (!title) return;
+  const copy = document.getElementById("batch-create-copy");
+  const listTitle = document.getElementById("batch-create-list-title");
+  const configTitle = document.getElementById("batch-create-config-title");
+  const targetLabel = document.getElementById("batch-target-label");
+  const docType = document.getElementById("document-type");
+  const service = getQueryParam("service") || "wholesale";
+  const config = {
+    wholesale: {
+      title: "業者販売の書類を作成する",
+      copy: "業者販売へ流す商品を複数選択し、見積依頼書テンプレートへまとめて差し込みます。",
+      listTitle: "業者販売へ流す商品",
+      configTitle: "見積依頼書の設定",
+      targetLabel: "送付先業者",
+      docType: "見積依頼書",
+    },
+    auction: {
+      title: "オークション依頼書を作成する",
+      copy: "オークションへ出す商品を複数選択し、オークション依頼書テンプレートへ差し込みます。",
+      listTitle: "オークションへ出す商品",
+      configTitle: "オークション依頼書の設定",
+      targetLabel: "送付先業者",
+      docType: "オークション依頼書",
+    },
+    simultaneous: {
+      title: "同時出品の管理書類を作成する",
+      copy: "同時出品の商品を選択し、出品管理シートへ差し込みます。",
+      listTitle: "同時出品で扱う商品",
+      configTitle: "出品管理シートの設定",
+      targetLabel: "出品先",
+      docType: "出品管理シート",
+    },
+  }[service];
+  if (!config) return;
+  title.textContent = config.title;
+  if (copy) copy.textContent = config.copy;
+  if (listTitle) listTitle.textContent = config.listTitle;
+  if (configTitle) configTitle.textContent = config.configTitle;
+  if (targetLabel) targetLabel.textContent = config.targetLabel;
+  if (docType) docType.value = config.docType;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".js-product-card[data-product-id]").forEach((card) => {
     const productId = card.dataset.productId;
@@ -489,7 +560,7 @@ document.addEventListener("DOMContentLoaded", () => {
       card.style.display = "none";
     }
 
-    if (card.dataset.stage === "vendor-outgoing") {
+    if (card.dataset.stage && card.dataset.stage.startsWith("outgoing-")) {
       const expected = card.dataset.expectedStatus || "査定中";
       if ((current.status || fallbackStatus) !== expected || current.unavailable) {
         card.style.display = "none";
@@ -497,11 +568,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  const visibleVendorCards = Array.from(document.querySelectorAll('.js-product-card[data-stage="vendor-outgoing"]')).filter((card) => card.style.display !== "none");
-  const vendorEmpty = document.getElementById("vendor-outgoing-empty");
-  if (vendorEmpty) {
-    vendorEmpty.hidden = visibleVendorCards.length > 0;
-  }
+  ["wholesale", "auction", "simultaneous"].forEach((service) => {
+    const cards = Array.from(document.querySelectorAll(`.js-product-card[data-stage="outgoing-${service}"]`)).filter((card) => card.style.display !== "none");
+    const empty = document.getElementById(`outgoing-empty-${service}`);
+    if (empty) empty.hidden = cards.length > 0;
+  });
 
   document.querySelectorAll(".vendor-check").forEach((checkbox) => {
     checkbox.addEventListener("change", syncVendorSelectionUI);
@@ -515,6 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   syncVendorSelectionUI();
+  renderBatchCreateMeta();
   renderVendorEstimateTemplate();
   renderStage4Summary();
   renderClientDelivery();

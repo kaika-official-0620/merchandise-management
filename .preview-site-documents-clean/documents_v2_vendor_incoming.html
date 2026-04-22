@@ -26,53 +26,138 @@
         <div class="section-head">
           <div>
             <h3>回答ファイルを登録する</h3>
-            <p class="section-note">ファイル選択と登録ボタンは枠内に収まるようにし、登録後は同じ一覧に増えていくイメージです。</p>
+            <p class="section-note">届いた書類を登録すると、下の一覧から開く・ダウンロードする想定です。</p>
           </div>
         </div>
         <div class="form-inline">
           <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
+          <label class="field"><span>書類区分</span><select id="vendor-file-service"><option value="wholesale">業者卸販売</option><option value="auction">業者オークション</option><option value="simultaneous">同時出品</option></select></label>
           <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
           <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
         </div>
         <p id="vendor-file-notice" class="inline-notice" hidden></p>
       </div>
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <h3>登録済みの回答ファイル</h3>
-            <p class="section-note">ファイルごとに開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
-          </div>
-        </div>
-        <div class="stack">
-        <div class="file-card">
-          <div class="file-head">
+
+        <div class="section">
+          <div class="section-head">
             <div>
-              <div class="file-title">2026/04/08 ブランドセンター 回答書 No.041</div>
-              <div class="file-meta">ブランドセンター / 2026/04 / 商品 1点</div>
+              <h3>業者卸販売 の回答書類</h3>
+              <p class="section-note">届いた書類を1件ずつ開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
             </div>
-            <span class="pill approved">回答受領</span>
           </div>
-          <p class="section-note">アズール サリナPM トートバッグ</p>
-          <div class="card-actions">
-            <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_145_アズール_サリナpm_トートバッグ.html">ファイルを開く</a>
-          </div>
+          <div class="stack">
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/08 ブランドセンター 回答書 No.041</div>
+                  <div class="file-meta">ブランドセンター / 2026/04 / 業者卸販売 / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">アズール サリナPM トートバッグ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_145_アズール_サリナpm_トートバッグ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/vendor_response_item_145_アズール_サリナpm_トートバッグ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/09 ブランド市場 回答書 No.042</div>
+                  <div class="file-meta">ブランド市場 / 2026/04 / 業者卸販売 / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">レザー ムーンサイド ショルダーバッグ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_146_レザー_ムーンサイド_ショルダーバッグ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/vendor_response_item_146_レザー_ムーンサイド_ショルダーバッグ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/10 Luxe Gate 回答書 No.043</div>
+                  <div class="file-meta">Luxe Gate / 2026/04 / 業者卸販売 / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/vendor_response_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+            </div>
         </div>
 
-        <div class="file-card">
-          <div class="file-head">
+        <div class="section">
+          <div class="section-head">
             <div>
-              <div class="file-title">2026/04/09 ブランド市場 回答書 No.042</div>
-              <div class="file-meta">ブランド市場 / 2026/04 / 商品 1点</div>
+              <h3>業者オークション の回答書類</h3>
+              <p class="section-note">届いた書類を1件ずつ開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
             </div>
-            <span class="pill approved">回答受領</span>
           </div>
-          <p class="section-note">ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</p>
-          <div class="card-actions">
-            <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.html">ファイルを開く</a>
+          <div class="stack">
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/19 オークション市場 結果書 No.084</div>
+                  <div class="file-meta">オークション市場 / 2026/04 / 業者オークション / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">ゲートバッグスモール ショルダーバッグ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_auction_response_file_item_147_ゲートバッグスモール_ショルダーバッグ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/auction_response_item_147_ゲートバッグスモール_ショルダーバッグ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+            </div>
+        </div>
+
+        <div class="section">
+          <div class="section-head">
+            <div>
+              <h3>同時出品 の回答書類</h3>
+              <p class="section-note">届いた書類を1件ずつ開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
+            </div>
           </div>
+          <div class="stack">
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/23 同時出品 売却報告 No.015</div>
+                  <div class="file-meta">同時出品管理 / 2026/04 / 同時出品 / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_simultaneous_response_file_item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/simultaneous_response_item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-head">
+                <div>
+                  <div class="file-title">2026/04/24 同時出品 売却報告 No.016</div>
+                  <div class="file-meta">同時出品管理 / 2026/04 / 同時出品 / 商品 1点</div>
+                </div>
+                <span class="pill approved">回答受領</span>
+              </div>
+              <p class="section-note">ルカゴールデニムショルダーバッグ ハンドバッグ</p>
+              <div class="card-actions">
+                <a class="btn btn-soft" href="documents_v2_simultaneous_response_file_item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ.html">書類を確認する</a>
+                <a class="btn btn-outline" href="static/downloads/simultaneous_response_item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ.txt" download>ダウンロード</a>
+              </div>
+            </div>
+            </div>
         </div>
-        </div>
-      </div>
+
     </div>
 
     <script src="static/preview_data.js"></script>

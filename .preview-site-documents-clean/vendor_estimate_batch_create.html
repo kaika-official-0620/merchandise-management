@@ -3,7 +3,7 @@
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>見積依頼書を作成する</title>
+      <title>書類を作成する</title>
       <link rel="stylesheet" href="static/preview_v2.css">
 
     </head>
@@ -18,39 +18,57 @@
 
       <div class="page-head">
         <div>
-          <h1>見積依頼書を作成する</h1>
-          <p>ここでは、業者へ流したい商品をチェックして既存の見積依頼書テンプレートへ差し込みます。件名や本文ではなく、商品・送付先・テンプレートだけを整える形です。</p>
+          <h1 id="batch-create-title">書類を作成する</h1>
+          <p id="batch-create-copy">ここでは、部門ごとに送る商品をチェックして既存テンプレートへ差し込みます。件名や本文ではなく、商品・送付先・テンプレートだけを整える形です。</p>
         </div>
       </div>
       <div class="two-col">
         <div class="section">
-          <div class="section-head"><h3>見積依頼書に入れる商品</h3></div>
+          <div class="section-head"><h3 id="batch-create-list-title">書類に入れる商品</h3></div>
           <div class="select-grid">
-        <label class="select-row js-vendor-select-row" data-product-id="item_145_アズール_サリナpm_トートバッグ" data-default-status="査定中">
+        <label class="select-row js-vendor-select-row" data-product-id="item_145_アズール_サリナpm_トートバッグ" data-service="wholesale" data-default-status="査定中">
           <input class="vendor-check" type="checkbox" data-product-id="item_145_アズール_サリナpm_トートバッグ" data-product="アズール サリナPM トートバッグ" data-summary="テスト / アズール サリナPM トートバッグ / Louis Vuitton" data-brand="Louis Vuitton">
           <span class="select-main">テスト / アズール サリナPM トートバッグ</span>
-          <span class="select-sub">Louis Vuitton / 商品ID KAIKA-145 / <a href="/view/145">商品詳細を見る</a></span>
+          <span class="select-sub">Louis Vuitton / 業者卸販売 / 商品ID KAIKA-145 / <a href="/view/145">商品詳細を見る</a></span>
         </label>
 
-        <label class="select-row js-vendor-select-row" data-product-id="item_146_レザー_ムーンサイド_ショルダーバッグ" data-default-status="認証待ち">
+        <label class="select-row js-vendor-select-row" data-product-id="item_146_レザー_ムーンサイド_ショルダーバッグ" data-service="wholesale" data-default-status="認証済み">
           <input class="vendor-check" type="checkbox" data-product-id="item_146_レザー_ムーンサイド_ショルダーバッグ" data-product="レザー ムーンサイド ショルダーバッグ" data-summary="テスト / レザー ムーンサイド ショルダーバッグ / Gucci" data-brand="Gucci">
           <span class="select-main">テスト / レザー ムーンサイド ショルダーバッグ</span>
-          <span class="select-sub">Gucci / 商品ID KAIKA-146 / <a href="/view/146">商品詳細を見る</a></span>
+          <span class="select-sub">Gucci / 業者卸販売 / 商品ID KAIKA-146 / <a href="/view/146">商品詳細を見る</a></span>
         </label>
 
-        <label class="select-row js-vendor-select-row" data-product-id="item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" data-default-status="査定中">
+        <label class="select-row js-vendor-select-row" data-product-id="item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" data-service="wholesale" data-default-status="査定中">
           <input class="vendor-check" type="checkbox" data-product-id="item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ" data-product="ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ" data-summary="テスト / ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ / Fendi" data-brand="Fendi">
           <span class="select-main">テスト / ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</span>
-          <span class="select-sub">Fendi / 商品ID KAIKA-151 / <a href="/view/151">商品詳細を見る</a></span>
+          <span class="select-sub">Fendi / 業者卸販売 / 商品ID KAIKA-151 / <a href="/view/151">商品詳細を見る</a></span>
+        </label>
+
+        <label class="select-row js-vendor-select-row" data-product-id="item_147_ゲートバッグスモール_ショルダーバッグ" data-service="auction" data-default-status="査定中">
+          <input class="vendor-check" type="checkbox" data-product-id="item_147_ゲートバッグスモール_ショルダーバッグ" data-product="ゲートバッグスモール ショルダーバッグ" data-summary="テスト / ゲートバッグスモール ショルダーバッグ / Loewe" data-brand="Loewe">
+          <span class="select-main">テスト / ゲートバッグスモール ショルダーバッグ</span>
+          <span class="select-sub">Loewe / 業者オークション / 商品ID KAIKA-147 / <a href="/view/147">商品詳細を見る</a></span>
+        </label>
+
+        <label class="select-row js-vendor-select-row" data-product-id="item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ" data-service="simultaneous" data-default-status="出品中">
+          <input class="vendor-check" type="checkbox" data-product-id="item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ" data-product="Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ" data-summary="テスト / Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ / Prada" data-brand="Prada">
+          <span class="select-main">テスト / Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ</span>
+          <span class="select-sub">Prada / 同時出品 / 商品ID KAIKA-148 / <a href="/view/148">商品詳細を見る</a></span>
+        </label>
+
+        <label class="select-row js-vendor-select-row" data-product-id="item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ" data-service="simultaneous" data-default-status="出品中">
+          <input class="vendor-check" type="checkbox" data-product-id="item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ" data-product="ルカゴールデニムショルダーバッグ ハンドバッグ" data-summary="テスト / ルカゴールデニムショルダーバッグ ハンドバッグ / Balenciaga" data-brand="Balenciaga">
+          <span class="select-main">テスト / ルカゴールデニムショルダーバッグ ハンドバッグ</span>
+          <span class="select-sub">Balenciaga / 同時出品 / 商品ID KAIKA-149 / <a href="/view/149">商品詳細を見る</a></span>
         </label>
         </div>
           <p id="vendor-selection-empty" class="section-note" hidden>査定中の業者卸販売商品がないため、選択できる商品はありません。</p>
         </div>
         <div class="section">
-          <div class="section-head"><h3>見積依頼書の設定</h3></div>
+          <div class="section-head"><h3 id="batch-create-config-title">書類の設定</h3></div>
           <div class="form-grid">
-            <label class="field"><span>送付先業者</span><select id="vendor-target"><option value="">選択してください</option><option>ブランドセンター</option><option>ブランド市場</option><option>Luxe Gate</option></select></label>
-            <label class="field"><span>書類種別</span><select><option>見積依頼書</option></select></label>
+            <label class="field"><span id="batch-target-label">送付先業者</span><select id="vendor-target"><option value="">選択してください</option><option>ブランドセンター</option><option>ブランド市場</option><option>Luxe Gate</option></select></label>
+            <label class="field"><span>書類種別</span><select id="document-type"><option>見積依頼書</option><option>出品依頼書</option><option>出品管理シート</option></select></label>
             <label class="field field-wide"><span>備考</span><textarea rows="4" placeholder="必要な場合だけ備考を入力"></textarea></label>
           </div>
           <div class="mini-panel">

@@ -104,32 +104,60 @@ PRODUCTS = {
 }
 
 
-VENDOR_FILES = [
+RESPONSE_FILES = [
     {
         "slug": "documents_v2_vendor_response_file_yamada_alma.html",
+        "download": "static/downloads/vendor_response_yamada_alma.txt",
         "label": "2026/04/08 ブランドセンター 回答書 No.041",
         "month": "2026/04",
         "partner": "ブランドセンター",
+        "service": "wholesale",
         "items": [
             {"product": "lv_alma", "price": 185000, "result": "成約", "assigned_client": "山田 太郎"},
         ],
     },
     {
         "slug": "documents_v2_vendor_response_file_yamada_wallet.html",
+        "download": "static/downloads/vendor_response_yamada_wallet.txt",
         "label": "2026/04/21 Luxe Gate 回答書 No.053",
         "month": "2026/04",
         "partner": "Luxe Gate",
+        "service": "wholesale",
         "items": [
             {"product": "chanel_wallet", "price": 72000, "result": "成約", "assigned_client": "山田 太郎"},
         ],
     },
     {
         "slug": "documents_v2_vendor_response_file_sato_scarf.html",
+        "download": "static/downloads/vendor_response_sato_scarf.txt",
         "label": "2026/04/15 ブランド市場 回答書 No.052",
         "month": "2026/04",
         "partner": "ブランド市場",
+        "service": "wholesale",
         "items": [
             {"product": "hermes_scarf", "price": 58000, "result": "成約", "assigned_client": "佐藤 花子"},
+        ],
+    },
+    {
+        "slug": "documents_v2_auction_response_file_suzuki_rolex.html",
+        "download": "static/downloads/auction_response_suzuki_rolex.txt",
+        "label": "2026/04/19 オークション市場 結果書 No.088",
+        "month": "2026/04",
+        "partner": "オークション市場",
+        "service": "auction",
+        "items": [
+            {"product": "rolex_dj", "price": 710000, "result": "落札", "assigned_client": "鈴木 一郎"},
+        ],
+    },
+    {
+        "slug": "documents_v2_simultaneous_response_file_takahashi_celine.html",
+        "download": "static/downloads/simultaneous_response_takahashi_celine.txt",
+        "label": "2026/04/20 同時出品 売却報告 No.014",
+        "month": "2026/04",
+        "partner": "同時出品管理",
+        "service": "simultaneous",
+        "items": [
+            {"product": "celine_luggage", "price": 148000, "result": "売却完了", "assigned_client": "高橋 愛"},
         ],
     },
 ]
@@ -221,11 +249,11 @@ def _service_for_item(merchandise_id: int) -> str:
 
 def _status_for_item(merchandise_id: int, service: str) -> str:
     if service == "wholesale":
-        return "査定中" if merchandise_id in {145, 151} else "認証待ち"
+        return "査定中" if merchandise_id in {145, 151} else "認証済み"
     if service == "auction":
-        return "完了"
+        return "査定中"
     if service == "simultaneous":
-        return "出品中" if merchandise_id == 148 else "完了"
+        return "出品中"
     return "認証待ち"
 
 
@@ -256,7 +284,7 @@ def _copy_preview_image(photo_path: str | None, service: str, brand_name: str | 
 def _load_preview_data():
     db_path = BASE_DIR / "merchandise.db"
     if not db_path.exists():
-        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+        return CLIENTS, PRODUCTS, RESPONSE_FILES, RETURN_GROUPS
 
     preferred_ids = [145, 146, 151, 147, 148, 149]
     conn = sqlite3.connect(db_path)
@@ -273,7 +301,7 @@ def _load_preview_data():
 
     if not user_row:
         conn.close()
-        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+        return CLIENTS, PRODUCTS, RESPONSE_FILES, RETURN_GROUPS
 
     placeholders = ",".join("?" for _ in preferred_ids)
     rows = cur.execute(
@@ -311,7 +339,7 @@ def _load_preview_data():
     conn.close()
 
     if not rows:
-        return CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS
+        return CLIENTS, PRODUCTS, RESPONSE_FILES, RETURN_GROUPS
 
     client_key = "test_client"
     clients = {
@@ -323,8 +351,7 @@ def _load_preview_data():
     }
 
     products = {}
-    wholesale_items = []
-    completed_items = []
+    service_items = {"wholesale": [], "auction": [], "simultaneous": []}
 
     for row in rows:
         service = _service_for_item(row["id"])
@@ -352,20 +379,20 @@ def _load_preview_data():
             "model_number": row["model_number"] or "未登録",
         }
         products[slug] = product
-        if service == "wholesale" and status == "査定中":
-            wholesale_items.append((slug, product))
-        if status == "完了":
-            completed_items.append((slug, product))
+        service_items[service].append((slug, product))
 
-    vendor_files = []
-    for index, (product_key, product) in enumerate(wholesale_items, start=1):
-        vendor = VENDORS[(index - 1) % len(VENDORS)]
-        vendor_files.append(
+    response_files = []
+    sequence = 1
+    for product_key, product in service_items["wholesale"]:
+        vendor = VENDORS[(sequence - 1) % len(VENDORS)]
+        response_files.append(
             {
                 "slug": f"documents_v2_vendor_response_file_{product_key}.html",
-                "label": f"2026/04/{7 + index:02d} {vendor['name']} 回答書 No.{40 + index:03d}",
+                "download": f"static/downloads/vendor_response_{product_key}.txt",
+                "label": f"2026/04/{7 + sequence:02d} {vendor['name']} 回答書 No.{40 + sequence:03d}",
                 "month": "2026/04",
                 "partner": vendor["name"],
+                "service": "wholesale",
                 "items": [
                     {
                         "product": product_key,
@@ -376,6 +403,49 @@ def _load_preview_data():
                 ],
             }
         )
+        sequence += 1
+
+    for product_key, product in service_items["auction"]:
+        response_files.append(
+            {
+                "slug": f"documents_v2_auction_response_file_{product_key}.html",
+                "download": f"static/downloads/auction_response_{product_key}.txt",
+                "label": f"2026/04/{15 + sequence:02d} オークション市場 結果書 No.{80 + sequence:03d}",
+                "month": "2026/04",
+                "partner": "オークション市場",
+                "service": "auction",
+                "items": [
+                    {
+                        "product": product_key,
+                        "price": product["amount"],
+                        "result": "落札",
+                        "assigned_client": clients[client_key]["name"],
+                    }
+                ],
+            }
+        )
+        sequence += 1
+
+    for product_key, product in service_items["simultaneous"]:
+        response_files.append(
+            {
+                "slug": f"documents_v2_simultaneous_response_file_{product_key}.html",
+                "download": f"static/downloads/simultaneous_response_{product_key}.txt",
+                "label": f"2026/04/{18 + sequence:02d} 同時出品 売却報告 No.{10 + sequence:03d}",
+                "month": "2026/04",
+                "partner": "同時出品管理",
+                "service": "simultaneous",
+                "items": [
+                    {
+                        "product": product_key,
+                        "price": product["amount"],
+                        "result": "売却完了",
+                        "assigned_client": clients[client_key]["name"],
+                    }
+                ],
+            }
+        )
+        sequence += 1
 
     return_groups = {}
 
@@ -391,9 +461,9 @@ def _load_preview_data():
             }
         return return_groups[group_key]
 
-    for file_info in vendor_files:
+    for file_info in response_files:
         for item in file_info["items"]:
-            ensure_return_group("wholesale")["items"].append(
+            ensure_return_group(file_info["service"])["items"].append(
                 {
                     "product": item["product"],
                     "price": item["price"],
@@ -401,28 +471,10 @@ def _load_preview_data():
                 }
             )
 
-    for product_key, product in completed_items:
-        if product["service"] == "auction":
-            ensure_return_group("auction")["items"].append(
-                {
-                    "product": product_key,
-                    "price": product["amount"],
-                    "source": "業者オークション 落札結果",
-                }
-            )
-        elif product["service"] == "simultaneous":
-            ensure_return_group("simultaneous")["items"].append(
-                {
-                    "product": product_key,
-                    "price": product["amount"],
-                    "source": "同時出品 売却完了",
-                }
-            )
-
-    return clients, products, vendor_files, return_groups
+    return clients, products, response_files, return_groups
 
 
-CLIENTS, PRODUCTS, VENDOR_FILES, RETURN_GROUPS = _load_preview_data()
+CLIENTS, PRODUCTS, RESPONSE_FILES, RETURN_GROUPS = _load_preview_data()
 
 
 def money(value: int) -> str:
@@ -503,9 +555,9 @@ def back_bar() -> str:
 
 def top_cards() -> str:
     stage1_count = sum(len(client_products(client_id)) for client_id in CLIENTS)
-    stage2_count = len(outgoing_products())
-    stage3_count = len(VENDOR_FILES)
-    stage4_count = len(RETURN_GROUPS)
+    stage2_count = sum(len(products_for_outgoing(service)) for service in ("wholesale", "auction", "simultaneous"))
+    stage3_count = len(RESPONSE_FILES)
+    stage4_count = sum(1 for _ in RETURN_GROUPS)
     cards = [
         ("1", "クライアントから受付", "どのクライアントから何の商品が届いたかを、名前単位で確認します。", "documents_v2_client_incoming.html"),
         ("2", "開花から業者へ依頼", "査定中に切り替えた業者卸販売の商品だけをまとめて業者へ流します。", "documents_v2_vendor_outgoing.html"),
@@ -640,6 +692,7 @@ def status_controls(product_id: str, status: str, product_name: str, service: st
     badge_id = f"badge-{product_id}"
     state_id = f"state-{product_id}"
     notice_id = f"notice-{product_id}"
+    memo_id = f"memo-{product_id}"
     if service == "simultaneous":
         status_options = ["認証待ち", "認証済み", "出品中", "入金待ち", "完了"]
     else:
@@ -662,6 +715,13 @@ def status_controls(product_id: str, status: str, product_name: str, service: st
       </div>
       <div class="status-row">
         <button class="btn btn-outline" type="button" onclick="notifyUnavailable('{notice_id}','{badge_id}','{state_id}','card-{product_id}','{escape(product_name)}')">受付不可を通知する</button>
+      </div>
+      <div class="field field-wide" style="margin-top:10px;">
+        <span>クライアントへ送るメモ</span>
+        <textarea id="{memo_id}" rows="3" placeholder="例：状態変更の理由や補足内容を入力してください"></textarea>
+      </div>
+      <div class="status-row">
+        <button class="btn btn-soft" type="button" onclick="sendMemo('{memo_id}','{notice_id}','{product_id}','{escape(product_name)}')">メモを送信する</button>
       </div>
       <p id="{notice_id}" class="inline-notice" hidden></p>
     </div>
@@ -773,25 +833,35 @@ def product_detail_page(product_id: str) -> str:
     )
 
 
-def outgoing_products() -> list[dict]:
-    items = []
-    for product_id, product in PRODUCTS.items():
-        if product["service"] != "wholesale" or product["status"] != "査定中":
-            continue
-        item = dict(product)
-        item["id"] = product_id
-        items.append(item)
-    return items
+def products_for_outgoing(service: str) -> list[dict]:
+    return products_for_service(service)
 
 
-def stage2_page() -> str:
+def outgoing_expected_status(service: str) -> str:
+    return "出品中" if service == "simultaneous" else "査定中"
+
+
+def outgoing_button_label(service: str) -> str:
+    return {
+        "wholesale": "業者向け見積依頼書を作成する",
+        "auction": "オークション依頼書を作成する",
+        "simultaneous": "出品管理シートを作成する",
+    }[service]
+
+
+def outgoing_section(service: str) -> str:
+    descriptions = {
+        "wholesale": "査定中にした業者卸販売の商品をまとめて選択し、複数の業者へ流す見積依頼書を作成します。",
+        "auction": "査定中にした業者オークションの商品をまとめて選択し、オークション出品用の依頼書を作成します。",
+        "simultaneous": "出品中にした同時出品の商品を選択し、出品管理用の書類を作成します。",
+    }
     cards = []
-    for product in wholesale_products():
+    for product in products_for_outgoing(service):
         client = CLIENTS[product["client"]]
         detail_href = product_detail_href(product)
         cards.append(
             f"""
-            <div class="product-card js-product-card" data-product-id="{product['id']}" data-service="{product['service']}" data-default-status="{product['status']}" data-stage="vendor-outgoing" data-expected-status="査定中">
+            <div class="product-card js-product-card" data-product-id="{product['id']}" data-service="{product['service']}" data-default-status="{product['status']}" data-stage="outgoing-{service}" data-expected-status="{outgoing_expected_status(service)}">
               <div class="product-thumb">
                 <img src="{product['image']}" alt="{escape(product['name'])}">
               </div>
@@ -801,17 +871,38 @@ def stage2_page() -> str:
                     <div class="product-title">{product['name']}</div>
                     <div class="product-meta">{client['name']} / {product['brand']} / {SERVICE_LABELS[product['service']]} / 商品ID {product['code']}</div>
                   </div>
-                  <span class="pill appraising">査定中</span>
+                  <span class="pill {status_class(product['status'])}">{product['status']}</span>
                 </div>
                 <div class="detail-grid">
                   <div class="field-block"><div class="field-label">画像確認</div><div class="field-value"><a href="{detail_href}">商品詳細を見る</a></div></div>
-                  <div class="field-block"><div class="field-label">送付先候補</div><div class="field-value">ブランドセンター / ブランド市場</div></div>
-                  <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">この商品を選んで、業者向け見積依頼書へまとめて差し込みます</div></div>
+                  <div class="field-block"><div class="field-label">申請元クライアント</div><div class="field-value">{client['name']}</div></div>
+                  <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">{descriptions[service]}</div></div>
                 </div>
               </div>
             </div>
             """
         )
+    return f"""
+    <div class="section">
+      <div class="section-head">
+        <div>
+          <h3>{SERVICE_LABELS[service]} へ進める商品</h3>
+          <p class="section-note">{descriptions[service]}</p>
+        </div>
+      </div>
+      <div class="stack">
+        {''.join(cards)}
+      </div>
+      <p id="outgoing-empty-{service}" class="section-note" hidden>この部門で進行できる商品はありません。1番で状態を更新するとここに表示されます。</p>
+      <div class="card-actions" style="margin-top:18px;">
+        <a class="btn btn-outline" href="vendor_partner_registry.html">送付先業者を登録・編集する</a>
+        <a class="btn btn-primary" href="vendor_estimate_batch_create.html?service={service}">{outgoing_button_label(service)}</a>
+      </div>
+    </div>
+    """
+
+
+def stage2_page() -> str:
     return page(
         "2. 開花から業者へ依頼",
         f"""
@@ -820,25 +911,12 @@ def stage2_page() -> str:
           <div class="page-head">
             <div>
               <h1>2. 開花から業者へ依頼</h1>
-              <p>1番で査定中に切り替えた業者卸販売の商品だけがここへ集まります。複数クライアント分の商品を選んで、まとめて業者向け見積依頼書を作成します。</p>
+              <p>ここでは、1番で進行可能にした商品を部門ごとに整理して、まとめて書類を作成します。却下していない商品だけを選び、複数商品・複数取引先へ流せる前提の画面です。</p>
             </div>
           </div>
-          <div class="section">
-              <div class="section-head">
-                <div>
-                  <h3>業者へ流す商品一覧</h3>
-                  <p class="section-note">1番で業者卸販売の商品の状態を査定中にしたものだけをここで扱います。複数クライアントの商品をまとめて見積依頼書に入れられます。</p>
-                </div>
-              </div>
-              <div class="stack">
-                {''.join(cards)}
-              </div>
-            <p id="vendor-outgoing-empty" class="section-note" hidden>現在、業者へ流す商品はありません。1番で業者卸販売の商品を査定中にすると、ここへ表示されます。</p>
-            <div class="card-actions" style="margin-top: 18px;">
-              <a class="btn btn-outline" href="vendor_partner_registry.html">送付先業者を登録・編集する</a>
-              <a class="btn btn-primary" href="vendor_estimate_batch_create.html">見積依頼書を作成する</a>
-            </div>
-          </div>
+          {outgoing_section("wholesale")}
+          {outgoing_section("auction")}
+          {outgoing_section("simultaneous")}
         </div>
         """,
     )
@@ -893,41 +971,41 @@ def vendor_registry_page() -> str:
 
 def batch_create_page() -> str:
     rows = []
-    for product in wholesale_products():
+    for product in products_for_service():
         client = CLIENTS[product["client"]]
         detail_href = product_detail_href(product)
         rows.append(
             f"""
-            <label class="select-row js-vendor-select-row" data-product-id="{product['id']}" data-default-status="{product['status']}">
+            <label class="select-row js-vendor-select-row" data-product-id="{product['id']}" data-service="{product['service']}" data-default-status="{product['status']}">
               <input class="vendor-check" type="checkbox" data-product-id="{product['id']}" data-product="{escape(product['name'])}" data-summary="{client['name']} / {product['name']} / {product['brand']}" data-brand="{product['brand']}">
               <span class="select-main">{client['name']} / {product['name']}</span>
-              <span class="select-sub">{product['brand']} / 商品ID {product['code']} / <a href="{detail_href}">商品詳細を見る</a></span>
+              <span class="select-sub">{product['brand']} / {SERVICE_LABELS[product['service']]} / 商品ID {product['code']} / <a href="{detail_href}">商品詳細を見る</a></span>
             </label>
             """
         )
     vendor_options = "".join(f'<option>{vendor["name"]}</option>' for vendor in VENDORS)
     return page(
-        "見積依頼書を作成する",
+        "書類を作成する",
         f"""
         <div class="page">
           {back_bar()}
           <div class="page-head">
             <div>
-              <h1>見積依頼書を作成する</h1>
-              <p>ここでは、業者へ流したい商品をチェックして既存の見積依頼書テンプレートへ差し込みます。件名や本文ではなく、商品・送付先・テンプレートだけを整える形です。</p>
+              <h1 id="batch-create-title">書類を作成する</h1>
+              <p id="batch-create-copy">ここでは、部門ごとに送る商品をチェックして既存テンプレートへ差し込みます。件名や本文ではなく、商品・送付先・テンプレートだけを整える形です。</p>
             </div>
           </div>
           <div class="two-col">
             <div class="section">
-              <div class="section-head"><h3>見積依頼書に入れる商品</h3></div>
+              <div class="section-head"><h3 id="batch-create-list-title">書類に入れる商品</h3></div>
               <div class="select-grid">{''.join(rows)}</div>
               <p id="vendor-selection-empty" class="section-note" hidden>査定中の業者卸販売商品がないため、選択できる商品はありません。</p>
             </div>
             <div class="section">
-              <div class="section-head"><h3>見積依頼書の設定</h3></div>
+              <div class="section-head"><h3 id="batch-create-config-title">書類の設定</h3></div>
               <div class="form-grid">
-                <label class="field"><span>送付先業者</span><select id="vendor-target"><option value="">選択してください</option>{vendor_options}</select></label>
-                <label class="field"><span>書類種別</span><select><option>見積依頼書</option></select></label>
+                <label class="field"><span id="batch-target-label">送付先業者</span><select id="vendor-target"><option value="">選択してください</option>{vendor_options}</select></label>
+                <label class="field"><span>書類種別</span><select id="document-type"><option>見積依頼書</option><option>出品依頼書</option><option>出品管理シート</option></select></label>
                 <label class="field field-wide"><span>備考</span><textarea rows="4" placeholder="必要な場合だけ備考を入力"></textarea></label>
               </div>
               <div class="mini-panel">
@@ -1051,23 +1129,39 @@ def estimate_template_page() -> str:
 
 
 def stage3_page() -> str:
-    file_cards = []
-    for file_info in VENDOR_FILES:
-        products = " / ".join(PRODUCTS[item["product"]]["name"] for item in file_info["items"])
-        file_cards.append(
-            f"""
-            <div class="file-card">
-              <div class="file-head">
-                <div>
-                  <div class="file-title">{file_info['label']}</div>
-                  <div class="file-meta">{file_info['partner']} / {file_info['month']} / 商品 {len(file_info['items'])}点</div>
+    sections = []
+    for service in ("wholesale", "auction", "simultaneous"):
+        cards = []
+        for file_info in [item for item in RESPONSE_FILES if item["service"] == service]:
+            products = " / ".join(PRODUCTS[item["product"]]["name"] for item in file_info["items"])
+            cards.append(
+                f"""
+                <div class="file-card">
+                  <div class="file-head">
+                    <div>
+                      <div class="file-title">{file_info['label']}</div>
+                      <div class="file-meta">{file_info['partner']} / {file_info['month']} / {SERVICE_LABELS[file_info['service']]} / 商品 {len(file_info['items'])}点</div>
+                    </div>
+                    <span class="pill approved">回答受領</span>
+                  </div>
+                  <p class="section-note">{products}</p>
+                  <div class="card-actions">
+                    <a class="btn btn-soft" href="{file_info['slug']}">書類を確認する</a>
+                    <a class="btn btn-outline" href="{file_info['download']}" download>ダウンロード</a>
+                  </div>
                 </div>
-                <span class="pill approved">回答受領</span>
+                """
+            )
+        sections.append(
+            f"""
+            <div class="section">
+              <div class="section-head">
+                <div>
+                  <h3>{SERVICE_LABELS[service]} の回答書類</h3>
+                  <p class="section-note">届いた書類を1件ずつ開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
+                </div>
               </div>
-              <p class="section-note">{products}</p>
-              <div class="card-actions">
-                <a class="btn btn-soft" href="{file_info['slug']}">ファイルを開く</a>
-              </div>
+              <div class="stack">{''.join(cards)}</div>
             </div>
             """
         )
@@ -1086,25 +1180,18 @@ def stage3_page() -> str:
             <div class="section-head">
               <div>
                 <h3>回答ファイルを登録する</h3>
-                <p class="section-note">ファイル選択と登録ボタンは枠内に収まるようにし、登録後は同じ一覧に増えていくイメージです。</p>
+                <p class="section-note">届いた書類を登録すると、下の一覧から開く・ダウンロードする想定です。</p>
               </div>
             </div>
             <div class="form-inline">
               <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
+              <label class="field"><span>書類区分</span><select id="vendor-file-service"><option value="wholesale">業者卸販売</option><option value="auction">業者オークション</option><option value="simultaneous">同時出品</option></select></label>
               <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
               <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
             </div>
             <p id="vendor-file-notice" class="inline-notice" hidden></p>
           </div>
-          <div class="section">
-            <div class="section-head">
-              <div>
-                <h3>登録済みの回答ファイル</h3>
-                <p class="section-note">ファイルごとに開き、商品ごとの売却額とクライアント振り分けを確認します。</p>
-              </div>
-            </div>
-            <div class="stack">{''.join(file_cards)}</div>
-          </div>
+          {''.join(sections)}
         </div>
         """,
     )
@@ -1128,7 +1215,7 @@ def vendor_file_page(file_info: dict) -> str:
                 <datalist id="{datalist_id}">{options}</datalist>
               </td>
               <td>
-                <button class="btn btn-soft" type="button" onclick="assignClient('assign-{item['product']}','assign-note-{item['product']}','{item['product']}','{escape(product['name'])}',{item['price']},'{escape(file_info['label'])}')">振り分ける</button>
+                <button class="btn btn-soft" type="button" onclick="assignClient('assign-{item['product']}','assign-note-{item['product']}','{item['product']}','{escape(product['name'])}',{item['price']},'{escape(file_info['label'])}','{file_info['service']}')">振り分ける</button>
               </td>
             </tr>
             <tr class="note-row">
@@ -1148,12 +1235,18 @@ def vendor_file_page(file_info: dict) -> str:
           <div class="page-head">
             <div>
               <h1>{file_info['label']}</h1>
-              <p>{file_info['partner']} から届いた回答ファイルを開き、商品ごとにどのクライアントへ返送するかを決める画面です。</p>
+              <p>{SERVICE_LABELS[file_info['service']]} として届いた書類を確認し、商品ごとにどのクライアントへ返送するかを決める画面です。</p>
             </div>
           </div>
           <div class="two-col">
             <div class="section">
-              <div class="section-head"><h3>ファイルの中身を確認</h3></div>
+              <div class="section-head">
+                <div>
+                  <h3>ファイルの中身を確認</h3>
+                  <p class="section-note">この書類は別タブで開く・ダウンロードする想定です。</p>
+                </div>
+                <a class="btn btn-outline" href="{file_info['download']}" download>ダウンロード</a>
+              </div>
               <div class="file-preview">
                 <div class="file-preview-head">回答ファイル プレビュー</div>
                 <table class="simple-table">
@@ -1402,7 +1495,7 @@ PREVIEW_JS = """
 const PREVIEW_STORAGE_KEY = "documentsPreviewStateV4";
 
 function previewData() {
-  return window.DOCUMENTS_PREVIEW_DATA || { clients: {}, products: {}, vendors: [], vendorFiles: [], serviceLabels: {} };
+  return window.DOCUMENTS_PREVIEW_DATA || { clients: {}, products: {}, vendors: [], responseFiles: [], serviceLabels: {} };
 }
 
 function normalizeState(raw) {
@@ -1466,7 +1559,7 @@ function getAssignments() {
 
 function defaultAssignments() {
   const assignments = {};
-  (previewData().vendorFiles || []).forEach((fileInfo) => {
+  (previewData().responseFiles || []).forEach((fileInfo) => {
     (fileInfo.items || []).forEach((item) => {
       const selected = findClientByName(item.assigned_client || "");
       if (!selected) return;
@@ -1474,13 +1567,18 @@ function defaultAssignments() {
       assignments[item.product] = {
         clientId,
         clientName: client.name,
-        service: "wholesale",
+        service: fileInfo.service,
         source: fileInfo.label,
         price: item.price,
       };
     });
   });
   return assignments;
+}
+
+function getQueryParam(name) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(name) || "";
 }
 
 function showInlineNotice(id, message) {
@@ -1554,35 +1652,15 @@ function buildDocRows(items) {
 }
 
 function buildReturnGroups() {
-  const data = previewData();
   const assignments = { ...defaultAssignments(), ...getAssignments() };
   const groups = {};
-
-  Object.entries(data.products || {}).forEach(([productId, product]) => {
+  Object.entries(assignments).forEach(([productId, assignment]) => {
+    const product = previewData().products?.[productId];
+    if (!product) return;
     const current = getItemState(productId, product.status || "認証待ち");
     if (current.unavailable) return;
-
-    let clientId = product.client;
-    let service = product.service;
-    let source = "";
-    let price = Number(product.amount) || 0;
-
-    if (service === "wholesale") {
-      const assignment = assignments[productId];
-      if (!assignment) return;
-      clientId = assignment.clientId || product.client;
-      source = assignment.source || "業者回答書";
-      price = Number(assignment.price) || price;
-    } else if (service === "auction") {
-      if (current.status !== "完了") return;
-      source = "業者オークション 落札結果";
-    } else if (service === "simultaneous") {
-      if (current.status !== "完了") return;
-      source = "同時出品 売却完了";
-    } else {
-      return;
-    }
-
+    const clientId = assignment.clientId || product.client;
+    const service = assignment.service || product.service;
     const key = `${clientId}__${service}`;
     if (!groups[key]) {
       groups[key] = {
@@ -1592,7 +1670,11 @@ function buildReturnGroups() {
         items: [],
       };
     }
-    groups[key].items.push({ product: productId, price, source });
+    groups[key].items.push({
+      product: productId,
+      price: Number(assignment.price) || Number(product.amount) || 0,
+      source: assignment.source || "回答書類",
+    });
   });
 
   return Object.values(groups).sort((left, right) => {
@@ -1645,9 +1727,21 @@ function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
   }
 }
 
+function sendMemo(textareaId, noticeId, productId, productName) {
+  const textarea = document.getElementById(textareaId);
+  const message = (textarea?.value || "").trim();
+  if (!message) {
+    showInlineNotice(noticeId, "送信するメモを入力してください。");
+    return;
+  }
+  setItemState(productId, { memo: message });
+  showInlineNotice(noticeId, `${productName} についてクライアントへメモを送信する想定です。内容: ${message}`);
+}
+
 function registerVendorFile() {
   const fileInput = document.getElementById("vendor-file");
   const dateInput = document.getElementById("vendor-file-date");
+  const serviceInput = document.getElementById("vendor-file-service");
   if (!fileInput) return;
   const fileName = (fileInput.value || "").split("\\\\").pop();
   if (!fileName) {
@@ -1655,10 +1749,11 @@ function registerVendorFile() {
     return;
   }
   const dateLabel = dateInput && dateInput.value ? dateInput.value : "未設定";
-  showInlineNotice("vendor-file-notice", `${dateLabel} の回答ファイル「${fileName}」を登録する想定です。`);
+  const service = serviceInput ? serviceLabel(serviceInput.value) : "業者卸販売";
+  showInlineNotice("vendor-file-notice", `${dateLabel} の ${service} 回答ファイル「${fileName}」を登録する想定です。`);
 }
 
-function assignClient(inputId, noticeId, productId, productName, price, source) {
+function assignClient(inputId, noticeId, productId, productName, price, source, service) {
   const input = document.getElementById(inputId);
   if (!input) return;
   const selected = findClientByName(input.value);
@@ -1670,23 +1765,25 @@ function assignClient(inputId, noticeId, productId, productName, price, source) 
   setAssignment(productId, {
     clientId,
     clientName: client.name,
-    service: "wholesale",
+    service,
     source,
     price,
   });
-  showInlineNotice(noticeId, `${productName} を「${client.name}」の業者卸販売返送候補へ振り分けました。4番で確認できます。`);
+  showInlineNotice(noticeId, `${productName} を「${client.name}」の ${serviceLabel(service)} 返送候補へ振り分けました。4番で確認できます。`);
 }
 
 function syncVendorSelectionUI() {
   const rows = Array.from(document.querySelectorAll(".js-vendor-select-row[data-product-id]"));
   const summary = document.getElementById("vendor-selected-summary");
   const empty = document.getElementById("vendor-selection-empty");
+  const service = getQueryParam("service") || "wholesale";
+  const expectedStatus = service === "simultaneous" ? "出品中" : "査定中";
 
   rows.forEach((row) => {
     const productId = row.dataset.productId;
     const product = previewData().products?.[productId];
     const current = getItemState(productId, row.dataset.defaultStatus || product?.status || "認証待ち");
-    const visible = !current.unavailable && current.status === "査定中";
+    const visible = !current.unavailable && row.dataset.service === service && current.status === expectedStatus;
     row.style.display = visible ? "" : "none";
     const checkbox = row.querySelector(".vendor-check");
     if (!visible && checkbox) checkbox.checked = false;
@@ -1706,6 +1803,7 @@ function syncVendorSelectionUI() {
 }
 
 function prepareEstimateDraft(targetHref) {
+  const service = getQueryParam("service") || "wholesale";
   const selectedProducts = Array.from(document.querySelectorAll(".vendor-check:checked"))
     .map((node) => node.dataset.productId)
     .filter(Boolean);
@@ -1722,6 +1820,8 @@ function prepareEstimateDraft(targetHref) {
   setVendorDraft({
     vendorName,
     selectedProducts,
+    service,
+    documentType: document.getElementById("document-type")?.value || "",
     createdAt: new Date().toISOString(),
   });
   window.location.href = targetHref;
@@ -1732,6 +1832,8 @@ function renderVendorEstimateTemplate() {
   if (!rowsTarget) return;
   const draft = getVendorDraft();
   const vendorName = document.querySelector("[data-vendor-name]");
+  const title = document.querySelector(".doc-title");
+  const message = document.querySelector(".doc-message");
   if (!draft || !draft.selectedProducts?.length) {
     rowsTarget.innerHTML = buildDocRows([]);
     if (vendorName) vendorName.textContent = "取引先業者 御中";
@@ -1743,6 +1845,16 @@ function renderVendorEstimateTemplate() {
   });
   rowsTarget.innerHTML = buildDocRows(items);
   if (vendorName) vendorName.textContent = `${draft.vendorName} 御中`;
+  if (title) {
+    title.textContent = draft.service === "auction" ? "オークション依頼書" : (draft.service === "simultaneous" ? "出品管理シート" : "見積依頼書");
+  }
+  if (message) {
+    message.textContent = draft.service === "auction"
+      ? "下記の商品について、オークション出品のご確認をお願いいたします。"
+      : (draft.service === "simultaneous"
+          ? "下記の商品について、同時出品の管理内容をご確認ください。"
+          : "下記の商品について、見積のご確認をお願いいたします。");
+  }
   const total = items.reduce((sum, item) => sum + item.price, 0);
   document.querySelectorAll("[data-total-output]").forEach((node) => {
     node.textContent = formatYen(total);
@@ -1760,31 +1872,39 @@ function renderStage4Summary() {
     return;
   }
   if (empty) empty.hidden = true;
-  container.innerHTML = groups.map((group) => {
-    const client = previewData().clients?.[group.client];
-    const total = group.items.reduce((sum, item) => sum + item.price, 0);
-    const names = group.items.map((item) => previewData().products?.[item.product]?.name).filter(Boolean).join(" / ");
-    const sources = group.items.map((item) => item.source).join(" / ");
-    const query = encodeURIComponent(group.key);
+  const byClient = {};
+  groups.forEach((group) => {
+    if (!byClient[group.client]) byClient[group.client] = [];
+    byClient[group.client].push(group);
+  });
+  container.innerHTML = Object.entries(byClient).map(([clientId, clientGroups]) => {
+    const client = previewData().clients?.[clientId];
+    const serviceCards = clientGroups.map((group) => {
+      const total = group.items.reduce((sum, item) => sum + item.price, 0);
+      const names = group.items.map((item) => previewData().products?.[item.product]?.name).filter(Boolean).join(" / ");
+      const query = encodeURIComponent(group.key);
+      return `
+        <div class="compact-item">
+          <strong>${serviceLabel(group.service)}</strong>
+          <span>${group.items.length}点 / ${names}</span>
+          <span>合計予定金額 ${formatYen(total)}</span>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_client_delivery.html?group=${query}">返送内容を確認する</a>
+            <a class="btn btn-primary" href="documents_v2_client_statement_template.html?group=${query}">買取明細書を作成する</a>
+          </div>
+        </div>
+      `;
+    }).join("");
     return `
       <div class="summary-card">
         <div class="summary-head">
           <div>
-            <div class="summary-client">${client?.name || "クライアント"} / ${serviceLabel(group.service)}</div>
-            <div class="summary-meta">${group.items.length}点 / 返送書類をサービス別に分けて作成します</div>
+            <div class="summary-client">${client?.name || "クライアント"}</div>
+            <div class="summary-meta">クライアントごとに、業者卸販売 / 業者オークション / 同時出品を分けて返送書類を作成します。</div>
           </div>
           <span class="pill payment">返送準備中</span>
         </div>
-        <div class="summary-card-grid">
-          <div class="field-block"><div class="field-label">対象商品</div><div class="field-value">${names}</div></div>
-          <div class="field-block"><div class="field-label">合計予定金額</div><div class="field-value">${formatYen(total)}</div></div>
-          <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書</div></div>
-          <div class="field-block"><div class="field-label">元データ</div><div class="field-value">${sources}</div></div>
-        </div>
-        <div class="card-actions">
-          <a class="btn btn-soft" href="documents_v2_client_delivery.html?group=${query}">返送内容を確認する</a>
-          <a class="btn btn-primary" href="documents_v2_client_statement_template.html?group=${query}">買取明細書を作成する</a>
-        </div>
+        <div class="compact-list" style="margin-top:14px;">${serviceCards}</div>
       </div>
     `;
   }).join("");
@@ -1865,6 +1985,50 @@ function renderStatementTemplate() {
   });
 }
 
+function renderBatchCreateMeta() {
+  const title = document.getElementById("batch-create-title");
+  if (!title) return;
+  const copy = document.getElementById("batch-create-copy");
+  const listTitle = document.getElementById("batch-create-list-title");
+  const configTitle = document.getElementById("batch-create-config-title");
+  const targetLabel = document.getElementById("batch-target-label");
+  const docType = document.getElementById("document-type");
+  const service = getQueryParam("service") || "wholesale";
+  const config = {
+    wholesale: {
+      title: "業者販売の書類を作成する",
+      copy: "業者販売へ流す商品を複数選択し、見積依頼書テンプレートへまとめて差し込みます。",
+      listTitle: "業者販売へ流す商品",
+      configTitle: "見積依頼書の設定",
+      targetLabel: "送付先業者",
+      docType: "見積依頼書",
+    },
+    auction: {
+      title: "オークション依頼書を作成する",
+      copy: "オークションへ出す商品を複数選択し、オークション依頼書テンプレートへ差し込みます。",
+      listTitle: "オークションへ出す商品",
+      configTitle: "オークション依頼書の設定",
+      targetLabel: "送付先業者",
+      docType: "オークション依頼書",
+    },
+    simultaneous: {
+      title: "同時出品の管理書類を作成する",
+      copy: "同時出品の商品を選択し、出品管理シートへ差し込みます。",
+      listTitle: "同時出品で扱う商品",
+      configTitle: "出品管理シートの設定",
+      targetLabel: "出品先",
+      docType: "出品管理シート",
+    },
+  }[service];
+  if (!config) return;
+  title.textContent = config.title;
+  if (copy) copy.textContent = config.copy;
+  if (listTitle) listTitle.textContent = config.listTitle;
+  if (configTitle) configTitle.textContent = config.configTitle;
+  if (targetLabel) targetLabel.textContent = config.targetLabel;
+  if (docType) docType.value = config.docType;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".js-product-card[data-product-id]").forEach((card) => {
     const productId = card.dataset.productId;
@@ -1890,7 +2054,7 @@ document.addEventListener("DOMContentLoaded", () => {
       card.style.display = "none";
     }
 
-    if (card.dataset.stage === "vendor-outgoing") {
+    if (card.dataset.stage && card.dataset.stage.startsWith("outgoing-")) {
       const expected = card.dataset.expectedStatus || "査定中";
       if ((current.status || fallbackStatus) !== expected || current.unavailable) {
         card.style.display = "none";
@@ -1898,11 +2062,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  const visibleVendorCards = Array.from(document.querySelectorAll('.js-product-card[data-stage="vendor-outgoing"]')).filter((card) => card.style.display !== "none");
-  const vendorEmpty = document.getElementById("vendor-outgoing-empty");
-  if (vendorEmpty) {
-    vendorEmpty.hidden = visibleVendorCards.length > 0;
-  }
+  ["wholesale", "auction", "simultaneous"].forEach((service) => {
+    const cards = Array.from(document.querySelectorAll(`.js-product-card[data-stage="outgoing-${service}"]`)).filter((card) => card.style.display !== "none");
+    const empty = document.getElementById(`outgoing-empty-${service}`);
+    if (empty) empty.hidden = cards.length > 0;
+  });
 
   document.querySelectorAll(".vendor-check").forEach((checkbox) => {
     checkbox.addEventListener("change", syncVendorSelectionUI);
@@ -1916,6 +2080,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   syncVendorSelectionUI();
+  renderBatchCreateMeta();
   renderVendorEstimateTemplate();
   renderStage4Summary();
   renderClientDelivery();
@@ -1992,6 +2157,30 @@ def redirect_html(url: str) -> str:
     return f'<!DOCTYPE html><meta http-equiv="refresh" content="0; url={url}">'
 
 
+def response_file_download_content(file_info: dict) -> str:
+    lines = [
+        file_info["label"],
+        f"区分: {SERVICE_LABELS[file_info['service']]}",
+        f"取引先: {file_info['partner']}",
+        f"対象月: {file_info['month']}",
+        "",
+    ]
+    for idx, item in enumerate(file_info["items"], start=1):
+        product = PRODUCTS[item["product"]]
+        lines.extend(
+            [
+                f"No.{idx}",
+                f"商品名: {product['name']}",
+                f"ブランド: {product['brand']}",
+                f"売却額: {money(item['price'])}",
+                f"結果: {item['result']}",
+                f"初期振り分け先: {item['assigned_client']}",
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def build() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -2000,7 +2189,7 @@ def build() -> None:
         "clients": CLIENTS,
         "products": PRODUCTS,
         "vendors": VENDORS,
-        "vendorFiles": VENDOR_FILES,
+        "responseFiles": RESPONSE_FILES,
         "serviceLabels": SERVICE_LABELS,
     }
     write_text(STATIC_DIR / "preview_data.js", f"window.DOCUMENTS_PREVIEW_DATA = {json.dumps(preview_payload, ensure_ascii=False)};")
@@ -2042,8 +2231,9 @@ def build() -> None:
     write_text(OUTPUT_DIR / "vendor_estimate_batch_create.html", batch_create_page())
     write_text(OUTPUT_DIR / "documents_v2_vendor_estimate_template.html", estimate_template_page())
     write_text(OUTPUT_DIR / "documents_v2_vendor_incoming.html", stage3_page())
-    for file_info in VENDOR_FILES:
+    for file_info in RESPONSE_FILES:
         write_text(OUTPUT_DIR / file_info["slug"], vendor_file_page(file_info))
+        write_text(OUTPUT_DIR / file_info["download"], response_file_download_content(file_info))
 
     write_text(OUTPUT_DIR / "documents_v2_client_outgoing.html", stage4_page())
     write_text(OUTPUT_DIR / "documents_v2_client_delivery.html", client_delivery_page())
