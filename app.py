@@ -7210,6 +7210,27 @@ def reports():
                            show_client_list=report_context['show_client_list'])
 
 
+@app.route('/reports/client-analytics')
+@login_required
+def client_analytics_reports():
+    """管理側のクライアント別売上分析一覧"""
+    if not can_view_all_reports():
+        flash('このページは管理画面からのみ利用できます。', 'error')
+        return redirect(url_for('reports'))
+
+    report_context = resolve_report_target_context()
+    analysis_clients = report_context.get('available_users') or []
+    client_count = len(analysis_clients)
+    total_item_count = sum(safe_int(client.get('item_count')) for client in analysis_clients)
+
+    return render_template(
+        'client_analytics_reports.html',
+        analysis_clients=analysis_clients,
+        client_count=client_count,
+        total_item_count=total_item_count,
+    )
+
+
 @app.route('/api/report-v2/<report_type>')
 @login_required
 def api_report_v2(report_type):

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}クライアント売上分析 - 株式会社開花{% endblock %}
+
+{% block content %}
+<div class="client-analytics-reports-page">
+    <div class="page-header">
+        <div>
+            <h1>クライアント売上分析</h1>
+            <p class="page-desc">各クライアントごとの売上分析ページへ進めます。売上や利益、在庫状況は「分析を見る」から確認できます。</p>
+        </div>
+        <div class="page-header-actions">
+            <a href="{{ url_for('reports') }}" class="report-link-button report-link-button--subtle">レポート一覧へ戻る</a>
+            <a href="{{ url_for('user_analytics') }}" class="report-link-button">全体売上分析を見る</a>
+        </div>
+    </div>
+
+    <section class="client-analytics-summary-grid">
+        <article class="client-analytics-summary-card">
+            <span class="client-analytics-summary-label">クライアント数</span>
+            <strong class="client-analytics-summary-value">{{ client_count }}</strong>
+        </article>
+        <article class="client-analytics-summary-card">
+            <span class="client-analytics-summary-label">登録商品数</span>
+            <strong class="client-analytics-summary-value">{{ total_item_count }}</strong>
+        </article>
+    </section>
+
+    <section class="client-analytics-section">
+        <div class="client-analytics-section-header">
+            <h2>クライアント一覧</h2>
+            <p>「分析を見る」から、そのクライアントの売上分析ページへ進めます。</p>
+        </div>
+
+        {% if analysis_clients %}
+        <div class="client-analytics-table-shell">
+            <div class="client-analytics-table-wrapper">
+                <table class="client-analytics-table">
+                    <thead>
+                        <tr>
+                            <th>クライアント名</th>
+                            <th>ユーザー名</th>
+                            <th class="text-right">商品数</th>
+                            <th class="text-center">分析</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for client in analysis_clients %}
+                        <tr>
+                            <td>{{ client.display_name }}</td>
+                            <td>{{ client.username }}</td>
+                            <td class="text-right">{{ client.item_count }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('user_analytics', client_id=client.id, from_client_reports=1) }}" class="client-analysis-report-link">分析を見る</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="client-analytics-empty">表示できるクライアントがまだありません。</div>
+        {% endif %}
+    </section>
+</div>
+
+<style>
+.client-analytics-reports-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.client-analytics-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 240px));
+    gap: 1rem;
+}
+
+.client-analytics-summary-card,
+.client-analytics-section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.client-analytics-summary-card {
+    padding: 1.1rem 1.15rem;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.client-analytics-summary-label {
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.client-analytics-summary-value {
+    color: #0f172a;
+    font-size: 1.45rem;
+    line-height: 1.3;
+}
+
+.client-analytics-section {
+    padding: 1.35rem;
+}
+
+.client-analytics-section-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.client-analytics-section-header h2 {
+    margin: 0;
+}
+
+.client-analytics-section-header p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+.client-analytics-table-shell {
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+}
+
+.client-analytics-table-wrapper {
+    overflow-x: auto;
+}
+
+.client-analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+}
+
+.client-analytics-table th,
+.client-analytics-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.client-analytics-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.84rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.client-analytics-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.client-analysis-report-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.client-analysis-report-link:hover {
+    background: #dbeafe;
+}
+
+.client-analytics-empty {
+    padding: 1rem 0.25rem 0.15rem;
+    color: #64748b;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-center {
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .client-analytics-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .client-analytics-section {
+        padding: 1rem;
+    }
+
+    .client-analytics-section-header {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}

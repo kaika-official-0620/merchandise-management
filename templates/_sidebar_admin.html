@@ -8,6 +8,7 @@
 {% set simultaneous_sales_agency_count = get_pending_sales_agency_count_by_service('simultaneous') if get_pending_sales_agency_count_by_service is defined else 0 %}
 {% set long_term_item_count = get_long_term_item_count() if get_long_term_item_count is defined else 0 %}
 {% set admin_notification_count = pending_sale_request_count + pending_disposal_count %}
+{% set analytics_from_report_nav = request.endpoint == 'user_analytics' and request.args.get('from_client_reports') == '1' %}
 {% set home_endpoints = [
     'admin_dashboard',
     'admin_company_sales_analytics',
@@ -82,6 +83,7 @@
     'admin_auction_keisan_view',
     'admin_auction_keisan_edit',
     'admin_auction_keisan_pdf',
+    'client_analytics_reports',
     'reports',
     'report_monthly',
     'report_inventory',
@@ -95,18 +97,18 @@
     'admin_backup'
 ] %}
 <div class="sidebar-category">
-    <button type="button" class="sidebar-category-toggle {% if request.path in ['/admin', '/admin/home'] or request.endpoint in home_endpoints %}active{% endif %}" onclick="toggleCategory(this)">
+    <button type="button" class="sidebar-category-toggle {% if request.path in ['/admin', '/admin/home'] or (request.endpoint in home_endpoints and not analytics_from_report_nav) %}active{% endif %}" onclick="toggleCategory(this)">
         ホーム
         <span class="category-arrow">▼</span>
     </button>
-    <div class="sidebar-category-items {% if request.path in ['/admin', '/admin/home'] or request.endpoint in home_endpoints %}open{% endif %}">
+    <div class="sidebar-category-items {% if request.path in ['/admin', '/admin/home'] or (request.endpoint in home_endpoints and not analytics_from_report_nav) %}open{% endif %}">
         <div class="sidebar-subcategory">
             <div class="subcategory-label">ホーム</div>
             <a href="{{ url_for('admin_dashboard') }}" class="{% if request.path in ['/admin', '/admin/home'] or request.endpoint == 'admin_dashboard' %}active{% endif %}">ホーム</a>
             {% if current_user.has_permission('analytics') %}
             <a href="{{ url_for('admin_company_sales_analytics') }}" class="{% if request.endpoint == 'admin_company_sales_analytics' %}active{% endif %}">会社全体売上分析</a>
             <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint in ['admin_analytics_kaika', 'admin_analytics_kaika_sales'] %}active{% endif %}">開花売上分析</a>
-            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント売上分析</a>
+            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' and not analytics_from_report_nav %}active{% endif %}">クライアント売上分析</a>
             {% else %}
             <span class="sidebar-item-disabled">分析の権限がありません</span>
             {% endif %}
@@ -150,11 +152,11 @@
 </div>
 
 <div class="sidebar-category">
-    <button class="sidebar-category-toggle {% if request.endpoint in user_management_endpoints %}active{% endif %}" onclick="toggleCategory(this)">
+    <button class="sidebar-category-toggle {% if request.endpoint in user_management_endpoints or analytics_from_report_nav %}active{% endif %}" onclick="toggleCategory(this)">
         ユーザー管理
         <span class="category-arrow">▼</span>
     </button>
-    <div class="sidebar-category-items {% if request.endpoint in user_management_endpoints %}open{% endif %}">
+    <div class="sidebar-category-items {% if request.endpoint in user_management_endpoints or analytics_from_report_nav %}open{% endif %}">
         <div class="sidebar-subcategory">
             <div class="subcategory-label">商品管理</div>
             <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and not request.args.get('long_term_only') %}active{% endif %}">商品一覧</a>
@@ -218,8 +220,9 @@
             {% endif %}
         </div>
         <div class="sidebar-subcategory">
-            <div class="subcategory-label">レポート</div>
-            <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
+            <div class="subcategory-label">分析</div>
+            <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">分析・CSV</a>
+            <a href="{{ url_for('client_analytics_reports') }}" class="{% if request.endpoint == 'client_analytics_reports' or analytics_from_report_nav %}active{% endif %}">クライアント売上分析</a>
         </div>
     </div>
 </div>

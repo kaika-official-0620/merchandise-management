@@ -27,7 +27,10 @@
         <div class="page-header-actions">
             {% if is_admin_report_view and selected_client_id %}
             <a href="{{ url_for('reports') }}" class="report-link-button report-link-button--subtle">クライアント一覧へ戻る</a>
-            {% elif not is_admin_report_view %}
+            <a href="{{ url_for('user_analytics', client_id=selected_client_id, from_client_reports=1) }}" class="report-link-button">売上分析を見る</a>
+            {% elif is_admin_report_view %}
+            <a href="{{ url_for('client_analytics_reports') }}" class="report-link-button">クライアント売上分析を見る</a>
+            {% else %}
             <a href="{{ url_for('user_analytics') }}" class="report-link-button">My分析を見る</a>
             {% endif %}
         </div>

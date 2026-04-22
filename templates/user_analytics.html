@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{% if analytics.is_admin_view %}ユーザー管理分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if analytics.is_admin_view %}クライアント売上分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 
 {% if analytics.is_admin_view %}
 {% set analytics_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set from_client_reports = request.args.get('from_client_reports') == '1' %}
 <style>
 .client-analysis-page {
     display: grid;
@@ -235,19 +236,22 @@
 
 <div class="client-analysis-page">
     <section class="client-analysis-card client-analysis-header">
-        <h1>ユーザー管理分析</h1>
+        <h1>クライアント売上分析</h1>
         <p>クライアントごとの在庫・売上・手数料・利益を、当月ベースで確認できます。クライアント名を押すと各ユーザーの商品管理へ進みます。</p>
     </section>
 
     <section class="client-analysis-card client-analysis-toolbar">
         <div class="period-chip-row">
-            <a class="period-chip {% if analytics.period_preset == 'month' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='month', client_keyword=analytics.client_keyword or None) }}">当月</a>
-            <a class="period-chip {% if analytics.period_preset == 'year' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='year', client_keyword=analytics.client_keyword or None) }}">今年</a>
-            <a class="period-chip {% if analytics.period_preset == 'all' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='all', client_keyword=analytics.client_keyword or None) }}">全期間</a>
+            <a class="period-chip {% if analytics.period_preset == 'month' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='month', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">当月</a>
+            <a class="period-chip {% if analytics.period_preset == 'year' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='year', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">今年</a>
+            <a class="period-chip {% if analytics.period_preset == 'all' %}active{% endif %}" href="{{ url_for('user_analytics', period_preset='all', client_keyword=analytics.client_keyword or None, from_client_reports=1 if from_client_reports else None) }}">全期間</a>
             <span class="period-chip active">表示期間: {{ analytics.period_label }}</span>
         </div>
 
         <form method="GET" action="{{ url_for('user_analytics') }}" class="client-filter-form">
+            {% if from_client_reports %}
+            <input type="hidden" name="from_client_reports" value="1">
+            {% endif %}
             <input type="hidden" name="period_preset" value="custom">
             <div class="client-filter-group">
                 <label for="client_keyword">クライアント名で絞り込み</label>
@@ -262,7 +266,7 @@
                 <input id="end_month" type="month" name="end_month" value="{{ end_month }}">
             </div>
             <button type="submit" class="btn btn-primary">適用</button>
-            <a href="{{ url_for('user_analytics', period_preset='month') }}" class="btn btn-secondary">リセット</a>
+            <a href="{{ url_for('user_analytics', period_preset='month', from_client_reports=1 if from_client_reports else None) }}" class="btn btn-secondary">リセット</a>
         </form>
 
         <div class="client-analysis-summary">
@@ -402,7 +406,7 @@
 
 {% if analytics.is_admin_view %}
 <div class="page-header">
-    <h1>ユーザー管理分析</h1>
+    <h1>クライアント売上分析</h1>
     <p class="page-description">
         {% if analytics.selected_client_name %}
         {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
@@ -416,6 +420,9 @@
 <!-- 期間フィルター -->
 <div class="period-filter-card">
     <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        {% if from_client_reports %}
+        <input type="hidden" name="from_client_reports" value="1">
+        {% endif %}
         <div class="filter-label">📅 期間で絞り込み</div>
         <div class="filter-inputs">
             <input type="month" name="start_month" value="{{ start_month }}" class="month-input" placeholder="開始月">
@@ -423,7 +430,7 @@
             <input type="month" name="end_month" value="{{ end_month }}" class="month-input" placeholder="終了月">
             <button type="submit" class="btn btn-primary btn-sm">適用</button>
             {% if start_month or end_month %}
-            <a href="{{ url_for('user_analytics', client_id=analytics.selected_client_id if analytics.selected_client_id else None) }}" class="btn btn-secondary btn-sm">クリア</a>
+            <a href="{{ url_for('user_analytics', client_id=analytics.selected_client_id if analytics.selected_client_id else None, from_client_reports=1 if from_client_reports else None) }}" class="btn btn-secondary btn-sm">クリア</a>
             {% endif %}
         </div>
         {% if start_month or end_month %}
@@ -558,6 +565,9 @@
 {% if analytics.is_admin_view %}
 <div class="period-filter-card">
     <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
+        {% if from_client_reports %}
+        <input type="hidden" name="from_client_reports" value="1">
+        {% endif %}
         <input type="hidden" name="start_month" value="{{ start_month }}">
         <input type="hidden" name="end_month" value="{{ end_month }}">
         <div class="filter-label">クライアントで絞り込み</div>
@@ -572,7 +582,7 @@
             </select>
             <button type="submit" class="btn btn-primary btn-sm">絞り込む</button>
             {% if analytics.selected_client_id %}
-            <a href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month) }}" class="btn btn-secondary btn-sm">全体へ戻す</a>
+            <a href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, from_client_reports=1 if from_client_reports else None) }}" class="btn btn-secondary btn-sm">全体へ戻す</a>
             {% endif %}
         </div>
     </form>
@@ -597,7 +607,7 @@
                 {% for client in analytics.client_summaries %}
                 <tr>
                     <td>
-                        <a class="client-summary-link" href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, client_id=client.user_id) }}">
+                        <a class="client-summary-link" href="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, client_id=client.user_id, from_client_reports=1 if from_client_reports else None) }}">
                             {{ client.client_name }}
                         </a>
                     </td>
@@ -681,7 +691,7 @@
 <!-- メモ欄 -->
 <div class="analytics-section memo-section">
     <h2>メモ</h2>
-    <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month) }}" class="memo-form">
+    <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, from_client_reports=1 if from_client_reports else None) }}" class="memo-form">
         <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics.analytics_memo or '' }}</textarea>
         <div class="memo-actions">
             <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
