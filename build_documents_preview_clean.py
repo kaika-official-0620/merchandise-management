@@ -667,7 +667,7 @@ def product_card(product_id: str) -> str:
     client = CLIENTS[product["client"]]
     detail_href = product_detail_href(product)
     return f"""
-    <div class="product-card" id="card-{product_id}">
+    <div class="product-card js-product-card" id="card-{product_id}" data-product-id="{product_id}" data-service="{product['service']}" data-default-status="{product['status']}">
       <div class="product-thumb">
         <img src="{product['image']}" alt="{escape(product['name'])}">
       </div>
@@ -785,7 +785,7 @@ def stage2_page() -> str:
         detail_href = product_detail_href(product)
         cards.append(
             f"""
-            <div class="product-card">
+            <div class="product-card js-product-card" data-product-id="{product['id']}" data-service="{product['service']}" data-default-status="{product['status']}" data-stage="vendor-outgoing" data-expected-status="査定中">
               <div class="product-thumb">
                 <img src="{product['image']}" alt="{escape(product['name'])}">
               </div>
@@ -827,6 +827,7 @@ def stage2_page() -> str:
             <div class="stack">
               {''.join(cards)}
             </div>
+            <p id="vendor-outgoing-empty" class="section-note" hidden>現在、業者へ流す商品はありません。1番で業者卸販売の商品を査定中にすると、ここへ表示されます。</p>
             <div class="card-actions" style="margin-top: 18px;">
               <a class="btn btn-outline" href="vendor_partner_registry.html">送付先業者を登録・編集する</a>
               <a class="btn btn-primary" href="vendor_estimate_batch_create.html">見積依頼書を作成する</a>
@@ -1222,7 +1223,7 @@ def client_delivery_page(client_id: str) -> str:
         detail_href = product_detail_href(product)
         cards.append(
             f"""
-            <div class="product-card">
+            <div class="product-card js-product-card" data-product-id="{item['product']}" data-service="{product['service']}" data-default-status="{product['status']}" data-stage="client-outgoing">
               <div class="product-thumb">
                 <img src="{product['image']}" alt="{escape(product['name'])}">
               </div>
@@ -1280,7 +1281,7 @@ def statement_template_page(client_id: str) -> str:
         f"""
         <div class="page page-narrow">
           <div class="doc-toolbar">
-            <div class="doc-toolbar-copy">既存の買取明細書テンプレートに、売却済み商品を差し込んだ preview です。</div>
+            <div class="doc-toolbar-copy">既存の買取明細書テンプレートに、サービス別で返送する商品を差し込んだ preview です。</div>
             <div class="doc-toolbar-actions">
               <a class="btn btn-outline" href="{config['slug']}">返送一覧へ戻る</a>
               <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
@@ -1438,6 +1439,33 @@ button,input,select,textarea{font:inherit}
 
 
 PREVIEW_JS = """
+const PREVIEW_STORAGE_KEY = "documentsPreviewStateV3";
+
+function loadPreviewState() {
+  try {
+    return JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function savePreviewState(state) {
+  window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(state));
+}
+
+function getItemState(productId, fallbackStatus = "認証待ち") {
+  const state = loadPreviewState();
+  return state[productId] || { status: fallbackStatus, unavailable: false };
+}
+
+function setItemState(productId, patch) {
+  const state = loadPreviewState();
+  const current = state[productId] || {};
+  state[productId] = { ...current, ...patch };
+  savePreviewState(state);
+  return state[productId];
+}
+
 function togglePanel(id) {
   const panel = document.getElementById(id);
   if (!panel) return;
@@ -1470,9 +1498,14 @@ function applyStatus(selectId, badgeId, stateId, noticeId, productName, service)
   const state = document.getElementById(stateId);
   if (!select || !badge || !state) return;
   const next = select.value;
+  const card = select.closest("[data-product-id]");
+  const productId = card ? card.dataset.productId : "";
   badge.textContent = next;
   badge.className = `pill ${statusClass(next)}`;
   state.textContent = next;
+  if (productId) {
+    setItemState(productId, { status: next, unavailable: false });
+  }
   const serviceLabel = service === "simultaneous" ? "同時出品" : (service === "auction" ? "業者オークション" : "業者卸販売");
   showInlineNotice(noticeId, `${productName}（${serviceLabel}）の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
 }
@@ -1489,8 +1522,12 @@ function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
   if (state) {
     state.textContent = "受付不可";
   }
-  showInlineNotice(noticeId, `${productName} は受付不可としてクライアントへ通知する想定です。`);
   const card = document.getElementById(cardId);
+  const productId = card ? card.dataset.productId : "";
+  if (productId) {
+    setItemState(productId, { status: "受付不可", unavailable: true });
+  }
+  showInlineNotice(noticeId, `${productName} は受付不可としてクライアントへ通知する想定です。`);
   if (card) {
     window.setTimeout(() => {
       card.style.display = "none";
@@ -1519,6 +1556,45 @@ function assignClient(inputId, noticeId, productName) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const state = loadPreviewState();
+
+  document.querySelectorAll(".js-product-card[data-product-id]").forEach((card) => {
+    const productId = card.dataset.productId;
+    const fallbackStatus = card.dataset.defaultStatus || "認証待ち";
+    const current = getItemState(productId, fallbackStatus);
+    const badge = card.querySelector(`[id^="badge-"]`);
+    const stateTarget = card.querySelector(`[id^="state-"]`);
+    const select = card.querySelector("select.status-select");
+
+    if (badge) {
+      badge.textContent = current.status || fallbackStatus;
+      badge.className = `pill ${statusClass(current.status || fallbackStatus)}`;
+    }
+    if (stateTarget) {
+      stateTarget.textContent = current.status || fallbackStatus;
+    }
+    if (select) {
+      select.value = current.status || fallbackStatus;
+    }
+
+    if (current.unavailable) {
+      card.style.display = "none";
+    }
+
+    if (card.dataset.stage === "vendor-outgoing") {
+      const expected = card.dataset.expectedStatus || "査定中";
+      if ((current.status || fallbackStatus) !== expected || current.unavailable) {
+        card.style.display = "none";
+      }
+    }
+  });
+
+  const visibleVendorCards = Array.from(document.querySelectorAll('.js-product-card[data-stage="vendor-outgoing"]')).filter((card) => card.style.display !== "none");
+  const vendorEmpty = document.getElementById("vendor-outgoing-empty");
+  if (vendorEmpty) {
+    vendorEmpty.hidden = visibleVendorCards.length > 0;
+  }
+
   document.querySelectorAll(".vendor-check").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       const names = Array.from(document.querySelectorAll(".vendor-check:checked")).map((node) => node.dataset.product);
@@ -1604,13 +1680,13 @@ def build() -> None:
     write_text(STATIC_DIR / "doc_editor.js", DOC_EDITOR_JS)
 
     write_text(OUTPUT_DIR / "documents_v2_index.html", page(
-        "書類管理 preview",
+        "書類管理",
         f"""
         <div class="page">
           <div class="page-head">
             <div>
-              <h1>書類管理 preview</h1>
-              <p>以前の使用感に近い形で、1番から4番までの流れをまとめ直した preview です。トップでは 2×2 の導線だけを見せ、各段階の中身は個別ページで確認します。</p>
+              <h1>書類管理</h1>
+              <p>1番から4番までの流れを管理者向けにまとめています。トップでは 2×2 の導線だけを見せ、各段階の中身は個別ページで確認します。</p>
             </div>
           </div>
           {top_cards()}
