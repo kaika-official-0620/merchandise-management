@@ -222,9 +222,9 @@ def _status_for_item(merchandise_id: int, service: str) -> str:
     if service == "wholesale":
         return "査定中" if merchandise_id in {145, 151} else "認証待ち"
     if service == "auction":
-        return "認証済み"
+        return "完了"
     if service == "simultaneous":
-        return "入金待ち" if merchandise_id == 148 else "認証待ち"
+        return "出品中" if merchandise_id == 148 else "完了"
     return "認証待ち"
 
 
@@ -323,7 +323,7 @@ def _load_preview_data():
 
     products = {}
     wholesale_items = []
-    sold_items = []
+    completed_items = []
 
     for row in rows:
         service = _service_for_item(row["id"])
@@ -353,8 +353,8 @@ def _load_preview_data():
         products[slug] = product
         if service == "wholesale" and status == "査定中":
             wholesale_items.append((slug, product))
-        if status in {"査定中", "認証済み", "入金待ち"}:
-            sold_items.append((slug, product))
+        if status == "完了":
+            completed_items.append((slug, product))
 
     vendor_files = []
     for index, (product_key, product) in enumerate(wholesale_items, start=1):
@@ -376,10 +376,23 @@ def _load_preview_data():
             }
         )
 
-    return_items = []
+    return_groups = {}
+
+    def ensure_return_group(service: str) -> dict:
+        group_key = f"{client_key}_{service}"
+        if group_key not in return_groups:
+            return_groups[group_key] = {
+                "client": client_key,
+                "service": service,
+                "slug": f"documents_v2_client_delivery_{group_key}.html",
+                "template": f"documents_v2_client_statement_template_{group_key}.html",
+                "items": [],
+            }
+        return return_groups[group_key]
+
     for file_info in vendor_files:
         for item in file_info["items"]:
-            return_items.append(
+            ensure_return_group("wholesale")["items"].append(
                 {
                     "product": item["product"],
                     "price": item["price"],
@@ -387,31 +400,23 @@ def _load_preview_data():
                 }
             )
 
-    for product_key, product in sold_items:
+    for product_key, product in completed_items:
         if product["service"] == "auction":
-            return_items.append(
+            ensure_return_group("auction")["items"].append(
                 {
                     "product": product_key,
                     "price": product["amount"],
                     "source": "業者オークション 落札結果",
                 }
             )
-        if product["service"] == "simultaneous":
-            return_items.append(
+        elif product["service"] == "simultaneous":
+            ensure_return_group("simultaneous")["items"].append(
                 {
                     "product": product_key,
                     "price": product["amount"],
                     "source": "同時出品 売却完了",
                 }
             )
-
-    return_groups = {
-        client_key: {
-            "slug": f"documents_v2_client_delivery_{client_key}.html",
-            "template": f"documents_v2_client_statement_template_{client_key}.html",
-            "items": return_items,
-        }
-    }
 
     return clients, products, vendor_files, return_groups
 
@@ -452,7 +457,9 @@ def status_class(status: str) -> str:
         "認証待ち": "pending",
         "認証済み": "approved",
         "査定中": "appraising",
+        "出品中": "listing",
         "入金待ち": "payment",
+        "完了": "completed",
         "受付不可": "unavailable",
     }.get(status, "approved")
 
@@ -622,14 +629,18 @@ def stage1_page(service: str | None) -> str:
     )
 
 
-def status_controls(product_id: str, status: str, product_name: str) -> str:
+def status_controls(product_id: str, status: str, product_name: str, service: str) -> str:
     select_id = f"status-{product_id}"
     badge_id = f"badge-{product_id}"
     state_id = f"state-{product_id}"
     notice_id = f"notice-{product_id}"
+    if service == "simultaneous":
+        status_options = ["認証待ち", "認証済み", "出品中", "入金待ち", "完了"]
+    else:
+        status_options = ["認証待ち", "認証済み", "査定中", "入金待ち", "完了"]
     options = "".join(
         f'<option value="{label}" {"selected" if label == status else ""}>{label}</option>'
-        for label in ["認証済み", "査定中", "入金待ち"]
+        for label in status_options
     )
     return f"""
     <div class="status-box">
@@ -641,10 +652,10 @@ def status_controls(product_id: str, status: str, product_name: str) -> str:
         <select id="{select_id}" class="status-select">
           {options}
         </select>
-        <button class="btn btn-primary" type="button" onclick="applyStatus('{select_id}','{badge_id}','{state_id}','{notice_id}','{escape(product_name)}')">状態を更新して通知</button>
+        <button class="btn btn-primary" type="button" onclick="applyStatus('{select_id}','{badge_id}','{state_id}','{notice_id}','{escape(product_name)}','{service}')">状態を更新して通知</button>
       </div>
       <div class="status-row">
-        <button class="btn btn-outline" type="button" onclick="notifyUnavailable('{notice_id}','{badge_id}','{state_id}','{escape(product_name)}')">受付不可を通知する</button>
+        <button class="btn btn-outline" type="button" onclick="notifyUnavailable('{notice_id}','{badge_id}','{state_id}','card-{product_id}','{escape(product_name)}')">受付不可を通知する</button>
       </div>
       <p id="{notice_id}" class="inline-notice" hidden></p>
     </div>
@@ -654,29 +665,31 @@ def status_controls(product_id: str, status: str, product_name: str) -> str:
 def product_card(product_id: str) -> str:
     product = PRODUCTS[product_id]
     client = CLIENTS[product["client"]]
+    detail_href = product_detail_href(product)
     return f"""
-    <div class="product-card">
+    <div class="product-card" id="card-{product_id}">
       <div class="product-thumb">
         <img src="{product['image']}" alt="{escape(product['name'])}">
       </div>
       <div class="product-body">
         <div class="product-top">
           <div>
-            <div class="product-title"><a href="{product['detail_page']}">{product['name']}</a></div>
+            <div class="product-title"><a href="{detail_href}">{product['name']}</a></div>
             <div class="product-meta">{client['name']} / {SERVICE_LABELS[product['service']]} / {product['brand']} / 商品ID {product['code']}</div>
           </div>
           <span id="badge-{product_id}" class="pill {status_class(product['status'])}">{product['status']}</span>
         </div>
         <div class="detail-grid">
+          <div class="field-block"><div class="field-label">申請形式</div><div class="field-value">{SERVICE_LABELS[product['service']]}</div></div>
           <div class="field-block"><div class="field-label">カテゴリ</div><div class="field-value">{product['category']}</div></div>
           <div class="field-block"><div class="field-label">ブランド</div><div class="field-value">{product['brand']}</div></div>
           <div class="field-block"><div class="field-label">モデル</div><div class="field-value">{product['model']}</div></div>
           <div class="field-block"><div class="field-label">状態</div><div class="field-value">{product['condition']}</div></div>
         </div>
         <div class="card-actions">
-          <a class="btn btn-soft" href="{product['detail_page']}">商品詳細を見る</a>
+          <a class="btn btn-soft" href="{detail_href}">商品詳細を見る</a>
         </div>
-        {status_controls(product_id, product['status'], product['name'])}
+        {status_controls(product_id, product['status'], product['name'], product['service'])}
       </div>
     </div>
     """
@@ -734,6 +747,7 @@ def product_detail_page(product_id: str) -> str:
               </div>
               <div class="detail-list">
                 <div class="detail-row"><strong>商品名</strong><span>{product['name']}</span></div>
+                <div class="detail-row"><strong>申請形式</strong><span>{SERVICE_LABELS[product['service']]}</span></div>
                 <div class="detail-row"><strong>ブランド</strong><span>{product['brand']}</span></div>
                 <div class="detail-row"><strong>カテゴリ</strong><span>{product['category']}</span></div>
                 <div class="detail-row"><strong>型番 / モデル</strong><span>{product['model_number']}</span></div>
@@ -768,6 +782,7 @@ def stage2_page() -> str:
     cards = []
     for product in outgoing_products():
         client = CLIENTS[product["client"]]
+        detail_href = product_detail_href(product)
         cards.append(
             f"""
             <div class="product-card">
@@ -783,7 +798,7 @@ def stage2_page() -> str:
                   <span class="pill appraising">査定中</span>
                 </div>
                 <div class="detail-grid">
-                  <div class="field-block"><div class="field-label">画像確認</div><div class="field-value"><a href="{product['detail_page']}">商品詳細を見る</a></div></div>
+                  <div class="field-block"><div class="field-label">画像確認</div><div class="field-value"><a href="{detail_href}">商品詳細を見る</a></div></div>
                   <div class="field-block"><div class="field-label">送付先候補</div><div class="field-value">ブランドセンター / ブランド市場</div></div>
                   <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">チェックした商品をまとめて見積依頼書へ差し込みます</div></div>
                 </div>
@@ -1138,19 +1153,23 @@ def vendor_file_page(file_info: dict) -> str:
     )
 
 
+def return_group_title(config: dict) -> str:
+    client = CLIENTS[config["client"]]
+    return f"{client['name']} / {SERVICE_LABELS[config['service']]}"
+
+
 def stage4_page() -> str:
     cards = []
-    for client_id, config in RETURN_GROUPS.items():
-        client = CLIENTS[client_id]
+    for group_id, config in RETURN_GROUPS.items():
+        client = CLIENTS[config["client"]]
         total = sum(item["price"] for item in config["items"])
-        service_labels = " / ".join(sorted({SERVICE_LABELS[PRODUCTS[item["product"]]["service"]] for item in config["items"]}))
         cards.append(
             f"""
             <div class="summary-card">
               <div class="summary-head">
                 <div>
-                  <div class="summary-client">{client['name']}</div>
-                  <div class="summary-meta">{len(config['items'])}点 / {service_labels}</div>
+                  <div class="summary-client">{return_group_title(config)}</div>
+                  <div class="summary-meta">{len(config['items'])}点 / 返送書類をサービス別に分けて作成します</div>
                 </div>
                 <span class="pill payment">返送準備中</span>
               </div>
@@ -1195,11 +1214,12 @@ def stage4_page() -> str:
 
 
 def client_delivery_page(client_id: str) -> str:
-    client = CLIENTS[client_id]
     config = RETURN_GROUPS[client_id]
+    client = CLIENTS[config["client"]]
     cards = []
     for item in config["items"]:
         product = PRODUCTS[item["product"]]
+        detail_href = product_detail_href(product)
         cards.append(
             f"""
             <div class="product-card">
@@ -1216,7 +1236,7 @@ def client_delivery_page(client_id: str) -> str:
                 </div>
                 <div class="detail-grid">
                   <div class="field-block"><div class="field-label">売却額</div><div class="field-value">{money(item['price'])}</div></div>
-                  <div class="field-block"><div class="field-label">商品詳細</div><div class="field-value"><a href="{product['detail_page']}">商品詳細を見る</a></div></div>
+                  <div class="field-block"><div class="field-label">商品詳細</div><div class="field-value"><a href="{detail_href}">商品詳細を見る</a></div></div>
                   <div class="field-block"><div class="field-label">返送書類</div><div class="field-value">買取明細書へ反映</div></div>
                 </div>
               </div>
@@ -1224,14 +1244,14 @@ def client_delivery_page(client_id: str) -> str:
             """
         )
     return page(
-        f"{client['name']} さんへの返送内容",
+        f"{return_group_title(config)} の返送内容",
         f"""
         <div class="page">
           {back_bar()}
           <div class="page-head">
             <div>
-              <h1>{client['name']} さんへの返送内容</h1>
-              <p>ここでどの商品を返送書類に含めるかを確認し、買取明細書へ進みます。</p>
+              <h1>{return_group_title(config)} の返送内容</h1>
+              <p>ここでどの商品を返送書類に含めるかを確認し、{SERVICE_LABELS[config['service']]} 用の買取明細書へ進みます。</p>
             </div>
           </div>
           <div class="section">
@@ -1252,11 +1272,11 @@ def client_delivery_page(client_id: str) -> str:
 
 
 def statement_template_page(client_id: str) -> str:
-    client = CLIENTS[client_id]
     config = RETURN_GROUPS[client_id]
+    client = CLIENTS[config["client"]]
     total = sum(item["price"] for item in config["items"])
     return page(
-        f"{client['name']} さん向け買取明細書",
+        f"{return_group_title(config)} の買取明細書",
         f"""
         <div class="page page-narrow">
           <div class="doc-toolbar">
@@ -1273,6 +1293,7 @@ def statement_template_page(client_id: str) -> str:
               <div><strong>発行日</strong> 2026年4月23日</div>
               <div><strong>宛名</strong> {client['name']} 様</div>
               <div><strong>発行者</strong> 株式会社開花</div>
+              <div><strong>対象サービス</strong> {SERVICE_LABELS[config['service']]}</div>
             </div>
             <div class="doc-message">下記の通り、買取明細をご案内いたします。</div>
             <table class="doc-table">
@@ -1347,7 +1368,9 @@ button,input,select,textarea{font:inherit}
 .pill.pending{background:#e2e8f0;color:#334155;padding:6px 10px}
 .pill.approved{background:#dcfce7;color:#166534;padding:6px 10px}
 .pill.appraising{background:#fef3c7;color:#92400e;padding:6px 10px}
+.pill.listing{background:#dbeafe;color:#1d4ed8;padding:6px 10px}
 .pill.payment{background:#dbeafe;color:#1d4ed8;padding:6px 10px}
+.pill.completed{background:#ede9fe;color:#6d28d9;padding:6px 10px}
 .pill.unavailable{background:#fee2e2;color:#b91c1c;padding:6px 10px}
 .service-tabs{margin-bottom:18px}
 .service-tab{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:13px;font-weight:700}
@@ -1433,13 +1456,15 @@ function statusClass(label) {
     case "認証待ち": return "pending";
     case "認証済み": return "approved";
     case "査定中": return "appraising";
+    case "出品中": return "listing";
     case "入金待ち": return "payment";
+    case "完了": return "completed";
     case "受付不可": return "unavailable";
     default: return "approved";
   }
 }
 
-function applyStatus(selectId, badgeId, stateId, noticeId, productName) {
+function applyStatus(selectId, badgeId, stateId, noticeId, productName, service) {
   const select = document.getElementById(selectId);
   const badge = document.getElementById(badgeId);
   const state = document.getElementById(stateId);
@@ -1448,10 +1473,13 @@ function applyStatus(selectId, badgeId, stateId, noticeId, productName) {
   badge.textContent = next;
   badge.className = `pill ${statusClass(next)}`;
   state.textContent = next;
-  showInlineNotice(noticeId, `${productName} の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
+  const serviceLabel = service === "simultaneous" ? "同時出品" : (service === "auction" ? "業者オークション" : "業者卸販売");
+  showInlineNotice(noticeId, `${productName}（${serviceLabel}）の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
 }
 
-function notifyUnavailable(noticeId, badgeId, stateId, productName) {
+function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
+  const confirmed = window.confirm(`${productName} を受付不可にして、クライアントへ通知します。よろしいですか？`);
+  if (!confirmed) return;
   const badge = document.getElementById(badgeId);
   const state = document.getElementById(stateId);
   if (badge) {
@@ -1462,6 +1490,12 @@ function notifyUnavailable(noticeId, badgeId, stateId, productName) {
     state.textContent = "受付不可";
   }
   showInlineNotice(noticeId, `${productName} は受付不可としてクライアントへ通知する想定です。`);
+  const card = document.getElementById(cardId);
+  if (card) {
+    window.setTimeout(() => {
+      card.style.display = "none";
+    }, 250);
+  }
 }
 
 function registerVendorFile() {
@@ -1563,9 +1597,8 @@ def write_text(path: Path, content: str) -> None:
 
 
 def build() -> None:
-    if OUTPUT_DIR.exists():
-        for stale_html in OUTPUT_DIR.rglob("*.html"):
-            stale_html.unlink(missing_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
     write_text(STATIC_DIR / "preview_v2.css", PREVIEW_CSS)
     write_text(STATIC_DIR / "preview_v2.js", PREVIEW_JS)
     write_text(STATIC_DIR / "doc_editor.js", DOC_EDITOR_JS)

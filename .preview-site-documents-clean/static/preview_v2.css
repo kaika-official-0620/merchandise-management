@@ -38,7 +38,9 @@ button,input,select,textarea{font:inherit}
 .pill.pending{background:#e2e8f0;color:#334155;padding:6px 10px}
 .pill.approved{background:#dcfce7;color:#166534;padding:6px 10px}
 .pill.appraising{background:#fef3c7;color:#92400e;padding:6px 10px}
+.pill.listing{background:#dbeafe;color:#1d4ed8;padding:6px 10px}
 .pill.payment{background:#dbeafe;color:#1d4ed8;padding:6px 10px}
+.pill.completed{background:#ede9fe;color:#6d28d9;padding:6px 10px}
 .pill.unavailable{background:#fee2e2;color:#b91c1c;padding:6px 10px}
 .service-tabs{margin-bottom:18px}
 .service-tab{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:13px;font-weight:700}

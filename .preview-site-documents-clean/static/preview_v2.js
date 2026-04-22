@@ -16,13 +16,15 @@ function statusClass(label) {
     case "認証待ち": return "pending";
     case "認証済み": return "approved";
     case "査定中": return "appraising";
+    case "出品中": return "listing";
     case "入金待ち": return "payment";
+    case "完了": return "completed";
     case "受付不可": return "unavailable";
     default: return "approved";
   }
 }
 
-function applyStatus(selectId, badgeId, stateId, noticeId, productName) {
+function applyStatus(selectId, badgeId, stateId, noticeId, productName, service) {
   const select = document.getElementById(selectId);
   const badge = document.getElementById(badgeId);
   const state = document.getElementById(stateId);
@@ -31,10 +33,13 @@ function applyStatus(selectId, badgeId, stateId, noticeId, productName) {
   badge.textContent = next;
   badge.className = `pill ${statusClass(next)}`;
   state.textContent = next;
-  showInlineNotice(noticeId, `${productName} の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
+  const serviceLabel = service === "simultaneous" ? "同時出品" : (service === "auction" ? "業者オークション" : "業者卸販売");
+  showInlineNotice(noticeId, `${productName}（${serviceLabel}）の状態を「${next}」へ更新し、クライアントへ通知する想定です。`);
 }
 
-function notifyUnavailable(noticeId, badgeId, stateId, productName) {
+function notifyUnavailable(noticeId, badgeId, stateId, cardId, productName) {
+  const confirmed = window.confirm(`${productName} を受付不可にして、クライアントへ通知します。よろしいですか？`);
+  if (!confirmed) return;
   const badge = document.getElementById(badgeId);
   const state = document.getElementById(stateId);
   if (badge) {
@@ -45,6 +50,12 @@ function notifyUnavailable(noticeId, badgeId, stateId, productName) {
     state.textContent = "受付不可";
   }
   showInlineNotice(noticeId, `${productName} は受付不可としてクライアントへ通知する想定です。`);
+  const card = document.getElementById(cardId);
+  if (card) {
+    window.setTimeout(() => {
+      card.style.display = "none";
+    }, 250);
+  }
 }
 
 function registerVendorFile() {
