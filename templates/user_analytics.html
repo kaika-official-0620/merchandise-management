@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{% if analytics.is_admin_view %}クライアント売上分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if analytics.use_admin_links %}ユーザー売上分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
-
-{% if analytics.is_admin_view %}
-{% set analytics_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 {% set from_client_reports = request.args.get('from_client_reports') == '1' %}
+
+{% if analytics.show_admin_overview %}
+{% set analytics_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <style>
 .client-analysis-page {
     display: grid;
@@ -236,8 +236,8 @@
 
 <div class="client-analysis-page">
     <section class="client-analysis-card client-analysis-header">
-        <h1>クライアント売上分析</h1>
-        <p>クライアントごとの在庫・売上・手数料・利益を、当月ベースで確認できます。クライアント名を押すと各ユーザーの商品管理へ進みます。</p>
+        <h1>ユーザー売上分析</h1>
+        <p>ユーザーごとの在庫・売上・手数料・利益をまとめて確認できます。ユーザー名を選ぶと、そのユーザーの分析画面と商品管理へ進めます。</p>
     </section>
 
     <section class="client-analysis-card client-analysis-toolbar">
@@ -404,16 +404,23 @@
 </div>
 {% else %}
 
-{% if analytics.is_admin_view %}
+{% if analytics.use_admin_links %}
 <div class="page-header">
-    <h1>クライアント売上分析</h1>
-    <p class="page-description">
-        {% if analytics.selected_client_name %}
-        {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
-        {% else %}
-        クライアントごとの売上・利益・在庫状況を確認できます。
-        {% endif %}
-    </p>
+    <div>
+        <h1>{% if analytics.selected_client_name and from_client_reports %}{{ analytics.selected_client_name }} の売上分析{% else %}ユーザー売上分析{% endif %}</h1>
+        <p class="page-description">
+            {% if analytics.selected_client_name %}
+            {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
+            {% else %}
+            ユーザーごとの売上・利益・在庫状況を確認できます。
+            {% endif %}
+        </p>
+    </div>
+    {% if from_client_reports %}
+    <div class="page-header-actions">
+        <a href="{{ url_for('client_analytics_reports') }}" class="btn btn-secondary btn-sm">ユーザー売上分析一覧へ戻る</a>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -562,7 +569,7 @@
 }
 </style>
 
-{% if analytics.is_admin_view %}
+{% if analytics.show_admin_overview %}
 <div class="period-filter-card">
     <form method="GET" action="{{ url_for('user_analytics') }}" class="period-filter-form">
         {% if from_client_reports %}
@@ -628,7 +635,7 @@
 {% endif %}
 
 <!-- 総合サマリー -->
-{% if analytics.is_admin_view %}
+{% if analytics.use_admin_links %}
 {% set list_all_url = url_for('admin_user_products') %}
 {% set list_sold_url = url_for('admin_user_products', status='sold') %}
 {% set list_unsold_url = url_for('admin_user_products', status='unsold') %}
@@ -668,7 +675,7 @@
 
 <!-- 追加分析カード -->
 <div class="analytics-summary extra-analytics-cards">
-    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(analytics.top_destination.sales_destination or '')) if analytics.is_admin_view else url_for('index', filter='sold') }}">
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(analytics.top_destination.sales_destination or '')) if analytics.use_admin_links else url_for('index', filter='sold') }}">
         <div class="summary-label">どこにいくら売れたか</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.top_destination.total_sales or 0)|int) }}</div>
         <div class="summary-sub">{{ analytics.top_destination.sales_destination or '販売先未設定' }} / {{ analytics.top_destination.count or 0 }}件</div>
@@ -681,7 +688,7 @@
         <div class="summary-value">{{ "%.1f"|format(sold_count / total_count_safe * 100) }}%</div>
         <div class="summary-sub">平均販売日数: {{ (analytics.kpi.avg_days_to_sell or 0)|round(1) }}日</div>
     </a>
-    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction') if analytics.is_admin_view else url_for('index', filter='sold') }}">
+    <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', sale_type='auction') if analytics.use_admin_links else url_for('index', filter='sold') }}">
         <div class="summary-label">オークション販売実績</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.auction_stats.auction_sales or 0)|int) }}</div>
         <div class="summary-sub">{{ analytics.auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((analytics.auction_stats.auction_profit or 0)|int) }}</div>

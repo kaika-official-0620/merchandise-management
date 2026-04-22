@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}クライアント売上分析 - 株式会社開花{% endblock %}
+{% block title %}ユーザー売上分析 - 株式会社開花{% endblock %}
 
 {% block content %}
 <div class="client-analytics-reports-page">
     <div class="page-header">
         <div>
-            <h1>クライアント売上分析</h1>
-            <p class="page-desc">各クライアントごとの売上分析ページへ進めます。売上や利益、在庫状況は「分析を見る」から確認できます。</p>
+            <h1>ユーザー売上分析</h1>
+            <p class="page-desc">各ユーザーごとの売上分析ページへ進めます。売上や利益、在庫状況は「分析を見る」から確認できます。</p>
         </div>
         <div class="page-header-actions">
             <a href="{{ url_for('reports') }}" class="report-link-button report-link-button--subtle">レポート一覧へ戻る</a>
-            <a href="{{ url_for('user_analytics') }}" class="report-link-button">全体売上分析を見る</a>
+            <a href="{{ url_for('user_analytics') }}" class="report-link-button">ユーザー売上分析を見る</a>
         </div>
     </div>
 
@@ -27,8 +27,8 @@
 
     <section class="client-analytics-section">
         <div class="client-analytics-section-header">
-            <h2>クライアント一覧</h2>
-            <p>「分析を見る」から、そのクライアントの売上分析ページへ進めます。</p>
+            <h2>ユーザー一覧</h2>
+            <p>「分析を見る」から、そのユーザーの売上分析ページへ進めます。</p>
         </div>
 
         {% if analysis_clients %}

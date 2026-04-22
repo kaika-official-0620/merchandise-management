@@ -8271,6 +8271,7 @@ def user_analytics():
     is_admin = current_user.is_admin()
     selected_client_id = request.args.get('client_id', '').strip() if is_admin else ''
     client_keyword = request.args.get('client_keyword', '').strip() if is_admin else ''
+    from_client_reports = request.args.get('from_client_reports') == '1' if is_admin else False
     try:
         selected_client_id_int = int(selected_client_id) if selected_client_id else None
     except (TypeError, ValueError):
@@ -8312,7 +8313,8 @@ def user_analytics():
             end_month=end_month,
             period_preset=period_preset,
             client_keyword=client_keyword if is_admin and client_keyword else None,
-            client_id=selected_client_id if is_admin and selected_client_id_int else None
+            client_id=selected_client_id if is_admin and selected_client_id_int else None,
+            from_client_reports=1 if from_client_reports else None,
         ))
     
     if DATABASE_URL:
@@ -8813,7 +8815,11 @@ def user_analytics():
     conn.close()
     
     # 管理者の場合は分析対象がわかるようにフラグを渡す
+    render_user_analysis_view = bool(is_admin and from_client_reports and selected_client_id_int)
     analytics_data['is_admin_view'] = is_admin
+    analytics_data['show_admin_overview'] = is_admin and not render_user_analysis_view
+    analytics_data['use_admin_links'] = is_admin
+    analytics_data['from_client_reports'] = from_client_reports
     analytics_data['available_users'] = available_users
     analytics_data['selected_client_id'] = selected_client_id_int
     analytics_data['selected_client_name'] = selected_client_name
