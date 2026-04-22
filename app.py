@@ -293,8 +293,6 @@ def ensure_proxy_service_auction_user_table(conn=None, cur=None):
         managed_cursor = True
 
     try:
-        source_item_id = source_item.get('id')
-
         if DATABASE_URL:
             cur.execute(
                 """
