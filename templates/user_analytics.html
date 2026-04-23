@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if analytics.use_admin_links %}ユーザー売上分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
+{% block title %}{% if analytics.use_admin_links and request.args.get('from_client_reports') == '1' %}各ユーザー売上分析{% elif analytics.use_admin_links %}全体ユーザー売上分析{% else %}My分析{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set from_client_reports = request.args.get('from_client_reports') == '1' %}
@@ -236,7 +236,7 @@
 
 <div class="client-analysis-page">
     <section class="client-analysis-card client-analysis-header">
-        <h1>ユーザー売上分析</h1>
+        <h1>全体ユーザー売上分析</h1>
         <p>ユーザーごとの在庫・売上・手数料・利益をまとめて確認できます。ユーザー名を選ぶと、そのユーザーの分析画面と商品管理へ進めます。</p>
     </section>
 
@@ -407,7 +407,7 @@
 {% if analytics.use_admin_links %}
 <div class="page-header">
     <div>
-        <h1>{% if analytics.selected_client_name and from_client_reports %}{{ analytics.selected_client_name }} の売上分析{% else %}ユーザー売上分析{% endif %}</h1>
+        <h1>{% if analytics.selected_client_name and from_client_reports %}{{ analytics.selected_client_name }} の売上分析{% else %}各ユーザー売上分析{% endif %}</h1>
         <p class="page-description">
             {% if analytics.selected_client_name %}
             {{ analytics.selected_client_name }} の売上・利益・在庫状況を確認できます。
@@ -418,7 +418,10 @@
     </div>
     {% if from_client_reports %}
     <div class="page-header-actions">
-        <a href="{{ url_for('client_analytics_reports') }}" class="btn btn-secondary btn-sm">ユーザー売上分析一覧へ戻る</a>
+        <a href="{{ url_for('client_analytics_reports') }}" class="btn btn-secondary btn-sm">各ユーザー売上分析一覧へ戻る</a>
+        {% if analytics.selected_client_id %}
+        <a href="{{ url_for('reports', client_id=analytics.selected_client_id) }}" class="btn btn-primary btn-sm">レポートCSVを見る</a>
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -675,6 +678,7 @@
 
 <!-- 追加分析カード -->
 <div class="analytics-summary extra-analytics-cards">
+    {% set operational_metrics = analytics.operational_metrics or {} %}
     <a class="summary-card summary-link-card" href="{{ url_for('admin_user_products', status='sold', destination=(analytics.top_destination.sales_destination or '')) if analytics.use_admin_links else url_for('index', filter='sold') }}">
         <div class="summary-label">どこにいくら売れたか</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.top_destination.total_sales or 0)|int) }}</div>
@@ -692,6 +696,16 @@
         <div class="summary-label">オークション販売実績</div>
         <div class="summary-value">¥{{ "{:,}".format((analytics.auction_stats.auction_sales or 0)|int) }}</div>
         <div class="summary-sub">{{ analytics.auction_stats.auction_count or 0 }}件 / 利益 ¥{{ "{:,}".format((analytics.auction_stats.auction_profit or 0)|int) }}</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_sold_url }}">
+        <div class="summary-label">手数料・送料率</div>
+        <div class="summary-value">{{ "%.1f"|format(operational_metrics.fee_rate or 0) }}%</div>
+        <div class="summary-sub">送料・手数料合計: ¥{{ "{:,}".format((operational_metrics.fee_total or 0)|int) }}</div>
+    </a>
+    <a class="summary-card summary-link-card" href="{{ list_unsold_url }}">
+        <div class="summary-label">90日超在庫</div>
+        <div class="summary-value">{{ operational_metrics.stale_inventory_count or 0 }}件</div>
+        <div class="summary-sub">在庫比率 {{ "%.1f"|format(operational_metrics.stale_inventory_ratio or 0) }}% / 原価 ¥{{ "{:,}".format((operational_metrics.stale_inventory_value or 0)|int) }}</div>
     </a>
 </div>
 
@@ -795,6 +809,15 @@
                 <div class="kpi-value">¥{{ "{:,}".format((analytics.summary.avg_profit or 0)|int) }}</div>
                 <div class="kpi-label">平均利益/件</div>
                 <div class="kpi-detail">1商品あたり</div>
+            </div>
+        </a>
+
+        <a class="kpi-card summary-link-card" href="{{ list_sold_url }}">
+            <div class="kpi-icon"></div>
+            <div class="kpi-content">
+                <div class="kpi-value">¥{{ "{:,}".format((operational_metrics.avg_sale_price or 0)|int) }}</div>
+                <div class="kpi-label">平均売価</div>
+                <div class="kpi-detail">売上合計 ÷ 販売件数</div>
             </div>
         </a>
     </div>

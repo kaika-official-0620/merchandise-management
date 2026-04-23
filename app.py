@@ -8492,6 +8492,33 @@ def user_analytics():
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
 
+        try:
+            cur.execute(f"""
+                SELECT
+                    COALESCE(SUM(
+                        CASE
+                            WHEN sale_date IS NULL
+                             AND purchase_date IS NOT NULL
+                             AND purchase_date <= CURRENT_DATE - INTERVAL '90 day'
+                            THEN 1 ELSE 0
+                        END
+                    ), 0) as stale_inventory_count,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN sale_date IS NULL
+                             AND purchase_date IS NOT NULL
+                             AND purchase_date <= CURRENT_DATE - INTERVAL '90 day'
+                            THEN purchase_price ELSE 0
+                        END
+                    ), 0) as stale_inventory_value
+                FROM merchandise
+                WHERE {user_condition}
+            """, user_params)
+            analytics_data['inventory_health'] = dict(cur.fetchone() or {})
+        except Exception as e:
+            print(f"Inventory health query error: {e}")
+            analytics_data['inventory_health'] = {'stale_inventory_count': 0, 'stale_inventory_value': 0}
+
         # 分析メモ
         cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
         memo_row = cur.fetchone()
@@ -8740,6 +8767,33 @@ def user_analytics():
             print(f"KPI query error: {e}")
             analytics_data['kpi'] = {'total_items': 0, 'sold_count': 0, 'unsold_count': 0, 'total_purchase': 0, 'inventory_value': 0, 'total_sales': 0, 'total_shipping': 0, 'total_commission': 0, 'avg_days_to_sell': 0}
 
+        try:
+            cur.execute(f"""
+                SELECT
+                    COALESCE(SUM(
+                        CASE
+                            WHEN sale_date IS NULL
+                             AND purchase_date IS NOT NULL
+                             AND date(purchase_date) <= date('now', '-90 day')
+                            THEN 1 ELSE 0
+                        END
+                    ), 0) as stale_inventory_count,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN sale_date IS NULL
+                             AND purchase_date IS NOT NULL
+                             AND date(purchase_date) <= date('now', '-90 day')
+                            THEN purchase_price ELSE 0
+                        END
+                    ), 0) as stale_inventory_value
+                FROM merchandise
+                WHERE {user_condition}
+            """, user_params)
+            analytics_data['inventory_health'] = dict(cur.fetchone() or {})
+        except Exception as e:
+            print(f"Inventory health query error: {e}")
+            analytics_data['inventory_health'] = {'stale_inventory_count': 0, 'stale_inventory_value': 0}
+
         # 分析メモ
         cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
         memo_row = cur.fetchone()
@@ -8827,6 +8881,19 @@ def user_analytics():
     analytics_data['client_summaries'] = client_summaries
     analytics_data['period_preset'] = period_preset
     analytics_data['period_label'] = build_month_period_label(start_month, end_month)
+    analytics_data.setdefault('inventory_health', {'stale_inventory_count': 0, 'stale_inventory_value': 0})
+    total_sales_value = safe_int((analytics_data.get('summary') or {}).get('total_sales'))
+    total_fee_value = safe_int((analytics_data.get('kpi') or {}).get('total_shipping')) + safe_int((analytics_data.get('kpi') or {}).get('total_commission'))
+    stale_inventory_count = safe_int((analytics_data.get('inventory_health') or {}).get('stale_inventory_count'))
+    unsold_inventory_count = safe_int((analytics_data.get('kpi') or {}).get('unsold_count'))
+    analytics_data['operational_metrics'] = {
+        'fee_rate': calculate_report_percentage(total_fee_value, total_sales_value),
+        'fee_total': total_fee_value,
+        'avg_sale_price': safe_int((analytics_data.get('summary') or {}).get('avg_sale_price')),
+        'stale_inventory_count': stale_inventory_count,
+        'stale_inventory_value': safe_int((analytics_data.get('inventory_health') or {}).get('stale_inventory_value')),
+        'stale_inventory_ratio': calculate_report_percentage(stale_inventory_count, unsold_inventory_count),
+    }
     if is_admin:
         client_total_summary = {
             'total_items': sum(safe_int(row.get('total_items')) for row in client_summaries),
