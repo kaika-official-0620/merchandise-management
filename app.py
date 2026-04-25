@@ -2540,11 +2540,18 @@ def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='
     pending_history = []
     archived_history = []
     overall_summary = {
+        'auction_count': 0,
+        'item_count': 0,
+        'bid_count': 0,
         'pending_auction_count': 0,
         'pending_attention_count': 0,
         'archive_auction_count': 0,
         'winner_count': 0,
+        'draft_doc_count': 0,
+        'completed_doc_count': 0,
         'submitted_count': 0,
+        'submitted_doc_count': 0,
+        'pending_reflection_count': 0,
     }
 
     for auction in auctions:
@@ -2613,8 +2620,14 @@ def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='
         card['item_names_summary'] = ' / '.join(item_names[:3]) if item_names else '-'
         card['is_pending_followup'] = card['attention_count'] > 0
 
+        overall_summary['item_count'] += int(card.get('item_count') or 0)
+        overall_summary['bid_count'] += int(card.get('bid_count') or 0)
         overall_summary['winner_count'] += int(card.get('winner_count') or 0)
+        overall_summary['draft_doc_count'] += int(card.get('draft_doc_count') or 0)
+        overall_summary['completed_doc_count'] += int(card.get('completed_doc_count') or 0)
         overall_summary['submitted_count'] += int(card.get('submitted_count') or 0)
+        overall_summary['submitted_doc_count'] += int(card.get('submitted_doc_count') or 0)
+        overall_summary['pending_reflection_count'] += int(card.get('pending_prepare_count') or 0)
 
         if card['is_pending_followup']:
             pending_history.append(card)
@@ -2626,6 +2639,7 @@ def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='
 
     pending_history.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
     archived_history.sort(key=lambda auction: (parse_proxy_service_datetime(auction.get('end_datetime')) or now, auction.get('id') or 0), reverse=True)
+    overall_summary['auction_count'] = len(pending_history) + len(archived_history)
 
     return {
         'pending_history': pending_history,
@@ -35094,7 +35108,7 @@ def admin_documents_history_v2():
     client_options = sorted({row.get('client_name') for row in all_rows if row.get('client_name') and row.get('client_name') != '-'})
     status_options = sorted({(row.get('status'), row.get('status_label')) for row in all_rows if row.get('status')})
     document_type_options = [
-        ('shikiriosho', '精算書'),
+        ('shikiriosho', '仕切書'),
         ('user_mitsumori', '見積り依頼書 / 業者向け見積依頼書'),
         ('user_kaitori_shoudaku', '買取依頼書'),
         ('invoice', '買取明細書'),
@@ -35102,6 +35116,67 @@ def admin_documents_history_v2():
         ('admin_kaitori_shoudaku', '業者買取明細書'),
     ]
     document_type_cards = build_admin_document_type_cards_v2(all_rows)
+
+    def count_document_history(direction=None, doc_type=None, document_key=None):
+        return sum(
+            1
+            for row in all_rows
+            if (direction in (None, 'all') or row.get('direction_key') == direction)
+            and (doc_type in (None, 'all') or row.get('kind') == doc_type)
+            and (document_key in (None, 'all') or row.get('document_key') == document_key)
+        )
+
+    document_history_category_cards = [
+        {
+            'step': '1',
+            'title': 'クライアントから届いた依頼書',
+            'copy': 'クライアントから届いた見積依頼書・買取依頼書を確認します。',
+            'count_label': f"{count_document_history(direction='client_incoming')}件",
+            'url': url_for('admin_documents_history', direction='client_incoming'),
+        },
+        {
+            'step': '2',
+            'title': '開花から業者への見積依頼書',
+            'copy': '開花から業者へ送った依頼書の履歴を確認します。',
+            'count_label': f"{count_document_history(direction='vendor_outgoing')}件",
+            'url': url_for('admin_documents_history', direction='vendor_outgoing'),
+        },
+        {
+            'step': '3',
+            'title': '業者から届いた回答書類',
+            'copy': '業者から戻ってきた回答書類・明細を確認します。',
+            'count_label': f"{count_document_history(direction='vendor_incoming')}件",
+            'url': url_for('admin_documents_history', direction='vendor_incoming'),
+        },
+        {
+            'step': '4',
+            'title': 'クライアントへ返送した書類',
+            'copy': 'クライアントへ返送した買取明細書の履歴を確認します。',
+            'count_label': f"{count_document_history(doc_type='invoice', direction='client_outgoing')}件",
+            'url': url_for('admin_documents_history', doc_type='invoice', direction='client_outgoing'),
+        },
+        {
+            'step': '5',
+            'title': 'クライアント返送見積依頼書',
+            'copy': '返送済みの見積依頼書を後から確認します。',
+            'count_label': f"{count_document_history(doc_type='user_mitsumori', direction='client_outgoing')}件",
+            'url': url_for('admin_documents_history', doc_type='user_mitsumori', direction='client_outgoing'),
+        },
+        {
+            'step': '6',
+            'title': '仕切書',
+            'copy': '仕切書の作成・送付履歴をクライアント別に確認します。',
+            'count_label': f"{count_document_history(doc_type='shikiriosho', direction='client_outgoing')}件",
+            'url': url_for('admin_documents_history', doc_type='shikiriosho', direction='client_outgoing'),
+        },
+        {
+            'step': '7',
+            'title': '計算書',
+            'copy': '代行仕入れで作成した計算書と送付履歴を確認します。',
+            'count_label': f"{count_document_history(doc_type='user_keisan', direction='client_outgoing')}件",
+            'url': url_for('admin_documents_history', doc_type='user_keisan', direction='client_outgoing'),
+        },
+    ]
     return render_template(
         'admin/documents_history.html',
         history_rows=history_rows,
@@ -35110,6 +35185,7 @@ def admin_documents_history_v2():
         status_options=status_options,
         document_type_options=document_type_options,
         document_type_cards=document_type_cards,
+        document_history_category_cards=document_history_category_cards,
         service_types=SALES_AGENCY_SERVICE_TYPES,
     )
 
@@ -37596,6 +37672,61 @@ def admin_documents_dashboard_preview():
     except Exception:
         app.logger.exception("Failed to build admin document type cards")
         document_type_cards = build_admin_document_type_cards_v2([])
+    document_card_counts = {
+        (card.get("doc_type"), card.get("direction")): int(card.get("count") or 0)
+        for card in document_type_cards
+    }
+    document_flow_cards = [
+        {
+            "step": "1",
+            "title": "クライアントから受付",
+            "description": "どのクライアントから何の商品が届いたかを、名前単位で確認します。",
+            "count_label": f"{len(stage_row_map.get('client_incoming', []))}件受付中",
+            "url": url_for("admin_documents_dashboard", group="client_incoming"),
+        },
+        {
+            "step": "2",
+            "title": "開花から業者へ依頼",
+            "description": "査定中・出品中に進めた商品を、業者販売・オークション・同時出品に分けて書類化します。",
+            "count_label": f"{len(stage_row_map.get('vendor_outgoing', []))}件準備中",
+            "url": url_for("admin_documents_dashboard", group="vendor_outgoing"),
+        },
+        {
+            "step": "3",
+            "title": "業者から回答受領",
+            "description": "業者から届いた回答ファイルを1件ずつ確認し、商品ごとに返送先を振り分けます。",
+            "count_label": f"{len(stage_row_map.get('vendor_incoming', []))}件受領",
+            "url": url_for("admin_documents_dashboard", group="vendor_incoming"),
+        },
+        {
+            "step": "4",
+            "title": "買取明細書",
+            "description": "クライアントごとに買取明細書を作成し、送付後にユーザー書類・商品ページへ反映します。",
+            "count_label": f"{len(stage_row_map.get('client_outgoing', []))}件返送準備",
+            "url": url_for("admin_documents_dashboard", group="client_outgoing"),
+        },
+        {
+            "step": "5",
+            "title": "クライアント返送見積依頼書",
+            "description": "買取明細書送付後に、ユーザーから見積依頼書として返送された書類を確認します。",
+            "count_label": "返送待ちを確認",
+            "url": url_for("admin_documents_history", doc_type="user_mitsumori", direction="client_outgoing"),
+        },
+        {
+            "step": "6",
+            "title": "仕切書",
+            "description": "月額利用料と撮影・梱包・発送代行サポート費用を月締めで確認・送付します。",
+            "count_label": f"{document_card_counts.get(('shikiriosho', 'client_outgoing'), 0)}件",
+            "url": url_for("admin_documents_history", doc_type="shikiriosho", direction="client_outgoing"),
+        },
+        {
+            "step": "7",
+            "title": "計算書",
+            "description": "代行仕入れを行った取引だけを計算書として確認します。",
+            "count_label": f"{document_card_counts.get(('user_keisan', 'client_outgoing'), 0)}件",
+            "url": url_for("admin_documents_history", doc_type="user_keisan", direction="client_outgoing"),
+        },
+    ]
 
     return render_template(
         "admin/documents_dashboard.html",
@@ -37616,6 +37747,7 @@ def admin_documents_dashboard_preview():
         selected_group_history_total=0,
         selected_group_service_label=selected_group_service_label,
         document_type_cards=document_type_cards,
+        document_flow_cards=document_flow_cards,
     )
 
 

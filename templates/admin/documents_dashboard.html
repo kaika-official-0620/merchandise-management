@@ -11,6 +11,7 @@
 {% set service_breakdown = service_breakdown if service_breakdown is defined else [] %}
 {% set stage_request_rows = stage_request_rows if stage_request_rows is defined else [] %}
 {% set document_type_cards = document_type_cards if document_type_cards is defined else [] %}
+{% set document_flow_cards = document_flow_cards if document_flow_cards is defined else [] %}
 
 {% macro service_badge(service_type, service_name) -%}
     {% set normalized = service_type or '' %}
@@ -219,6 +220,80 @@
     font-size: 0.78rem;
     font-weight: 700;
     padding: 0.28rem 0.7rem;
+    white-space: nowrap;
+}
+
+.archive-flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.archive-flow-card {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    min-height: 100%;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dbeafe;
+    background:
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 20px;
+    padding: 1.15rem;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.archive-flow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 38px rgba(37, 99, 235, 0.12);
+    border-color: #93c5fd;
+}
+
+.archive-flow-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.archive-flow-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 999px;
+    background: #1d4ed8;
+    color: #fff;
+    font-weight: 800;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
+}
+
+.archive-flow-card h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+
+.archive-flow-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+    font-size: 0.92rem;
+}
+
+.archive-flow-count {
+    justify-self: flex-start;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 800;
+    padding: 0.34rem 0.82rem;
     white-space: nowrap;
 }
 
@@ -560,6 +635,7 @@
 }
 
 @media (max-width: 1100px) {
+    .archive-flow-grid,
     .overview-grid,
     .document-type-grid,
     .service-filter-grid {
@@ -568,6 +644,7 @@
 }
 
 @media (max-width: 720px) {
+    .archive-flow-grid,
     .overview-grid,
     .document-type-grid,
     .service-filter-grid {
@@ -612,50 +689,26 @@
     </section>
 
     {% if selected_group == 'all' %}
-    <section class="overview-grid">
-        {% for card in stage_cards %}
-        <a href="{{ card.url }}" class="overview-card">
-            <div class="overview-card-head">
-                <div>
-                    <span class="stage-pill">{{ card.flow_label }}</span>
-                    <h2>{{ card.title }}</h2>
-                </div>
-                <div class="count-pill">
-                    <strong>{{ card.current_count }}件</strong>
-                    <span>現在進行中の案件</span>
-                </div>
-            </div>
-            <p class="helper-text">{{ card.summary }}</p>
-            <div class="doc-pill-list">
-                {% for label in card.documents %}
-                <span class="doc-pill">{{ label }}</span>
-                {% endfor %}
-            </div>
-        </a>
-        {% endfor %}
-    </section>
-
-    {% if document_type_cards %}
     <section class="section-card">
         <div class="stage-topbar">
             <div>
-                <h2>書類種別一覧</h2>
-                <p class="helper-text">見積依頼書、買取依頼書、仕切書、計算書など、運用で使う7種類の書類履歴をここから確認できます。</p>
+                <h2>書類管理</h2>
+                <p class="helper-text">現在処理中の書類を、1〜7 の業務順で確認します。履歴ではなく、いま対応が必要な書類だけをここから開きます。</p>
             </div>
         </div>
-        <div class="document-type-grid">
-            {% for card in document_type_cards %}
-            <a href="{{ card.url }}" class="document-type-card">
-                <div class="document-type-card-head">
-                    <strong>{{ card.title }}</strong>
-                    <span class="document-count-pill">{{ card.count }}件</span>
+        <div class="archive-flow-grid">
+            {% for card in document_flow_cards %}
+            <a href="{{ card.url }}" class="archive-flow-card">
+                <div class="archive-flow-card-head">
+                    <span class="archive-flow-step">{{ card.step }}</span>
+                    <h2>{{ card.title }}</h2>
                 </div>
                 <p>{{ card.description }}</p>
+                <span class="archive-flow-count">{{ card.count_label }}</span>
             </a>
             {% endfor %}
         </div>
     </section>
-    {% endif %}
     {% else %}
     <section class="section-card stage-header">
         <div>

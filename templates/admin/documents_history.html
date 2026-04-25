@@ -8,6 +8,8 @@
 {% set status_options = status_options if status_options is defined else [] %}
 {% set document_type_options = document_type_options if document_type_options is defined else [] %}
 {% set service_types = service_types if service_types is defined else {} %}
+{% set document_history_category_cards = document_history_category_cards if document_history_category_cards is defined else [] %}
+{% set history_category_cards = document_history_category_cards if document_history_category_cards else document_type_cards %}
 
 <style>
 .history-page {
@@ -266,17 +268,18 @@
         </div>
     </div>
 
-    {% if document_type_cards %}
+    {% if history_category_cards %}
     <div class="hint-card">
-        <h2>書類タイプ別の履歴</h2>
+        <h2>書類履歴トップ</h2>
+        <p>書類の種類ごとに、業務順で履歴を確認できます。</p>
         <div class="type-card-grid">
-            {% for card in document_type_cards %}
+            {% for card in history_category_cards %}
             <article class="type-card">
                 <h3>{{ card.title }}</h3>
-                <p>{{ card.description }}</p>
+                <p>{{ card.copy or card.description }}</p>
                 <div class="type-card-meta">
-                    <span class="type-card-count">{{ card.count }}件</span>
-                    <a href="{{ card.url }}" class="btn btn-secondary btn-sm">履歴を見る</a>
+                    <span class="type-card-count">{{ card.count_label or ((card.count or 0) ~ '件') }}</span>
+                    <a href="{{ card.url }}" class="btn btn-secondary btn-sm">履歴を開く</a>
                 </div>
             </article>
             {% endfor %}

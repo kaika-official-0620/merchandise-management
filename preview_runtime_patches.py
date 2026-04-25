@@ -1138,7 +1138,7 @@ def apply(module: Any) -> None:
                     {
                         "kind": "shikiriosho",
                         "id": row["id"],
-                        "document_type": "精算書",
+                        "document_type": "仕切書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": client_name,
                         "service_type": "",
@@ -1147,7 +1147,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": get_document_status_label("shikiriosho", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": "",
                         "notes": "",
@@ -1182,7 +1182,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": get_document_status_label("invoice", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": "",
                         "notes": row.get("notes") or "",
@@ -1216,7 +1216,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": get_document_status_label("user_mitsumori", row.get("status")),
-                        "direction_key": "vendor" if is_admin_created else "incoming",
+                        "direction_key": "vendor_outgoing" if is_admin_created else "client_incoming",
                         "direction_label": "開花→業者" if is_admin_created else "クライアント→開花",
                         "subject": row.get("subject") or "",
                         "notes": row.get("notes") or "",
@@ -1249,7 +1249,7 @@ def apply(module: Any) -> None:
                         "total_amount": int(row.get("total_amount") or 0),
                         "status": row.get("status") or "",
                         "status_label": get_document_status_label("user_keisan", row.get("status")),
-                        "direction_key": "outgoing",
+                        "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
                         "subject": row.get("subject") or "",
                         "notes": row.get("notes") or "",
@@ -1386,10 +1386,72 @@ def apply(module: Any) -> None:
         client_options = sorted({row.get("client_name") for row in all_rows if row.get("client_name")})
         status_options = sorted({(row.get("status"), row.get("status_label")) for row in all_rows if row.get("status")})
         document_type_options = [
-            ("shikiriosho", "精算書"),
-            ("user_mitsumori", "見積依頼書"),
+            ("shikiriosho", "仕切書"),
+            ("user_mitsumori", "見積依頼書 / 業者向け見積依頼書"),
+            ("user_kaitori_shoudaku", "買取依頼書"),
             ("invoice", "買取明細書"),
             ("user_keisan", "計算書"),
+            ("admin_kaitori_shoudaku", "業者買取明細書"),
+        ]
+
+        def count_document_history(direction=None, doc_type=None):
+            return sum(
+                1
+                for row in all_rows
+                if (direction in (None, "all") or row.get("direction_key") == direction)
+                and (doc_type in (None, "all") or row.get("kind") == doc_type)
+            )
+
+        document_history_category_cards = [
+            {
+                "step": "1",
+                "title": "クライアントから届いた依頼書",
+                "copy": "クライアントから届いた見積依頼書・買取依頼書を確認します。",
+                "count_label": f"{count_document_history(direction='client_incoming')}件",
+                "url": url_for("admin_documents_history", direction="client_incoming"),
+            },
+            {
+                "step": "2",
+                "title": "開花から業者への見積依頼書",
+                "copy": "開花から業者へ送った依頼書の履歴を確認します。",
+                "count_label": f"{count_document_history(direction='vendor_outgoing')}件",
+                "url": url_for("admin_documents_history", direction="vendor_outgoing"),
+            },
+            {
+                "step": "3",
+                "title": "業者から届いた回答書類",
+                "copy": "業者から戻ってきた回答書類・明細を確認します。",
+                "count_label": f"{count_document_history(direction='vendor_incoming')}件",
+                "url": url_for("admin_documents_history", direction="vendor_incoming"),
+            },
+            {
+                "step": "4",
+                "title": "クライアントへ返送した書類",
+                "copy": "クライアントへ返送した買取明細書の履歴を確認します。",
+                "count_label": f"{count_document_history(doc_type='invoice', direction='client_outgoing')}件",
+                "url": url_for("admin_documents_history", doc_type="invoice", direction="client_outgoing"),
+            },
+            {
+                "step": "5",
+                "title": "クライアント返送見積依頼書",
+                "copy": "返送済みの見積依頼書を後から確認します。",
+                "count_label": f"{count_document_history(doc_type='user_mitsumori', direction='client_outgoing')}件",
+                "url": url_for("admin_documents_history", doc_type="user_mitsumori", direction="client_outgoing"),
+            },
+            {
+                "step": "6",
+                "title": "仕切書",
+                "copy": "仕切書の作成・送付履歴をクライアント別に確認します。",
+                "count_label": f"{count_document_history(doc_type='shikiriosho', direction='client_outgoing')}件",
+                "url": url_for("admin_documents_history", doc_type="shikiriosho", direction="client_outgoing"),
+            },
+            {
+                "step": "7",
+                "title": "計算書",
+                "copy": "代行仕入れで作成した計算書と送付履歴を確認します。",
+                "count_label": f"{count_document_history(doc_type='user_keisan', direction='client_outgoing')}件",
+                "url": url_for("admin_documents_history", doc_type="user_keisan", direction="client_outgoing"),
+            },
         ]
         return render_template(
             "admin/documents_history.html",
@@ -1398,6 +1460,7 @@ def apply(module: Any) -> None:
             client_options=client_options,
             status_options=status_options,
             document_type_options=document_type_options,
+            document_history_category_cards=document_history_category_cards,
             service_types=SALES_AGENCY_SERVICE_TYPES,
         )
 

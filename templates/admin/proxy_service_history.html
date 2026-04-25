@@ -247,12 +247,31 @@
                 {% if is_archive %}
                 処理送付まで完了した終了案件です。誰が何を仕入れしたか、入札履歴や結果を後から確認できます。
                 {% else %}
-                サービスが終了し、処理送付や売上確定の対応が必要な案件だけを表示しています。終了結果を開いて、クライアントごとの仕入れ内容確認と書類送付へ進めます。
+                サービスが終了し、処理送付や売上確定の対応が必要な案件だけを表示しています。終了結果、入札履歴、クライアント別計算書の確認に進めます。
                 {% endif %}
             </p>
         </div>
         <div class="topbar-actions">
             <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">管理一覧へ戻る</a>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-label">{% if is_archive %}過去履歴件数{% else %}対応待ち履歴{% endif %}</span>
+            <div class="stat-value">{{ history_auctions|length }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">落札成立</span>
+            <div class="stat-value">{{ history_summary.winner_count or 0 }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">入札件数</span>
+            <div class="stat-value">{{ history_summary.bid_count or 0 }}</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">計算書作成中</span>
+            <div class="stat-value">{{ history_summary.draft_doc_count or 0 }}</div>
         </div>
     </div>
 
@@ -343,6 +362,7 @@
                 {% else %}
                 <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id, history_view=1) }}" class="btn btn-primary">サービス終了を確認</a>
                 {% endif %}
+                <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction.id) }}" class="btn btn-secondary">クライアント別計算書</a>
             </div>
         </article>
         {% endfor %}
