@@ -104,6 +104,46 @@
 {% set proxy_service_service_active = request.endpoint in ['admin_proxy_service', 'admin_proxy_service_create'] or (request.endpoint == 'admin_proxy_service_detail' and not proxy_service_history_mode) %}
 {% set proxy_service_followup_active = request.endpoint in ['admin_proxy_service_history', 'admin_proxy_service_document_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_auction_keisan_pdf'] or (request.endpoint == 'admin_proxy_service_detail' and proxy_service_history_mode and not proxy_service_archive_mode) %}
 {% set proxy_service_archive_active = request.endpoint == 'admin_proxy_service_history_archive' or (request.endpoint == 'admin_proxy_service_detail' and proxy_service_history_mode and proxy_service_archive_mode) %}
+{% set quick_access_active = request.endpoint in [
+    'admin_documents_dashboard',
+    'admin_documents_history',
+    'admin_user_products',
+    'admin_proxy_service',
+    'admin_proxy_service_create',
+    'admin_proxy_service_detail',
+    'admin_proxy_service_history',
+    'admin_proxy_service_history_archive',
+    'admin_proxy_service_document_history',
+    'admin_auction_keisan_list',
+    'admin_auction_keisan_view',
+    'admin_auction_keisan_edit',
+    'admin_auction_keisan_pdf'
+] %}
+<div class="sidebar-category">
+    <button type="button" class="sidebar-category-toggle {% if quick_access_active %}active{% endif %}" onclick="toggleCategory(this)">
+        主要機能
+        <span class="category-arrow">▼</span>
+    </button>
+    <div class="sidebar-category-items open">
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">よく使う管理ページ</div>
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint == 'admin_documents_dashboard' %}active{% endif %}">書類管理</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint == 'admin_documents_history' %}active{% endif %}">書類履歴</a>
+            <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') %}active{% endif %}">長期保存商品</a>
+            {% if current_user.can_manage_proxy_service() %}
+            <a href="{{ url_for('admin_proxy_service') }}" class="{% if proxy_service_service_active %}active{% endif %}">代行仕入れサービス管理</a>
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if proxy_service_followup_active %}active{% endif %}">
+                <span class="menu-label">サービス終了と処理送付</span>
+                {% if pending_proxy_service_history_count > 0 %}
+                <span class="menu-badge-inline">{{ pending_proxy_service_history_count }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_proxy_service_history_archive') }}" class="{% if proxy_service_archive_active %}active{% endif %}">代行仕入れサービスレポート</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 <div class="sidebar-category">
     <button type="button" class="sidebar-category-toggle {% if request.path in ['/admin', '/admin/home'] or (request.endpoint in home_endpoints and not analytics_from_report_nav) %}active{% endif %}" onclick="toggleCategory(this)">
         ホーム
