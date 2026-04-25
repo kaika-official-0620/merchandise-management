@@ -1585,8 +1585,28 @@ def normalize_month_period(start_month='', end_month='', preset='', default_to_c
     current_year_start = f'{today.year}-01'
     normalized_preset = (preset or '').strip()
 
+    def shift_month(month_text, offset):
+        year_value, month_value = map(int, month_text.split('-'))
+        month_value += offset
+        while month_value <= 0:
+            month_value += 12
+            year_value -= 1
+        while month_value > 12:
+            month_value -= 12
+            year_value += 1
+        return f'{year_value:04d}-{month_value:02d}'
+
     if normalized_preset == 'month':
         start_month = current_month
+        end_month = current_month
+    elif normalized_preset == '3months':
+        start_month = shift_month(current_month, -2)
+        end_month = current_month
+    elif normalized_preset == '6months':
+        start_month = shift_month(current_month, -5)
+        end_month = current_month
+    elif normalized_preset == '12months':
+        start_month = shift_month(current_month, -11)
         end_month = current_month
     elif normalized_preset == 'year':
         start_month = current_year_start
@@ -1602,6 +1622,12 @@ def normalize_month_period(start_month='', end_month='', preset='', default_to_c
     if not normalized_preset:
         if start_month == current_month and end_month == current_month:
             normalized_preset = 'month'
+        elif start_month == shift_month(current_month, -2) and end_month == current_month:
+            normalized_preset = '3months'
+        elif start_month == shift_month(current_month, -5) and end_month == current_month:
+            normalized_preset = '6months'
+        elif start_month == shift_month(current_month, -11) and end_month == current_month:
+            normalized_preset = '12months'
         elif start_month == current_year_start and end_month == current_month:
             normalized_preset = 'year'
         elif not start_month and not end_month:
@@ -1689,8 +1715,14 @@ def safe_int(value):
 def format_metric_value(value, value_type='currency'):
     if value_type == 'count':
         return f"{safe_int(value):,}件"
+    if value_type == 'item_count':
+        return f"{safe_int(value):,}商品"
     if value_type == 'percent':
-        return f"{safe_int(value):,}%"
+        return f"{float(value or 0):.1f}%"
+    if value_type == 'rate':
+        return f"{float(value or 0):.2f}回"
+    if value_type == 'days':
+        return f"{float(value or 0):.1f}日"
     if value_type == 'text':
         return str(value or '-')
     return f"¥{safe_int(value):,}"
@@ -6124,20 +6156,28 @@ def build_report_merchandise_row(row, scope='user', fee_settings=None):
     return item
 
 
-def fetch_report_merchandise_rows(target_user_id=None, scope='user'):
+def fetch_report_merchandise_rows(target_user_id=None, scope='user', include_all_users=False):
     conn = get_db()
     cur = None
 
     try:
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            user_filter = 'user_id = %s'
+            if include_all_users:
+                user_filter = 'user_id IS NOT NULL'
+                params = ()
+            else:
+                user_filter = 'user_id = %s'
+                params = (target_user_id if target_user_id is not None else current_user.id,)
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            user_filter = 'user_id = ?'
-
-        params = (target_user_id if target_user_id is not None else current_user.id,)
+            if include_all_users:
+                user_filter = 'user_id IS NOT NULL'
+                params = ()
+            else:
+                user_filter = 'user_id = ?'
+                params = (target_user_id if target_user_id is not None else current_user.id,)
         cur.execute(f"""
             SELECT id, user_id, purchase_date, sale_date, product_name, brand_name, store_name,
                    supplier_detail, item_condition, purchase_price, listing_price, sale_price,
@@ -6234,6 +6274,8 @@ def build_inventory_turnover_metrics(rows, period_start, period_end, cost_key='r
     return {
         'sold_rows': sold_rows,
         'purchased_rows': purchased_rows,
+        'opening_rows': opening_rows,
+        'closing_rows': closing_rows,
         'opening_count': len(opening_rows),
         'opening_value': opening_value,
         'closing_count': len(closing_rows),
@@ -7170,6 +7212,772 @@ def build_report_pdf_bytes(payload):
 
     doc.build(elements)
     return buffer.getvalue()
+
+
+def parse_month_filter_value(value):
+    if not value:
+        return None
+    try:
+        year_value, month_value = map(int, str(value).split('-', 1))
+        return date(year_value, month_value, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_next_month_start(value):
+    if value.month == 12:
+        return date(value.year + 1, 1, 1)
+    return date(value.year, value.month + 1, 1)
+
+
+def collect_report_row_month_values(rows):
+    month_values = set()
+    for row in rows:
+        for key in ('purchase_date_value', 'sale_date_value'):
+            value = row.get(key)
+            if value:
+                month_values.add(date(value.year, value.month, 1))
+    return sorted(month_values)
+
+
+def build_analytics_month_slices(rows, start_month='', end_month=''):
+    today = datetime.now().date()
+    available_months = collect_report_row_month_values(rows)
+    start_value = parse_month_filter_value(start_month)
+    end_value = parse_month_filter_value(end_month)
+
+    if available_months:
+        if start_value is None:
+            start_value = available_months[0]
+        if end_value is None:
+            end_value = available_months[-1]
+    else:
+        current_month = date(today.year, today.month, 1)
+        start_value = start_value or current_month
+        end_value = end_value or current_month
+
+    if start_value > end_value:
+        start_value, end_value = end_value, start_value
+
+    slices = []
+    current_value = start_value
+    while current_value <= end_value:
+        period_end = get_report_month_end(current_value.year, current_value.month)
+        if current_value.year == today.year and current_value.month == today.month and period_end > today:
+            period_end = today
+        slices.append({
+            'month_key': current_value.strftime('%Y-%m'),
+            'display_label': f'{current_value.year}年{current_value.month}月',
+            'start': current_value,
+            'end': period_end,
+        })
+        current_value = get_next_month_start(current_value)
+    return slices
+
+
+def build_analytics_item_detail_rows(items, item_kind='sale'):
+    detail_rows = []
+    for item in items:
+        detail_rows.append({
+            'id': item.get('id') or '',
+            'product_name': item.get('product_name') or '-',
+            'brand_name': item.get('brand_name') or '-',
+            'purchase_date': item.get('purchase_date_display') or '-',
+            'sale_date': item.get('sale_date_display') or '-',
+            'supplier_name': item.get('supplier_name') or '-',
+            'sales_destination': item.get('report_sales_destination') or '-',
+            'sale_type_label': item.get('report_sale_type_label') or '-',
+            'status_label': item.get('status_label') or '-',
+            'purchase_value': format_report_currency(item.get('report_cost_value')),
+            'sale_value': format_report_currency(item.get('sale_price')),
+            'expense_value': format_report_currency(item.get('expense_total')),
+            'shipping_value': format_report_currency(item.get('shipping_cost')),
+            'commission_value': format_report_currency(item.get('commission')),
+            'profit_value': format_report_currency(item.get('profit')),
+            'fee_breakdown': item.get('fee_breakdown_display') or 'なし',
+            'days_to_sell': (
+                format_metric_value(item.get('days_to_sell'), 'days')
+                if item.get('days_to_sell') is not None
+                else '-'
+            ),
+            'item_kind': item_kind,
+        })
+    return detail_rows
+
+
+def shift_month_date(month_date, offset):
+    year_value = month_date.year
+    month_value = month_date.month + offset
+    while month_value <= 0:
+        month_value += 12
+        year_value -= 1
+    while month_value > 12:
+        month_value -= 12
+        year_value += 1
+    return date(year_value, month_value, 1)
+
+
+def build_analytics_period_label_from_dates(period_start, period_end):
+    start_label = period_start.strftime('%Y-%m')
+    end_label = period_end.strftime('%Y-%m')
+    return start_label if start_label == end_label else f'{start_label} 〜 {end_label}'
+
+
+def build_previous_analytics_period(period_start, period_end):
+    month_count = ((period_end.year - period_start.year) * 12) + period_end.month - period_start.month + 1
+    previous_end_month = shift_month_date(date(period_start.year, period_start.month, 1), -1)
+    previous_start_month = shift_month_date(previous_end_month, -(month_count - 1))
+    return (
+        previous_start_month,
+        get_report_month_end(previous_end_month.year, previous_end_month.month),
+    )
+
+
+def summarize_analytics_period(rows, period_start, period_end):
+    sold_rows = [
+        row for row in rows
+        if row.get('sale_date_value')
+        and period_start <= row['sale_date_value'] <= period_end
+    ]
+    purchase_rows = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and period_start <= row['purchase_date_value'] <= period_end
+    ]
+    turnover = build_inventory_turnover_metrics(rows, period_start, period_end)
+
+    total_sales = sum(safe_int(row.get('sale_price')) for row in sold_rows)
+    total_purchase = sum(safe_int(row.get('report_cost_value')) for row in purchase_rows)
+    total_shipping = sum(safe_int(row.get('shipping_cost')) for row in sold_rows)
+    total_commission = sum(safe_int(row.get('commission')) for row in sold_rows)
+    total_expenses = total_shipping + total_commission
+    total_profit = sum(safe_int(row.get('profit')) for row in sold_rows)
+    sold_count = len(sold_rows)
+
+    return {
+        'sold_rows': sold_rows,
+        'purchase_rows': purchase_rows,
+        'turnover': turnover,
+        'total_sales': total_sales,
+        'total_purchase': total_purchase,
+        'total_shipping': total_shipping,
+        'total_commission': total_commission,
+        'total_expenses': total_expenses,
+        'total_profit': total_profit,
+        'total_balance': total_sales - total_purchase - total_expenses,
+        'sold_count': sold_count,
+        'purchase_count': len(purchase_rows),
+        'avg_sale_price': round(total_sales / sold_count) if sold_count else 0,
+        'avg_profit_per_item': round(total_profit / sold_count) if sold_count else 0,
+        'fee_rate': calculate_report_percentage(total_expenses, total_sales),
+        'profit_margin': calculate_report_percentage(total_profit, total_sales),
+        'turnover_ratio': turnover['turnover_ratio'],
+        'avg_days_to_sell': turnover['avg_days_to_sell'],
+    }
+
+
+def build_comparison_metric(metric_id, label, current_value, previous_value, value_type='currency', higher_is_better=True, note='', current_items=None, previous_items=None):
+    current_numeric = float(current_value or 0)
+    previous_numeric = float(previous_value or 0)
+    difference = current_numeric - previous_numeric
+    abs_difference = abs(difference)
+    change_rate = calculate_report_percentage(abs_difference, abs(previous_numeric)) if previous_numeric else 0.0
+
+    if difference > 0:
+        direction = 'up'
+        direction_label = '増加'
+        sign = '+'
+    elif difference < 0:
+        direction = 'down'
+        direction_label = '減少'
+        sign = '-'
+    else:
+        direction = 'flat'
+        direction_label = '変化なし'
+        sign = '±'
+
+    if previous_numeric == 0 and current_numeric != 0:
+        change_text = '前期間データなし'
+    elif difference == 0:
+        change_text = '前期間比 ±0'
+    else:
+        change_text = f'前期間比 {sign}{format_metric_value(abs_difference, value_type)} / {direction_label} {change_rate:.1f}%'
+
+    if direction == 'flat':
+        tone = 'neutral'
+    elif (difference > 0 and higher_is_better) or (difference < 0 and not higher_is_better):
+        tone = 'good'
+    else:
+        tone = 'watch'
+
+    return {
+        'id': metric_id,
+        'label': label,
+        'current_value': current_value,
+        'previous_value': previous_value,
+        'display_current': format_metric_value(current_value, value_type),
+        'display_previous': format_metric_value(previous_value, value_type),
+        'display_difference': format_metric_value(abs_difference, value_type),
+        'change_text': change_text,
+        'direction': direction,
+        'tone': tone,
+        'note': note,
+        'detail_title': f'{label}の前期間比較',
+        'detail_formula': '前期間比較 = 今の表示期間と、同じ長さのひとつ前の期間を比べています。',
+        'detail_lines': [
+            build_detail_line(f'表示期間の{label}', current_value, value_type),
+            build_detail_line(f'前期間の{label}', previous_value, value_type),
+            build_detail_line('差分', difference, value_type),
+        ],
+        'current_items': build_analytics_item_detail_rows(current_items or [], item_kind='sale'),
+        'previous_items': build_analytics_item_detail_rows(previous_items or [], item_kind='sale'),
+    }
+
+
+def build_analytics_dashboard_payload(rows, start_month='', end_month=''):
+    month_slices = build_analytics_month_slices(rows, start_month, end_month)
+    if month_slices:
+        period_start = month_slices[0]['start']
+        period_end = month_slices[-1]['end']
+    else:
+        today = datetime.now().date()
+        period_start = date(today.year, today.month, 1)
+        period_end = today
+
+    sold_rows = [
+        row for row in rows
+        if row.get('sale_date_value')
+        and period_start <= row['sale_date_value'] <= period_end
+    ]
+    purchase_rows = [
+        row for row in rows
+        if row.get('purchase_date_value')
+        and period_start <= row['purchase_date_value'] <= period_end
+    ]
+    current_inventory_rows = get_inventory_snapshot_rows(rows, period_end)
+    period_turnover = build_inventory_turnover_metrics(rows, period_start, period_end)
+
+    total_sales = sum(row['sale_price'] for row in sold_rows)
+    total_purchase = sum(row['report_cost_value'] for row in purchase_rows)
+    total_shipping = sum(row['shipping_cost'] for row in sold_rows)
+    total_commission = sum(row['commission'] for row in sold_rows)
+    total_expenses = total_shipping + total_commission
+    total_profit = sum(row['profit'] for row in sold_rows)
+    total_balance = total_sales - total_purchase - total_expenses
+    sold_count = len(sold_rows)
+    purchase_count = len(purchase_rows)
+    avg_sale_price = round(total_sales / sold_count) if sold_count else 0
+    avg_profit_per_item = round(total_profit / sold_count) if sold_count else 0
+    fee_rate = calculate_report_percentage(total_expenses, total_sales)
+    profit_margin = calculate_report_percentage(total_profit, total_sales)
+    previous_period_start, previous_period_end = build_previous_analytics_period(period_start, period_end)
+    previous_summary = summarize_analytics_period(rows, previous_period_start, previous_period_end)
+
+    stale_threshold = period_end - timedelta(days=90)
+    stale_inventory_rows = [
+        row for row in current_inventory_rows
+        if row.get('purchase_date_value')
+        and row['purchase_date_value'] <= stale_threshold
+    ]
+    stale_inventory_count = len(stale_inventory_rows)
+    stale_inventory_value = sum(safe_int(row.get('report_cost_value')) for row in stale_inventory_rows)
+
+    business_trend_rows = []
+    cumulative_balance = 0
+    for time_slice in month_slices:
+        sales_items = [
+            row for row in rows
+            if row.get('sale_date_value')
+            and time_slice['start'] <= row['sale_date_value'] <= time_slice['end']
+        ]
+        purchase_items = [
+            row for row in rows
+            if row.get('purchase_date_value')
+            and time_slice['start'] <= row['purchase_date_value'] <= time_slice['end']
+        ]
+        turnover_metrics = build_inventory_turnover_metrics(rows, time_slice['start'], time_slice['end'])
+
+        slice_sales = sum(row['sale_price'] for row in sales_items)
+        slice_purchase = sum(row['report_cost_value'] for row in purchase_items)
+        slice_shipping = sum(row['shipping_cost'] for row in sales_items)
+        slice_commission = sum(row['commission'] for row in sales_items)
+        slice_expenses = slice_shipping + slice_commission
+        slice_profit = sum(row['profit'] for row in sales_items)
+        slice_balance = slice_sales - slice_purchase - slice_expenses
+        slice_profit_margin = calculate_report_percentage(slice_profit, slice_sales)
+        slice_kaika_fee_in_cost = sum(safe_int(row.get('kaika_fee')) for row in purchase_items)
+        cumulative_balance += slice_balance
+
+        business_trend_rows.append({
+            'id': f"business-{time_slice['month_key']}",
+            'label': time_slice['display_label'],
+            'sold_count': len(sales_items),
+            'purchase_count': len(purchase_items),
+            'sales_total': slice_sales,
+            'purchase_total': slice_purchase,
+            'shipping_total': slice_shipping,
+            'commission_total': slice_commission,
+            'expense_total': slice_expenses,
+            'profit_total': slice_profit,
+            'cashflow_total': slice_balance,
+            'cumulative_cashflow': cumulative_balance,
+            'profit_margin': slice_profit_margin,
+            'avg_days_to_sell': turnover_metrics['avg_days_to_sell'],
+            'inventory_total': turnover_metrics['closing_value'],
+            'detail_title': f"{time_slice['display_label']}の売上・仕入・運営残額の内訳",
+            'detail_formula': '運営残額 = 売上 - 当月仕入額 - 送料 - 売却手数料',
+            'detail_lines': [
+                build_detail_line('販売商品数', len(sales_items), 'item_count'),
+                build_detail_line('仕入商品数', len(purchase_items), 'item_count'),
+                build_detail_line('売上', slice_sales),
+                build_detail_line('当月仕入額', slice_purchase),
+                build_detail_line('送料合計', slice_shipping),
+                build_detail_line('売却手数料合計', slice_commission),
+                build_detail_line('送料・手数料合計', slice_expenses),
+                build_detail_line('販売利益', slice_profit),
+                build_detail_line('運営残額', slice_balance),
+                build_detail_line('利益率', slice_profit_margin, 'percent'),
+                build_detail_line('平均販売日数', turnover_metrics['avg_days_to_sell'], 'days'),
+                build_detail_line('月末在庫原価', turnover_metrics['closing_value']),
+            ] + (
+                [build_detail_line('仕入額に含まれる開花手数料', slice_kaika_fee_in_cost)]
+                if slice_kaika_fee_in_cost else []
+            ),
+            'detail_note': (
+                '販売商品一覧では、何の商品が売れたか、送料・手数料が何にかかったかまで確認できます。'
+                + (' 開花手数料が仕入額に含まれる商品は、当月仕入額側に含めて表示しています。' if slice_kaika_fee_in_cost else '')
+            ),
+            'sold_items': build_analytics_item_detail_rows(sales_items, item_kind='sale'),
+            'purchase_items': build_analytics_item_detail_rows(purchase_items, item_kind='purchase'),
+        })
+
+    inventory_turnover_rows = []
+    for time_slice in month_slices:
+        metrics = build_inventory_turnover_metrics(rows, time_slice['start'], time_slice['end'])
+        sold_cost_total = sum(safe_int(row.get('report_cost_value')) for row in metrics['sold_rows'])
+        purchased_cost_total = sum(safe_int(row.get('report_cost_value')) for row in metrics['purchased_rows'])
+        inventory_turnover_rows.append({
+            'id': f"inventory-{time_slice['month_key']}",
+            'label': time_slice['display_label'],
+            'opening_count': metrics['opening_count'],
+            'opening_value': metrics['opening_value'],
+            'purchased_count': len(metrics['purchased_rows']),
+            'purchased_value': purchased_cost_total,
+            'sold_count': metrics['sold_count'],
+            'sold_value': sold_cost_total,
+            'closing_count': metrics['closing_count'],
+            'closing_value': metrics['closing_value'],
+            'sell_through_rate': metrics['sell_through_rate'],
+            'avg_days_to_sell': metrics['avg_days_to_sell'],
+            'turnover_ratio': metrics['turnover_ratio'],
+            'detail_title': f"{time_slice['display_label']}の在庫回転内訳",
+            'detail_formula': '在庫回転率 = 売れた商品の仕入原価 ÷ 平均在庫原価',
+            'detail_lines': [
+                build_detail_line('月初在庫数', metrics['opening_count'], 'item_count'),
+                build_detail_line('月初在庫原価', metrics['opening_value']),
+                build_detail_line('当月仕入数', len(metrics['purchased_rows']), 'item_count'),
+                build_detail_line('当月仕入額', purchased_cost_total),
+                build_detail_line('販売商品数', metrics['sold_count'], 'item_count'),
+                build_detail_line('売れた商品の仕入原価', sold_cost_total),
+                build_detail_line('月末在庫数', metrics['closing_count'], 'item_count'),
+                build_detail_line('月末在庫原価', metrics['closing_value']),
+                build_detail_line('消化率', metrics['sell_through_rate'], 'percent'),
+                build_detail_line('平均販売日数', metrics['avg_days_to_sell'], 'days'),
+                build_detail_line('在庫回転率', metrics['turnover_ratio'], 'rate'),
+            ],
+            'detail_note': 'この月に仕入れた商品、売れた商品、月末時点で残っている商品をそれぞれ確認できます。',
+            'sold_items': build_analytics_item_detail_rows(metrics['sold_rows'], item_kind='sale'),
+            'purchase_items': build_analytics_item_detail_rows(metrics['purchased_rows'], item_kind='purchase'),
+            'closing_items': build_analytics_item_detail_rows(metrics['closing_rows'], item_kind='inventory'),
+        })
+
+    channel_map = {}
+    for row in sold_rows:
+        key = row.get('report_sales_destination') or '販売先未設定'
+        entry = channel_map.setdefault(key, {
+            'name': key,
+            'count': 0,
+            'sales_total': 0,
+            'profit_total': 0,
+        })
+        entry['count'] += 1
+        entry['sales_total'] += safe_int(row.get('sale_price'))
+        entry['profit_total'] += safe_int(row.get('profit'))
+    for entry in channel_map.values():
+        entry['avg_profit'] = round(entry['profit_total'] / entry['count']) if entry['count'] else 0
+        entry['profit_rate'] = calculate_report_percentage(entry['profit_total'], entry['sales_total'])
+    channel_stats = sorted(
+        channel_map.values(),
+        key=lambda item: (item['sales_total'], item['count']),
+        reverse=True,
+    )
+
+    auction_rows = [
+        row for row in sold_rows
+        if 'auction' in (row.get('sale_type') or '')
+    ]
+    auction_sales_total = sum(row['sale_price'] for row in auction_rows)
+    auction_ratio = calculate_report_percentage(auction_sales_total, total_sales)
+    main_channel = channel_stats[0] if channel_stats else {
+        'name': '販売先未設定',
+        'count': 0,
+        'sales_total': 0,
+        'profit_total': 0,
+    }
+
+    overview_cards = [
+        build_metric_payload(
+            'period-sales',
+            '対象期間売上',
+            total_sales,
+            subvalue=f"販売 {format_metric_value(sold_count, 'item_count')}",
+            title='対象期間売上',
+            formula='対象期間売上 = この期間に売れた商品の売上合計',
+            lines=[
+                build_detail_line('販売商品数', sold_count, 'item_count'),
+                build_detail_line('売上', total_sales),
+                build_detail_line('平均売価', avg_sale_price),
+            ],
+            note='上部で選んだ期間に売却日が入っている商品だけを集計しています。',
+        ),
+        build_metric_payload(
+            'period-profit',
+            '対象期間利益',
+            total_profit,
+            value_class='profit-positive' if total_profit > 0 else 'profit-negative',
+            subvalue=f"利益率 {format_metric_value(profit_margin, 'percent')}",
+            title='対象期間利益',
+            formula='対象期間利益 = 売上 - その商品原価 - 送料 - 売却手数料',
+            lines=[
+                build_detail_line('売上', total_sales),
+                build_detail_line('送料合計', total_shipping),
+                build_detail_line('売却手数料合計', total_commission),
+                build_detail_line('対象期間利益', total_profit),
+            ],
+            note='仕入が当月でなくても、期間内に売れた商品の利益を集計しています。',
+        ),
+        build_metric_payload(
+            'current-inventory',
+            '現在庫原価',
+            period_turnover['closing_value'],
+            subvalue=f"現在庫 {format_metric_value(period_turnover['closing_count'], 'item_count')}",
+            title='現在庫原価',
+            formula='現在庫原価 = 期間末時点で残っている在庫の仕入額合計',
+            lines=[
+                build_detail_line('現在庫数', period_turnover['closing_count'], 'item_count'),
+                build_detail_line('現在庫原価', period_turnover['closing_value']),
+            ],
+            note='期間末時点でまだ売れていない商品だけを在庫として数えています。',
+        ),
+        build_metric_payload(
+            'stale-inventory',
+            '90日超在庫',
+            stale_inventory_count,
+            value_type='item_count',
+            subvalue=f"原価 {format_report_currency(stale_inventory_value)}",
+            title='90日超在庫',
+            formula='90日超在庫 = 期間末時点で仕入から90日以上たっている未売却在庫',
+            lines=[
+                build_detail_line('90日超在庫数', stale_inventory_count, 'item_count'),
+                build_detail_line('90日超在庫原価', stale_inventory_value),
+            ],
+            note='長く残っている在庫がどれくらいあるかを見るための指標です。',
+        ),
+        build_metric_payload(
+            'main-channel',
+            '主力販路',
+            main_channel['name'],
+            value_type='text',
+            subvalue=f"売上 {format_report_currency(main_channel['sales_total'])} / {format_metric_value(main_channel['count'], 'item_count')}",
+            title='主力販路',
+            formula='主力販路 = 対象期間で最も売上が大きかった販売先',
+            lines=[
+                build_detail_line('販売商品数', main_channel['count'], 'item_count'),
+                build_detail_line('売上', main_channel['sales_total']),
+                build_detail_line('利益', main_channel.get('profit_total')),
+            ],
+            note='商品ごとの販売先入力をもとに、売上が一番大きい販路を表示しています。',
+        ),
+        build_metric_payload(
+            'auction-ratio',
+            'オークション売上比率',
+            auction_ratio,
+            value_type='percent',
+            subvalue=f"売上 {format_report_currency(auction_sales_total)} / {format_metric_value(len(auction_rows), 'item_count')}",
+            title='オークション売上比率',
+            formula='オークション売上比率 = オークション販売の売上 ÷ 対象期間売上',
+            lines=[
+                build_detail_line('オークション販売数', len(auction_rows), 'item_count'),
+                build_detail_line('オークション売上', auction_sales_total),
+                build_detail_line('対象期間売上', total_sales),
+            ],
+            note='オークション販売の比重が高いかどうかを確認できます。',
+        ),
+    ]
+
+    kpi_cards = [
+        build_metric_payload(
+            'profit-margin',
+            '利益率',
+            profit_margin,
+            value_type='percent',
+            value_class='profit-positive' if total_profit > 0 else 'profit-negative',
+            subvalue='販売利益 ÷ 売上',
+            title='利益率',
+            formula='利益率 = 販売利益 ÷ 売上',
+            lines=[
+                build_detail_line('売上', total_sales),
+                build_detail_line('販売利益', total_profit),
+                build_detail_line('利益率', profit_margin, 'percent'),
+            ],
+            note='売上に対して、どれくらい利益が残ったかを見る指標です。',
+        ),
+        build_metric_payload(
+            'fee-rate',
+            '手数料率',
+            fee_rate,
+            value_type='percent',
+            subvalue='送料・手数料 ÷ 売上',
+            title='手数料率',
+            formula='手数料率 = 送料・手数料合計 ÷ 売上',
+            lines=[
+                build_detail_line('送料合計', total_shipping),
+                build_detail_line('売却手数料合計', total_commission),
+                build_detail_line('送料・手数料合計', total_expenses),
+                build_detail_line('売上', total_sales),
+            ],
+            note='売上のうち、送料と売却手数料がどれくらいを占めたかを見ます。',
+        ),
+        build_metric_payload(
+            'avg-sale-price',
+            '平均売価',
+            avg_sale_price,
+            subvalue='売上合計 ÷ 販売商品数',
+            title='平均売価',
+            formula='平均売価 = 売上合計 ÷ 販売商品数',
+            lines=[
+                build_detail_line('売上', total_sales),
+                build_detail_line('販売商品数', sold_count, 'item_count'),
+                build_detail_line('平均売価', avg_sale_price),
+            ],
+            note='1商品あたり、どれくらいの価格で売れているかを見ます。',
+        ),
+        build_metric_payload(
+            'avg-profit',
+            '1商品あたり利益',
+            avg_profit_per_item,
+            value_class='profit-positive' if avg_profit_per_item > 0 else 'profit-negative',
+            subvalue='販売利益 ÷ 販売商品数',
+            title='1商品あたり利益',
+            formula='1商品あたり利益 = 販売利益 ÷ 販売商品数',
+            lines=[
+                build_detail_line('販売利益', total_profit),
+                build_detail_line('販売商品数', sold_count, 'item_count'),
+                build_detail_line('1商品あたり利益', avg_profit_per_item),
+            ],
+            note='利益がどの商品でも同じではありませんが、全体の目安をつかめます。',
+        ),
+        build_metric_payload(
+            'avg-days',
+            '平均販売日数',
+            period_turnover['avg_days_to_sell'],
+            value_type='days',
+            subvalue='仕入から売却までの平均日数',
+            title='平均販売日数',
+            formula='平均販売日数 = 売れた各商品の保有日数の平均',
+            lines=[
+                build_detail_line('売れた商品数', period_turnover['sold_count'], 'item_count'),
+                build_detail_line('平均販売日数', period_turnover['avg_days_to_sell'], 'days'),
+            ],
+            note='仕入れてから売れるまでのスピード感を確認できます。',
+        ),
+        build_metric_payload(
+            'sell-through',
+            '消化率',
+            period_turnover['sell_through_rate'],
+            value_type='percent',
+            subvalue='販売商品数 ÷ (月初在庫数 + 当月仕入数)',
+            title='消化率',
+            formula='消化率 = 販売商品数 ÷ （月初在庫数 + 当月仕入数）',
+            lines=[
+                build_detail_line('販売商品数', period_turnover['sold_count'], 'item_count'),
+                build_detail_line('月初在庫数', period_turnover['opening_count'], 'item_count'),
+                build_detail_line('当月仕入数', len(period_turnover['purchased_rows']), 'item_count'),
+                build_detail_line('消化率', period_turnover['sell_through_rate'], 'percent'),
+            ],
+            note='その期間に用意できた在庫のうち、どれくらい売れたかを見ます。',
+        ),
+        build_metric_payload(
+            'turnover-ratio',
+            '在庫回転率',
+            period_turnover['turnover_ratio'],
+            value_type='rate',
+            subvalue='売れた商品の仕入原価 ÷ 平均在庫原価',
+            title='在庫回転率',
+            formula='在庫回転率 = 売れた商品の仕入原価 ÷ 平均在庫原価',
+            lines=[
+                build_detail_line('売れた商品の仕入原価', period_turnover['sold_purchase_total']),
+                build_detail_line('月初在庫原価', period_turnover['opening_value']),
+                build_detail_line('月末在庫原価', period_turnover['closing_value']),
+                build_detail_line('在庫回転率', period_turnover['turnover_ratio'], 'rate'),
+            ],
+            note='在庫がどれくらい効率よく回っているかを見る指標です。',
+        ),
+        build_metric_payload(
+            'net-balance',
+            '運営残額',
+            total_balance,
+            value_class='profit-positive' if total_balance > 0 else 'profit-negative',
+            subvalue='売上 - 当月仕入額 - 送料・手数料',
+            title='運営残額',
+            formula='運営残額 = 売上 - 当月仕入額 - 送料・手数料',
+            lines=[
+                build_detail_line('売上', total_sales),
+                build_detail_line('当月仕入額', total_purchase),
+                build_detail_line('送料合計', total_shipping),
+                build_detail_line('売却手数料合計', total_commission),
+                build_detail_line('運営残額', total_balance),
+            ],
+            note='その期間の売上から、同じ期間に使った仕入額と送料・手数料を引いた残額です。',
+        ),
+    ]
+
+    comparison_cards = [
+        build_comparison_metric(
+            'sales',
+            '売上',
+            total_sales,
+            previous_summary['total_sales'],
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='今の期間で売上が前の同じ長さの期間より伸びているかを見ます。',
+        ),
+        build_comparison_metric(
+            'sold-count',
+            '販売商品数',
+            sold_count,
+            previous_summary['sold_count'],
+            value_type='item_count',
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='売れた商品の数が増えているかを確認します。',
+        ),
+        build_comparison_metric(
+            'profit',
+            '販売利益',
+            total_profit,
+            previous_summary['total_profit'],
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='売上から原価、送料、売却手数料を引いた利益の伸びを見ます。',
+        ),
+        build_comparison_metric(
+            'profit-margin',
+            '利益率',
+            profit_margin,
+            previous_summary['profit_margin'],
+            value_type='percent',
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='売上に対して、利益がどれくらい残ったかを前期間と比べます。',
+        ),
+        build_comparison_metric(
+            'fee-rate',
+            '手数料率',
+            fee_rate,
+            previous_summary['fee_rate'],
+            value_type='percent',
+            higher_is_better=False,
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='送料と売却手数料の割合が上がりすぎていないかを確認します。',
+        ),
+        build_comparison_metric(
+            'inventory-turnover',
+            '在庫回転率',
+            period_turnover['turnover_ratio'],
+            previous_summary['turnover_ratio'],
+            value_type='rate',
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='在庫がどれくらい効率よく売上に変わっているかを比べます。',
+        ),
+        build_comparison_metric(
+            'avg-days',
+            '平均販売日数',
+            period_turnover['avg_days_to_sell'],
+            previous_summary['avg_days_to_sell'],
+            value_type='days',
+            higher_is_better=False,
+            current_items=sold_rows,
+            previous_items=previous_summary['sold_rows'],
+            note='仕入れてから売れるまでの日数が短くなっているかを見ます。',
+        ),
+    ]
+
+    return {
+        'overview_cards': overview_cards,
+        'kpi_cards': kpi_cards,
+        'comparison_cards': comparison_cards,
+        'comparison_period_label': build_analytics_period_label_from_dates(previous_period_start, previous_period_end),
+        'business_trend_rows': business_trend_rows,
+        'inventory_turnover_rows': inventory_turnover_rows,
+        'channel_stats': channel_stats,
+        'empty_message': '対象期間のデータはありません。',
+    }
+
+
+def build_price_chart_payload(price_stats):
+    stats = price_stats or []
+    if not stats:
+        return {
+            'sales_points': '',
+            'points': [],
+            'max_sales': 0,
+        }
+
+    max_sales = max(safe_int(item.get('total_sales')) for item in stats) or 1
+    point_count = len(stats)
+    points = []
+    for index, item in enumerate(stats):
+        x_position = 50 if point_count == 1 else 8 + ((84 / (point_count - 1)) * index)
+        y_position = 88 - ((safe_int(item.get('total_sales')) / max_sales) * 70)
+        points.append({
+            'x': round(x_position, 2),
+            'y': round(y_position, 2),
+            'label': item.get('price_range') or '-',
+            'sales': safe_int(item.get('total_sales')),
+            'count': safe_int(item.get('count')),
+            'profit': safe_int(item.get('total_profit')),
+        })
+
+    return {
+        'sales_points': ' '.join(f"{point['x']},{point['y']}" for point in points),
+        'points': points,
+        'max_sales': max_sales,
+    }
+
+
+def enrich_analytics_display_stats(analytics_data):
+    price_stats = analytics_data.get('price_stats') or []
+    for item in price_stats:
+        count = safe_int(item.get('count'))
+        total_sales = safe_int(item.get('total_sales'))
+        total_profit = safe_int(item.get('total_profit'))
+        item['avg_sales'] = round(total_sales / count) if count else 0
+        item['avg_profit'] = round(total_profit / count) if count else 0
+        item['profit_rate'] = calculate_report_percentage(total_profit, total_sales)
+    analytics_data['price_chart'] = build_price_chart_payload(price_stats)
+
+    for item in analytics_data.get('brand_stats') or []:
+        count = safe_int(item.get('count'))
+        total_sales = safe_int(item.get('total_sales'))
+        total_profit = safe_int(item.get('total_profit'))
+        item['avg_sales'] = round(total_sales / count) if count else safe_int(item.get('avg_sales'))
+        item['avg_profit'] = round(total_profit / count) if count else safe_int(item.get('avg_profit'))
+        item['profit_rate'] = calculate_report_percentage(total_profit, total_sales)
+
+
 
 
 @app.route('/reports')
@@ -8281,7 +9089,7 @@ def user_analytics():
         start_month,
         end_month,
         period_preset,
-        default_to_current=is_admin
+        default_to_current=True
     )
     selected_client_name = ''
     available_users = []
@@ -8401,17 +9209,18 @@ def user_analytics():
         # ブランド別統計
         cur.execute(f"""
             SELECT 
-                COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                COALESCE(NULLIF(TRIM(brand_name), ''), '(ブランド名なし)') as brand_name,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
-                CASE WHEN SUM(purchase_price) > 0 
-                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(purchase_price), 1)
+                COALESCE(AVG(sale_price - purchase_price - shipping_cost - commission), 0) as avg_profit,
+                CASE WHEN SUM(sale_price) > 0
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
             WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
-            GROUP BY brand_name
-            ORDER BY total_profit DESC
+            GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(ブランド名なし)')
+            ORDER BY count DESC, total_sales DESC
             LIMIT 10
         """, user_params)
         analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
@@ -8676,17 +9485,18 @@ def user_analytics():
         # ブランド別統計
         cur.execute(f"""
             SELECT 
-                COALESCE(brand_name, '(ブランド名なし)') as brand_name,
+                COALESCE(NULLIF(TRIM(brand_name), ''), '(ブランド名なし)') as brand_name,
                 COUNT(*) as count,
                 COALESCE(SUM(sale_price), 0) as total_sales,
                 COALESCE(SUM(sale_price - purchase_price - shipping_cost - commission), 0) as total_profit,
-                CASE WHEN SUM(purchase_price) > 0 
-                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(purchase_price), 1)
+                COALESCE(AVG(sale_price - purchase_price - shipping_cost - commission), 0) as avg_profit,
+                CASE WHEN SUM(sale_price) > 0
+                    THEN ROUND(SUM(sale_price - purchase_price - shipping_cost - commission) * 100.0 / SUM(sale_price), 1)
                     ELSE 0 END as profit_rate
             FROM merchandise 
             WHERE {user_condition} AND sale_date IS NOT NULL {sale_date_filter}
-            GROUP BY brand_name
-            ORDER BY total_profit DESC
+            GROUP BY COALESCE(NULLIF(TRIM(brand_name), ''), '(ブランド名なし)')
+            ORDER BY count DESC, total_sales DESC
             LIMIT 10
         """, user_params)
         analytics_data['brand_stats'] = [dict(b) for b in cur.fetchall()]
@@ -8970,6 +9780,70 @@ def user_analytics():
                 build_detail_line('対象期間利益', client.get('total_profit')),
             ]
             client['detail_note'] = 'クライアント名を押すと、そのクライアントの商品一覧と月次サマリーへ移動できます。'
+
+    analysis_target_user_id = None
+    analysis_include_all_users = bool(is_admin and not render_user_analysis_view and not selected_client_id_int)
+    if not is_admin:
+        analysis_target_user_id = current_user.id
+    elif selected_client_id_int:
+        analysis_target_user_id = selected_client_id_int
+
+    analytics_data['analysis_dashboard'] = {
+        'overview_cards': [],
+        'kpi_cards': [],
+        'business_trend_rows': [],
+        'inventory_turnover_rows': [],
+        'channel_stats': [],
+        'empty_message': '対象期間のデータはありません。',
+    }
+    if analysis_target_user_id or analysis_include_all_users:
+        analysis_rows = fetch_report_merchandise_rows(
+            target_user_id=analysis_target_user_id,
+            scope='user',
+            include_all_users=analysis_include_all_users,
+        )
+        analytics_data['analysis_dashboard'] = build_analytics_dashboard_payload(
+            analysis_rows,
+            start_month=start_month,
+            end_month=end_month,
+        )
+    enrich_analytics_display_stats(analytics_data)
+
+    inline_report_target_user_id = None
+    inline_report_client_id = None
+    if not is_admin:
+        inline_report_target_user_id = current_user.id
+    elif render_user_analysis_view and selected_client_id_int:
+        inline_report_target_user_id = selected_client_id_int
+        inline_report_client_id = selected_client_id_int
+
+    current_report_year = datetime.now().year
+    current_report_month = datetime.now().month
+    inline_report_years = [current_report_year]
+    if inline_report_target_user_id:
+        inline_report_rows = fetch_report_merchandise_rows(
+            target_user_id=inline_report_target_user_id,
+            scope='user',
+        )
+        inline_report_years = get_report_available_years(inline_report_rows)
+        if current_report_year not in inline_report_years:
+            inline_report_years = sorted(set(inline_report_years + [current_report_year]), reverse=True)
+
+    analytics_data['inline_reports'] = {
+        'enabled': bool(inline_report_target_user_id),
+        'client_id': inline_report_client_id,
+        'years': inline_report_years,
+        'current_year': current_report_year,
+        'current_month': current_report_month,
+        'management_cards': [
+            dict(card) for card in REPORT_V2_CARD_DEFINITIONS
+            if card.get('category') == 'management'
+        ],
+        'export_cards': [
+            dict(card) for card in REPORT_V2_CARD_DEFINITIONS
+            if card.get('category') == 'export'
+        ],
+    }
     analytics_data.setdefault('top_destination', {})
     analytics_data.setdefault('auction_stats', {})
     analytics_data.setdefault('analytics_memo', '')
@@ -10393,8 +11267,8 @@ def admin_dashboard():
         url_for('admin_analytics_kaika_sales'),
     )
     user_summary = build_summary(
-        'ユーザー売上分析',
-        '会員商品の売上・利益・在庫と、ユーザー側で動いた実績をまとめています。',
+        '全体クライアント売上分析',
+        'クライアント商品の売上・利益・在庫と、クライアント側で動いた実績をまとめています。',
         user_items,
         url_for('admin_user_products'),
         url_for('user_analytics'),

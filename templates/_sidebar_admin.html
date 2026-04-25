@@ -108,7 +108,7 @@
             {% if current_user.has_permission('analytics') %}
             <a href="{{ url_for('admin_company_sales_analytics') }}" class="{% if request.endpoint == 'admin_company_sales_analytics' %}active{% endif %}">会社全体売上分析</a>
             <a href="{{ url_for('admin_analytics_kaika') }}" class="{% if request.endpoint in ['admin_analytics_kaika', 'admin_analytics_kaika_sales'] %}active{% endif %}">開花売上分析</a>
-            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' and not analytics_from_report_nav %}active{% endif %}">全体ユーザー売上分析</a>
+            <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' and not analytics_from_report_nav %}active{% endif %}">全体クライアント売上分析</a>
             {% else %}
             <span class="sidebar-item-disabled">分析の権限がありません</span>
             {% endif %}
@@ -220,9 +220,9 @@
             {% endif %}
         </div>
         <div class="sidebar-subcategory">
-            <div class="subcategory-label">分析</div>
+            <div class="subcategory-label">レポート</div>
             <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポートCSV</a>
-            <a href="{{ url_for('client_analytics_reports') }}" class="{% if request.endpoint == 'client_analytics_reports' or analytics_from_report_nav %}active{% endif %}">各ユーザー売上分析</a>
+            <a href="{{ url_for('client_analytics_reports') }}" class="{% if request.endpoint == 'client_analytics_reports' or analytics_from_report_nav %}active{% endif %}">各クライアント売上分析</a>
         </div>
     </div>
 </div>

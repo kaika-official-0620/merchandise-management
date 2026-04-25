@@ -373,7 +373,7 @@
                 <div class="sidebar-category-items {% if request.endpoint in ['admin_dashboard', 'admin_analytics_kaika_sales', 'user_analytics'] %}open{% endif %}">
                     <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">全体売上管理</a>
                     <a href="{{ url_for('admin_analytics_kaika_sales') }}" class="{% if request.endpoint == 'admin_analytics_kaika_sales' %}active{% endif %}">開花売上分析</a>
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">ユーザー売上分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">全体クライアント売上分析</a>
                 </div>
             </div>
             {% endif %}
@@ -489,7 +489,7 @@
                     <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">クライアント別分析</a>
                     <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート</a>
                     {% else %}
-                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">My分析</a>
+                    <a href="{{ url_for('user_analytics') }}" class="{% if request.endpoint == 'user_analytics' %}active{% endif %}">売上分析</a>
                     <a href="{{ url_for('reports') }}" class="{% if request.endpoint in ['reports', 'report_monthly', 'report_inventory', 'report_annual'] %}active{% endif %}">レポート・CSV</a>
                     {% endif %}
                 </div>
@@ -1747,7 +1747,7 @@
 
                 const delta = timestamp - lastTimestamp;
                 lastTimestamp = timestamp;
-                const pixelsPerSecond = 180 + (820 * hoverStrength);
+                const pixelsPerSecond = 300 + (1250 * hoverStrength);
                 activeTarget.scrollLeft += activeDirection * pixelsPerSecond * (delta / 1000);
 
                 const atLeftEdge = activeDirection < 0 && activeTarget.scrollLeft <= 0;
