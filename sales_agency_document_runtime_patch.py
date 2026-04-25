@@ -913,9 +913,14 @@ def apply(module: Any) -> None:
             keisan_request_select = ", k.sales_agency_request_id" if has_keisan_request_id else ", NULL AS sales_agency_request_id"
             cur.execute(
                 f"""
-                SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at
+                SELECT k.id, k.document_no, k.issue_date, k.total_amount, k.status, k.created_at,
+                       k.subject, k.notes, k.recipient_name,
+                       u.display_name AS client_name, u.username,
+                       ps.auction_name
                        {keisan_request_select}
                 FROM user_keisan k
+                LEFT JOIN users u ON k.user_id = u.id
+                LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
                 WHERE {admin_created_condition}
                 ORDER BY COALESCE(k.issue_date, k.created_at) DESC, k.id DESC
                 """
@@ -930,7 +935,7 @@ def apply(module: Any) -> None:
                         "request_id": row.get("sales_agency_request_id"),
                         "document_type": "オークション計算書",
                         "document_no": row.get("document_no") or "-",
-                        "client_name": request_info.get("client_name") or "-",
+                        "client_name": request_info.get("client_name") or row.get("client_name") or row.get("recipient_name") or row.get("username") or "-",
                         "service_type": request_info.get("service_type") or "auction",
                         "service_name": service_name(request_info.get("service_type") or "auction"),
                         "issue_date": format_date(row.get("issue_date") or row.get("created_at")),
@@ -939,8 +944,8 @@ def apply(module: Any) -> None:
                         "status_label": document_status_label("user_keisan", row.get("status")),
                         "direction_key": "client_outgoing",
                         "direction_label": "開花→クライアント",
-                        "subject": "",
-                        "notes": "",
+                        "subject": row.get("subject") or row.get("auction_name") or "",
+                        "notes": row.get("notes") or "",
                         "detail_endpoint": "admin_auction_keisan_view",
                         "sort_key": str(row.get("issue_date") or row.get("created_at") or ""),
                     }

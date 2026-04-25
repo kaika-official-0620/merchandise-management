@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if is_archive %}代行仕入れ 過去履歴{% else %}代行仕入れ 履歴対応{% endif %} - 株式会社開花{% endblock %}
+{% block title %}{% if is_archive %}代行仕入れ 過去履歴{% else %}サービス終了と処理送付{% endif %} - 株式会社開花{% endblock %}
 
 {% block content %}
 <style>
@@ -71,7 +71,7 @@
 
 .filter-form {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 220px) auto auto;
+    grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 200px) minmax(150px, 190px) minmax(150px, 190px) auto auto;
     gap: 0.75rem;
 }
 
@@ -130,6 +130,7 @@
     padding: 0.3rem 0.7rem;
     font-size: 0.76rem;
     font-weight: 700;
+    white-space: nowrap;
 }
 
 .history-badge.mode-auction {
@@ -204,6 +205,11 @@
     margin-top: 1rem;
 }
 
+.topbar-actions .btn,
+.history-actions .btn {
+    white-space: nowrap;
+}
+
 .empty-state {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -236,41 +242,17 @@
 <div class="history-page">
     <div class="history-topbar">
         <div>
-            <h1>{% if is_archive %}代行仕入れ 過去履歴{% else %}代行仕入れ 履歴対応{% endif %}</h1>
+            <h1>{% if is_archive %}代行仕入れ 過去履歴{% else %}サービス終了と処理送付{% endif %}</h1>
             <p>
                 {% if is_archive %}
-                送付まで対応済みの代行仕入れ履歴です。必要なときに過去案件を検索して確認できます。
+                処理送付まで完了した終了案件です。誰が何を仕入れしたか、入札履歴や結果を後から確認できます。
                 {% else %}
-                まだ対応が残っている終了案件だけを表示しています。終了結果、入札履歴、クライアント別計算書の確認に進めます。
+                サービスが終了し、処理送付や売上確定の対応が必要な案件だけを表示しています。終了結果を開いて、クライアントごとの仕入れ内容確認と書類送付へ進めます。
                 {% endif %}
             </p>
         </div>
         <div class="topbar-actions">
             <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">管理一覧へ戻る</a>
-            {% if is_archive %}
-            <a href="{{ url_for('admin_proxy_service_history', keyword=filters.keyword, sale_mode=filters.sale_mode) }}" class="btn btn-secondary">未対応履歴を見る</a>
-            {% else %}
-            <a href="{{ url_for('admin_proxy_service_history_archive', keyword=filters.keyword, sale_mode=filters.sale_mode) }}" class="btn btn-secondary">過去履歴を見る</a>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-label">{% if is_archive %}過去履歴件数{% else %}未対応履歴件数{% endif %}</span>
-            <div class="stat-value">{% if is_archive %}{{ history_summary.archive_auction_count or history_auctions|length }}{% else %}{{ history_summary.pending_auction_count or history_auctions|length }}{% endif %}</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-label">{% if is_archive %}送付済み件数{% else %}対応待ちアクション{% endif %}</span>
-            <div class="stat-value">{% if is_archive %}{{ history_summary.submitted_count or 0 }}{% else %}{{ history_summary.pending_attention_count or 0 }}{% endif %}</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-label">落札クライアント数</span>
-            <div class="stat-value">{{ history_summary.winner_count or 0 }}</div>
-        </div>
-        <div class="stat-card">
-            <span class="stat-label">{% if is_archive %}未対応履歴件数{% else %}過去履歴件数{% endif %}</span>
-            <div class="stat-value">{% if is_archive %}{{ history_summary.pending_auction_count or 0 }}{% else %}{{ history_summary.archive_auction_count or 0 }}{% endif %}</div>
         </div>
     </div>
 
@@ -282,6 +264,8 @@
                 <option value="auction" {% if filters.sale_mode == 'auction' %}selected{% endif %}>オークション</option>
                 <option value="fixed" {% if filters.sale_mode == 'fixed' %}selected{% endif %}>早い者勝ち</option>
             </select>
+            <input type="date" name="date_from" value="{{ filters.date_from or '' }}" aria-label="開始日">
+            <input type="date" name="date_to" value="{{ filters.date_to or '' }}" aria-label="終了日">
             <button type="submit" class="btn btn-primary">絞り込む</button>
             {% if is_archive %}
             <a href="{{ url_for('admin_proxy_service_history_archive') }}" class="btn btn-secondary">クリア</a>
@@ -337,7 +321,7 @@
             </dl>
 
             <div class="summary-box">
-                <h3>対応状況</h3>
+                    <h3>{% if is_archive %}完了状況{% else %}対応状況{% endif %}</h3>
                 <p>
                     {% if auction.winner_names_summary and auction.winner_names_summary != '-' %}
                     落札クライアント: {{ auction.winner_names_summary }}
@@ -348,14 +332,17 @@
                     <br>対象商品: {{ auction.item_names_summary }}
                     {% endif %}
                     {% if not is_archive %}
-                    <br>落札確定待ち {{ auction.pending_finalize_count or 0 }}件 / 計算書未追加 {{ auction.pending_prepare_count or 0 }}件 / 送付準備完了 {{ auction.prepared_count or 0 }}件
+                    <br>落札確定待ち {{ auction.pending_finalize_count or 0 }}件 / 書類未作成 {{ auction.pending_prepare_count or 0 }}件 / 送付待ち {{ auction.prepared_count or 0 }}件
                     {% endif %}
                 </p>
             </div>
 
             <div class="history-actions">
-                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id) }}" class="btn btn-primary">終了結果を見る</a>
-                <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction.id) }}" class="btn btn-secondary">クライアント別計算書</a>
+                {% if is_archive %}
+                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id, history_view=1, archive_view=1) }}" class="btn btn-primary">過去結果を見る</a>
+                {% else %}
+                <a href="{{ url_for('admin_proxy_service_detail', auction_id=auction.id, history_view=1) }}" class="btn btn-primary">サービス終了を確認</a>
+                {% endif %}
             </div>
         </article>
         {% endfor %}

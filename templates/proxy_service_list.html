@@ -19,6 +19,31 @@
     <p class="page-lead">公開中と公開前の募集だけを表示しています。締切済みのオークションは履歴から確認できます。</p>
 </div>
 
+{% if proxy_service_info %}
+<section class="balance-panel">
+    <div>
+        <span class="balance-label">現在利用できる口座残高</span>
+        <strong>¥{{ "{:,}".format(proxy_service_info.remaining or 0) }}</strong>
+    </div>
+    <dl>
+        <div>
+            <dt>設定上限</dt>
+            <dd>¥{{ "{:,}".format(proxy_service_info.budget or 0) }}</dd>
+        </div>
+        <div>
+            <dt>利用中</dt>
+            <dd>¥{{ "{:,}".format(proxy_service_info.used or 0) }}</dd>
+        </div>
+        {% if upcoming_auctions %}
+        <div>
+            <dt>次回開始</dt>
+            <dd>{{ format_schedule(upcoming_auctions[0].start_datetime) }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+</section>
+{% endif %}
+
 <section class="auction-section">
     <div class="section-header">
         <h2>公開中</h2>
@@ -118,8 +143,8 @@
 {% if history_auctions %}
 <section class="history-summary">
     <div>
-        <h2>オークション履歴</h2>
-        <p>締切済みの募集は履歴ページにまとめています。終了後は各自の結果だけ確認できます。</p>
+        <h2>参加したオークション履歴</h2>
+        <p>自分が入札または購入した締切済みの募集だけを履歴ページで確認できます。</p>
     </div>
     <a href="{{ url_for('public_proxy_service_history') }}" class="history-summary-link">
         履歴ページへ
@@ -132,6 +157,62 @@
 .page-lead {
     margin-top: 0.5rem;
     color: var(--text-secondary);
+}
+
+.balance-panel {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+    box-shadow: 0 12px 30px rgba(37, 99, 235, 0.08);
+}
+
+.balance-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #1e40af;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.balance-panel strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1.8rem;
+    line-height: 1.15;
+}
+
+.balance-panel dl {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin: 0;
+}
+
+.balance-panel dl div {
+    min-width: 120px;
+    padding: 0.75rem 0.85rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.balance-panel dt {
+    margin-bottom: 0.25rem;
+    color: #64748b;
+    font-size: 0.72rem;
+}
+
+.balance-panel dd {
+    margin: 0;
+    color: #0f172a;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
 .history-summary-link {
@@ -328,6 +409,19 @@
 }
 
 @media (max-width: 768px) {
+    .balance-panel {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .balance-panel dl {
+        justify-content: stretch;
+    }
+
+    .balance-panel dl div {
+        flex: 1;
+    }
+
     .history-summary {
         flex-direction: column;
         align-items: stretch;

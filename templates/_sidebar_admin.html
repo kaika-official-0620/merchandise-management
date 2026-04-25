@@ -7,6 +7,7 @@
 {% set auction_sales_agency_count = get_pending_sales_agency_count_by_service('auction') if get_pending_sales_agency_count_by_service is defined else 0 %}
 {% set simultaneous_sales_agency_count = get_pending_sales_agency_count_by_service('simultaneous') if get_pending_sales_agency_count_by_service is defined else 0 %}
 {% set long_term_item_count = get_long_term_item_count() if get_long_term_item_count is defined else 0 %}
+{% set pending_proxy_service_history_count = get_pending_proxy_service_history_count() if get_pending_proxy_service_history_count is defined else 0 %}
 {% set admin_notification_count = pending_sale_request_count + pending_disposal_count %}
 {% set analytics_from_report_nav = request.endpoint == 'user_analytics' and request.args.get('from_client_reports') == '1' %}
 {% set home_endpoints = [
@@ -78,7 +79,9 @@
     'admin_proxy_service',
     'admin_proxy_service_create',
     'admin_proxy_service_detail',
+    'admin_proxy_service_document_history',
     'admin_proxy_service_history',
+    'admin_proxy_service_history_archive',
     'admin_auction_keisan_list',
     'admin_auction_keisan_view',
     'admin_auction_keisan_edit',
@@ -96,6 +99,11 @@
     'admin_stripe_dashboard',
     'admin_backup'
 ] %}
+{% set proxy_service_history_mode = request.args.get('history_view') %}
+{% set proxy_service_archive_mode = request.args.get('archive_view') %}
+{% set proxy_service_service_active = request.endpoint in ['admin_proxy_service', 'admin_proxy_service_create'] or (request.endpoint == 'admin_proxy_service_detail' and not proxy_service_history_mode) %}
+{% set proxy_service_followup_active = request.endpoint in ['admin_proxy_service_history', 'admin_proxy_service_document_history', 'admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit', 'admin_auction_keisan_pdf'] or (request.endpoint == 'admin_proxy_service_detail' and proxy_service_history_mode and not proxy_service_archive_mode) %}
+{% set proxy_service_archive_active = request.endpoint == 'admin_proxy_service_history_archive' or (request.endpoint == 'admin_proxy_service_detail' and proxy_service_history_mode and proxy_service_archive_mode) %}
 <div class="sidebar-category">
     <button type="button" class="sidebar-category-toggle {% if request.path in ['/admin', '/admin/home'] or (request.endpoint in home_endpoints and not analytics_from_report_nav) %}active{% endif %}" onclick="toggleCategory(this)">
         ホーム
@@ -212,9 +220,18 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">サービス</div>
             {% if current_user.can_manage_proxy_service() %}
-            <a href="{{ url_for('admin_proxy_service') }}" class="{% if request.endpoint in ['admin_proxy_service', 'admin_proxy_service_create', 'admin_proxy_service_detail'] %}active{% endif %}">代行仕入れサービス</a>
-            <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if request.endpoint == 'admin_proxy_service_history' %}active{% endif %}">代行仕入れ履歴</a>
-            <a href="{{ url_for('admin_auction_keisan_list') }}" class="{% if request.endpoint in ['admin_auction_keisan_list', 'admin_auction_keisan_view', 'admin_auction_keisan_edit'] %}active{% endif %}">オークション計算書</a>
+            <a href="{{ url_for('admin_proxy_service') }}" class="{% if proxy_service_service_active %}active{% endif %}">
+                <span class="menu-label">代行仕入れサービス</span>
+            </a>
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="{% if proxy_service_followup_active %}active{% endif %}">
+                <span class="menu-label">サービス終了と処理送付</span>
+                {% if pending_proxy_service_history_count > 0 %}
+                <span class="menu-badge-inline">{{ pending_proxy_service_history_count }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('admin_proxy_service_history_archive') }}" class="{% if proxy_service_archive_active %}active{% endif %}">
+                <span class="menu-label">代行仕入れ過去履歴</span>
+            </a>
             {% else %}
             <span class="sidebar-item-disabled">サービス管理の権限がありません</span>
             {% endif %}

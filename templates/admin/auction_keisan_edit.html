@@ -3,338 +3,481 @@
 {% block title %}計算書編集 - 株式会社開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <a href="{{ url_for('admin_auction_keisan_view', id=keisan.id) }}" class="btn btn-secondary">← 戻る</a>
+<div class="admin-header">
     <h1>計算書編集</h1>
+    <div class="admin-nav">
+        <a href="{{ back_to_view_url }}" class="btn btn-secondary">← 処理送付へ戻る</a>
+    </div>
 </div>
 
-<div class="form-container">
-    <form method="POST" id="keisan-form">
-        <div class="form-section">
-            <h3>基本情報</h3>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>計算書No.</label>
-                    <input type="text" value="{{ keisan.document_no }}" readonly class="readonly-field">
-                </div>
-                <div class="form-group">
-                    <label>クライアント</label>
-                    <input type="text" value="{{ keisan.user_name }}" readonly class="readonly-field">
-                </div>
-                <div class="form-group">
-                    <label>対象オークション</label>
-                    <input type="text" value="{{ keisan.auction_name_display }}" readonly class="readonly-field">
-                </div>
-                <div class="form-group">
-                    <label>販売方式 / 終了日時</label>
-                    <input type="text" value="{{ keisan.sale_mode_label }} / {{ keisan.auction_end_display }}" readonly class="readonly-field">
-                </div>
-                <div class="form-group">
-                    <label for="issue_date">発行日 <span class="required">*</span></label>
-                    <input type="date" id="issue_date" name="issue_date" value="{{ keisan.issue_date }}" required>
-                </div>
-                <div class="form-group">
-                    <label for="recipient_name">宛名</label>
-                    <input type="text" id="recipient_name" name="recipient_name" value="{{ keisan.recipient_name or '' }}" placeholder="例: 山田 太郎 様">
-                </div>
+<form method="POST" id="keisan-form" class="keisan-edit-form">
+    {% if next_url %}
+    <input type="hidden" name="next" value="{{ next_url }}">
+    {% endif %}
+
+    <div class="edit-hint">
+        計算書の表示そのものに直接入力できます。金額や項目を修正したら、下部の保存ボタンで反映してください。
+    </div>
+
+    <div class="keisan-sheet editable-sheet">
+        <h2 class="keisan-title">計算書</h2>
+
+        <div class="keisan-meta-grid">
+            <label class="meta-item">
+                <span class="meta-label">対象月</span>
+                <input type="date" id="issue_date" name="issue_date" value="{{ keisan.issue_date }}" required class="doc-input meta-input">
+            </label>
+            <label class="meta-item">
+                <span class="meta-label">宛先</span>
+                <span class="inline-recipient">
+                    <input type="text" id="recipient_name" name="recipient_name" value="{{ keisan.recipient_name or keisan.user_name or '' }}" placeholder="宛先" class="doc-input meta-input">
+                    <span>様</span>
+                </span>
+            </label>
+            <div class="meta-item">
+                <span class="meta-label">発行者</span>
+                <span class="meta-value">株式会社開花</span>
             </div>
-            <div class="form-group full-width">
-                <label for="subject">件名</label>
-                <input type="text" id="subject" name="subject" value="{{ keisan.subject or '' }}" placeholder="例: 代行仕入れサービス計算書">
+            <div class="meta-item">
+                <span class="meta-label">クライアント番号</span>
+                <span class="meta-value">C-{{ "%03d"|format(keisan.user_id or 0) }}</span>
             </div>
-            <div class="form-group full-width">
-                <label>クライアント商品一覧</label>
-                <a href="{{ url_for('admin_user_products', owner_id=keisan.user_id) }}" class="btn btn-secondary btn-inline-link">商品一覧を別画面で確認</a>
+            <label class="meta-item">
+                <span class="meta-label">書類区分</span>
+                <input type="text" id="subject" name="subject" value="{{ keisan.subject or '代行仕入れ計算書' }}" class="doc-input meta-input">
+            </label>
+            <div class="meta-item">
+                <span class="meta-label">支払方法</span>
+                <span class="meta-value">指定口座振込</span>
             </div>
         </div>
 
-        <div class="form-section">
-            <h3>商品</h3>
-            <table class="items-table" id="items-table">
-                <thead>
-                    <tr>
-                        <th style="width: 60px;">No.</th>
-                        <th>商品名</th>
-                        <th style="width: 90px;">数量</th>
-                        <th style="width: 100px;">単位</th>
-                        <th style="width: 140px;">単価</th>
-                        <th style="width: 140px;">金額</th>
-                        <th style="width: 60px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="items-tbody">
-                    {% for item in items %}
-                    <tr class="item-row">
-                        <td class="item-no">{{ loop.index }}</td>
-                        <td>
-                            <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}" class="item-merchandise-id">
-                            <input type="hidden" name="proxy_source_item_id[]" value="{{ item.proxy_source_item_id or '' }}" class="item-source-id">
-                            <input type="text" name="item_name[]" value="{{ item.item_name }}" class="item-name" required>
-                        </td>
-                        <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="item-qty" min="1"></td>
-                        <td><input type="text" name="unit[]" value="{{ item.unit or '' }}" class="item-unit" placeholder="点"></td>
-                        <td><input type="number" name="unit_price[]" value="{{ item.unit_price or 0 }}" class="item-price" min="0"></td>
-                        <td class="item-amount">¥{{ "{:,}".format(item.amount or 0) }}</td>
-                        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
-                    </tr>
-                    {% else %}
-                    <tr class="item-row">
-                        <td class="item-no">1</td>
-                        <td>
-                            <input type="hidden" name="merchandise_id[]" value="" class="item-merchandise-id">
-                            <input type="hidden" name="proxy_source_item_id[]" value="" class="item-source-id">
-                            <input type="text" name="item_name[]" class="item-name" required>
-                        </td>
-                        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
-                        <td><input type="text" name="unit[]" class="item-unit" placeholder="点"></td>
-                        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
-                        <td class="item-amount">¥0</td>
-                        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="7">
-                            <button type="button" class="btn btn-add" onclick="addRow()">+ 商品を追加</button>
-                        </td>
-                    </tr>
-                    <tr class="total-row">
-                        <td colspan="5" class="text-right"><strong>合計金額</strong></td>
-                        <td id="total-amount" class="total-amount">¥{{ "{:,}".format(keisan.total_amount or 0) }}</td>
-                        <td></td>
-                    </tr>
-                </tfoot>
-            </table>
+        <table class="keisan-items" id="items-table">
+            <thead>
+                <tr>
+                    <th class="col-no">No.</th>
+                    <th>項目</th>
+                    <th class="col-qty">数量</th>
+                    <th class="col-amount">金額</th>
+                    <th class="col-action"></th>
+                </tr>
+            </thead>
+            <tbody id="items-tbody">
+                {% for item in items %}
+                <tr class="item-row">
+                    <td class="text-center item-no">{{ loop.index }}</td>
+                    <td>
+                        <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                        <input type="hidden" name="proxy_source_item_id[]" value="{{ item.proxy_source_item_id or '' }}">
+                        <input type="text" name="item_name[]" value="{{ item.item_name }}" class="doc-input item-name-input" required>
+                        <div class="item-note">
+                            {{ keisan.auction_name_display }} / {{ keisan.sale_mode_label }}
+                            {% if item.source_product_name or item.source_brand_name %}
+                            <br>元商品: {{ item.source_product_name or item.item_name }}{% if item.source_brand_name %} / {{ item.source_brand_name }}{% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <div class="qty-edit">
+                            <input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="doc-input qty-input item-qty" min="1">
+                            <input type="text" name="unit[]" value="{{ item.unit or '点' }}" class="doc-input unit-input item-unit" placeholder="点">
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <div class="amount-edit">
+                            <span>¥</span>
+                            <input type="number" name="amount[]" value="{{ item.amount or 0 }}" class="doc-input amount-input item-amount-input" min="0">
+                        </div>
+                        <input type="hidden" name="unit_price[]" value="{{ item.unit_price or item.amount or 0 }}" class="item-unit-price">
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="row-delete" onclick="removeRow(this)" aria-label="明細を削除">×</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr class="item-row">
+                    <td class="text-center item-no">1</td>
+                    <td>
+                        <input type="hidden" name="merchandise_id[]" value="">
+                        <input type="hidden" name="proxy_source_item_id[]" value="">
+                        <input type="text" name="item_name[]" class="doc-input item-name-input" required>
+                        <div class="item-note">{{ keisan.auction_name_display }} / {{ keisan.sale_mode_label }}</div>
+                    </td>
+                    <td class="text-center">
+                        <div class="qty-edit">
+                            <input type="number" name="quantity[]" value="1" class="doc-input qty-input item-qty" min="1">
+                            <input type="text" name="unit[]" value="点" class="doc-input unit-input item-unit" placeholder="点">
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <div class="amount-edit">
+                            <span>¥</span>
+                            <input type="number" name="amount[]" value="0" class="doc-input amount-input item-amount-input" min="0">
+                        </div>
+                        <input type="hidden" name="unit_price[]" value="0" class="item-unit-price">
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="row-delete" onclick="removeRow(this)" aria-label="明細を削除">×</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <button type="button" class="add-row-button" onclick="addRow()">+ 明細を追加</button>
+
+        <div class="keisan-total-row">
+            <span>合計金額</span>
+            <strong id="total-amount">¥{{ "{:,}".format(keisan.total_amount or 0) }}</strong>
         </div>
 
-        <div class="form-section">
+        <div class="keisan-divider"></div>
+
+        <section class="keisan-notes">
             <h3>備考</h3>
-            <div class="form-group full-width">
-                <textarea name="notes" rows="4" placeholder="備考を入力">{{ keisan.notes or '' }}</textarea>
-            </div>
-        </div>
+            <textarea id="notes" name="notes" rows="5" class="doc-textarea" placeholder="申告や確認時に必要な補足があれば入力してください。">{{ keisan.notes or '' }}</textarea>
+        </section>
 
-        <div class="form-actions">
-            <a href="{{ url_for('admin_auction_keisan_view', id=keisan.id) }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-            <button type="submit" name="status" value="completed" class="btn btn-primary">送付準備完了にする</button>
+        <div class="keisan-status-line">
+            <span>計算書番号 {{ keisan.document_no }}</span>
         </div>
-    </form>
-</div>
+    </div>
+
+    <div class="form-actions">
+        <a href="{{ back_to_view_url }}" class="btn btn-secondary">キャンセル</a>
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">保存</button>
+        <button type="submit" name="status" value="completed" class="btn btn-primary">送付準備完了にする</button>
+    </div>
+</form>
 
 <style>
-.page-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.page-header h1 {
-    margin: 0;
-}
-
-.form-container {
+.keisan-edit-form {
     max-width: 1080px;
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-    padding: 24px;
+    margin: 0 auto;
 }
 
-.form-section {
-    margin-bottom: 32px;
-}
-
-.form-section h3 {
-    margin: 0 0 16px 0;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #2563eb;
-    color: #1e293b;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.form-group.full-width {
-    grid-column: 1 / -1;
-}
-
-.form-group label {
-    font-weight: 600;
-    color: #475569;
-    font-size: 0.875rem;
-}
-
-.required {
-    color: #ef4444;
-}
-
-.form-group input,
-.form-group textarea {
-    padding: 10px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
+.edit-hint {
+    margin: 0 auto 16px;
+    max-width: 960px;
+    padding: 12px 16px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+    color: #334155;
     font-size: 14px;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
+.keisan-sheet {
+    max-width: 960px;
+    min-height: 1180px;
+    margin: 0 auto;
+    padding: 72px 64px;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.editable-sheet {
+    outline: 2px solid transparent;
+}
+
+.keisan-title {
+    margin: 0 0 34px;
+    text-align: center;
+    color: #111827;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.keisan-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 48px;
+    row-gap: 20px;
+    margin-bottom: 28px;
+    font-size: 17px;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.meta-label {
+    margin-right: 8px;
+    color: #111827;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.meta-value {
+    color: #374151;
+    font-weight: 500;
+}
+
+.inline-recipient {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.doc-input,
+.doc-textarea {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #111827;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.doc-input {
+    padding: 7px 8px;
+}
+
+.doc-textarea {
+    min-height: 120px;
+    padding: 10px 12px;
+    line-height: 1.8;
+    resize: vertical;
+}
+
+.doc-input:focus,
+.doc-textarea:focus {
     outline: none;
     border-color: #2563eb;
+    background: #fff;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.readonly-field {
-    background: #f8fafc;
-    color: #64748b;
+.meta-input {
+    min-width: 0;
+    font-weight: 600;
 }
 
-.items-table {
+.keisan-items {
     width: 100%;
     border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 17px;
 }
 
-.items-table th,
-.items-table td {
-    padding: 10px;
-    border: 1px solid #e2e8f0;
-    text-align: left;
+.keisan-items th,
+.keisan-items td {
+    border: 2px solid #475569;
+    padding: 12px 12px;
+    vertical-align: middle;
 }
 
-.items-table th {
+.keisan-items th {
     background: #f8fafc;
-    font-weight: 600;
-    color: #475569;
-    font-size: 0.875rem;
-}
-
-.items-table input {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-.items-table input:focus {
-    outline: none;
-    border-color: #2563eb;
-}
-
-.item-no {
+    color: #111827;
+    font-weight: 800;
     text-align: center;
-    font-weight: 600;
-    color: #64748b;
 }
 
-.item-amount {
-    font-family: Consolas, monospace;
-    text-align: right;
-    font-weight: 700;
+.col-no {
+    width: 72px;
 }
 
-.btn-remove {
-    background: #fee2e2;
-    color: #ef4444;
-    border: none;
-    border-radius: 6px;
-    width: 32px;
-    height: 32px;
-    cursor: pointer;
-    font-size: 16px;
+.col-qty {
+    width: 150px;
 }
 
-.btn-remove:hover {
-    background: #fecaca;
+.col-amount {
+    width: 190px;
 }
 
-.btn-add {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
+.col-action {
+    width: 48px;
 }
 
-.btn-add:hover {
-    background: #dbeafe;
-}
-
-.btn-inline-link {
-    width: fit-content;
-}
-
-.total-row td {
-    background: #f8fbff;
-    border-top: 2px solid #2563eb;
+.text-center {
+    text-align: center;
 }
 
 .text-right {
     text-align: right;
 }
 
-.total-amount {
-    font-family: Consolas, monospace;
-    font-size: 1rem;
+.item-name-input {
+    font-weight: 700;
+}
+
+.item-note {
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.qty-edit {
+    display: grid;
+    grid-template-columns: minmax(56px, 1fr) 52px;
+    gap: 6px;
+    align-items: center;
+}
+
+.qty-input,
+.unit-input {
+    text-align: center;
+}
+
+.amount-edit {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.amount-input {
+    max-width: 130px;
+    text-align: right;
+    font-weight: 700;
+}
+
+.row-delete {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    cursor: pointer;
     font-weight: 800;
-    color: #047857;
+}
+
+.row-delete:hover {
+    background: #fecaca;
+}
+
+.add-row-button {
+    margin-top: 12px;
+    padding: 9px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #1e293b;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.keisan-total-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 24px;
+    margin: 38px 0 20px;
+    color: #111827;
+}
+
+.keisan-total-row span {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-total-row strong {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+}
+
+.keisan-divider {
+    border-top: 1px solid #d1d5db;
+    margin: 0 0 28px;
+}
+
+.keisan-notes h3 {
+    margin: 0 0 22px;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-status-line {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 42px;
+    color: #64748b;
+    font-size: 13px;
 }
 
 .form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding-top: 8px;
+    max-width: 960px;
+    margin: 24px auto 0;
+    padding-bottom: 32px;
 }
 
-@media (max-width: 768px) {
-    .page-header,
-    .form-actions {
-        flex-direction: column;
-        align-items: stretch;
+@media (max-width: 860px) {
+    .keisan-sheet {
+        padding: 36px 20px;
+        min-height: 0;
+        overflow-x: auto;
     }
 
-    .items-table {
-        display: block;
-        overflow-x: auto;
+    .keisan-meta-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .keisan-items {
+        min-width: 760px;
+    }
+
+    .form-actions {
+        flex-direction: column;
+        display: flex;
+    }
+
+    .keisan-total-row strong {
+        font-size: 32px;
     }
 }
 </style>
 
 <script>
+const auctionName = {{ keisan.auction_name_display|tojson }};
+const saleMode = {{ keisan.sale_mode_label|tojson }};
+
 function formatYen(value) {
     return '¥' + Number(value || 0).toLocaleString('ja-JP');
 }
 
-function recalculateRow(row) {
-    const qty = Number(row.querySelector('.item-qty').value || 0);
-    const price = Number(row.querySelector('.item-price').value || 0);
-    row.querySelector('.item-amount').textContent = formatYen(qty * price);
+function numberValue(input) {
+    return Number(input && input.value ? input.value : 0) || 0;
+}
+
+function syncUnitPrice(row) {
+    const qty = Math.max(1, numberValue(row.querySelector('.item-qty')));
+    const amount = Math.max(0, numberValue(row.querySelector('.item-amount-input')));
+    const hiddenUnitPrice = row.querySelector('.item-unit-price');
+    if (hiddenUnitPrice) {
+        hiddenUnitPrice.value = Math.floor(amount / qty);
+    }
 }
 
 function recalculateTotal() {
     let total = 0;
     document.querySelectorAll('.item-row').forEach((row, index) => {
         row.querySelector('.item-no').textContent = index + 1;
-        const qty = Number(row.querySelector('.item-qty').value || 0);
-        const price = Number(row.querySelector('.item-price').value || 0);
-        total += qty * price;
-        recalculateRow(row);
+        const amount = Math.max(0, numberValue(row.querySelector('.item-amount-input')));
+        total += amount;
+        syncUnitPrice(row);
     });
     document.getElementById('total-amount').textContent = formatYen(total);
+}
+
+function bindRowEvents(row) {
+    row.querySelectorAll('.item-qty, .item-unit, .item-amount-input, .item-name-input').forEach((input) => {
+        input.addEventListener('input', recalculateTotal);
+    });
 }
 
 function addRow() {
@@ -342,18 +485,31 @@ function addRow() {
     const row = document.createElement('tr');
     row.className = 'item-row';
     row.innerHTML = `
-        <td class="item-no"></td>
+        <td class="text-center item-no"></td>
         <td>
-            <input type="hidden" name="merchandise_id[]" value="" class="item-merchandise-id">
-            <input type="hidden" name="proxy_source_item_id[]" value="" class="item-source-id">
-            <input type="text" name="item_name[]" class="item-name" required>
+            <input type="hidden" name="merchandise_id[]" value="">
+            <input type="hidden" name="proxy_source_item_id[]" value="">
+            <input type="text" name="item_name[]" class="doc-input item-name-input" required>
+            <div class="item-note"></div>
         </td>
-        <td><input type="number" name="quantity[]" value="1" class="item-qty" min="1"></td>
-        <td><input type="text" name="unit[]" class="item-unit" placeholder="点"></td>
-        <td><input type="number" name="unit_price[]" value="0" class="item-price" min="0"></td>
-        <td class="item-amount">¥0</td>
-        <td><button type="button" class="btn-remove" onclick="removeRow(this)">×</button></td>
+        <td class="text-center">
+            <div class="qty-edit">
+                <input type="number" name="quantity[]" value="1" class="doc-input qty-input item-qty" min="1">
+                <input type="text" name="unit[]" value="点" class="doc-input unit-input item-unit" placeholder="点">
+            </div>
+        </td>
+        <td class="text-right">
+            <div class="amount-edit">
+                <span>¥</span>
+                <input type="number" name="amount[]" value="0" class="doc-input amount-input item-amount-input" min="0">
+            </div>
+            <input type="hidden" name="unit_price[]" value="0" class="item-unit-price">
+        </td>
+        <td class="text-center">
+            <button type="button" class="row-delete" onclick="removeRow(this)" aria-label="明細を削除">×</button>
+        </td>
     `;
+    row.querySelector('.item-note').textContent = `${auctionName} / ${saleMode}`;
     tbody.appendChild(row);
     bindRowEvents(row);
     recalculateTotal();
@@ -368,13 +524,8 @@ function removeRow(button) {
     recalculateTotal();
 }
 
-function bindRowEvents(row) {
-    row.querySelectorAll('.item-qty, .item-price').forEach((input) => {
-        input.addEventListener('input', recalculateTotal);
-    });
-}
-
 document.querySelectorAll('.item-row').forEach(bindRowEvents);
+document.getElementById('keisan-form').addEventListener('submit', recalculateTotal);
 recalculateTotal();
 </script>
 {% endblock %}

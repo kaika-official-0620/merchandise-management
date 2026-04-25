@@ -2,24 +2,20 @@
 {% block title %}{{ settings.auction_name or 'オークション' }} - 代行仕入れサービス管理{% endblock %}
 
 {% block content %}
+{% set is_open_edit_locked = auction_state.is_open and not result_only_mode %}
 <div class="page-header">
     <h1>
-        <a href="{{ url_for('admin_proxy_service') }}" class="back-link">← 一覧</a>
+        <a href="{{ history_back_url if result_only_mode else url_for('admin_proxy_service') }}" class="back-link">← {{ history_back_label if result_only_mode else '一覧' }}</a>
         {{ settings.auction_name or 'オークション' }}
     </h1>
     <div class="header-actions">
+        {% if not result_only_mode %}
         <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
         {% if not auction_state.is_ended and not auction_state.is_open %}
         <button type="button" class="btn btn-primary" onclick="startAuctionNow()">
             今すぐ公開する
         </button>
         {% endif %}
-        {% if auction_state.is_open %}
-        <button onclick="finalizeAuction()" class="btn btn-danger">
-            {% if settings.sale_mode == 'fixed' %}販売終了{% else %}オークション終了・落札確定{% endif %}
-        </button>
-        {% elif result_summary.pending_finalize_count > 0 %}
-        <button onclick="finalizeAuction()" class="btn btn-danger">落札確定</button>
         {% endif %}
     </div>
 </div>
@@ -28,12 +24,16 @@
     <div class="overview-main">
         <span class="overview-badge {{ auction_state.status }}">{{ auction_state.status_label }}</span>
         <div class="overview-copy">
-            <h2>公開状態と締切状況</h2>
+            <h2>{% if result_only_mode %}サービス終了後の対応状況{% else %}公開状態と締切状況{% endif %}</h2>
             <p>
                 {% if auction_state.status == 'open' %}
-                現在公開中です。終了時刻になると受付を停止し、公開ページは結果表示へ切り替わります。
+                現在公開中です。開始日時と販売方式は固定され、終了日時は延長できます。商品追加と参加ユーザー追加はこのまま行えます。
                 {% elif auction_state.status == 'ended' %}
+                {% if result_only_mode %}
+                募集は締切済みです。ここでは誰がどの商品を取得したかを確認し、購入者ごとに計算書を作成して送付できます。計算書を送付したタイミングで、開花側在庫を売却済みにし、同じ金額でユーザー商品へ反映します。
+                {% else %}
                 募集は締切済みです。ユーザー画面には自分が競り落とした商品のみ結果を表示します。
+                {% endif %}
                 {% elif auction_state.status == 'scheduled' %}
                 予約公開中です。開始時刻まではユーザー側には開始待ちとして表示されます。
                 {% else %}
@@ -56,19 +56,19 @@
             <strong>{% if auction_state.end_datetime %}{{ auction_state.end_datetime.strftime('%Y/%m/%d %H:%M') }}{% else %}無期限{% endif %}</strong>
         </div>
         <div class="overview-item">
-            <span class="overview-label">公開中商品</span>
-            <strong>{{ items|length }}件</strong>
+            <span class="overview-label">{% if result_only_mode %}対象商品{% else %}公開中商品{% endif %}</span>
+            <strong>{% if result_only_mode %}{{ result_items|length }}件{% else %}{{ items|length }}件{% endif %}</strong>
         </div>
         <div class="overview-item">
             <span class="overview-label">結果対象</span>
             <strong>{{ result_summary.winner_count }}件</strong>
         </div>
         <div class="overview-item">
-            <span class="overview-label">クライアント反映待ち</span>
+            <span class="overview-label">処理送付待ち</span>
             <strong>{{ result_summary.pending_reflection_count }}件</strong>
         </div>
         <div class="overview-item">
-            <span class="overview-label">反映済み</span>
+            <span class="overview-label">送付済み</span>
             <strong>{{ result_summary.reflected_count }}件</strong>
         </div>
         <div class="overview-item">
@@ -79,9 +79,15 @@
 </div>
 
 <div class="proxy-admin-container">
+    {% if not result_only_mode %}
     <!-- 設定フォーム -->
     <div class="settings-card">
         <h2>基本設定</h2>
+        {% if is_open_edit_locked %}
+        <div class="edit-lock-notice">
+            公開中のため、開始日時・販売方式・公開状態は固定しています。終了日時の延長、ページ名や説明文の変更、商品追加、参加ユーザー追加は可能です。
+        </div>
+        {% endif %}
         <form method="POST" action="{{ url_for('admin_proxy_service_settings', auction_id=auction_id) }}">
             <div class="form-group">
                 <label>オークション名（管理用）</label>
@@ -91,12 +97,14 @@
             <div class="form-group toggle-group">
                 <div class="toggle-info">
                     <span class="toggle-text">ページを公開する</span>
-                    <p class="form-hint">オフにするとページは非公開になります</p>
+                    <p class="form-hint">{% if is_open_edit_locked %}公開中のため公開状態は固定されます{% else %}オフにするとページは非公開になります{% endif %}</p>
+                    {% if not is_open_edit_locked %}
                     <p class="form-hint">上の「今すぐ公開する」を押すと、開始日時を現在時刻に更新してすぐ公開できます。</p>
+                    {% endif %}
                 </div>
                 <div class="toggle-buttons">
-                    <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false)">非公開</button>
-                    <button type="button" class="toggle-btn on {% if settings.is_public %}active{% endif %}" onclick="setPublic(true)">公開</button>
+                    <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false)" {% if is_open_edit_locked %}disabled{% endif %}>非公開</button>
+                    <button type="button" class="toggle-btn on {% if settings.is_public %}active{% endif %}" onclick="setPublic(true)" {% if is_open_edit_locked %}disabled{% endif %}>公開</button>
                     <input type="hidden" name="is_public" id="is_public_input" value="{% if settings.is_public %}on{% endif %}">
                 </div>
             </div>
@@ -113,36 +121,46 @@
             
             <div class="form-group">
                 <label>販売方式</label>
+                {% if is_open_edit_locked %}
+                <input type="hidden" name="sale_mode" value="{{ settings.sale_mode or 'auction' }}">
+                {% endif %}
                 <div class="sale-mode-options">
                     <label class="radio-label">
-                        <input type="radio" name="sale_mode" value="auction" {% if not settings.sale_mode or settings.sale_mode == 'auction' %}checked{% endif %} onchange="updateSaleModePreview()">
+                        <input type="radio" name="sale_mode" value="auction" {% if not settings.sale_mode or settings.sale_mode == 'auction' %}checked{% endif %} onchange="updateSaleModePreview()" {% if is_open_edit_locked %}disabled{% endif %}>
                         <span class="radio-text">
                             <strong>オークション</strong>
                             <small>入札形式で最高額を競います</small>
                         </span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="sale_mode" value="fixed" {% if settings.sale_mode == 'fixed' %}checked{% endif %} onchange="updateSaleModePreview()">
+                        <input type="radio" name="sale_mode" value="fixed" {% if settings.sale_mode == 'fixed' %}checked{% endif %} onchange="updateSaleModePreview()" {% if is_open_edit_locked %}disabled{% endif %}>
                         <span class="radio-text">
                             <strong>即決・早い者勝ち</strong>
                             <small>固定価格で先着順に購入できます</small>
                         </span>
                     </label>
                 </div>
+                {% if is_open_edit_locked %}
+                <p class="form-hint">公開後は販売方式を変更できません。</p>
+                {% endif %}
             </div>
             
             <div class="form-group">
                 <label>開始日時</label>
+                {% if is_open_edit_locked %}
+                <input type="hidden" name="start_datetime" value="{% if settings.start_datetime %}{% if settings.start_datetime is string %}{{ settings.start_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+                {% endif %}
                 <input type="datetime-local" name="start_datetime" class="form-control" 
-                       value="{% if settings.start_datetime %}{% if settings.start_datetime is string %}{{ settings.start_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
-                <p class="form-hint">この日時以降に公開されます（空欄で即時公開）</p>
+                       value="{% if settings.start_datetime %}{% if settings.start_datetime is string %}{{ settings.start_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.start_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
+                       {% if is_open_edit_locked %}disabled{% endif %}>
+                <p class="form-hint">{% if is_open_edit_locked %}公開中のため開始日時は変更できません{% else %}この日時以降に公開されます（空欄で即時公開）{% endif %}</p>
             </div>
             
             <div class="form-group">
                 <label>終了日時</label>
                 <input type="datetime-local" name="end_datetime" class="form-control"
                        value="{% if settings.end_datetime %}{% if settings.end_datetime is string %}{{ settings.end_datetime[:16].replace(' ', 'T') }}{% else %}{{ settings.end_datetime.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
-                <p class="form-hint">この日時に終了します（空欄で無期限）</p>
+                <p class="form-hint">{% if is_open_edit_locked %}公開中は終了日時の延長のみ可能です。短縮は保存時にブロックされます。{% else %}この日時に終了します（空欄で無期限）{% endif %}</p>
             </div>
             
             <div class="form-group">
@@ -282,46 +300,144 @@
         {% else %}
         <div class="empty-message">
             公開中の商品はありません。<br>
-            商品一覧から「代行サービスに掲載」をクリックして商品を追加してください。
+            下の「商品を追加」から開花商品管理の商品を選択してください。
         </div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% set current_page_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+    {% set is_live_status_view = auction_state.is_open and not result_only_mode %}
+    {% set display_client_groups = pending_client_document_groups if result_only_mode else client_document_groups %}
     <div class="results-card">
         <div class="results-header">
             <div>
-                <h2>終了結果 / 購入者一覧 <span class="item-count">{{ result_items|length }}件</span></h2>
-                <p class="results-subcopy">終了後は、誰がどの商品を取得したかを確認し、必要な商品だけ計算書へ追加できます。クライアントの商品一覧への反映と開花側在庫の売り切れ処理は、計算書を送付したタイミングで実行されます。</p>
-                {% if keisan_summary.total_docs > 0 %}
+                <h2>
+                    {% if is_live_status_view %}公開中商品の入札状況{% elif result_only_mode %}送付前クライアント一覧{% else %}サービス終了後の購入者一覧{% endif %}
+                    <span class="item-count">{% if result_only_mode %}{{ display_client_groups|length }}名{% else %}{{ result_items|length }}件{% endif %}</span>
+                </h2>
+                <p class="results-subcopy">
+                    {% if is_live_status_view %}
+                    現在公開している商品の入札・購入状況です。価格や購入状況に変化があると自動で更新されます。
+                    {% elif result_only_mode %}
+                    計算書の送付がまだ完了していないクライアントだけを表示しています。名前をクリックすると、今回仕入れした商品を画像付きで確認できます。
+                    {% else %}
+                    購入者名を押すと、そのクライアントが仕入れた商品を確認できます。計算書を確認して送付したタイミングで、開花側在庫は売却済みになり、同じ金額でユーザー商品一覧へ反映されます。
+                    {% endif %}
+                </p>
+                {% if keisan_summary.total_docs > 0 and not is_live_status_view and not result_only_mode %}
                 <div class="results-keisan-summary">
-                    <span>計算書 {{ keisan_summary.total_docs }}件</span>
-                    <span>下書き {{ keisan_summary.draft_count }}件</span>
+                    <span>書類 {{ keisan_summary.total_docs }}件</span>
                     <span>送付準備完了 {{ keisan_summary.completed_count }}件</span>
                     <span>送付済み {{ keisan_summary.submitted_count }}件</span>
-                    <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction_id) }}">このオークションの計算書を見る</a>
+                    <a href="{{ url_for('admin_proxy_service_document_history', auction_id=auction_id) }}">このサービスの処理送付履歴を見る</a>
                 </div>
                 {% endif %}
             </div>
-            {% if result_summary.pending_reflection_count > 0 %}
+            {% if result_summary.pending_reflection_count > 0 and not is_live_status_view and not result_only_mode %}
             <button type="button" class="btn btn-primary" onclick="reflectAllWinnerItems()">
-                落札商品を一括で計算書に追加
+                未作成の書類をまとめて作成
             </button>
             {% endif %}
         </div>
-        {% if result_items %}
+        {% if display_client_groups and not is_live_status_view %}
+        <div class="client-document-grid {% if result_only_mode %}client-document-list{% endif %}">
+            {% for group in display_client_groups %}
+            <details class="client-document-card" {% if loop.first and not result_only_mode %}open{% endif %}>
+                <summary class="client-document-summary-trigger">
+                    <div class="client-document-summary-main">
+                        <div class="client-document-head">
+                            <div>
+                                <h3>{{ group.winner_name }}</h3>
+                            </div>
+                            <div class="client-document-badges">
+                                {% if group.can_prepare_document %}
+                                <span class="result-status-badge scheduled">書類未作成</span>
+                                {% elif group.can_send_document %}
+                                <span class="result-status-badge ready">送付準備完了</span>
+                                {% elif group.is_document_submitted %}
+                                <span class="result-status-badge sent">送付済み</span>
+                                {% elif group.has_document and group.document_status != 'draft' %}
+                                <span class="result-status-badge {{ group.document_status_class }}">{{ group.document_status_label }}</span>
+                                {% endif %}
+                                {% if group.document_id and not group.is_document_submitted %}
+                                <a href="{{ url_for('admin_auction_keisan_edit', id=group.document_id, next=current_page_path) }}" class="client-document-edit-button">計算書を編集</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <span class="client-document-toggle">仕入れ内容を見る</span>
+                </summary>
+                <div class="client-document-body">
+                    <div class="client-document-section-title">
+                        <strong>今回仕入れした商品</strong>
+                        <span>{{ group.won_item_count }}点 / 合計 ¥{{ "{:,}".format(group.total_amount or 0) }}</span>
+                    </div>
+                    <div class="client-document-items">
+                        {% for item in group.won_items %}
+                        <div class="client-document-item">
+                            <div class="client-document-item-photo">
+                                {% if item.photo_path %}
+                                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="">
+                                {% else %}
+                                <div class="no-photo">No Image</div>
+                                {% endif %}
+                            </div>
+                            <div class="client-document-item-copy">
+                                <strong>{{ item.product_name or '-' }}</strong>
+                                <span>{{ item.brand_name or '-' }}</span>
+                                <span>{{ item.ended_method_label or item.status_label }}</span>
+                                <span>落札金額 ¥{{ "{:,}".format(item.result_price or 0) }}</span>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="client-document-empty">落札確定済みの商品はまだありません。</div>
+                        {% endfor %}
+                    </div>
+                    <div class="client-document-actions">
+                        {% if group.can_prepare_document %}
+                        <button type="button" class="btn btn-primary btn-sm" onclick="prepareClientDocument({{ group.winner_user_id }}, this)">
+                            計算書を作成
+                        </button>
+                        {% endif %}
+                        {% if group.document_id %}
+                        {% if group.is_document_submitted %}
+                        <a href="{{ url_for('admin_auction_keisan_view', id=group.document_id, next=current_page_path) }}" class="btn btn-secondary btn-sm">送付済み計算書を確認</a>
+                        {% endif %}
+                        {% if group.can_send_document %}
+                        <form action="{{ url_for('admin_auction_keisan_submit', id=group.document_id) }}" method="POST" class="inline-form">
+                            <input type="hidden" name="auction_id" value="{{ auction_id }}">
+                            <input type="hidden" name="next" value="{{ current_page_path }}">
+                            <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('このクライアントへ計算書を送付しますか？')">計算書を送付</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+        {% elif result_only_mode %}
+        <div class="empty-message">
+            送付前のクライアントはありません。
+        </div>
+        {% endif %}
+        {% if result_items and not result_only_mode %}
         <div class="results-table-container">
-            <table class="results-table">
+            <table class="results-table {% if is_live_status_view %}results-table-live{% endif %}">
                 <thead>
                     <tr>
                         <th>商品</th>
-                        <th>結果</th>
-                        <th>終了方法</th>
-                        <th>落札者 / 購入者</th>
-                        <th>金額</th>
-                        <th>入札</th>
-                        <th>送付状況</th>
-                        <th>計算書</th>
+                        <th>{% if is_live_status_view %}現在状況{% else %}結果{% endif %}</th>
+                        <th>{% if is_live_status_view %}方式{% else %}終了方法{% endif %}</th>
+                        <th>{% if is_live_status_view %}最高入札者 / 購入者{% else %}落札者 / 購入者{% endif %}</th>
+                        <th>{% if is_live_status_view %}現在価格{% else %}金額{% endif %}</th>
+                        <th>入札数</th>
+                        {% if not is_live_status_view %}
+                        <th>送付後反映</th>
+                        <th>書類</th>
                         <th>操作</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -349,13 +465,19 @@
                         <td>
                             <span class="result-status-badge {{ item.status_class }}">{{ item.status_label }}</span>
                         </td>
-                        <td>{{ item.ended_method_label or '公開中' }}</td>
+                        <td>
+                            {% if is_live_status_view %}
+                            {{ '早い者勝ち' if auction_state.sale_mode == 'fixed' else 'オークション' }}
+                            {% else %}
+                            {{ item.ended_method_label or '公開中' }}
+                            {% endif %}
+                        </td>
                         <td>
                             {% if item.winner_name %}
                             <div class="result-person-cell">
                                 <strong>{{ item.winner_name }}</strong>
                                 {% if item.winner_user_id %}
-                                <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}">クライアント商品一覧へ</a>
+                                <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}">ユーザー商品一覧へ</a>
                                 {% endif %}
                             </div>
                             {% else %}
@@ -370,6 +492,7 @@
                             {% endif %}
                         </td>
                         <td>{{ item.bid_count or 0 }}件</td>
+                        {% if not is_live_status_view %}
                         <td>
                             <div class="result-reflection-cell">
                                 <span class="result-status-badge {{ item.reflection_status_class }}">{{ item.reflection_status_label }}</span>
@@ -377,7 +500,7 @@
                                 <span>{{ item.reflected_user_name or '-' }}</span>
                                 <span>{{ item.reflected_at_display }}</span>
                                 {% elif item.can_prepare_keisan %}
-                                <span>計算書にまだ追加されていません</span>
+                                <span>計算書送付時にユーザー商品へ反映されます</span>
                                 {% elif item.result_code == 'auction_closed_with_bid' %}
                                 <span>先に落札確定を行ってください</span>
                                 {% endif %}
@@ -387,13 +510,13 @@
                             <div class="result-keisan-cell">
                                 {% if item.keisan_doc_id %}
                                 <span class="result-status-badge {{ item.keisan_status_class }}">{{ item.keisan_status_label }}</span>
-                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}">{{ item.keisan_doc_no }}</a>
+                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id, next=current_page_path) }}">{{ item.keisan_doc_no }}</a>
                                 <span>{{ item.keisan_issue_date_display }}</span>
                                 {% elif item.is_reflected_to_client %}
                                 <span class="result-status-badge scheduled">送付済み</span>
-                                <a href="{{ url_for('admin_auction_keisan_list', auction_id=auction_id) }}">計算書一覧を見る</a>
+                                <a href="{{ url_for('admin_proxy_service_document_history', auction_id=auction_id) }}">送付履歴を見る</a>
                                 {% elif item.can_prepare_keisan %}
-                                <span class="result-empty-text">計算書へ追加してください</span>
+                                <span class="result-empty-text">まず計算書を作成してください</span>
                                 {% else %}
                                 <span class="result-empty-text">-</span>
                                 {% endif %}
@@ -403,11 +526,11 @@
                             <div class="result-action-cell">
                                 {% if item.can_prepare_keisan %}
                                 <button type="button" class="btn btn-sm btn-primary" onclick="reflectWinnerItem({{ item.id }}, this)">
-                                    計算書に追加
+                                    書類に追加
                                 </button>
                                 {% elif item.keisan_doc_id %}
-                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id) }}" class="btn btn-sm btn-secondary">
-                                    計算書を見る
+                                <a href="{{ url_for('admin_auction_keisan_view', id=item.keisan_doc_id, next=current_page_path) }}" class="btn btn-sm btn-secondary">
+                                    書類を見る
                                 </a>
                                 {% elif item.is_reflected_to_client and item.winner_user_id %}
                                 <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}" class="btn btn-sm btn-secondary">
@@ -418,6 +541,7 @@
                                 {% endif %}
                             </div>
                         </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -430,9 +554,10 @@
         {% endif %}
     </div>
     
+    {% if not result_only_mode %}
     <!-- 商品を追加 -->
     <div class="add-items-card">
-        <h2>商品を追加 <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
+        <h2>商品を追加（開花商品管理） <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
         
         <!-- 検索・フィルター -->
         <div class="filter-section">
@@ -526,6 +651,7 @@
         </div>
         {% endif %}
     </div>
+    {% endif %}
     
     <!-- 入札履歴 -->
     <div class="bids-card">
@@ -815,6 +941,7 @@
     font-size: 0.75rem;
     color: #64748b;
     margin-bottom: 0.25rem;
+    white-space: nowrap;
 }
 
 .overview-item strong {
@@ -892,6 +1019,7 @@
     color: #334155;
     font-size: 0.8rem;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .results-keisan-summary a {
@@ -901,6 +1029,236 @@
     font-weight: 700;
 }
 
+.client-document-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.client-document-summary span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.client-document-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.client-document-list {
+    grid-template-columns: 1fr;
+}
+
+.client-document-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.client-document-summary-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.client-document-summary-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.client-document-summary-main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.client-document-body {
+    padding: 0 1rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.client-document-head,
+.client-document-actions,
+.client-document-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.client-document-head {
+    justify-content: space-between;
+    align-items: center;
+}
+
+.client-document-head h3 {
+    margin: 0;
+    font-size: 1.08rem;
+}
+
+.client-document-head p,
+.client-document-copy,
+.client-document-meta {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.client-document-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12);
+}
+
+details[open] .client-document-toggle {
+    border-color: #93c5fd;
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.client-document-edit-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid #2563eb;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.client-document-edit-button:hover {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+.client-document-badges .client-document-edit-button {
+    min-height: 36px !important;
+    padding: 0.45rem 0.9rem !important;
+    font-size: 0.82rem !important;
+}
+
+.client-document-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin: 0.85rem 0;
+}
+
+.client-document-item {
+    display: flex;
+    gap: 0.75rem;
+    align-items: stretch;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.client-document-item.pending {
+    border-color: #fed7aa;
+    background: #fff7ed;
+}
+
+.client-document-item-photo {
+    width: 84px;
+    height: 84px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #e2e8f0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.client-document-item-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.client-document-item-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.client-document-item-copy strong {
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.client-document-actions {
+    margin-top: 0.9rem;
+    align-items: center;
+}
+
+.client-document-section-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 1rem;
+    color: #0f172a;
+}
+
+.client-document-section-title span {
+    color: #64748b;
+    font-size: 0.86rem;
+}
+
+.client-document-section-title.muted strong {
+    color: #9a3412;
+}
+
+.client-document-empty {
+    padding: 0.85rem;
+    border-radius: 12px;
+    background: #fff;
+    color: #64748b;
+    border: 1px dashed #cbd5e1;
+}
+
+.inline-form {
+    display: inline-flex;
+}
+
 .results-table-container {
     overflow-x: auto;
 }
@@ -908,7 +1266,11 @@
 .results-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 980px;
+    min-width: 1180px;
+}
+
+.results-table-live {
+    min-width: 960px;
 }
 
 .results-table th,
@@ -925,6 +1287,11 @@
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.results-table td:not(:first-child) {
+    white-space: nowrap;
 }
 
 .results-product-cell {
@@ -1021,6 +1388,16 @@
     color: #1d4ed8;
 }
 
+.result-status-badge.ready {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.result-status-badge.sent {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
 .result-status-badge.muted,
 .result-status-badge.scheduled {
     background: #f1f5f9;
@@ -1090,6 +1467,17 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.edit-lock-notice {
+    margin: -0.5rem 0 1.25rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 0.9rem;
+    line-height: 1.7;
 }
 
 .item-count {
@@ -1195,6 +1583,12 @@
 .toggle-btn:hover:not(.active) {
     background: #f1f5f9;
     border-color: #cbd5e1;
+}
+
+.toggle-btn:disabled,
+.radio-label input:disabled + .radio-text {
+    cursor: not-allowed;
+    opacity: 0.58;
 }
 
 @media (max-width: 480px) {
@@ -1579,6 +1973,8 @@
 
 <script>
 const AUCTION_ID = {{ auction_id }};
+const IS_LIVE_STATUS_VIEW = {{ 'true' if is_live_status_view else 'false' }};
+let adminLiveStatusSnapshot = JSON.stringify({{ (live_status_snapshot or {}) | tojson }});
 const PREVIEW_QUERY = {
     preview_token: {{ (preview_token or '') | tojson }},
     preview_role: {{ (preview_role or '') | tojson }}
@@ -1592,6 +1988,39 @@ function buildPreviewUrl(path) {
     }
     return url.pathname + url.search + url.hash;
 }
+
+function startAdminLiveStatusPolling() {
+    if (!IS_LIVE_STATUS_VIEW) {
+        return;
+    }
+
+    setInterval(() => {
+        if (document.hidden) {
+            return;
+        }
+
+        fetch(buildPreviewUrl(`/proxy-service/${AUCTION_ID}/status`), {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin'
+        })
+            .then(response => response.ok ? response.json() : null)
+            .then(data => {
+                if (!data || !data.success || !data.snapshot) {
+                    return;
+                }
+                const nextSnapshot = JSON.stringify(data.snapshot);
+                if (nextSnapshot !== adminLiveStatusSnapshot) {
+                    adminLiveStatusSnapshot = nextSnapshot;
+                    window.location.reload();
+                }
+            })
+            .catch(() => {
+                // 次回ポーリングで再取得します。
+            });
+    }, 10000);
+}
+
+document.addEventListener('DOMContentLoaded', startAdminLiveStatusPolling);
 
 function updateSaleModePreview() {
     const saleMode = getCurrentSaleMode();
@@ -2100,7 +2529,7 @@ function clearAvailableFilters() {
     filterAvailableItems();
 }
 
-// オークション終了・落札確定
+// 削除・落札確定
 function deleteAuction() {
     if (!confirm('このオークションを削除しますか？\n\n掲載中の商品は未掲載状態に戻ります。')) {
         return;
@@ -2114,7 +2543,7 @@ function deleteAuction() {
 }
 
 function finalizeAuction() {
-    if (!confirm('オークションを終了して落札結果を確定しますか？\n\nこの操作は取り消せません。確定後は結果一覧から「クライアントに反映」を押して、落札商品を各クライアントの商品一覧へ登録できます。')) {
+    if (!confirm('落札結果を確定しますか？\n\n確定後は「サービス終了と処理送付」で購入者ごとに計算書を作成できます。ユーザー商品への反映は、計算書を確認して送付したタイミングで実行されます。')) {
         return;
     }
     
@@ -2163,6 +2592,45 @@ function startAuctionNow() {
     });
 }
 
+function prepareClientDocument(userId, btn) {
+    const button = btn || null;
+    if (button) {
+        button.disabled = true;
+    }
+
+    fetch(buildPreviewUrl(`/admin/proxy-service/{{ auction_id }}/prepare-client-document/${userId}`), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const nextPath = data.edit_url || (data.keisan_id ? `/admin/auction-keisan/${data.keisan_id}/edit` : '');
+            if (nextPath) {
+                const currentPath = window.location.pathname + window.location.search;
+                const separator = nextPath.includes('?') ? '&' : '?';
+                window.location.href = buildPreviewUrl(`${nextPath}${separator}next=${encodeURIComponent(currentPath)}`);
+            } else {
+                alert(data.message);
+                location.reload();
+            }
+        } else {
+            if (button) {
+                button.disabled = false;
+            }
+            alert(data.error || '計算書の作成に失敗しました');
+        }
+    })
+    .catch(() => {
+        if (button) {
+            button.disabled = false;
+        }
+        alert('計算書の作成中にエラーが発生しました');
+    });
+}
+
 function reflectWinnerItem(itemId, btn) {
     const button = btn || null;
     if (button) {
@@ -2184,19 +2652,19 @@ function reflectWinnerItem(itemId, btn) {
             if (button) {
                 button.disabled = false;
             }
-            alert(data.error || '計算書への追加に失敗しました');
+            alert(data.error || '書類への追加に失敗しました');
         }
     })
     .catch(() => {
         if (button) {
             button.disabled = false;
         }
-        alert('計算書への追加中にエラーが発生しました');
+        alert('書類への追加中にエラーが発生しました');
     });
 }
 
 function reflectAllWinnerItems() {
-    if (!confirm('落札確定済みの商品を一括で計算書へ追加しますか？\n\nクライアントの商品一覧への反映は、各クライアントへ計算書を送付したタイミングで実行されます。')) {
+    if (!confirm('落札確定済みの商品を一括で書類へ追加しますか？\n\nユーザー商品への反映は、各クライアントへ書類を送付したタイミングで自動実行されます。')) {
         return;
     }
 
@@ -2212,11 +2680,11 @@ function reflectAllWinnerItems() {
             alert(data.message);
             location.reload();
         } else {
-            alert(data.error || '一括追加に失敗しました');
+            alert(data.error || '書類の一括作成に失敗しました');
         }
     })
     .catch(() => {
-        alert('一括追加中にエラーが発生しました');
+        alert('書類の一括作成中にエラーが発生しました');
     });
 }
 </script>

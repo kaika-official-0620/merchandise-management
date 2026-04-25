@@ -2,170 +2,274 @@
 {% block title %}計算書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<style>
-.doc-page { max-width: 980px; margin: 0 auto; }
-.page-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: .65rem 1rem; border-radius: 10px; font-weight: 700; text-decoration: none; border: none; cursor: pointer; }
-.btn-primary { background: #0f172a; color: #fff; }
-.btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
-.btn-success { background: #10b981; color: #fff; }
-.btn-pdf { background: #dc2626; color: #fff; }
-.document-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); overflow: hidden; }
-.document-header { padding: 1.4rem 1.5rem; background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.document-title { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-.document-title h1 { margin: 0; font-size: 1.5rem; }
-.doc-no { font-family: Consolas, monospace; font-size: .95rem; opacity: .92; }
-.status-chip { display: inline-flex; align-items: center; padding: .34rem .72rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
-.status-draft { background: #fef3c7; color: #92400e; }
-.status-submitted { background: #dbeafe; color: #1d4ed8; }
-.status-completed { background: #d1fae5; color: #065f46; }
-.document-body { padding: 1.5rem; }
-.section { margin-bottom: 1.5rem; }
-.section h3 { margin: 0 0 .75rem; color: #0f172a; font-size: 1rem; }
-.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
-.info-box { padding: .95rem 1rem; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc; }
-.info-label { display: block; color: #64748b; font-size: .82rem; margin-bottom: .25rem; }
-.info-value { color: #0f172a; font-weight: 700; }
-.items-table-wrap { overflow-x: auto; }
-.items-table { width: 100%; border-collapse: collapse; min-width: 720px; }
-.items-table th, .items-table td { padding: .85rem 1rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
-.items-table th { background: #f8fafc; color: #334155; }
-.text-right { text-align: right; }
-.total-row td { font-weight: 800; background: #f8fafc; }
-.notes { white-space: pre-wrap; line-height: 1.7; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
-@media (max-width: 768px) {
-  .info-grid { grid-template-columns: 1fr; }
-  .document-header { flex-direction: column; align-items: flex-start; }
-}
-</style>
-
-<div class="doc-page">
-    <div class="page-actions">
-        <a href="{{ url_for('admin_auction_keisan_list', auction_id=keisan.proxy_service_auction_id) if keisan.proxy_service_auction_id else url_for('admin_auction_keisan_list') }}" class="btn btn-secondary">一覧へ戻る</a>
-        {% if keisan.proxy_service_auction_id %}
-        <a href="{{ url_for('admin_proxy_service_detail', auction_id=keisan.proxy_service_auction_id) }}" class="btn btn-secondary">終了結果へ</a>
+<div class="admin-header">
+    <h1>計算書詳細</h1>
+    <div class="admin-nav">
+        <a href="{{ back_url }}" class="btn btn-secondary">← 処理送付へ戻る</a>
+        {% if keisan.status != 'submitted' %}
+        <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id, next=next_url) if next_url else url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">計算書を編集</a>
         {% endif %}
-        {% if keisan.status == 'draft' %}
-        <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
-        {% elif keisan.status == 'completed' %}
-        <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-secondary">再確認</a>
+        {% if keisan.status == 'completed' %}
         <form action="{{ url_for('admin_auction_keisan_submit', id=keisan.id) }}" method="POST" style="display:inline;">
-            <button type="submit" class="btn btn-success" onclick="return confirm('このクライアント向け計算書を送付済みにしますか？')">このクライアントに送付</button>
+            {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            {% endif %}
+            <button type="submit" class="btn btn-success" onclick="return confirm('このクライアントへ計算書を送付しますか？送付後に対象商品がユーザー商品へ反映されます。')">このクライアントに送付</button>
         </form>
         {% endif %}
-        <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
-    </div>
-
-    <div class="document-card">
-        <div class="document-header">
-            <div class="document-title">
-                <h1>計算書</h1>
-                {% if keisan.status == 'submitted' %}
-                <span class="status-chip status-submitted">送信済み</span>
-                {% elif keisan.status == 'completed' %}
-                <span class="status-chip status-completed">送信待機</span>
-                {% else %}
-                <span class="status-chip status-draft">下書き確認中</span>
-                {% endif %}
-            </div>
-            <div class="doc-no">{{ keisan.document_no }}</div>
-        </div>
-
-        <div class="document-body">
-            <section class="section">
-                <h3>基本情報</h3>
-                <div class="info-grid">
-                    <div class="info-box">
-                        <span class="info-label">対象オークション</span>
-                        <span class="info-value">{{ keisan.auction_name_display }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">販売方式 / 終了日時</span>
-                        <span class="info-value">{{ keisan.sale_mode_label }} / {{ keisan.auction_end_display }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">クライアント</span>
-                        <span class="info-value">{{ keisan.user_name or keisan.username }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">発行日</span>
-                        <span class="info-value">{{ keisan.issue_date }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">送付先名</span>
-                        <span class="info-value">{{ keisan.recipient_name or '-' }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">メールアドレス</span>
-                        <span class="info-value">{{ keisan.email or '-' }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">状態</span>
-                        <span class="info-value">{{ keisan.status_label }}</span>
-                    </div>
-                    <div class="info-box">
-                        <span class="info-label">クライアント商品一覧</span>
-                        <span class="info-value">
-                            <a href="{{ url_for('admin_user_products', owner_id=keisan.user_id) }}">確認する</a>
-                        </span>
-                    </div>
-                </div>
-            </section>
-
-            {% if keisan.subject %}
-            <section class="section">
-                <h3>件名</h3>
-                <div class="notes">{{ keisan.subject }}</div>
-            </section>
-            {% endif %}
-
-            <section class="section">
-                <h3>対象商品</h3>
-                <div class="items-table-wrap">
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th>No.</th>
-                                <th>商品名</th>
-                                <th>数量</th>
-                                <th>単位</th>
-                                <th class="text-right">単価</th>
-                                <th class="text-right">金額</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            <tr>
-                                <td>{{ item.item_no }}</td>
-                                <td>{{ item.item_name }}</td>
-                                <td>{{ item.quantity }}</td>
-                                <td>{{ item.unit or '-' }}</td>
-                                <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
-                                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6">商品はまだありません。</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot>
-                            <tr class="total-row">
-                                <td colspan="5" class="text-right">合計金額</td>
-                                <td class="text-right">¥{{ "{:,}".format(keisan.total_amount or 0) }}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </section>
-
-            {% if keisan.notes %}
-            <section class="section">
-                <h3>備考</h3>
-                <div class="notes">{{ keisan.notes }}</div>
-            </section>
-            {% endif %}
-        </div>
     </div>
 </div>
+
+<div class="keisan-sheet">
+    <h2 class="keisan-title">計算書</h2>
+
+    <div class="keisan-meta-grid">
+        <div class="meta-item">
+            <span class="meta-label">対象月</span>
+            <span class="meta-value">{{ (keisan.issue_date|string)[:7] if keisan.issue_date else '-' }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">宛先</span>
+            <span class="meta-value">{{ keisan.recipient_name or keisan.user_name or keisan.username or '宛先未設定' }} 様</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">発行者</span>
+            <span class="meta-value">株式会社開花</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">クライアント番号</span>
+            <span class="meta-value">C-{{ "%03d"|format(keisan.user_id or 0) }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">書類区分</span>
+            <span class="meta-value">代行仕入れ計算書</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">支払方法</span>
+            <span class="meta-value">指定口座振込</span>
+        </div>
+    </div>
+
+    <table class="keisan-items">
+        <thead>
+            <tr>
+                <th class="col-no">No.</th>
+                <th>項目</th>
+                <th class="col-qty">数量</th>
+                <th class="col-amount">金額</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.item_no or loop.index }}</td>
+                <td>
+                    <div class="item-name">{{ item.item_name or item.source_product_name or '商品' }}</div>
+                    <div class="item-note">
+                        {{ keisan.auction_name_display }} / {{ keisan.sale_mode_label }}
+                        {% if keisan.auction_end_display and keisan.auction_end_display != '-' %}
+                        / 終了日時 {{ keisan.auction_end_display }}
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="text-center">{{ item.quantity or 1 }}{{ item.unit or '点' }}</td>
+                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% for i in range(items|length, 2) %}
+            <tr class="empty-row">
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="keisan-total-row">
+        <span>合計金額</span>
+        <strong>¥{{ "{:,}".format(keisan.total_amount or 0) }}</strong>
+    </div>
+
+    <div class="keisan-divider"></div>
+
+    <section class="keisan-notes">
+        <h3>備考</h3>
+        {% if keisan.notes %}
+        <p>{{ keisan.notes|replace('\n', '<br>')|safe }}</p>
+        {% else %}
+        <p>代行仕入れサービスの終了結果に基づき作成しています。計算書送付後、対象商品はクライアントの商品一覧へ反映されます。</p>
+        {% endif %}
+    </section>
+
+    <div class="keisan-status-line">
+        <span>計算書番号 {{ keisan.document_no }}</span>
+    </div>
+</div>
+
+<style>
+.keisan-sheet {
+    max-width: 960px;
+    min-height: 1180px;
+    margin: 0 auto;
+    padding: 72px 64px;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.keisan-title {
+    margin: 0 0 34px;
+    text-align: center;
+    color: #111827;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.keisan-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 56px;
+    row-gap: 22px;
+    margin-bottom: 28px;
+    font-size: 17px;
+}
+
+.meta-label {
+    margin-right: 8px;
+    color: #111827;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.meta-value {
+    color: #374151;
+    font-weight: 500;
+}
+
+.keisan-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 17px;
+}
+
+.keisan-items th,
+.keisan-items td {
+    border: 2px solid #475569;
+    padding: 13px 14px;
+    vertical-align: middle;
+}
+
+.keisan-items th {
+    background: #f8fafc;
+    color: #111827;
+    font-weight: 800;
+    text-align: center;
+}
+
+.col-no {
+    width: 84px;
+}
+
+.col-qty {
+    width: 140px;
+}
+
+.col-amount {
+    width: 190px;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.item-name {
+    font-weight: 700;
+}
+
+.item-note {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.empty-row td {
+    height: 48px;
+}
+
+.keisan-total-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 24px;
+    margin: 38px 0 20px;
+    color: #111827;
+}
+
+.keisan-total-row span {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-total-row strong {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+}
+
+.keisan-divider {
+    border-top: 1px solid #d1d5db;
+    margin: 0 0 28px;
+}
+
+.keisan-notes h3 {
+    margin: 0 0 22px;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.keisan-notes p {
+    margin: 0;
+    color: #374151;
+    font-size: 16px;
+    line-height: 1.9;
+}
+
+.keisan-status-line {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 42px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+@media (max-width: 860px) {
+    .keisan-sheet {
+        padding: 36px 20px;
+        min-height: 0;
+        overflow-x: auto;
+    }
+
+    .keisan-meta-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .keisan-items {
+        min-width: 760px;
+    }
+
+    .keisan-total-row strong {
+        font-size: 32px;
+    }
+}
+</style>
 {% endblock %}

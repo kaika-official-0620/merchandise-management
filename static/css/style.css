@@ -350,6 +350,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .menu-label {
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 .category-arrow {
@@ -907,6 +908,7 @@ body.sidebar-open {
     transition: all 0.2s;
     border: none;
     font-family: inherit;
+    white-space: nowrap;
 }
 
 .btn-primary {
@@ -1523,6 +1525,11 @@ body.sidebar-open {
     overflow-x: auto;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
+}
+
+.kaika-horizontal-scroll-hover {
+    overscroll-behavior-x: contain;
     scrollbar-gutter: stable both-edges;
 }
 
@@ -2349,7 +2356,10 @@ li,
 
 .menu-label {
     word-break: keep-all;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .form-group label {

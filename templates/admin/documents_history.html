@@ -52,6 +52,45 @@
     gap: 0.9rem;
 }
 
+.type-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.9rem;
+}
+
+.type-card {
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    padding: 1rem;
+}
+
+.type-card h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.type-card p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 0.88rem;
+}
+
+.type-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.85rem;
+}
+
+.type-card-count {
+    font-weight: 700;
+    color: #1d4ed8;
+}
+
 .hint-item {
     border: 1px solid #e2e8f0;
     border-radius: 12px;
@@ -226,6 +265,24 @@
             </div>
         </div>
     </div>
+
+    {% if document_type_cards %}
+    <div class="hint-card">
+        <h2>書類タイプ別の履歴</h2>
+        <div class="type-card-grid">
+            {% for card in document_type_cards %}
+            <article class="type-card">
+                <h3>{{ card.title }}</h3>
+                <p>{{ card.description }}</p>
+                <div class="type-card-meta">
+                    <span class="type-card-count">{{ card.count }}件</span>
+                    <a href="{{ card.url }}" class="btn btn-secondary btn-sm">履歴を見る</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <div class="filter-card">
         <form method="GET">

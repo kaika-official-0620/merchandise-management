@@ -74,15 +74,9 @@
 <div class="page-header proxy-page-header">
     <div>
         <h1>代行仕入れサービス管理</h1>
-        <p class="page-lead">公開中、公開前、保存済みのページをここで管理します。終了したオークションは履歴ページにまとめてあり、結果確認や計算書確認へ進めます。</p>
+        <p class="page-lead">公開中、公開前、保存済みのページをここで管理します。終了したサービスは左メニューの「サービス終了と処理送付」から対応します。</p>
     </div>
     <div class="header-actions compact-actions">
-        <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary btn-compact btn-history">
-            履歴を見る
-            {% if (history_summary.pending_auction_count or 0) > 0 %}
-            <span class="history-count-badge">{{ history_summary.pending_auction_count }}</span>
-            {% endif %}
-        </a>
         <a href="{{ url_for('admin_proxy_service_create') }}" class="btn btn-primary btn-compact">新規ページを作成</a>
     </div>
 </div>
@@ -103,11 +97,6 @@
         <strong>{{ draft_auctions|length }}件</strong>
         <small>まだ公開していないページ</small>
     </div>
-    <div class="summary-card summary-card-history">
-        <span class="summary-label">履歴</span>
-        <strong>{{ history_summary.pending_auction_count or history_auctions|length }}件</strong>
-        <small>未対応 / 過去履歴 {{ history_summary.archive_auction_count or 0 }}件</small>
-    </div>
 </div>
 
 <details class="guide-toggle">
@@ -116,7 +105,7 @@
         <ol class="guide-list">
             <li>「新規ページを作成」でページを用意し、詳細画面から掲載商品を選びます。</li>
             <li>公開前に価格、開始日時、終了日時、販売方式を整えて保存します。</li>
-            <li>終了したページは「履歴を見る」から開き、結果確認とクライアント反映、計算書確認へ進みます。</li>
+            <li>終了したページは左メニューの「サービス終了と処理送付」から開き、結果確認と書類送付へ進みます。</li>
         </ol>
     </div>
 </details>
@@ -174,27 +163,9 @@
     min-height: 44px;
 }
 
-.btn-history {
-    gap: 0.45rem;
-}
-
-.history-count-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.6rem;
-    height: 1.6rem;
-    padding: 0 0.4rem;
-    border-radius: 999px;
-    background: #dc2626;
-    color: #fff;
-    font-size: 0.78rem;
-    font-weight: 800;
-}
-
 .management-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
     margin-bottom: 1.25rem;
 }
@@ -204,11 +175,6 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1rem 1.1rem;
-}
-
-.summary-card-history {
-    background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
-    border-color: #fdba74;
 }
 
 .summary-label {

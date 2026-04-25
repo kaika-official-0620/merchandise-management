@@ -682,7 +682,8 @@
         {% endwith %}
         
         {% set is_user_home = request.endpoint == 'user_home' %}
-        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] %}
+        {% set hide_context_back = request.endpoint == 'admin_proxy_service_detail' and request.args.get('history_view') %}
+        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] or hide_context_back %}
         {% if not hide_history_back %}
         <div
             class="history-back-bar"
@@ -1382,7 +1383,7 @@
                 historyBackBar.hidden = true;
             }
         })();
-        
+
         // サイドバートグル
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
@@ -1667,9 +1668,12 @@
                 '.recent-sales-table-wrap',
                 '.master-table-container',
                 '.cashflow-table-container',
+                '.results-table-container',
                 '.bids-table-container',
                 '.inquiry-table-container',
                 '.logs-table-container',
+                '.proxy-doc-table-wrap',
+                '.keisan-items-wrap',
                 '.report-table-wrapper'
             ].join(', ');
             const nestedScrollableSelector = [
@@ -1681,9 +1685,12 @@
                 ':scope > .recent-sales-table-wrap',
                 ':scope > .master-table-container',
                 ':scope > .cashflow-table-container',
+                ':scope > .results-table-container',
                 ':scope > .bids-table-container',
                 ':scope > .inquiry-table-container',
                 ':scope > .logs-table-container',
+                ':scope > .proxy-doc-table-wrap',
+                ':scope > .keisan-items-wrap',
                 ':scope > .report-table-wrapper'
             ].join(', ');
             let activeTarget = null;

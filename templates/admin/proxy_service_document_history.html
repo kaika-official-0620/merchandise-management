@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+{% block title %}代行仕入れ 処理送付履歴 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.proxy-doc-history {
+    display: grid;
+    gap: 1.4rem;
+}
+
+.proxy-doc-header,
+.proxy-doc-toolbar,
+.proxy-doc-stats,
+.proxy-doc-results {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.3rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.proxy-doc-header,
+.proxy-doc-toolbar-head,
+.proxy-doc-results-head,
+.proxy-doc-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.proxy-doc-header h1,
+.proxy-doc-results-head h2 {
+    margin: 0;
+}
+
+.proxy-doc-header p,
+.proxy-doc-results-head p,
+.proxy-doc-note {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.proxy-doc-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.9rem;
+}
+
+.proxy-doc-type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.9rem;
+}
+
+.proxy-doc-type-card {
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    padding: 1rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.proxy-doc-type-card h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.proxy-doc-type-card p {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+    line-height: 1.65;
+    font-size: 0.88rem;
+}
+
+.proxy-doc-type-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.85rem;
+}
+
+.proxy-doc-type-count {
+    font-weight: 700;
+    color: #1d4ed8;
+}
+
+.proxy-doc-stat {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+    background: #f8fafc;
+}
+
+.proxy-doc-stat-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
+}
+
+.proxy-doc-stat-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.proxy-doc-filter-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.proxy-doc-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.9rem;
+}
+
+.proxy-doc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.proxy-doc-field label {
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.proxy-doc-field input,
+.proxy-doc-field select {
+    width: 100%;
+    padding: 0.72rem 0.78rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 0.92rem;
+}
+
+.proxy-doc-table-wrap {
+    overflow-x: auto;
+}
+
+.proxy-doc-table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+}
+
+.proxy-doc-table th,
+.proxy-doc-table td {
+    padding: 0.82rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.proxy-doc-table th {
+    text-align: left;
+    font-size: 0.82rem;
+    color: #475569;
+    background: #f8fafc;
+}
+
+.proxy-doc-table tr:last-child td {
+    border-bottom: none;
+}
+
+.proxy-doc-sub {
+    display: block;
+    margin-top: 0.28rem;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.status-draft {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-completed {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-submitted {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.proxy-doc-empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 2rem 1rem;
+    text-align: center;
+    color: #64748b;
+    background: #f8fafc;
+}
+
+.inline-form {
+    display: inline-flex;
+}
+
+@media (max-width: 768px) {
+    .proxy-doc-header,
+    .proxy-doc-toolbar-head,
+    .proxy-doc-results-head,
+    .proxy-doc-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+</style>
+
+{% set current_page_path = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+<div class="proxy-doc-history">
+    <div class="proxy-doc-header">
+        <div>
+            <h1>代行仕入れ 処理送付履歴</h1>
+            <p>サービス終了後に作成した書類の下書き、送付準備完了、送付済みをまとめて確認できます。送り忘れや再確認が必要な時も、この画面から対応できます。</p>
+        </div>
+        <div class="proxy-doc-actions">
+            <a href="{{ url_for('admin_proxy_service_history') }}" class="btn btn-secondary">サービス終了と処理送付へ戻る</a>
+            <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">代行仕入れ管理へ</a>
+        </div>
+    </div>
+
+    {% if document_type_cards %}
+    <div class="proxy-doc-header">
+        <div>
+            <h2>書類タイプ別の履歴</h2>
+                <p>計算書だけでなく、関連する書類も種類ごとに確認できます。題名を押すと、その書類だけの履歴へ移動します。</p>
+        </div>
+    </div>
+    <div class="proxy-doc-type-grid">
+        {% for card in document_type_cards %}
+        <article class="proxy-doc-type-card">
+            <h2>{{ card.title }}</h2>
+            <p>{{ card.description }}</p>
+            <div class="proxy-doc-type-meta">
+                <span class="proxy-doc-type-count">{{ card.count }}件</span>
+                <a href="{{ card.url }}" class="btn btn-secondary btn-sm">履歴を見る</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="proxy-doc-stats">
+        <div class="proxy-doc-stat">
+            <span class="proxy-doc-stat-label">対象書類</span>
+            <div class="proxy-doc-stat-value">{{ stats.total_docs }}</div>
+        </div>
+        <div class="proxy-doc-stat">
+            <span class="proxy-doc-stat-label">下書き</span>
+            <div class="proxy-doc-stat-value">{{ stats.draft_count }}</div>
+        </div>
+        <div class="proxy-doc-stat">
+            <span class="proxy-doc-stat-label">送付準備完了</span>
+            <div class="proxy-doc-stat-value">{{ stats.completed_count }}</div>
+        </div>
+        <div class="proxy-doc-stat">
+            <span class="proxy-doc-stat-label">送付済み</span>
+            <div class="proxy-doc-stat-value">{{ stats.submitted_count }}</div>
+        </div>
+        <div class="proxy-doc-stat">
+            <span class="proxy-doc-stat-label">合計金額</span>
+            <div class="proxy-doc-stat-value">¥{{ "{:,}".format(stats.total_amount or 0) }}</div>
+        </div>
+    </div>
+
+    <div class="proxy-doc-toolbar">
+        <div class="proxy-doc-toolbar-head">
+            <div>
+                <h2>絞り込み</h2>
+                <p class="proxy-doc-note">送付済みだけを見たい時や、特定クライアントの書類だけを確認したい時に使えます。</p>
+            </div>
+        </div>
+        <form method="GET" class="proxy-doc-filter-form">
+            <div class="proxy-doc-filter-grid">
+                <div class="proxy-doc-field">
+                    <label for="auction_id">オークション</label>
+                    <select id="auction_id" name="auction_id">
+                        <option value="">すべて</option>
+                        {% for auction_id, auction_name in auction_options %}
+                        <option value="{{ auction_id }}" {% if filters.auction_id == auction_id %}selected{% endif %}>{{ auction_name }} (#{{ auction_id }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="client">クライアント</label>
+                    <input id="client" name="client" value="{{ filters.client or '' }}" list="proxy-doc-client-list" placeholder="クライアント名で検索">
+                    <datalist id="proxy-doc-client-list">
+                        {% for client_name in client_options %}
+                        <option value="{{ client_name }}"></option>
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="status">状態</label>
+                    <select id="status" name="status">
+                        <option value="all" {% if filters.status == 'all' %}selected{% endif %}>すべて</option>
+                        <option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>下書き</option>
+                        <option value="completed" {% if filters.status == 'completed' %}selected{% endif %}>送付準備完了</option>
+                        <option value="submitted" {% if filters.status == 'submitted' %}selected{% endif %}>送付済み</option>
+                    </select>
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="sale_mode">形式</label>
+                    <select id="sale_mode" name="sale_mode">
+                        <option value="all" {% if filters.sale_mode == 'all' %}selected{% endif %}>すべて</option>
+                        <option value="auction" {% if filters.sale_mode == 'auction' %}selected{% endif %}>オークション</option>
+                        <option value="fixed" {% if filters.sale_mode == 'fixed' %}selected{% endif %}>早い者勝ち</option>
+                    </select>
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="date_from">開始日</label>
+                    <input id="date_from" name="date_from" type="date" value="{{ filters.date_from or '' }}">
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="date_to">終了日</label>
+                    <input id="date_to" name="date_to" type="date" value="{{ filters.date_to or '' }}">
+                </div>
+                <div class="proxy-doc-field">
+                    <label for="keyword">キーワード</label>
+                    <input id="keyword" name="keyword" value="{{ filters.keyword or '' }}" placeholder="書類番号 / 商品名 / オークション名">
+                </div>
+            </div>
+            <div class="proxy-doc-actions">
+                <button type="submit" class="btn btn-primary">絞り込む</button>
+                <a href="{{ url_for('admin_proxy_service_document_history') }}" class="btn btn-secondary">クリア</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="proxy-doc-results">
+        <div class="proxy-doc-results-head">
+            <div>
+                <h2>送付対象の書類一覧</h2>
+                <p>{{ history_rows|length }} 件</p>
+            </div>
+        </div>
+        {% if history_rows %}
+        <div class="proxy-doc-table-wrap">
+            <table class="proxy-doc-table">
+                <thead>
+                    <tr>
+                        <th>計算書No.</th>
+                        <th>クライアント</th>
+                        <th>オークション</th>
+                        <th>商品</th>
+                        <th>金額</th>
+                        <th>状態</th>
+                        <th>発行日</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in history_rows %}
+                    <tr>
+                        <td>{{ doc.document_no or '-' }}</td>
+                        <td>
+                            <strong>{{ doc.client_name }}</strong>
+                            <span class="proxy-doc-sub">ユーザーID: {{ doc.user_id }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ doc.auction_name_display }}</strong>
+                            <span class="proxy-doc-sub">{{ doc.sale_mode_label }} / 終了 {{ doc.end_display }}</span>
+                        </td>
+                        <td>
+                            {{ doc.item_summary }}
+                            <span class="proxy-doc-sub">{{ doc.item_count }} 点</span>
+                        </td>
+                        <td>¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
+                        <td><span class="status-chip status-{{ doc.status_class }}">{{ doc.status_label }}</span></td>
+                        <td>{{ doc.issue_date_display }}</td>
+                        <td>
+                            <div class="proxy-doc-actions">
+                                <a href="{{ url_for('admin_auction_keisan_view', id=doc.id, next=current_page_path) }}" class="btn btn-primary btn-sm">詳細</a>
+                                {% if doc.status != 'submitted' %}
+                                <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id, next=current_page_path) }}" class="btn btn-secondary btn-sm">編集</a>
+                                {% endif %}
+                                {% if doc.status == 'completed' %}
+                                <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" class="inline-form">
+                                    <input type="hidden" name="auction_id" value="{{ doc.proxy_service_auction_id }}">
+                                    <input type="hidden" name="next" value="{{ current_page_path }}">
+                                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('この書類を送付しますか？')">書類を送付</button>
+                                </form>
+                                {% endif %}
+                                {% if doc.status == 'submitted' %}
+                                <a href="{{ url_for('admin_auction_keisan_pdf', id=doc.id) }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">PDF</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="proxy-doc-empty">条件に一致する処理送付履歴はありません。</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

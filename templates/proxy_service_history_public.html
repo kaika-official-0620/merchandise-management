@@ -16,7 +16,7 @@
 {% block content %}
 <div class="page-header">
     <h1>代行仕入れサービス履歴</h1>
-    <p class="page-lead">締切済みのオークション一覧です。詳細ページでは、ログイン中のご本人に関係する結果だけを表示します。</p>
+    <p class="page-lead">自分が入札または購入した締切済みのオークションだけを表示しています。詳細ページでは、ご本人に関係する結果だけを確認できます。</p>
 </div>
 
 <div class="history-toolbar">
@@ -54,6 +54,10 @@
                 </div>
                 {% if current_user.is_authenticated %}
                 <div>
+                    <dt>あなたの入札</dt>
+                    <dd>{{ auction.user_bid_count or 0 }}件</dd>
+                </div>
+                <div>
                     <dt>あなたの結果</dt>
                     <dd>{{ auction.user_result_count or 0 }}件</dd>
                 </div>
@@ -67,7 +71,7 @@
 {% else %}
 <div class="empty-card">
     <h2>履歴はまだありません</h2>
-    <p>締切済みのオークションが追加されると、ここに表示されます。</p>
+    <p>参加したオークションが締切になると、ここに表示されます。</p>
 </div>
 {% endif %}
 
