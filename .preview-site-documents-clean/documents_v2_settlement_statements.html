@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>仕切書</title>
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>仕切書</h1>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary" type="button" onclick="sendAllSettlementStatements('settlement-bulk-notice')">全クライアントへ一括送付</button>
+        </div>
+      </div>
+      <p id="settlement-bulk-notice" class="inline-notice" hidden></p>
+      <div class="section">
+        <div class="section-head">
+          <h3>月締め対象</h3>
+          <label class="field history-filter-field">
+            <span>対象月</span>
+            <input id="settlement-month-filter" type="month" value="2026-04">
+          </label>
+        </div>
+        <div id="settlement-current-list" class="stack"></div>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+    </body>
+    </html>

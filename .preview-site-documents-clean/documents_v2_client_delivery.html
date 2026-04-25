@@ -4,7 +4,7 @@
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>クライアント返送内容</title>
-      <link rel="stylesheet" href="static/preview_v2.css">
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
     </head>
     <body>
@@ -26,7 +26,7 @@
         <div class="section-head">
           <div>
             <h3>返送する商品</h3>
-            <p class="section-note">キャンセル済みの商品は含めず、売却済みの商品のみを返送対象にします。</p>
+            <p class="section-note">キャンセル済みの商品は含めず、3番で反映済みの商品と完了済みの商品だけを確認して、サービス別の買取明細書を作成します。</p>
           </div>
         </div>
         <div id="client-delivery-items" class="stack"></div>
@@ -37,8 +37,10 @@
       </div>
     </div>
 
-    <script src="static/preview_data.js"></script>
-    <script src="static/preview_v2.js"></script>
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
     </body>
     </html>

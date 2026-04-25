@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>クライアント向け買取明細書</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
+  <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
 </head>
 <body>
@@ -16,6 +16,7 @@
       <a id="statement-back-link" class="btn btn-outline" href="documents_v2_client_delivery.html">返送一覧へ戻る</a>
       <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
       <button class="btn btn-outline" type="button" data-action="reset-doc">入力を元に戻す</button>
+      <a id="statement-send-link" class="btn btn-primary" href="documents_v2_user_item_editor.html" onclick="completeCurrentDocument('client')">送付をする</a>
     </div>
   </div>
   <div class="doc-page" data-doc-editor>
@@ -199,11 +200,14 @@
       <strong>備考</strong>
       <p>必要に応じて、ここで備考や金額を修正してからクライアントへ返送する想定です。</p>
     </div>
+    <p id="doc-save-notice" class="inline-notice" hidden></p>
   </div>
 </div>
 
-<script src="static/preview_data.js"></script>
-<script src="static/preview_v2.js"></script>
+<script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 <script src="static/doc_editor.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>見積依頼書</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
+  <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
 </head>
 <body>
@@ -16,6 +16,8 @@
       <a class="btn btn-outline" href="documents_v2_vendor_outgoing.html">一覧へ戻る</a>
       <button class="btn btn-soft" type="button" data-action="toggle-edit">書類を編集する</button>
       <button class="btn btn-outline" type="button" data-action="reset-doc">入力を元に戻す</button>
+      <button class="btn btn-primary" type="button" onclick="saveCurrentDocumentAsPdf('vendor','kaika_vendor_request.pdf')">PDFとして保存</button>
+      <button class="btn btn-soft" type="button" onclick="saveCurrentDocumentAsWord('vendor','kaika_vendor_request.doc')">Word形式で保存</button>
     </div>
   </div>
   <div class="doc-page" data-doc-editor>
@@ -24,6 +26,9 @@
       <div><strong>発行日</strong> 2026年4月23日</div>
       <div><strong>送付先</strong> <span data-vendor-name>取引先業者 御中</span></div>
       <div><strong>差出人</strong> 株式会社開花</div>
+      <div><strong>担当者</strong> 田中 花子</div>
+      <div><strong>連絡先</strong> 03-0000-0000 / kaika@example.jp</div>
+      <div><strong>回答希望日</strong> 2026年4月30日</div>
     </div>
     <div class="doc-message">下記の商品について、見積のご確認をお願いいたします。</div>
     <table class="doc-table">
@@ -196,13 +201,16 @@
     </div>
     <div class="doc-note">
       <strong>備考</strong>
-      <p>選択した商品をもとに、必要に応じて書類内容を編集してから業者へ送付します。</p>
+      <p>選択した商品をもとに、必要に応じて書類内容を編集してから業者へ送付します。査定条件、返送方法、回答期限など、重要事項はこの欄へ追記してください。</p>
     </div>
+    <p id="doc-save-notice" class="inline-notice" hidden></p>
   </div>
 </div>
 
-<script src="static/preview_data.js"></script>
-<script src="static/preview_v2.js"></script>
+<script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 <script src="static/doc_editor.js"></script>
 </body>
 </html>

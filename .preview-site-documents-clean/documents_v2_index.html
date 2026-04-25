@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>書類管理</title>
-  <link rel="stylesheet" href="static/preview_v2.css">
+  <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div class="page-head">
     <div>
       <h1>書類管理</h1>
-      <p>1番から4番までの流れを管理者向けにまとめています。トップでは 2×2 の導線だけを見せ、各段階の中身は個別ページで確認します。</p>
+      <p>現状処理中の書類を種類ごとに確認します。履歴ではなく、いま対応が必要な書類だけをここから開く形です。</p>
     </div>
   </div>
   <div class="flow-grid">
@@ -27,7 +27,7 @@
     <a class="flow-card" href="documents_v2_vendor_outgoing.html">
       <span class="flow-step">2</span>
       <h2>開花から業者へ依頼</h2>
-      <p>査定中に切り替えた業者卸販売の商品だけをまとめて業者へ流します。</p>
+      <p>査定中・出品中に進めた商品を、業者販売・オークション・同時出品に分けて書類化します。</p>
       <span class="flow-count">6点準備中</span>
     </a>
 
@@ -40,15 +40,38 @@
 
     <a class="flow-card" href="documents_v2_client_outgoing.html">
       <span class="flow-step">4</span>
-      <h2>クライアントへ返送</h2>
-      <p>クライアントごとに書類をまとめて作成し、返送内容を確認します。</p>
+      <h2>買取明細書</h2>
+      <p>クライアントごとに買取明細書を作成し、送付後にユーザー書類・商品ページへ反映します。</p>
       <span class="flow-count">3名へ返送準備</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_client_estimate_requests.html">
+      <span class="flow-step">5</span>
+      <h2>クライアント返送見積依頼書</h2>
+      <p>買取明細書送付後に、ユーザーから見積依頼書として返送された書類を確認します。</p>
+      <span class="flow-count">返送待ちを確認</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_settlement_statements.html">
+      <span class="flow-step">6</span>
+      <h2>仕切書</h2>
+      <p>月額利用料と撮影・梱包・発送代行サポート費用を月締めで確認・送付します。</p>
+      <span class="flow-count">1名分</span>
+    </a>
+
+    <a class="flow-card" href="documents_v2_calculation_statements.html">
+      <span class="flow-step">7</span>
+      <h2>計算書</h2>
+      <p>代行仕入れを行った取引だけを計算書として確認します。</p>
+      <span class="flow-count">代行仕入れのみ</span>
     </a>
     </div>
 </div>
 
-<script src="static/preview_data.js"></script>
-<script src="static/preview_v2.js"></script>
+<script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
 </body>
 </html>

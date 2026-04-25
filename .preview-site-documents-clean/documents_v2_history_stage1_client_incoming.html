@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>2026/03 クライアント受付履歴</title>
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_history.html">書類履歴トップへ戻る</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>2026/03 クライアント受付履歴</h1>
+          <p>クライアント受付 の履歴書類です。書類履歴から中身を確認するための preview です。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>履歴書類の中身</h3>
+            <p class="section-note">2026/03 / 業者卸販売 / 過去履歴</p>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-primary btn-compact" type="button" onclick="downloadElementAsPdf(document.querySelector('.file-preview'),'history_document.pdf')">PDF保存</button>
+            <button class="btn btn-soft btn-compact" type="button" onclick="downloadElementAsWord(document.querySelector('.file-preview'),'history_document.doc')">Word保存</button>
+            <button class="btn btn-outline btn-compact" type="button" onclick="printElement(document.querySelector('.file-preview'))">印刷</button>
+          </div>
+        </div>
+        <div class="file-preview">
+          <div class="file-preview-head">履歴書類プレビュー</div>
+          <table class="simple-table">
+            <thead><tr><th>No.</th><th>商品名</th><th>金額</th><th>結果</th></tr></thead>
+            <tbody><tr><td>1</td><td>アズール サリナPM トートバッグ</td><td>¥0</td><td>受付済み</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+    </body>
+    </html>

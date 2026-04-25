@@ -4,7 +4,7 @@
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>1. クライアントから受付 - 業者オークション</title>
-      <link rel="stylesheet" href="static/preview_v2.css">
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
     </head>
     <body>
@@ -29,14 +29,20 @@
             <p class="section-note">商品一覧を縦に並べず、まずはクライアント単位で確認できる形にしています。サービスを切り替えても同じ見え方で確認できます。</p>
           </div>
         </div>
-        <div class="service-tabs"><a class="service-tab" href="documents_v2_client_incoming.html">すべて</a><a class="service-tab" href="documents_v2_client_incoming_wholesale.html">業者卸販売</a><a class="service-tab is-active" href="documents_v2_client_incoming_auction.html">業者オークション</a><a class="service-tab" href="documents_v2_client_incoming_simultaneous.html">同時出品</a></div>
+        <div class="service-tabs"><a class="service-tab" href="documents_v2_client_incoming.html" data-stage-tab="stage1" data-service-key="all">すべて<span class="service-tab-count">6</span></a><a class="service-tab" href="documents_v2_client_incoming_wholesale.html" data-stage-tab="stage1" data-service-key="wholesale">業者卸販売<span class="service-tab-count">3</span></a><a class="service-tab is-active" href="documents_v2_client_incoming_auction.html" data-stage-tab="stage1" data-service-key="auction">業者オークション<span class="service-tab-count">1</span></a><a class="service-tab" href="documents_v2_client_incoming_simultaneous.html" data-stage-tab="stage1" data-service-key="simultaneous">同時出品<span class="service-tab-count">2</span></a></div>
+        <div class="filter-row">
+          <label class="field search-field">
+            <span>クライアント検索</span>
+            <input id="client-incoming-search" type="search" placeholder="クライアント名・クライアント番号・商品名で検索">
+          </label>
+        </div>
         <div class="summary-grid">
 
-<div class="summary-card">
+<div class="summary-card js-filter-card" data-search="テスト C-018 REQ-TEST-018 業者オークション ゲートバッグスモール ショルダーバッグ 業者オークション">
   <div class="summary-head">
     <div>
       <div class="summary-client">テスト</div>
-      <div class="summary-meta">REQ-TEST-018 / 受付日 2026/04/23</div>
+      <div class="summary-meta">C-018 / REQ-TEST-018 / 受付日 2026/04/23</div>
     </div>
     <span class="pill appraising">査定中</span>
   </div>
@@ -46,18 +52,23 @@
     <div class="field-block"><div class="field-label">代表商品</div><div class="field-value">ゲートバッグスモール ショルダーバッグ</div></div>
     <div class="field-block"><div class="field-label">次の流れ</div><div class="field-value">詳細で確認後、査定中にした商品だけ2番へ送ります</div></div>
   </div>
-  <div class="service-chip-row"><span class="service-chip service-chip-auction">業者オークション 1件</span></div>
-  <div class="card-actions">
-    <a class="btn btn-soft" href="documents_v2_request_detail_test_client_auction.html">詳細を確認する</a>
+  <div class="summary-footer">
+    <div class="service-chip-row summary-chip-row"><span class="service-chip service-chip-auction">業者オークション 1件</span></div>
+    <div class="card-actions summary-actions summary-action-row">
+      <a class="btn btn-soft" href="documents_v2_request_detail_test_client_auction.html">詳細を確認する</a>
+    </div>
   </div>
 </div>
 
         </div>
+        <p id="client-incoming-empty" class="section-note" hidden>条件に合う受付はありません。</p>
       </div>
     </div>
 
-    <script src="static/preview_data.js"></script>
-    <script src="static/preview_v2.js"></script>
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
     </body>
     </html>

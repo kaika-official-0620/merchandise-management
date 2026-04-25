@@ -4,7 +4,7 @@
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>3. 業者から回答受領</title>
-      <link rel="stylesheet" href="static/preview_v2.css">
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
     </head>
     <body>
@@ -19,21 +19,31 @@
       <div class="page-head">
         <div>
           <h1>3. 業者から回答受領</h1>
-          <p>月に1件ではなく、取引ごとの回答ファイルを1件ずつ登録して確認します。ファイルを開くと、商品ごとにどのクライアントへ返送するかを振り分けられます。</p>
+          <p>月に1件ではなく、取引ごとの回答ファイルを1件ずつ登録して確認します。直近1か月以内の書類をここで扱い、それ以前のものは書類履歴で確認する前提です。</p>
         </div>
+      </div>
+      <div class="service-tabs"><a class="service-tab is-active" href="documents_v2_vendor_incoming.html" data-stage-tab="stage3" data-service-key="all">すべて<span class="service-tab-count">6</span></a><a class="service-tab" href="documents_v2_vendor_incoming_wholesale.html" data-stage-tab="stage3" data-service-key="wholesale">業者卸販売<span class="service-tab-count">3</span></a><a class="service-tab" href="documents_v2_vendor_incoming_auction.html" data-stage-tab="stage3" data-service-key="auction">業者オークション<span class="service-tab-count">1</span></a><a class="service-tab" href="documents_v2_vendor_incoming_simultaneous.html" data-stage-tab="stage3" data-service-key="simultaneous">同時出品<span class="service-tab-count">2</span></a></div>
+      <div class="filter-row">
+        <label class="field search-field">
+          <span>回答ファイル検索</span>
+          <input id="vendor-incoming-search" type="search" placeholder="取引先・商品名・書類名で検索">
+        </label>
+        <a class="btn btn-outline" href="documents_v2_history.html">書類履歴を開く</a>
       </div>
       <div class="section">
           <div class="section-head">
             <div>
               <h3>回答ファイルを登録する</h3>
-              <p class="section-note">届いたファイルをサービス別に登録し、下の一覧から開く・ダウンロードして中身を確認する想定です。</p>
+              <p class="section-note">届いたファイルをサービス別に登録し、下の一覧から書類の中身を開いて確認する想定です。</p>
             </div>
           </div>
           <div class="form-inline">
             <label class="field file-field"><span>回答ファイル</span><input id="vendor-file" type="file"></label>
-          <label class="field"><span>書類区分</span><select id="vendor-file-service"><option value="wholesale">業者卸販売</option><option value="auction">業者オークション</option><option value="simultaneous">同時出品</option></select></label>
-          <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
-          <button class="btn btn-primary" type="button" onclick="registerVendorFile()">ファイルを登録</button>
+            <label class="field"><span>題名</span><input id="vendor-file-title" type="text" placeholder="例：2026/04/24 ブランドセンター 回答書 No.054"></label>
+            <label class="field"><span>業者名</span><input id="vendor-file-company" list="vendor-company-options" type="text" placeholder="例：ブランドセンター"><datalist id="vendor-company-options"><option value="ブランドセンター"></option><option value="ブランド市場"></option><option value="Luxe Gate"></option></datalist></label>
+            <label class="field"><span>書類区分</span><select id="vendor-file-service"><option value="wholesale">業者卸販売</option><option value="auction">業者オークション</option><option value="simultaneous">同時出品</option></select></label>
+            <label class="field"><span>取引日</span><input id="vendor-file-date" type="date" value="2026-04-23"></label>
+            <button class="btn btn-primary btn-compact" type="button" onclick="registerVendorFile()">ファイルを登録</button>
         </div>
         <p id="vendor-file-notice" class="inline-notice" hidden></p>
       </div>
@@ -46,7 +56,7 @@
             </div>
           </div>
           <div class="stack">
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/08 ブランドセンター 回答書 No.041 ブランドセンター アズール サリナPM トートバッグ 業者卸販売">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/08 ブランドセンター 回答書 No.041</div>
@@ -57,11 +67,10 @@
               <p class="section-note">アズール サリナPM トートバッグ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_145_アズール_サリナpm_トートバッグ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/vendor_response_item_145_アズール_サリナpm_トートバッグ.txt" download>ダウンロード</a>
               </div>
             </div>
 
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/09 ブランド市場 回答書 No.042 ブランド市場 レザー ムーンサイド ショルダーバッグ 業者卸販売">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/09 ブランド市場 回答書 No.042</div>
@@ -72,11 +81,10 @@
               <p class="section-note">レザー ムーンサイド ショルダーバッグ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_146_レザー_ムーンサイド_ショルダーバッグ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/vendor_response_item_146_レザー_ムーンサイド_ショルダーバッグ.txt" download>ダウンロード</a>
               </div>
             </div>
 
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/10 Luxe Gate 回答書 No.043 Luxe Gate ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ 業者卸販売">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/10 Luxe Gate 回答書 No.043</div>
@@ -87,7 +95,6 @@
               <p class="section-note">ズッカ柄 マンマ金具/ワンショルダー ショルダーバッグ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_vendor_response_file_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/vendor_response_item_151_ズッカ柄_マンマ金具_ワンショルダー_ショルダーバッグ.txt" download>ダウンロード</a>
               </div>
             </div>
             </div>
@@ -101,7 +108,7 @@
             </div>
           </div>
           <div class="stack">
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/19 オークション市場 結果書 No.084 オークション市場 ゲートバッグスモール ショルダーバッグ 業者オークション">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/19 オークション市場 結果書 No.084</div>
@@ -112,7 +119,6 @@
               <p class="section-note">ゲートバッグスモール ショルダーバッグ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_auction_response_file_item_147_ゲートバッグスモール_ショルダーバッグ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/auction_response_item_147_ゲートバッグスモール_ショルダーバッグ.txt" download>ダウンロード</a>
               </div>
             </div>
             </div>
@@ -126,7 +132,7 @@
             </div>
           </div>
           <div class="stack">
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/23 同時出品 売却報告 No.015 同時出品管理 Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ 同時出品">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/23 同時出品 売却報告 No.015</div>
@@ -137,11 +143,10 @@
               <p class="section-note">Re-edition2005リナイロン バッグ ブラック クロシェット・ストラップ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_simultaneous_response_file_item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/simultaneous_response_item_148_re_edition2005リナイロン_バッグ_ブラック_クロシェット_ストラップ.txt" download>ダウンロード</a>
               </div>
             </div>
 
-            <div class="file-card">
+            <div class="file-card js-filter-card" data-search="2026/04/24 同時出品 売却報告 No.016 同時出品管理 ルカゴールデニムショルダーバッグ ハンドバッグ 同時出品">
               <div class="file-head">
                 <div>
                   <div class="file-title">2026/04/24 同時出品 売却報告 No.016</div>
@@ -152,16 +157,18 @@
               <p class="section-note">ルカゴールデニムショルダーバッグ ハンドバッグ</p>
               <div class="card-actions">
                 <a class="btn btn-soft" href="documents_v2_simultaneous_response_file_item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ.html">書類を確認する</a>
-                <a class="btn btn-outline" href="static/downloads/simultaneous_response_item_149_ルカゴールデニムショルダーバッグ_ハンドバッグ.txt" download>ダウンロード</a>
               </div>
             </div>
             </div>
         </div>
 
+      <p id="vendor-incoming-search-empty" class="section-note" hidden>条件に合う回答書類はありません。</p>
     </div>
 
-    <script src="static/preview_data.js"></script>
-    <script src="static/preview_v2.js"></script>
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
     </body>
     </html>

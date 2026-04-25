@@ -4,7 +4,7 @@
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>2026/04/19 オークション市場 結果書 No.084</title>
-      <link rel="stylesheet" href="static/preview_v2.css">
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
     </head>
     <body>
@@ -27,47 +27,49 @@
           <div class="section-head">
             <div>
               <h3>ファイルの中身を確認</h3>
-              <p class="section-note">登録したファイルを確認し、商品名・売却額・結果を見ながら、4番へ渡す準備をします。</p>
+              <p class="section-note">登録したファイルを確認し、商品名・売却額・結果を見ながら、4番で振り分けるための元データを確認します。</p>
             </div>
-            <a class="btn btn-outline" href="static/downloads/auction_response_item_147_ゲートバッグスモール_ショルダーバッグ.txt" download>ダウンロード</a>
           </div>
           <div class="file-preview">
             <div class="file-preview-head">回答ファイル プレビュー</div>
             <table class="simple-table">
-              <thead><tr><th>No.</th><th>商品名</th><th>売却額</th><th>結果</th></tr></thead>
-              <tbody><tr><td>1</td><td>ゲートバッグスモール ショルダーバッグ</td><td>¥710,000</td><td>落札</td></tr></tbody>
+              <thead><tr><th>No.</th><th>商品名</th><th>売却額</th><th>結果</th><th>4番への反映先</th></tr></thead>
+              <tbody>
+    <tr>
+      <td>1</td>
+      <td>ゲートバッグスモール ショルダーバッグ</td>
+      <td>¥710,000</td>
+      <td>落札</td>
+      <td>
+        <input class="assign-input" id="assign-item_147_ゲートバッグスモール_ショルダーバッグ" list="client-options-auction" value="テスト" placeholder="クライアント名で検索">
+        <button class="btn btn-soft btn-mini" type="button" onclick="assignClient('assign-item_147_ゲートバッグスモール_ショルダーバッグ','assign-note-item_147_ゲートバッグスモール_ショルダーバッグ','item_147_ゲートバッグスモール_ショルダーバッグ','ゲートバッグスモール ショルダーバッグ',710000,'2026/04/19 オークション市場 結果書 No.084','auction')">4番へ反映</button>
+        <p id="assign-note-item_147_ゲートバッグスモール_ショルダーバッグ" class="inline-note" hidden></p>
+      </td>
+    </tr>
+    </tbody>
             </table>
+            <datalist id="client-options-auction"><option value="テスト"></option></datalist>
           </div>
         </div>
         <div class="section">
-          <div class="section-head"><h3>4番へ振り分ける</h3></div>
-          <table class="simple-table">
-            <thead><tr><th>No.</th><th>商品名</th><th>売却額</th><th>結果</th><th>返送先クライアント</th><th>操作</th></tr></thead>
-            <tbody>
-        <tr>
-          <td>1</td>
-          <td>ゲートバッグスモール ショルダーバッグ</td>
-          <td>¥710,000</td>
-          <td>落札</td>
-          <td>
-            <input class="assign-input" data-product-id="item_147_ゲートバッグスモール_ショルダーバッグ" list="client-list-item_147_ゲートバッグスモール_ショルダーバッグ" id="assign-item_147_ゲートバッグスモール_ショルダーバッグ" value="テスト" placeholder="クライアント名を検索">
-            <datalist id="client-list-item_147_ゲートバッグスモール_ショルダーバッグ"><option value="テスト"></option></datalist>
-          </td>
-          <td>
-            <button class="btn btn-soft" type="button" onclick="assignClient('assign-item_147_ゲートバッグスモール_ショルダーバッグ','assign-note-item_147_ゲートバッグスモール_ショルダーバッグ','item_147_ゲートバッグスモール_ショルダーバッグ','ゲートバッグスモール ショルダーバッグ',710000,'2026/04/19 オークション市場 結果書 No.084','auction')">振り分ける</button>
-          </td>
-        </tr>
-        <tr class="note-row">
-          <td colspan="6"><p id="assign-note-item_147_ゲートバッグスモール_ショルダーバッグ" class="inline-note">この商品をどのクライアントの 業者オークション 返送へつなぐか、ここで決めます。</p></td>
-        </tr>
-        </tbody>
-          </table>
+          <div class="section-head"><h3>次の作業</h3></div>
+          <div class="compact-list">
+            <div class="compact-item">
+              <strong>4番でクライアントへ返送する</strong>
+              <span>この書類の各商品をここで反映先へ登録すると、4番のクライアント返送候補に表示されます。</span>
+              <div class="card-actions">
+                <a class="btn btn-primary" href="documents_v2_client_outgoing_auction.html">4番の 業者オークション 一覧を開く</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <script src="static/preview_data.js"></script>
-    <script src="static/preview_v2.js"></script>
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
     </body>
     </html>

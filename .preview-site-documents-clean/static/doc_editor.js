@@ -1,3 +1,8 @@
+async function downloadDocumentAsWord(filename) {
+  if (typeof downloadElementAsWord !== "function") return false;
+  return downloadElementAsWord(document.querySelector(".doc-page"), filename);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("[data-doc-editor]").forEach((root) => {
     const editableNodes = Array.from(root.querySelectorAll(".doc-meta strong, .doc-meta div, .doc-message, .doc-table tbody td, .doc-note p"));

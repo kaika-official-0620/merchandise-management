@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ユーザー画面プレビュー</title>
+  <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+</head>
+<body>
+
+<div class="page">
+  <div class="back-bar">
+    <a class="btn btn-outline" href="documents_v2_user_item_editor.html">ユーザー商品編集へ戻る</a>
+    <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  </div>
+  <div class="page-head">
+    <div>
+      <h1 id="user-documents-title">ユーザー画面プレビュー</h1>
+      <p id="user-documents-copy">買取明細書を送付した後、ユーザー側の書類一覧・通知・商品ページに反映される状態を確認します。</p>
+    </div>
+    <span id="user-documents-notification" class="notification-badge">通知 0</span>
+  </div>
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <h3>ユーザー書類一覧</h3>
+        <p class="section-note">送付済みの買取明細書がここに表示される想定です。</p>
+      </div>
+    </div>
+    <div id="user-documents-list" class="stack"></div>
+    <p id="user-documents-empty" class="section-note" hidden>ユーザー側に届いている書類はまだありません。</p>
+  </div>
+  <div class="section">
+    <div class="section-head">
+      <div>
+        <h3>商品ページへの反映</h3>
+        <p class="section-note">送付対象の商品に、送付済み・完了・販売金額などが反映される想定です。</p>
+      </div>
+    </div>
+    <div id="user-documents-products" class="stack"></div>
+  </div>
+</div>
+
+<script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>計算書</title>
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>計算書</h1>
+          <p>代行仕入れを行った取引だけを計算書として表示します。通常の業者販売・オークション・同時出品はここには混ぜません。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>代行仕入れ履歴から送付する書類</h3>
+            <p class="section-note">代行仕入れ対象の商品だけをクライアント別にまとめ、計算書を確認して送付する場所です。送付後はこの一覧から外れ、下の履歴へ移動します。</p>
+          </div>
+        </div>
+        <div id="calculation-current-list" class="stack"></div>
+        <p id="calculation-current-empty" class="section-note" hidden>現在、代行仕入れの書類送付対象はありません。</p>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>送付済み計算書履歴</h3>
+            <p class="section-note">計算書を送付すると、商品一覧側の送付対象から消えて、ここに履歴として残ります。</p>
+          </div>
+        </div>
+        <div id="completed-doc-history" class="stack" data-completed-filter="calculation_statement"></div>
+        <p id="completed-doc-empty" class="section-note" hidden>送付済みの計算書はまだありません。</p>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+    </body>
+    </html>

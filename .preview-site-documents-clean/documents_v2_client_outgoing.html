@@ -4,7 +4,7 @@
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>4. クライアントへ返送</title>
-      <link rel="stylesheet" href="static/preview_v2.css">
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
 
     </head>
     <body>
@@ -22,20 +22,29 @@
           <p>3番で振り分けた回答内容と、完了した案件をもとに、クライアント名ごと・サービス別に返送書類を作成します。1人に対してもサービスごとに別書類で返送する前提です。</p>
         </div>
       </div>
+      <div class="service-tabs"><a class="service-tab is-active" href="documents_v2_client_outgoing.html" data-stage-tab="stage4" data-service-key="all">すべて<span class="service-tab-count">3</span></a><a class="service-tab" href="documents_v2_client_outgoing_wholesale.html" data-stage-tab="stage4" data-service-key="wholesale">業者卸販売<span class="service-tab-count">1</span></a><a class="service-tab" href="documents_v2_client_outgoing_auction.html" data-stage-tab="stage4" data-service-key="auction">業者オークション<span class="service-tab-count">1</span></a><a class="service-tab" href="documents_v2_client_outgoing_simultaneous.html" data-stage-tab="stage4" data-service-key="simultaneous">同時出品<span class="service-tab-count">1</span></a></div>
+      <div class="filter-row">
+        <label class="field search-field">
+          <span>クライアント検索</span>
+          <input id="client-outgoing-search" type="search" placeholder="クライアント名・クライアント番号・商品名で検索">
+        </label>
+      </div>
       <div class="section">
         <div class="section-head">
           <div>
             <h3>返送対象のクライアント一覧</h3>
-            <p class="section-note">業者から回答が来て振り分けた商品と、完了したオークション・同時出品の商品を、クライアント名 × サービス別に分けて表示します。</p>
+            <p class="section-note">最初はクライアント名だけを一覧表示し、名前を開くと業者卸販売・業者オークション・同時出品の返送候補をサービス別に確認できる形です。</p>
           </div>
         </div>
-        <div id="client-outgoing-groups" class="summary-grid"></div>
+        <div id="client-outgoing-groups" class="summary-grid" data-service-filter="all"></div>
         <p id="client-outgoing-empty" class="section-note" hidden>返送対象の商品はまだありません。3番で振り分けるか、完了したオークション・同時出品の商品があるとここへ表示されます。</p>
       </div>
     </div>
 
-    <script src="static/preview_data.js"></script>
-    <script src="static/preview_v2.js"></script>
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
 
     </body>
     </html>

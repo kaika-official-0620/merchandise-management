@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>書類履歴</title>
+  <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+</head>
+<body>
+
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>書類履歴</h1>
+      <p>書類の種類ごとに履歴を分けて確認します。トップには全部を並べず、必要な書類カテゴリを開いて中身を確認する形です。</p>
+    </div>
+  </div>
+  <div class="flow-grid">
+    <a class="flow-card history-category-card" href="documents_v2_history_client_requests.html">
+      <h2>クライアントから届いた依頼書</h2>
+      <p>1番で受け付けた、最初の申請依頼書・買取依頼書の履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_vendor_requests.html">
+      <h2>開花から業者への見積依頼書</h2>
+      <p>2番でPDF/Word保存して完了にした、業者向け見積依頼書・オークション依頼書の履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+      <p class="section-note">保存完了した見積依頼書もここへ追加表示されます。</p>
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_vendor_responses.html">
+      <h2>業者から届いた回答書類</h2>
+      <p>3番で登録した、業者卸販売・業者オークション・同時出品の回答ファイル履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_client_returns.html">
+      <h2>クライアントへ返送した書類</h2>
+      <p>4番で送付完了にした、ユーザー向け買取明細書などの返送履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+      <p class="section-note">送付完了した買取明細書もここへ追加表示されます。</p>
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_client_estimate_requests.html">
+      <h2>クライアント返送見積依頼書</h2>
+      <p>買取明細書を送った後、ユーザーから見積依頼書として返送された書類の履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+      <p class="section-note">ユーザーから返送された見積依頼書を認証するとここへ追加表示されます。</p>
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_settlement_statements.html">
+      <h2>仕切書</h2>
+      <p>月額利用料や撮影・梱包・発送代行サポート費用をまとめた、利用明細書型の仕切書履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+
+    </a>
+
+    <a class="flow-card history-category-card" href="documents_v2_history_calculation_statements.html">
+      <h2>計算書</h2>
+      <p>代行仕入れの計算書を送付した履歴です。</p>
+      <span class="flow-count">この書類履歴を開く</span>
+
+    </a>
+    </div>
+</div>
+
+<script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+</body>
+</html>

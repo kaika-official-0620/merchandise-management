@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>計算書</title>
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_history.html">書類履歴トップへ戻る</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>計算書</h1>
+          <p>代行仕入れの計算書を送付した履歴です。</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>送付済みの計算書</h3>
+            <details class="compact-help">
+              <summary>説明を見る</summary>
+              <p>代行仕入れの計算書を作成・送付した場合にここへ追加されます。</p>
+            </details>
+          </div>
+        </div>
+        <div id="completed-doc-history" class="stack" data-completed-filter="calculation_statement"></div>
+        <p id="completed-doc-empty" class="section-note" hidden>完了済みの書類はまだありません。</p>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>保存済み履歴</h3>
+            <details class="compact-help">
+              <summary>説明を見る</summary>
+              <p>過去の書類を種類別に確認します。必要な書類だけをこのページ内で探せます。</p>
+            </details>
+          </div>
+        </div>
+        <div class="filter-row">
+          <label class="field search-field">
+            <span>題名検索</span>
+            <input id="history-title-search" type="search" placeholder="例：仕切書、見積依頼書、ブランドセンター">
+          </label>
+          <label class="field history-filter-field">
+            <span>対象月</span>
+            <input id="history-month-filter" type="month">
+          </label>
+          <label class="field history-filter-field">
+            <span>開始日</span>
+            <input id="history-date-from" type="date">
+          </label>
+          <label class="field history-filter-field">
+            <span>終了日</span>
+            <input id="history-date-to" type="date">
+          </label>
+          <button class="btn btn-outline btn-compact history-clear-btn" type="button" onclick="clearHistoryFilters()">絞り込みを解除</button>
+        </div>
+        <div class="stack">
+        <div class="file-card js-filter-card js-history-card" data-search="2026/03 代行仕入れ計算書履歴 代行仕入れ計算書 レザー ムーンサイド ショルダーバッグ 代行仕入れ 2026/03 2026-03-22" data-title="2026/03 代行仕入れ計算書履歴" data-date="2026-03-22" data-month="2026-03">
+          <div class="file-head">
+            <div>
+              <div class="file-title">2026/03 代行仕入れ計算書履歴</div>
+              <div class="file-meta">取引日 2026-03-22 / 代行仕入れ計算書 / 2026/03 / 代行仕入れ / レザー ムーンサイド ショルダーバッグ</div>
+            </div>
+            <span class="pill completed">履歴</span>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-soft" href="documents_v2_history_proxy_purchase_calculation.html">履歴を開く</a>
+          </div>
+        </div>
+        </div>
+        <p id="history-empty" class="section-note" hidden>条件に合う履歴はありません。</p>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+    </body>
+    </html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+    <html lang="ja">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>クライアント返送見積依頼書</title>
+      <link rel="stylesheet" href="static/preview_v2.css?v=calculation-send-history-20260425">
+
+    </head>
+    <body>
+
+    <div class="page">
+
+<div class="back-bar">
+  <a class="btn btn-outline" href="documents_v2_index.html">書類一覧</a>
+  <a class="btn btn-outline" href="javascript:history.back()">1つ前に戻る</a>
+</div>
+
+      <div class="page-head">
+        <div>
+          <h1>クライアント返送見積依頼書</h1>
+          <p>買取明細書を送付した後、ユーザー画面から見積依頼書として返送された書類を確認します。管理側で認証すると、書類履歴へ移動します。</p>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>認証待ちの見積依頼書</h3>
+            <p class="section-note">ユーザーが「見積依頼書として返送する」を押した書類がここに届く想定です。</p>
+          </div>
+        </div>
+        <div id="pending-client-estimate-list" class="stack"></div>
+        <p id="pending-client-estimate-empty" class="section-note" hidden>認証待ちの見積依頼書はありません。</p>
+      </div>
+    </div>
+
+    <script src="static/preview_data.js?v=calculation-send-history-20260425"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="static/preview_v2.js?v=calculation-send-history-20260425"></script>
+
+    </body>
+    </html>
