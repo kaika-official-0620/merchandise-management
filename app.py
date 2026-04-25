@@ -37374,7 +37374,7 @@ def admin_documents_dashboard_preview():
             "title": "4. クライアントへ返送",
             "flow_label": "開花 -> クライアント",
             "summary": "各サービスに応じた最終書類を作成し、クライアントへ返送する段階です。",
-            "documents": ["買取明細書", "仕切書"],
+            "documents": ["買取明細書", "仕切書", "オークション計算書"],
             "url": url_for("admin_documents_dashboard", group="client_outgoing"),
             "current_count": 0,
         },
@@ -37415,7 +37415,7 @@ def admin_documents_dashboard_preview():
             "flow_label": "開花 -> クライアント",
             "stage_title": "4. クライアントへ返送",
             "summary": "各サービスに応じた書類をここで作成し、クライアントへ返送します。",
-            "documents": ["買取明細書", "仕切書"],
+            "documents": ["買取明細書", "仕切書", "オークション計算書"],
             "check_points": ["業者卸販売は業者回答を引用", "業者オークションと同時出品は申請内容を引用", "クライアント向け書類だけを作成"],
             "create_guidance": "クライアントへ返す書類は、この段階で案件データを引用して作成します。",
             "action_title": "クライアントへ返送する案件",
@@ -37537,12 +37537,17 @@ def admin_documents_dashboard_preview():
                     doc for doc in row["related_documents"]
                     if doc.get("document_type") in {"クライアント向け買取明細書", "仕切書"}
                 ]
-            elif service_type == "auction":
-                client_out_row["next_document_label"] = "クライアント向け買取明細書を作成"
+            elif service_type in {"auction", "simultaneous"}:
+                client_out_row["next_document_label"] = "クライアント向け買取明細書・計算書を作成"
                 client_out_row["create_client_invoice_url"] = url_for("admin_kaitori_add", request_id=request_id) if not client_invoice_id else None
+                client_out_row["create_auction_keisan_url"] = (
+                    url_for("admin_auction_keisan_add", request_id=request_id)
+                    if not linked_docs.get("auction_keisan_id")
+                    else None
+                )
                 client_out_row["related_documents"] = [
                     doc for doc in row["related_documents"]
-                    if doc.get("document_type") in {"クライアント向け買取明細書"}
+                    if doc.get("document_type") in {"クライアント向け買取明細書", "オークション計算書"}
                 ]
             else:
                 client_out_row["next_document_label"] = "買取明細書を作成"
@@ -37586,6 +37591,11 @@ def admin_documents_dashboard_preview():
         ] if option["key"] == selected_service_type),
         "すべてのサービス",
     )
+    try:
+        document_type_cards = build_admin_document_type_cards_v2(fetch_admin_document_history_rows_with_vendor_statements_v2())
+    except Exception:
+        app.logger.exception("Failed to build admin document type cards")
+        document_type_cards = build_admin_document_type_cards_v2([])
 
     return render_template(
         "admin/documents_dashboard.html",
@@ -37605,6 +37615,7 @@ def admin_documents_dashboard_preview():
         selected_group_current_count=selected_group_current_count,
         selected_group_history_total=0,
         selected_group_service_label=selected_group_service_label,
+        document_type_cards=document_type_cards,
     )
 
 

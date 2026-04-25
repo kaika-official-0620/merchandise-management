@@ -10,6 +10,7 @@
 {% set active_meta = group_meta.get(selected_group, {}) %}
 {% set service_breakdown = service_breakdown if service_breakdown is defined else [] %}
 {% set stage_request_rows = stage_request_rows if stage_request_rows is defined else [] %}
+{% set document_type_cards = document_type_cards if document_type_cards is defined else [] %}
 
 {% macro service_badge(service_type, service_name) -%}
     {% set normalized = service_type or '' %}
@@ -38,6 +39,11 @@
     <a href="{{ row.shikiriosho_url }}" class="btn btn-outline btn-sm">仕切書を確認</a>
     {% elif row.create_shikiriosho_url %}
     <a href="{{ row.create_shikiriosho_url }}" class="btn btn-primary btn-sm">仕切書を作成</a>
+    {% endif %}
+    {% if row.auction_keisan_url %}
+    <a href="{{ row.auction_keisan_url }}" class="btn btn-outline btn-sm">計算書を確認</a>
+    {% elif row.create_auction_keisan_url %}
+    <a href="{{ row.create_auction_keisan_url }}" class="btn btn-primary btn-sm">計算書を作成</a>
     {% endif %}
 </div>
 {%- endmacro %}
@@ -161,6 +167,59 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+}
+
+.document-type-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.document-type-card {
+    display: block;
+    min-height: 100%;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 16px;
+    padding: 0.95rem 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.document-type-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    border-color: #93c5fd;
+}
+
+.document-type-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: flex-start;
+}
+
+.document-type-card strong {
+    color: #0f172a;
+}
+
+.document-type-card p {
+    margin: 0.55rem 0 0;
+    color: #64748b;
+    font-size: 0.87rem;
+    line-height: 1.65;
+}
+
+.document-count-pill {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.28rem 0.7rem;
+    white-space: nowrap;
 }
 
 .overview-card {
@@ -502,13 +561,15 @@
 
 @media (max-width: 1100px) {
     .overview-grid,
+    .document-type-grid,
     .service-filter-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 720px) {
     .overview-grid,
+    .document-type-grid,
     .service-filter-grid {
         grid-template-columns: 1fr;
     }
@@ -573,6 +634,28 @@
         </a>
         {% endfor %}
     </section>
+
+    {% if document_type_cards %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h2>書類種別一覧</h2>
+                <p class="helper-text">見積依頼書、買取依頼書、仕切書、計算書など、運用で使う7種類の書類履歴をここから確認できます。</p>
+            </div>
+        </div>
+        <div class="document-type-grid">
+            {% for card in document_type_cards %}
+            <a href="{{ card.url }}" class="document-type-card">
+                <div class="document-type-card-head">
+                    <strong>{{ card.title }}</strong>
+                    <span class="document-count-pill">{{ card.count }}件</span>
+                </div>
+                <p>{{ card.description }}</p>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
     {% else %}
     <section class="section-card stage-header">
         <div>
