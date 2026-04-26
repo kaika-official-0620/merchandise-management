@@ -93,6 +93,80 @@
     color: #1d4ed8;
 }
 
+.archive-flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.archive-flow-card {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    min-height: 100%;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dbeafe;
+    background:
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 20px;
+    padding: 1.15rem;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.archive-flow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 38px rgba(37, 99, 235, 0.12);
+    border-color: #93c5fd;
+}
+
+.archive-flow-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: flex-start;
+}
+
+.archive-flow-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 999px;
+    background: #1d4ed8;
+    color: #fff;
+    font-weight: 800;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
+}
+
+.archive-flow-card h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+
+.archive-flow-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.75;
+    font-size: 0.92rem;
+}
+
+.archive-flow-count {
+    justify-self: flex-start;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 800;
+    padding: 0.34rem 0.82rem;
+    white-space: nowrap;
+}
+
 .hint-item {
     border: 1px solid #e2e8f0;
     border-radius: 12px;
@@ -225,6 +299,10 @@
 }
 
 @media (max-width: 768px) {
+    .archive-flow-grid {
+        grid-template-columns: 1fr;
+    }
+
     .hint-card,
     .filter-card,
     .results-card {
@@ -246,42 +324,20 @@
         <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
     </div>
 
-    <div class="hint-card">
-        <h2>履歴の見方</h2>
-        <div class="hint-grid">
-            <div class="hint-item">
-                <strong>クライアント→開花</strong>
-                ユーザーが開花へ送った依頼書です。ここが案件の起点になります。
-            </div>
-            <div class="hint-item">
-                <strong>開花→業者</strong>
-                開花が業者へ送った見積依頼書です。
-            </div>
-            <div class="hint-item">
-                <strong>業者→開花</strong>
-                業者から返ってきた回答書類です。ここを確認してからユーザー向け書類を作成します。
-            </div>
-            <div class="hint-item">
-                <strong>開花→クライアント</strong>
-                最終的にユーザー画面へ反映される書類です。
-            </div>
-        </div>
-    </div>
-
     {% if history_category_cards %}
     <div class="hint-card">
         <h2>書類履歴トップ</h2>
         <p>書類の種類ごとに、業務順で履歴を確認できます。</p>
-        <div class="type-card-grid">
+        <div class="archive-flow-grid">
             {% for card in history_category_cards %}
-            <article class="type-card">
-                <h3>{{ card.title }}</h3>
-                <p>{{ card.copy or card.description }}</p>
-                <div class="type-card-meta">
-                    <span class="type-card-count">{{ card.count_label or ((card.count or 0) ~ '件') }}</span>
-                    <a href="{{ card.url }}" class="btn btn-secondary btn-sm">履歴を開く</a>
+            <a href="{{ card.url }}" class="archive-flow-card">
+                <div class="archive-flow-card-head">
+                    <span class="archive-flow-step">{{ card.step }}</span>
+                    <h2>{{ card.title }}</h2>
                 </div>
-            </article>
+                <p>{{ card.copy or card.description }}</p>
+                <span class="archive-flow-count">{{ card.count_label or ((card.count or 0) ~ '件') }}</span>
+            </a>
             {% endfor %}
         </div>
     </div>

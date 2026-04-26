@@ -22999,6 +22999,86 @@ def admin_shikiriosho_send(id):
     flash('精算書を送信しました', 'success')
     return redirect(url_for('admin_shikiriosho_list'))
 
+
+@app.route('/admin/shikiriosho/send-bulk', methods=['POST'])
+@login_required
+@permission_required('shikiriosho')
+def admin_shikiriosho_send_bulk():
+    """完成済みの仕切書をまとめて送信済みにする"""
+    send_scope = request.form.get('send_scope', 'selected')
+    selected_ids = []
+    for raw_id in request.form.getlist('document_ids'):
+        try:
+            selected_ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+
+    conn = get_db()
+    updated_count = 0
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            if send_scope == 'all':
+                cur.execute(
+                    """
+                    UPDATE shikiriosho
+                    SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'completed'
+                    """,
+                )
+            elif selected_ids:
+                cur.execute(
+                    """
+                    UPDATE shikiriosho
+                    SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'completed' AND id = ANY(%s)
+                    """,
+                    (selected_ids,),
+                )
+            else:
+                flash('送信対象の仕切書を選択してください', 'warning')
+                return redirect(url_for('admin_shikiriosho_list'))
+            updated_count = cur.rowcount or 0
+        else:
+            cur = conn.cursor()
+            if send_scope == 'all':
+                cur.execute(
+                    """
+                    UPDATE shikiriosho
+                    SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'completed'
+                    """
+                )
+            elif selected_ids:
+                placeholders = ','.join(['?'] * len(selected_ids))
+                cur.execute(
+                    f"""
+                    UPDATE shikiriosho
+                    SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'completed' AND id IN ({placeholders})
+                    """,
+                    tuple(selected_ids),
+                )
+            else:
+                flash('送信対象の仕切書を選択してください', 'warning')
+                return redirect(url_for('admin_shikiriosho_list'))
+            updated_count = cur.rowcount or 0
+
+        conn.commit()
+        flash(f'仕切書を{updated_count}件送信済みにしました', 'success')
+    except Exception as exc:
+        conn.rollback()
+        flash(f'仕切書の一括送信に失敗しました: {exc}', 'error')
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+    return redirect(url_for('admin_shikiriosho_list'))
+
+
 @app.route('/admin/shikiriosho/view/<int:id>')
 @login_required
 @permission_required('shikiriosho')
@@ -37710,21 +37790,21 @@ def admin_documents_dashboard_preview():
             "title": "クライアント返送見積依頼書",
             "description": "買取明細書送付後に、ユーザーから見積依頼書として返送された書類を確認します。",
             "count_label": "返送待ちを確認",
-            "url": url_for("admin_documents_history", doc_type="user_mitsumori", direction="client_outgoing"),
+            "url": url_for("admin_mitsumori_list"),
         },
         {
             "step": "6",
             "title": "仕切書",
             "description": "月額利用料と撮影・梱包・発送代行サポート費用を月締めで確認・送付します。",
             "count_label": f"{document_card_counts.get(('shikiriosho', 'client_outgoing'), 0)}件",
-            "url": url_for("admin_documents_history", doc_type="shikiriosho", direction="client_outgoing"),
+            "url": url_for("admin_shikiriosho_list"),
         },
         {
             "step": "7",
             "title": "計算書",
             "description": "代行仕入れを行った取引だけを計算書として確認します。",
             "count_label": f"{document_card_counts.get(('user_keisan', 'client_outgoing'), 0)}件",
-            "url": url_for("admin_documents_history", doc_type="user_keisan", direction="client_outgoing"),
+            "url": url_for("admin_auction_keisan_list"),
         },
     ]
 
