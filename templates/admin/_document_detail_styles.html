@@ -1,0 +1,316 @@
+<style>
+.admin-doc-page {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 1120px;
+    margin: 0 auto;
+}
+
+.admin-doc-toolbar,
+.admin-doc-actions,
+.admin-doc-hero,
+.admin-doc-section-head,
+.admin-doc-total {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.admin-doc-toolbar h1 {
+    margin: 0;
+    color: #0f172a;
+    font-size: clamp(1.4rem, 2.2vw, 2rem);
+}
+
+.admin-doc-toolbar p,
+.admin-doc-kicker,
+.admin-doc-sub,
+.admin-doc-dl dt,
+.admin-doc-note {
+    color: #64748b;
+}
+
+.admin-doc-toolbar p,
+.admin-doc-sub {
+    margin: 0.35rem 0 0;
+    line-height: 1.7;
+}
+
+.admin-doc-actions {
+    align-items: center;
+}
+
+.doc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.68rem 0.95rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.doc-btn-primary {
+    background: #0f172a;
+    color: #fff;
+}
+
+.doc-btn-secondary {
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.doc-btn-success {
+    background: #047857;
+    color: #fff;
+}
+
+.doc-btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.admin-doc-sheet {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+}
+
+.admin-doc-hero {
+    padding: 1.5rem;
+    background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-bottom: 1px solid #dbeafe;
+}
+
+.admin-doc-title {
+    margin: 0.25rem 0 0;
+    color: #0f172a;
+    font-size: clamp(1.7rem, 3vw, 2.5rem);
+    letter-spacing: 0.08em;
+}
+
+.admin-doc-kicker {
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.admin-doc-no {
+    margin: 0.55rem 0 0;
+    color: #1d4ed8;
+    font-family: Consolas, monospace;
+    font-weight: 800;
+}
+
+.admin-doc-status {
+    display: grid;
+    gap: 0.55rem;
+    justify-items: flex-end;
+}
+
+.admin-doc-page .status-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0.34rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.admin-doc-page .status-draft,
+.admin-doc-page .status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.admin-doc-page .status-sent,
+.admin-doc-page .status-submitted {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.admin-doc-page .status-approved,
+.admin-doc-page .status-completed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.admin-doc-page .status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.admin-doc-body {
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.5rem;
+}
+
+.admin-doc-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.admin-doc-card,
+.admin-doc-section,
+.admin-doc-notes {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    padding: 1.15rem;
+}
+
+.admin-doc-card h2,
+.admin-doc-section h2,
+.admin-doc-notes h2 {
+    margin: 0 0 0.9rem;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.admin-doc-dl {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+}
+
+.admin-doc-dl div {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.admin-doc-dl dt {
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.admin-doc-dl dd {
+    margin: 0;
+    color: #0f172a;
+    line-height: 1.7;
+}
+
+.admin-doc-total {
+    align-items: center;
+    padding: 1rem 1.15rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 16px;
+    background: #eff6ff;
+}
+
+.admin-doc-total span {
+    color: #1e3a8a;
+    font-weight: 800;
+}
+
+.admin-doc-total strong {
+    color: #0f172a;
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    letter-spacing: 0.02em;
+}
+
+.table-scroll {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+
+.admin-doc-table {
+    width: 100%;
+    min-width: 820px;
+    border-collapse: collapse;
+}
+
+.admin-doc-table th,
+.admin-doc-table td {
+    padding: 0.82rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+}
+
+.admin-doc-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.admin-doc-table tbody tr:last-child td,
+.admin-doc-table tfoot tr:last-child td {
+    border-bottom: none;
+}
+
+.admin-doc-table tfoot td {
+    background: #f8fafc;
+    font-weight: 700;
+}
+
+.admin-doc-table .total-row td {
+    background: #eff6ff;
+}
+
+.text-center {
+    text-align: center !important;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+.admin-doc-note,
+.admin-doc-notes-body {
+    white-space: pre-wrap;
+    line-height: 1.85;
+}
+
+.admin-doc-empty {
+    text-align: center;
+    color: #64748b;
+    padding: 1.5rem;
+}
+
+@media (max-width: 760px) {
+    .admin-doc-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-doc-status {
+        justify-items: flex-start;
+    }
+
+    .admin-doc-body,
+    .admin-doc-hero {
+        padding: 1rem;
+    }
+}
+
+@media print {
+    .admin-doc-toolbar {
+        display: none;
+    }
+
+    .admin-doc-page,
+    .admin-doc-sheet {
+        max-width: none;
+        box-shadow: none;
+        border: none;
+    }
+}
+</style>

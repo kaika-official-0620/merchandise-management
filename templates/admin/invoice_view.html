@@ -3,315 +3,172 @@
 {% block title %}買取明細書詳細 - {{ invoice.invoice_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>買取明細書詳細</h1>
-    <div class="admin-nav">
-        <a href="{{ url_for('admin_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
-        {% if invoice.status == 'sent' %}
-        <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を承認しますか？')">✔ 承認</a>
-        <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="btn btn-danger" onclick="return confirm('この買取明細書を却下しますか？')">✖ 却下</a>
-        {% endif %}
-        <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download btn-sm">CSV</a>
-        <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-    </div>
-</div>
+{% include "admin/_document_detail_styles.html" %}
+{% set total_amount = invoice.total_amount|default(0, true) or 0 %}
+{% set subtotal = invoice.subtotal|default(total_amount, true) or 0 %}
+{% set tax_amount_8 = invoice.tax_amount_8|default(0, true) or 0 %}
+{% set tax_amount_10 = invoice.tax_amount_10|default(0, true) or 0 %}
+{% set is_client_outgoing = invoice.document_scope == 'client_outgoing' or invoice.sales_agency_request_id %}
+{% set back_url = url_for('admin_documents_dashboard', group='client_outgoing') if is_client_outgoing else url_for('admin_invoice_list') %}
 
-<div class="document-container">
-    <div class="document-header">
-        <div class="document-title">
-            <h2>買取明細書</h2>
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>買取明細書</h1>
+            <p>{{ 'クライアントへ返送する買取明細書です。' if is_client_outgoing else 'ユーザーから届いた買取明細書です。' }}</p>
         </div>
-        <div class="document-info">
-            <table>
-                <tr>
-                    <th>発行日</th>
-                    <td>{{ invoice.issue_date }}</td>
-                </tr>
-                <tr>
-                    <th>買取明細書番号</th>
-                    <td>{{ invoice.invoice_no }}</td>
-                </tr>
-                {% if invoice.payment_due_date %}
-                <tr>
-                    <th>支払期限</th>
-                    <td>{{ invoice.payment_due_date }}</td>
-                </tr>
-                {% endif %}
-                <tr>
-                    <th>送信者</th>
-                    <td>{{ invoice.sender_display_name or invoice.sender_username }}</td>
-                </tr>
-                <tr>
-                    <th>ステータス</th>
-                    <td>
-                        <span class="status-badge status-{{ invoice.status }}">
-                            {% if invoice.status == 'sent' %}審査中
-                            {% elif invoice.status == 'approved' %}✔ 承認済
-                            {% elif invoice.status == 'rejected' %}✖ 却下
+        <div class="admin-doc-actions">
+            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary">一覧へ戻る</a>
+            {% if invoice.status == 'sent' %}
+            <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="doc-btn doc-btn-success" onclick="return confirm('この買取明細書を承認しますか？')">承認</a>
+            <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="doc-btn doc-btn-danger" onclick="return confirm('この買取明細書を差し戻しますか？')">差し戻し</a>
+            {% endif %}
+            <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-secondary">CSV</a>
+            <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF出力</a>
+        </div>
+    </div>
+
+    <article class="admin-doc-sheet">
+        <header class="admin-doc-hero">
+            <div>
+                <div class="admin-doc-kicker">{{ '開花からクライアントへ返送' if is_client_outgoing else 'クライアントから受付' }}</div>
+                <h2 class="admin-doc-title">買取明細書</h2>
+                <p class="admin-doc-no">{{ invoice.invoice_no or '-' }}</p>
+            </div>
+            <div class="admin-doc-status">
+                <span class="status-badge status-{{ invoice.status or 'draft' }}">
+                    {% if invoice.status == 'sent' %}審査中
+                    {% elif invoice.status == 'approved' %}承認済み
+                    {% elif invoice.status == 'rejected' %}差し戻し
+                    {% elif invoice.status == 'completed' %}完成
+                    {% elif invoice.status == 'submitted' %}送付済み
+                    {% else %}下書き{% endif %}
+                </span>
+                <span class="admin-doc-sub">発行日: {{ invoice.issue_date or '-' }}</span>
+            </div>
+        </header>
+
+        <div class="admin-doc-body">
+            <div class="admin-doc-info-grid">
+                <section class="admin-doc-card">
+                    <h2>クライアント情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>クライアント</dt>
+                            <dd>{{ invoice.sender_display_name or invoice.recipient_name or invoice.sender_username or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>送信者ID</dt>
+                            <dd>{{ invoice.sender_id or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>作成日時</dt>
+                            <dd>{{ invoice.created_at or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="admin-doc-card">
+                    <h2>書類情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>書類番号</dt>
+                            <dd>{{ invoice.invoice_no or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>支払期限</dt>
+                            <dd>{{ invoice.payment_due_date or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>書類区分</dt>
+                            <dd>{{ 'クライアント向け買取明細書' if is_client_outgoing else '受信した買取明細書' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
+
+            <div class="admin-doc-total">
+                <span>税込合計金額</span>
+                <strong>¥{{ "{:,}".format(total_amount) }}</strong>
+            </div>
+
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>商品明細</h2>
+                    <strong>{{ items|length }}件</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>日付</th>
+                                <th>品名・品番</th>
+                                <th>数量</th>
+                                <th>単位</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            {% set row_amount = item.amount|default(0, true) or 0 %}
+                            {% set row_unit_price = item.unit_price|default(row_amount, true) or row_amount %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.product_date or item.purchase_date or '-' }}</td>
+                                <td>{{ item.product_name or '-' }}</td>
+                                <td class="text-right">{{ item.quantity or 1 }}</td>
+                                <td>{{ item.unit or '点' }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(row_unit_price) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(row_amount) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="admin-doc-empty">明細はまだ登録されていません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="6" class="text-right">小計</td>
+                                <td class="text-right">¥{{ "{:,}".format(subtotal) }}</td>
+                            </tr>
+                            {% if tax_amount_8 %}
+                            <tr>
+                                <td colspan="6" class="text-right">消費税(8%)</td>
+                                <td class="text-right">¥{{ "{:,}".format(tax_amount_8) }}</td>
+                            </tr>
                             {% endif %}
-                        </span>
-                    </td>
-                </tr>
-            </table>
+                            {% if tax_amount_10 %}
+                            <tr>
+                                <td colspan="6" class="text-right">消費税(10%)</td>
+                                <td class="text-right">¥{{ "{:,}".format(tax_amount_10) }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr class="total-row">
+                                <td colspan="6" class="text-right">合計</td>
+                                <td class="text-right">¥{{ "{:,}".format(total_amount) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            {% if invoice.bank_info %}
+            <section class="admin-doc-notes">
+                <h2>振込先</h2>
+                <div class="admin-doc-notes-body">{{ invoice.bank_info }}</div>
+            </section>
+            {% endif %}
+
+            {% if invoice.notes %}
+            <section class="admin-doc-notes">
+                <h2>備考</h2>
+                <div class="admin-doc-notes-body">{{ invoice.notes }}</div>
+            </section>
+            {% endif %}
         </div>
-    </div>
-
-    <div class="document-total-box">
-        <span class="total-label">請求金額 (税込)</span>
-        <span class="total-value">¥{{ "{:,}".format(invoice.total_amount) }}</span>
-    </div>
-
-    <table class="document-items">
-        <thead>
-            <tr>
-                <th width="8%">税区分</th>
-                <th width="12%">日付</th>
-                <th width="32%">品名・品番</th>
-                <th width="10%">数量</th>
-                <th width="8%">単位</th>
-                <th width="15%">単価</th>
-                <th width="15%">合計</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in items %}
-            <tr>
-                <td class="text-center">{{ item.tax_category }}%</td>
-                <td>{{ item.product_date or '-' }}</td>
-                <td>{{ item.product_name }}</td>
-                <td class="text-right">{{ item.quantity }}</td>
-                <td class="text-center">{{ item.unit or '-' }}</td>
-                <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
-                <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
-            </tr>
-            {% endfor %}
-            {% for i in range(items|length, 10) %}
-            <tr class="empty-row">
-                <td>&nbsp;</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="4" rowspan="4" class="footer-notes">
-                    {% if invoice.notes %}
-                    <strong>備考：</strong><br>
-                    {{ invoice.notes|replace('\n', '<br>')|safe }}
-                    {% endif %}
-                </td>
-                <td colspan="2" class="text-right"><strong>小計</strong></td>
-                <td class="text-right">¥{{ "{:,}".format(invoice.subtotal) }}</td>
-            </tr>
-            <tr>
-                <td colspan="2" class="text-right"><strong>消費税(8%)</strong></td>
-                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_8) }}</td>
-            </tr>
-            <tr>
-                <td colspan="2" class="text-right"><strong>消費税(10%)</strong></td>
-                <td class="text-right">¥{{ "{:,}".format(invoice.tax_amount_10) }}</td>
-            </tr>
-            <tr class="total-row">
-                <td colspan="2" class="text-right"><strong>請求金額</strong></td>
-                <td class="text-right"><strong>¥{{ "{:,}".format(invoice.total_amount) }}</strong></td>
-            </tr>
-        </tfoot>
-    </table>
-
-    {% if invoice.bank_info %}
-    <div class="bank-info">
-        <h4>🏦 振込先</h4>
-        <p>{{ invoice.bank_info|replace('\n', '<br>')|safe }}</p>
-    </div>
-    {% endif %}
+    </article>
 </div>
-
-<style>
-.admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.admin-nav {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.btn-success {
-    background: #28a745;
-    color: white;
-}
-
-.btn-danger {
-    background: #dc3545;
-    color: white;
-}
-
-.btn-download {
-    background: #17a2b8;
-    color: white;
-}
-
-.btn-pdf {
-    background: #e74c3c;
-    color: white;
-}
-
-.document-container {
-    max-width: 900px;
-    margin: 0 auto;
-    background: white;
-    padding: 40px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    border-radius: 8px;
-}
-
-.document-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 30px;
-}
-
-.document-title h2 {
-    font-size: 28px;
-    margin: 0;
-    padding-bottom: 10px;
-    border-bottom: 3px double #333;
-}
-
-.document-info table {
-    border-collapse: collapse;
-}
-
-.document-info th,
-.document-info td {
-    padding: 5px 10px;
-    text-align: left;
-}
-
-.document-info th {
-    background: #f8f9fa;
-    font-weight: normal;
-}
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.status-badge.status-sent {
-    background: #d1ecf1;
-    color: #0c5460;
-}
-
-.status-badge.status-approved {
-    background: #d4edda;
-    color: #155724;
-}
-
-.status-badge.status-rejected {
-    background: #f8d7da;
-    color: #721c24;
-}
-
-.document-total-box {
-    background: #f8f9fa;
-    border: 2px solid #333;
-    padding: 15px 30px;
-    display: inline-block;
-    margin-bottom: 30px;
-}
-
-.total-label {
-    font-size: 14px;
-    margin-right: 20px;
-}
-
-.total-value {
-    font-size: 24px;
-    font-weight: bold;
-}
-
-.document-items {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 30px;
-}
-
-.document-items th,
-.document-items td {
-    border: 1px solid #333;
-    padding: 8px 10px;
-    font-size: 13px;
-}
-
-.document-items th {
-    background: #f8f9fa;
-    font-weight: normal;
-}
-
-.document-items .text-center {
-    text-align: center;
-}
-
-.document-items .text-right {
-    text-align: right;
-}
-
-.empty-row td {
-    height: 28px;
-}
-
-.footer-notes {
-    vertical-align: top;
-    font-size: 12px;
-    border-right: none !important;
-}
-
-.total-row td {
-    background: #f8f9fa;
-    font-size: 15px;
-}
-
-.bank-info {
-    background: #f8f9fa;
-    padding: 15px 20px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-
-.bank-info h4 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-}
-
-.bank-info p {
-    margin: 0;
-    font-size: 14px;
-}
-
-@media print {
-    .admin-header {
-        display: none;
-    }
-    .document-container {
-        box-shadow: none;
-        padding: 0;
-    }
-}
-</style>
 {% endblock %}
-

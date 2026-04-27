@@ -3,340 +3,147 @@
 {% block title %}見積依頼書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-actions">
-    <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
-    <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="btn btn-primary" target="_blank">PDF出力</a>
-</div>
+{% include "admin/_document_detail_styles.html" %}
+{% set doc_no = mitsumori.document_no or '' %}
+{% set is_vendor_doc = doc_no[:3] == 'MT-' or mitsumori.document_scope == 'vendor_outgoing' %}
+{% set back_url = url_for('admin_documents_dashboard', group='vendor_outgoing' if is_vendor_doc else 'client_incoming') %}
 
-<div class="document-view">
-    <div class="document-header">
-        <div class="doc-title-section">
-            <h1>見積依頼書</h1>
-            <span class="status-badge status-{{ mitsumori.status }}">
-                {% if mitsumori.status == 'draft' %}下書き
-                {% elif mitsumori.status == 'sent' %}送信済
-                {% else %}完了{% endif %}
-            </span>
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>{{ '業者向け見積依頼書' if is_vendor_doc else '見積依頼書' }}</h1>
+            <p>{{ '開花から業者へ送付する見積依頼書です。' if is_vendor_doc else 'クライアントから届いた見積依頼書です。' }}</p>
         </div>
-        <div class="doc-no">{{ mitsumori.document_no }}</div>
+        <div class="admin-doc-actions">
+            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
+            <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF出力</a>
+        </div>
     </div>
 
-    <div class="document-body">
-        <!-- 送信者情報 -->
-        <div class="sender-section">
-            <h3>作成者</h3>
-            <div class="sender-info">
-                <p class="sender-name">{{ mitsumori.user_name or mitsumori.username or '-' }}</p>
-                <p class="sender-id">ユーザーID: {{ mitsumori.user_id }}</p>
+    <article class="admin-doc-sheet">
+        <header class="admin-doc-hero">
+            <div>
+                <div class="admin-doc-kicker">{{ '開花から業者へ送付' if is_vendor_doc else 'クライアントから受付' }}</div>
+                <h2 class="admin-doc-title">{{ '業者向け見積依頼書' if is_vendor_doc else '見積依頼書' }}</h2>
+                <p class="admin-doc-no">{{ mitsumori.document_no or '-' }}</p>
             </div>
-        </div>
-
-        <div class="info-section">
-            <div class="info-grid">
-                <div class="info-item">
-                    <span class="info-label">発行日</span>
-                    <span class="info-value">{{ mitsumori.issue_date or '-' }}</span>
-                </div>
-                {% if mitsumori.valid_until %}
-                <div class="info-item">
-                    <span class="info-label">有効期限</span>
-                    <span class="info-value">{{ mitsumori.valid_until }}</span>
-                </div>
-                {% endif %}
-                <div class="info-item">
-                    <span class="info-label">作成日時</span>
-                    <span class="info-value">{{ mitsumori.created_at or '-' }}</span>
-                </div>
+            <div class="admin-doc-status">
+                <span class="status-badge status-{{ mitsumori.status or 'draft' }}">
+                    {% if mitsumori.status == 'draft' %}下書き
+                    {% elif mitsumori.status in ['sent', 'submitted'] %}送信済み
+                    {% elif mitsumori.status == 'approved' %}承認済み
+                    {% elif mitsumori.status == 'rejected' %}差し戻し
+                    {% else %}完了{% endif %}
+                </span>
+                <span class="admin-doc-sub">発行日: {{ mitsumori.issue_date or '-' }}</span>
             </div>
-        </div>
+        </header>
 
-        <div class="recipient-section">
-            <h3>宛先</h3>
-            <div class="recipient-info">
-                <p class="company-name">{{ mitsumori.company_name or '-' }}</p>
-                {% if mitsumori.department %}
-                <p>{{ mitsumori.department }}</p>
-                {% endif %}
-                {% if mitsumori.contact_person %}
-                <p>{{ mitsumori.contact_person }} 様</p>
-                {% endif %}
-                {% if mitsumori.address %}
-                <p class="address">{{ mitsumori.address }}</p>
-                {% endif %}
+        <div class="admin-doc-body">
+            <div class="admin-doc-info-grid">
+                <section class="admin-doc-card">
+                    <h2>{{ '依頼元' if is_vendor_doc else '送信者' }}</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>クライアント</dt>
+                            <dd>{{ mitsumori.user_name or mitsumori.username or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>ユーザーID</dt>
+                            <dd>{{ mitsumori.user_id or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>作成日時</dt>
+                            <dd>{{ mitsumori.created_at or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="admin-doc-card">
+                    <h2>{{ '業者宛先' if is_vendor_doc else '宛先' }}</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>会社名</dt>
+                            <dd>{{ mitsumori.company_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>部署・担当者</dt>
+                            <dd>
+                                {% if mitsumori.department %}{{ mitsumori.department }}<br>{% endif %}
+                                {{ (mitsumori.contact_person ~ ' 様') if mitsumori.contact_person else '-' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>住所</dt>
+                            <dd>{{ mitsumori.address or '-' }}</dd>
+                        </div>
+                        {% if mitsumori.valid_until %}
+                        <div>
+                            <dt>有効期限</dt>
+                            <dd>{{ mitsumori.valid_until }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </section>
             </div>
-        </div>
 
-        <div class="subject-section">
-            <h3>件名</h3>
-            <p class="subject-text">{{ mitsumori.subject or '-' }}</p>
-        </div>
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>件名</h2>
+                </div>
+                <p class="admin-doc-note">{{ mitsumori.subject or '-' }}</p>
+            </section>
 
-        <div class="items-section">
-            <h3>依頼品目</h3>
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th width="10%">No.</th>
-                        <th>品名・内容</th>
-                        <th width="15%">数量</th>
-                        <th width="10%">単位</th>
-                        <th width="15%">単価</th>
-                        <th width="15%">金額</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                    <tr>
-                        <td>{{ item.item_no }}</td>
-                        <td>{{ item.item_name }}</td>
-                        <td class="text-right">{{ item.quantity or '-' }}</td>
-                        <td>{{ item.unit or '-' }}</td>
-                        <td class="text-right">{% if item.unit_price %}¥{{ "{:,}".format(item.unit_price) }}{% else %}-{% endif %}</td>
-                        <td class="text-right">{% if item.amount %}¥{{ "{:,}".format(item.amount) }}{% else %}-{% endif %}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center">品目がありません</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                {% if items %}
-                <tfoot>
-                    <tr>
-                        <td colspan="5" class="text-right"><strong>合計</strong></td>
-                        <td class="text-right"><strong>¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</strong></td>
-                    </tr>
-                </tfoot>
-                {% endif %}
-            </table>
-        </div>
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>依頼品目</h2>
+                    <strong>合計 ¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>品名・内容</th>
+                                <th>数量</th>
+                                <th>単位</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.item_name or '-' }}</td>
+                                <td class="text-right">{{ item.quantity or '-' }}</td>
+                                <td>{{ item.unit or '-' }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="admin-doc-empty">品目がありません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="total-row">
+                                <td colspan="5" class="text-right">合計</td>
+                                <td class="text-right">¥{{ "{:,}".format(mitsumori.total_amount or 0) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
 
-        {% if mitsumori.notes %}
-        <div class="notes-section">
-            <h3>備考・条件</h3>
-            <p class="notes-text">{{ mitsumori.notes }}</p>
+            {% if mitsumori.notes %}
+            <section class="admin-doc-notes">
+                <h2>備考・条件</h2>
+                <div class="admin-doc-notes-body">{{ mitsumori.notes }}</div>
+            </section>
+            {% endif %}
         </div>
-        {% endif %}
-    </div>
+    </article>
 </div>
-
-<style>
-.document-view {
-    max-width: 900px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    overflow: hidden;
-}
-
-.document-header {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-    padding: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.doc-title-section {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.document-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-}
-
-.doc-no {
-    font-family: 'Consolas', monospace;
-    font-size: 1rem;
-    opacity: 0.9;
-}
-
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.status-badge.status-draft { background: #fef3c7; color: #b45309; }
-.status-badge.status-completed { background: #d1fae5; color: #059669; }
-.status-badge.status-sent { background: #d1fae5; color: #059669; }
-
-.document-body {
-    padding: 24px;
-}
-
-.sender-section {
-    margin-bottom: 24px;
-    padding: 16px;
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    border-radius: 8px;
-    border-left: 4px solid #3b82f6;
-}
-
-.sender-section h3 {
-    margin: 0 0 8px 0;
-    font-size: 0.9rem;
-    color: #1e40af;
-}
-
-.sender-info .sender-name {
-    margin: 0;
-    font-weight: 700;
-    font-size: 1.2rem;
-    color: #1e293b;
-}
-
-.sender-info .sender-id {
-    margin: 4px 0 0 0;
-    font-size: 0.85rem;
-    color: #64748b;
-}
-
-.info-section {
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-}
-
-.info-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.info-label {
-    color: #64748b;
-    font-size: 0.85rem;
-}
-
-.info-value {
-    font-weight: 500;
-    color: #1e293b;
-}
-
-.recipient-section,
-.subject-section,
-.items-section,
-.notes-section {
-    margin-bottom: 24px;
-}
-
-.recipient-section h3,
-.subject-section h3,
-.items-section h3,
-.notes-section h3 {
-    margin: 0 0 12px 0;
-    font-size: 1rem;
-    color: #334155;
-    border-left: 3px solid #3b82f6;
-    padding-left: 10px;
-}
-
-.recipient-info {
-    background: #f8fafc;
-    padding: 16px;
-    border-radius: 8px;
-}
-
-.recipient-info p {
-    margin: 4px 0;
-    color: #475569;
-}
-
-.recipient-info .company-name {
-    font-weight: 600;
-    font-size: 1.1rem;
-    color: #1e293b;
-}
-
-.subject-text {
-    font-size: 1.1rem;
-    font-weight: 500;
-    color: #1e293b;
-    margin: 0;
-}
-
-.items-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.items-table th,
-.items-table td {
-    padding: 10px 12px;
-    border: 1px solid #e2e8f0;
-    text-align: left;
-}
-
-.items-table th {
-    background: #f8fafc;
-    font-weight: 500;
-    color: #475569;
-}
-
-.items-table tfoot td {
-    background: #f1f5f9;
-}
-
-.items-table .text-right {
-    text-align: right;
-}
-
-.items-table .text-center {
-    text-align: center;
-    color: #64748b;
-}
-
-.notes-text {
-    background: #f8fafc;
-    padding: 16px;
-    border-radius: 8px;
-    margin: 0;
-    white-space: pre-wrap;
-    color: #475569;
-}
-
-.page-actions {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.btn-primary { background: #3b82f6; color: white; }
-.btn-secondary { background: #64748b; color: white; }
-
-@media (max-width: 768px) {
-    .document-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
-    }
-    
-    .items-table {
-        font-size: 0.85rem;
-    }
-}
-</style>
 {% endblock %}

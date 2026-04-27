@@ -25852,9 +25852,52 @@ def admin_kaitori_add():
 @login_required
 @admin_required
 def admin_kaitori_view(id):
-    """買取明細書詳細"""
-    flash('この機能は準備中です', 'info')
-    return redirect(url_for('admin_kaitori_list'))
+    """買取明細書詳細（書類管理・販売代行フロー用）"""
+    conn = get_db()
+    cur = None
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+                FROM invoices i
+                LEFT JOIN users u ON i.sender_id = u.id
+                WHERE i.id = %s
+            """, (id,))
+            invoice = cur.fetchone()
+            if invoice:
+                invoice = dict(invoice)
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
+            cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT i.*, u.display_name as sender_display_name, u.username as sender_username
+                FROM invoices i
+                LEFT JOIN users u ON i.sender_id = u.id
+                WHERE i.id = ?
+            """, (id,))
+            row = cur.fetchone()
+            if row:
+                invoice = dict(zip([d[0] for d in cur.description], row))
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
+            else:
+                invoice = None
+            cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
+            item_columns = [d[0] for d in cur.description] if cur.description else []
+            items = [dict(zip(item_columns, item_row)) for item_row in cur.fetchall()]
+        conn.commit()
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+    if not invoice:
+        flash('買取明細書が見つかりません', 'error')
+        return redirect(url_for('admin_documents_dashboard', group='client_outgoing'))
+
+    return render_template('admin/invoice_view.html', invoice=invoice, items=items)
 
 @app.route('/admin/kaitori/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -36360,7 +36403,7 @@ def admin_documents_dashboard_preview():
                     "issue_date": "",
                     "status": "completed",
                     "status_label": "作成済み",
-                    "detail_url": url_for("admin_kaitori_pdf", id=client_invoice_id),
+                    "detail_url": url_for("admin_kaitori_view", id=client_invoice_id),
                     "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
                 }
             )
@@ -37386,7 +37429,7 @@ def _build_dashboard_related_documents(request_row):
                 "issue_date": "",
                 "status": "completed",
                 "status_label": "作成済み",
-                "detail_url": url_for("admin_kaitori_pdf", id=client_invoice_id),
+                "detail_url": url_for("admin_kaitori_view", id=client_invoice_id),
                 "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
             }
         )

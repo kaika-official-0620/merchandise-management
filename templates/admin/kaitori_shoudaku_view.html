@@ -3,210 +3,161 @@
 {% block title %}業者買取明細書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1 class="page-title">業者買取明細書 詳細</h1>
-    <div class="header-actions">
-        <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-secondary">書類管理へ戻る</a>
-        <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-export" target="_blank">PDF出力</a>
-    </div>
-</div>
+{% include "admin/_document_detail_styles.html" %}
+{% set subtotal = kaitori.subtotal|default(0, true) or 0 %}
+{% set tax_amount = kaitori.tax_amount|default(0, true) or 0 %}
+{% set total_amount = kaitori.total_amount|default(subtotal + tax_amount, true) or 0 %}
 
-<div class="document-view">
-    <div class="document-header">
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
         <div>
-            <div class="document-title">業者買取明細書</div>
-            <div class="document-sub">書類番号: {{ kaitori.document_no }}</div>
+            <h1>業者買取明細書</h1>
+            <p>業者から届いた回答内容です。クライアント向け買取明細書へ進める前に内容を確認できます。</p>
         </div>
-        <div class="document-sub">受領日: {{ kaitori.issue_date }}</div>
-    </div>
-
-    <div class="document-section">
-        <h3>業者情報</h3>
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="label">業者名</span>
-                <span class="value">{{ kaitori.company_name or '-' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="label">担当者名</span>
-                <span class="value">{{ kaitori.contact_name or '-' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="label">住所</span>
-                <span class="value">{{ kaitori.company_address or '-' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="label">電話番号</span>
-                <span class="value">{{ kaitori.company_phone or '-' }}</span>
-            </div>
-            <div class="info-item">
-                <span class="label">支払い方法</span>
-                <span class="value">{{ kaitori.payment_method or '-' }}</span>
-            </div>
+        <div class="admin-doc-actions">
+            <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
+            {% if kaitori.vendor_response_file_path %}
+            <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" class="doc-btn doc-btn-secondary" target="_blank" rel="noopener">添付を開く</a>
+            {% endif %}
+            <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF出力</a>
         </div>
     </div>
 
-    <div class="document-section">
-        <h3>受領ファイル</h3>
-        {% if kaitori.vendor_response_file_path %}
-        <p class="notes-text">
-            <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" target="_blank">
-                {{ kaitori.vendor_response_file_name or '添付ファイルを開く' }}
-            </a>
-        </p>
-        {% else %}
-        <p class="notes-text">添付ファイルは登録されていません。</p>
-        {% endif %}
-    </div>
+    <article class="admin-doc-sheet">
+        <header class="admin-doc-hero">
+            <div>
+                <div class="admin-doc-kicker">業者から回答受領</div>
+                <h2 class="admin-doc-title">業者買取明細書</h2>
+                <p class="admin-doc-no">{{ kaitori.document_no or '-' }}</p>
+            </div>
+            <div class="admin-doc-status">
+                <span class="status-badge status-{{ kaitori.status or 'completed' }}">
+                    {% if kaitori.status == 'draft' %}下書き
+                    {% elif kaitori.status in ['sent', 'submitted'] %}送信済み
+                    {% elif kaitori.status == 'rejected' %}差し戻し
+                    {% else %}登録済み{% endif %}
+                </span>
+                <span class="admin-doc-sub">受領日: {{ kaitori.issue_date or '-' }}</span>
+            </div>
+        </header>
 
-    <div class="document-section">
-        <h3>回答内容</h3>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>No.</th>
-                    <th>商品名</th>
-                    <th>ブランド</th>
-                    <th>状態</th>
-                    <th>数量</th>
-                    <th>単価</th>
-                    <th>金額</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in items %}
-                <tr>
-                    <td>{{ item.item_no }}</td>
-                    <td>{{ item.product_name }}</td>
-                    <td>{{ item.brand_name or '-' }}</td>
-                    <td>{{ item.condition or '-' }}</td>
-                    <td>{{ item.quantity }}</td>
-                    <td>¥{{ "{:,}".format(item.unit_price or 0) }}</td>
-                    <td>¥{{ "{:,}".format(item.amount or 0) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="6" class="text-right">小計</td>
-                    <td>¥{{ "{:,}".format(kaitori.subtotal or 0) }}</td>
-                </tr>
-                <tr>
-                    <td colspan="6" class="text-right">消費税 ({{ kaitori.tax_rate }}%)</td>
-                    <td>¥{{ "{:,}".format(kaitori.tax_amount or 0) }}</td>
-                </tr>
-                <tr class="total-row">
-                    <td colspan="6" class="text-right"><strong>合計</strong></td>
-                    <td><strong>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</strong></td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
+        <div class="admin-doc-body">
+            <div class="admin-doc-info-grid">
+                <section class="admin-doc-card">
+                    <h2>業者情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>業者名</dt>
+                            <dd>{{ kaitori.company_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>担当者名</dt>
+                            <dd>{{ kaitori.contact_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>電話番号</dt>
+                            <dd>{{ kaitori.company_phone or '-' }}</dd>
+                        </div>
+                    </dl>
+                </section>
 
-    {% if kaitori.bank_info %}
-    <div class="document-section">
-        <h3>振込情報</h3>
-        <p class="notes-text">{{ kaitori.bank_info }}</p>
-    </div>
-    {% endif %}
+                <section class="admin-doc-card">
+                    <h2>支払・添付情報</h2>
+                    <dl class="admin-doc-dl">
+                        <div>
+                            <dt>住所</dt>
+                            <dd>{{ kaitori.company_address or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>支払い方法</dt>
+                            <dd>{{ kaitori.payment_method or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>受領ファイル</dt>
+                            <dd>
+                                {% if kaitori.vendor_response_file_path %}
+                                <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" target="_blank" rel="noopener">{{ kaitori.vendor_response_file_name or '添付ファイルを開く' }}</a>
+                                {% else %}
+                                添付ファイルなし
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
 
-    {% if kaitori.notes %}
-    <div class="document-section">
-        <h3>備考</h3>
-        <p class="notes-text">{{ kaitori.notes }}</p>
-    </div>
-    {% endif %}
+            <div class="admin-doc-total">
+                <span>業者回答 合計金額</span>
+                <strong>¥{{ "{:,}".format(total_amount) }}</strong>
+            </div>
+
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>回答内容</h2>
+                    <strong>{{ items|length }}件</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>商品名</th>
+                                <th>ブランド</th>
+                                <th>状態</th>
+                                <th>数量</th>
+                                <th>単価</th>
+                                <th>金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.product_name or '-' }}</td>
+                                <td>{{ item.brand_name or '-' }}</td>
+                                <td>{{ item.condition or '-' }}</td>
+                                <td class="text-right">{{ item.quantity or 1 }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.unit_price or 0) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="admin-doc-empty">明細はまだ登録されていません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="6" class="text-right">小計</td>
+                                <td class="text-right">¥{{ "{:,}".format(subtotal) }}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="6" class="text-right">消費税 ({{ kaitori.tax_rate or 10 }}%)</td>
+                                <td class="text-right">¥{{ "{:,}".format(tax_amount) }}</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td colspan="6" class="text-right">合計</td>
+                                <td class="text-right">¥{{ "{:,}".format(total_amount) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            {% if kaitori.bank_info %}
+            <section class="admin-doc-notes">
+                <h2>振込情報</h2>
+                <div class="admin-doc-notes-body">{{ kaitori.bank_info }}</div>
+            </section>
+            {% endif %}
+
+            {% if kaitori.notes %}
+            <section class="admin-doc-notes">
+                <h2>備考</h2>
+                <div class="admin-doc-notes-body">{{ kaitori.notes }}</div>
+            </section>
+            {% endif %}
+        </div>
+    </article>
 </div>
-
-<style>
-.document-view {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    padding: 2rem;
-}
-
-.document-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 2px solid var(--primary);
-    gap: 1rem;
-}
-
-.document-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.document-sub {
-    color: var(--text-secondary);
-    margin-top: 0.25rem;
-}
-
-.document-section {
-    margin-bottom: 2rem;
-}
-
-.document-section h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border);
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-}
-
-.info-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.info-item .label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-}
-
-.info-item .value {
-    font-weight: 500;
-}
-
-.notes-text {
-    white-space: pre-wrap;
-    background: var(--bg-main);
-    padding: 1rem;
-    border-radius: var(--radius-sm);
-    line-height: 1.75;
-}
-
-.notes-text a {
-    color: var(--primary);
-    text-decoration: none;
-}
-
-.text-right {
-    text-align: right;
-}
-
-.total-row {
-    background: rgba(37, 99, 235, 0.05);
-}
-
-@media (max-width: 768px) {
-    .document-header,
-    .info-grid {
-        grid-template-columns: 1fr;
-        display: grid;
-    }
-}
-</style>
 {% endblock %}
