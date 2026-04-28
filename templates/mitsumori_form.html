@@ -20,7 +20,7 @@
         <span>商品一覧から選択すると、数量・単価・合計金額が自動で計算されます。下書き保存後は、作成完了にする前であれば編集できます。</span>
     </div>
 
-    <form method="POST" class="mitsumori-form">
+    <form method="POST" class="mitsumori-form" id="mitsumori-form">
         <section class="form-section">
             <h2>基本情報</h2>
             <div class="form-grid">
@@ -123,7 +123,7 @@
                             <tr class="item-row">
                                 <td class="item-no">{{ i + 1 }}</td>
                                 <td>
-                                    <input type="text" name="item_name[]" class="form-control"{% if i == 0 %} required{% endif %}>
+                                    <input type="text" name="item_name[]" class="form-control">
                                     <input type="hidden" name="merchandise_id[]" value="">
                                 </td>
                                 <td><input type="number" name="quantity[]" value="1" class="form-control calc-input" min="1"></td>
@@ -159,11 +159,106 @@
             </div>
         </section>
 
+        <section class="form-section preview-check-section">
+            <div>
+                <h2>書類プレビュー確認</h2>
+                <p>作成完了の前に、実際の書類としてどのように表示されるか確認できます。内容を確認して問題なければ、プレビュー画面から作成完了してください。</p>
+            </div>
+            <button type="button" class="btn btn-primary" id="open-preview-btn">書類を確認する</button>
+        </section>
+
         <div class="form-actions">
             <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-            <button type="submit" name="status" value="completed" class="btn btn-primary">作成完了</button>
         </div>
     </form>
+
+    <div class="document-preview-modal" id="document-preview-modal" aria-hidden="true">
+        <div class="document-preview-backdrop" data-close-preview></div>
+        <div class="document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+            <div class="document-preview-toolbar">
+                <div>
+                    <span class="preview-kicker">送信前プレビュー</span>
+                    <h2 id="preview-title">見積り依頼書の確認</h2>
+                </div>
+                <button type="button" class="preview-close-btn" data-close-preview>閉じる</button>
+            </div>
+
+            <div class="preview-sheet">
+                <div class="preview-sheet-title">見 積 依 頼 書</div>
+
+                <div class="preview-header">
+                    <div>
+                        <div class="preview-recipient"><span id="preview-company-name">株式会社 開花</span><span class="preview-suffix">御中</span></div>
+                        <div id="preview-department" class="preview-muted"></div>
+                        <div id="preview-contact-person" class="preview-muted"></div>
+                    </div>
+                    <div class="preview-meta">
+                        <div>No.：{{ mitsumori.document_no if is_edit else document_no }}</div>
+                        <div>発行日：<span id="preview-issue-date"></span></div>
+                        <div id="preview-valid-row">有効期限：<span id="preview-valid-until"></span></div>
+                    </div>
+                </div>
+
+                <p class="preview-message">下記商品の見積りを依頼いたします。ご確認のほどよろしくお願いいたします。</p>
+
+                <div class="preview-amount-row">
+                    <div class="preview-amount-box">
+                        <span>見積依頼金額</span>
+                        <strong id="preview-total-main">¥0 (税込)</strong>
+                    </div>
+                    <div class="preview-sender-box">
+                        <strong>{{ current_user.display_name or current_user.username or 'ご依頼者' }}</strong>
+                        <span>見積り依頼者</span>
+                        <span>件名：<span id="preview-subject-inline"></span></span>
+                    </div>
+                </div>
+
+                <table class="preview-items-table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>商品名・内容</th>
+                            <th>数量</th>
+                            <th>単位</th>
+                            <th>単価</th>
+                            <th>金額(税込)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="preview-items-body"></tbody>
+                </table>
+
+                <div class="preview-footer">
+                    <div class="preview-note-block">
+                        <strong>備考・条件：</strong>
+                        <div id="preview-notes"></div>
+                    </div>
+                    <table class="preview-summary-table">
+                        <tr>
+                            <th>合計点数</th>
+                            <td id="preview-item-count">0 点</td>
+                        </tr>
+                        <tr>
+                            <th>小計</th>
+                            <td id="preview-subtotal">¥0</td>
+                        </tr>
+                        <tr>
+                            <th>内税(10%)</th>
+                            <td id="preview-tax">0</td>
+                        </tr>
+                        <tr class="preview-summary-total">
+                            <th>合計(税込)</th>
+                            <td id="preview-total">¥0</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="document-preview-actions">
+                <button type="button" class="btn btn-secondary" data-close-preview>編集に戻る</button>
+                <button type="button" class="btn btn-primary" id="complete-from-preview-btn">この内容で作成完了</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -402,17 +497,274 @@
     justify-content: flex-end;
 }
 
+.preview-check-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.preview-check-section h2 {
+    margin-bottom: 0.35rem;
+}
+
+.preview-check-section p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+}
+
+.document-preview-modal.open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.64);
+}
+
+.document-preview-dialog {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: min(1040px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: hidden;
+    border-radius: 22px;
+    background: #f8fafc;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.35);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: none;
+}
+
+.document-preview-toolbar h2 {
+    margin: 0.15rem 0 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.preview-kicker {
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.preview-close-btn {
+    min-height: 36px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    color: #475569;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.preview-sheet {
+    width: min(820px, calc(100% - 32px));
+    margin: 1rem auto;
+    padding: 32px;
+    overflow: auto;
+    background: #fff;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    font-size: 0.86rem;
+}
+
+.preview-sheet-title {
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 2px solid #111827;
+    text-align: center;
+    font-size: 1.55rem;
+    font-weight: 900;
+    letter-spacing: 0.32em;
+}
+
+.preview-header,
+.preview-amount-row,
+.preview-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.25rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-suffix {
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.preview-muted,
+.preview-message,
+.preview-note-block {
+    color: #4b5563;
+}
+
+.preview-meta {
+    min-width: 220px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-message {
+    margin: 1.2rem 0;
+    text-align: center;
+}
+
+.preview-amount-row {
+    align-items: stretch;
+    margin-bottom: 1.2rem;
+}
+
+.preview-amount-box,
+.preview-sender-box {
+    flex: 1;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+}
+
+.preview-amount-box {
+    place-items: center;
+    border: 2px solid #111827;
+}
+
+.preview-amount-box span {
+    font-weight: 800;
+}
+
+.preview-amount-box strong {
+    color: #1d4ed8;
+    font-size: 1.45rem;
+}
+
+.preview-sender-box {
+    text-align: right;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.preview-items-table th,
+.preview-items-table td,
+.preview-summary-table th,
+.preview-summary-table td {
+    padding: 0.48rem 0.55rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th,
+.preview-summary-table th {
+    background: #f3f4f6;
+}
+
+.preview-items-table th {
+    text-align: center;
+}
+
+.preview-footer {
+    align-items: flex-start;
+    margin-top: 1rem;
+}
+
+.preview-note-block {
+    flex: 1;
+    min-height: 48px;
+    white-space: pre-wrap;
+}
+
+.preview-summary-table {
+    width: 320px;
+    border-collapse: collapse;
+}
+
+.preview-summary-table td {
+    text-align: right;
+}
+
+.preview-summary-total th,
+.preview-summary-total td {
+    font-weight: 900;
+}
+
 @media (max-width: 760px) {
     .page-header,
     .form-actions,
-    .product-selector {
+    .product-selector,
+    .preview-check-section,
+    .document-preview-toolbar,
+    .document-preview-actions {
         align-items: stretch;
         flex-direction: column;
     }
 
     .page-header .btn,
     .form-actions .btn,
-    .product-selector .btn {
+    .product-selector .btn,
+    .preview-check-section .btn,
+    .document-preview-actions .btn {
+        width: 100%;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 18px;
+    }
+
+    .preview-header,
+    .preview-amount-row,
+    .preview-footer {
+        flex-direction: column;
+    }
+
+    .preview-meta,
+    .preview-sender-box {
+        text-align: left;
+    }
+
+    .preview-summary-table {
         width: 100%;
     }
 }
@@ -425,6 +777,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const addProductButton = document.getElementById('add-product-btn');
     const productSelect = document.getElementById('product-select');
     const productSelectMeta = document.getElementById('product-select-meta');
+    const form = document.getElementById('mitsumori-form');
+    const previewModal = document.getElementById('document-preview-modal');
+    const openPreviewButton = document.getElementById('open-preview-btn');
+    const completeFromPreviewButton = document.getElementById('complete-from-preview-btn');
 
     function formatYen(value) {
         const amount = Number(value || 0);
@@ -567,6 +923,129 @@ document.addEventListener('DOMContentLoaded', () => {
         productSelectMeta.textContent = `${data.itemName} / 参考単価 ${formatYen(data.unitPrice)}`;
     }
 
+    function setText(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value || '';
+        }
+    }
+
+    function collectPreviewData() {
+        const rows = [];
+        document.querySelectorAll('#items-body .item-row').forEach((row) => {
+            const itemName = row.querySelector('input[name="item_name[]"]')?.value.trim() || '';
+            if (!itemName) {
+                return;
+            }
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+            const unit = row.querySelector('input[name="unit[]"]')?.value.trim() || '点';
+            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            rows.push({
+                itemName,
+                quantity: quantity || 1,
+                unit,
+                unitPrice,
+                amount: (quantity || 1) * unitPrice
+            });
+        });
+
+        const total = rows.reduce((sum, row) => sum + row.amount, 0);
+        return {
+            issueDate: document.getElementById('issue_date')?.value || '',
+            validUntil: document.getElementById('valid_until')?.value || '',
+            companyName: document.getElementById('company_name')?.value || '株式会社 開花',
+            department: document.getElementById('department')?.value || '',
+            contactPerson: document.getElementById('contact_person')?.value || '',
+            subject: document.getElementById('subject')?.value || '見積り依頼書',
+            notes: document.querySelector('textarea[name="notes"]')?.value || '',
+            rows,
+            total
+        };
+    }
+
+    function renderPreview(data) {
+        setText('preview-company-name', data.companyName);
+        setText('preview-department', data.department);
+        setText('preview-contact-person', data.contactPerson ? `${data.contactPerson} 様` : '');
+        setText('preview-issue-date', data.issueDate || '-');
+        setText('preview-valid-until', data.validUntil || '-');
+        setText('preview-subject-inline', data.subject);
+        setText('preview-notes', data.notes || 'なし');
+        setText('preview-total-main', `${formatYen(data.total)} (税込)`);
+        setText('preview-item-count', `${data.rows.length} 点`);
+        setText('preview-subtotal', formatYen(data.total));
+        setText('preview-tax', Math.floor(data.total * 10 / 110).toLocaleString('ja-JP'));
+        setText('preview-total', formatYen(data.total));
+
+        const validRow = document.getElementById('preview-valid-row');
+        if (validRow) {
+            validRow.style.display = data.validUntil ? '' : 'none';
+        }
+
+        const body = document.getElementById('preview-items-body');
+        body.innerHTML = '';
+        const visibleRows = Math.max(8, data.rows.length);
+        for (let index = 0; index < visibleRows; index += 1) {
+            const item = data.rows[index];
+            const row = document.createElement('tr');
+            const values = item
+                ? [index + 1, item.itemName, item.quantity, item.unit, formatYen(item.unitPrice), formatYen(item.amount)]
+                : [index + 1, '', '', '', '', ''];
+            values.forEach((value, valueIndex) => {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                if ([0, 2, 3, 4, 5].includes(valueIndex)) {
+                    cell.classList.add(valueIndex >= 4 ? 'text-right' : 'text-center');
+                }
+                row.appendChild(cell);
+            });
+            body.appendChild(row);
+        }
+    }
+
+    function validateBeforePreview() {
+        if (!form.reportValidity()) {
+            return false;
+        }
+        const data = collectPreviewData();
+        if (data.rows.length === 0) {
+            alert('商品名・内容を1件以上入力してください。');
+            return false;
+        }
+        return data;
+    }
+
+    function openPreview() {
+        const data = validateBeforePreview();
+        if (!data) {
+            return;
+        }
+        renderPreview(data);
+        previewModal.classList.add('open');
+        previewModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePreview() {
+        previewModal.classList.remove('open');
+        previewModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function submitCompletedFromPreview() {
+        const data = validateBeforePreview();
+        if (!data) {
+            closePreview();
+            return;
+        }
+        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = 'completed';
+        statusInput.dataset.previewStatus = 'true';
+        form.appendChild(statusInput);
+        form.submit();
+    }
+
     addRowButton.addEventListener('click', () => createRow());
 
     if (productSelect) {
@@ -591,6 +1070,24 @@ document.addEventListener('DOMContentLoaded', () => {
             updateProductMeta();
         });
     }
+
+    if (openPreviewButton) {
+        openPreviewButton.addEventListener('click', openPreview);
+    }
+
+    if (completeFromPreviewButton) {
+        completeFromPreviewButton.addEventListener('click', submitCompletedFromPreview);
+    }
+
+    document.querySelectorAll('[data-close-preview]').forEach((button) => {
+        button.addEventListener('click', closePreview);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && previewModal.classList.contains('open')) {
+            closePreview();
+        }
+    });
 
     document.querySelectorAll('#items-body .item-row').forEach(bindRowEvents);
     updateRowNumbers();
