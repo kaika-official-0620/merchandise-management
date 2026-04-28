@@ -1,147 +1,253 @@
 {% extends "base.html" %}
 
-{% block title %}見積依頼書一覧 - 物販管理システム{% endblock %}
+{% block title %}見積り依頼書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>見積依頼書一覧</h1>
-    <div class="header-actions">
-        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+<div class="mitsumori-list-page">
+    <div class="page-header">
+        <div>
+            <h1>見積り依頼書</h1>
+            <p class="page-subtitle">開花へ送付する見積り依頼書を、管理画面と同じ明細形式で作成・確認できます。</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('documents') }}" class="btn btn-secondary">書類一覧へ戻る</a>
+            <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
+        </div>
     </div>
-</div>
 
-<div class="info-box">
-    <p>開花への見積依頼書を作成・管理できます。</p>
-</div>
-
-<div class="table-container">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>書類No.</th>
-                <th>宛先</th>
-                <th>件名</th>
-                <th>発行日</th>
-                <th>有効期限</th>
-                <th>合計金額</th>
-                <th>ステータス</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for doc in mitsumori_list %}
-            <tr>
-                <td class="doc-no">{{ doc.document_no }}</td>
-                <td>{{ doc.company_name }}</td>
-                <td>{{ doc.subject or '-' }}</td>
-                <td>{{ doc.issue_date }}</td>
-                <td>{{ doc.valid_until or '-' }}</td>
-                <td class="amount">¥{{ "{:,}".format(doc.total_amount) }}</td>
-                <td>
-                    {% if doc.status == 'completed' %}
-                        <span class="status-badge status-completed">完了</span>
-                    {% elif doc.status == 'submitted' %}
-                        <span class="status-badge status-submitted">送信済</span>
-                    {% else %}
-                        <span class="status-badge status-draft">下書き</span>
+    {% if mitsumori_list %}
+    <div class="doc-grid">
+        {% for doc in mitsumori_list %}
+        {% set status = doc.status or 'draft' %}
+        <article class="doc-card status-{{ status }}">
+            <div class="doc-card-head">
+                <span class="doc-no">{{ doc.document_no }}</span>
+                <span class="status-badge status-{{ status }}">
+                    {% if status == 'draft' %}下書き
+                    {% elif status in ['completed', 'submitted', 'sent'] %}作成済み
+                    {% elif status == 'approved' %}承認済み
+                    {% elif status == 'rejected' %}差し戻し
+                    {% else %}{{ status }}
                     {% endif %}
-                </td>
-                <td class="actions">
-                    <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
-                    <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
-                    {% if doc.status == 'draft' %}
-                        <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
-                        <a href="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この見積依頼書を削除しますか？')">削除</a>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="8" class="text-center text-muted">見積依頼書がありません</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                </span>
+            </div>
+            <div class="doc-card-body">
+                <h2>{{ doc.subject or '見積り依頼書' }}</h2>
+                <dl>
+                    <div>
+                        <dt>発行日</dt>
+                        <dd>{{ doc.issue_date or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>宛先</dt>
+                        <dd>{{ doc.company_name or '株式会社 開花' }}</dd>
+                    </div>
+                    <div>
+                        <dt>有効期限</dt>
+                        <dd>{{ doc.valid_until or '-' }}</dd>
+                    </div>
+                    <div class="total">
+                        <dt>合計金額</dt>
+                        <dd>¥{{ "{:,}".format(doc.total_amount or 0) }}</dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="doc-card-actions">
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細を見る</a>
+                {% if status == 'draft' %}
+                <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                <a href="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="btn btn-danger" onclick="return confirm('この見積り依頼書を削除しますか？')">削除</a>
+                {% endif %}
+                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state-card">
+        <h2>見積り依頼書はまだありません</h2>
+        <p>商品明細を選択して、開花へ送付する見積り依頼書を作成できます。</p>
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積り依頼書を作成</a>
+    </div>
+    {% endif %}
 </div>
 
 <style>
-.page-header {
+.mitsumori-list-page {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.page-header,
+.header-actions,
+.doc-card-head,
+.doc-card-actions {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
 }
 
 .page-header h1 {
     margin: 0;
+    color: #0f172a;
 }
 
-.header-actions {
-    display: flex;
-    gap: 10px;
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
 }
 
-.info-box {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin-bottom: 20px;
+.doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
 }
 
-.info-box p {
-    margin: 0;
-    color: #1e40af;
-    font-size: 0.9rem;
+.doc-card,
+.empty-state-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+    padding: 1rem;
+}
+
+.doc-card {
+    display: grid;
+    gap: 1rem;
 }
 
 .doc-no {
-    font-family: monospace;
-    font-weight: 500;
+    color: #1d4ed8;
+    font-family: Consolas, monospace;
+    font-weight: 800;
 }
 
 .status-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0.32rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
-.status-completed { background: #d4edda; color: #155724; }
-.status-submitted { background: #cce5ff; color: #004085; }
-.status-draft { background: #fff3cd; color: #856404; }
-
-.btn-sm { padding: 4px 8px; font-size: 12px; margin: 2px; }
-.btn-info { background: #17a2b8; color: white; }
-.btn-pdf { background: #dc3545; color: white; }
-.btn-primary { background: #3b82f6; color: white; }
-
-.actions { white-space: nowrap; }
-
-.amount {
-    font-family: 'Consolas', monospace;
-    font-weight: 600;
+.status-badge.status-draft {
+    background: #fef3c7;
+    color: #92400e;
 }
 
-/* スマホ対応 - 横スクロール */
-@media (max-width: 768px) {
-    .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .data-table {
-        min-width: 800px;
-    }
-    
-    .data-table th,
-    .data-table td {
-        white-space: nowrap;
-    }
-    
-    .page-header {
-        flex-direction: column;
-        gap: 10px;
-        align-items: stretch;
+.status-badge.status-completed,
+.status-badge.status-submitted,
+.status-badge.status-sent,
+.status-badge.status-approved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.doc-card-body h2 {
+    margin: 0 0 0.85rem;
+    color: #0f172a;
+    font-size: 1.05rem;
+}
+
+.doc-card-body dl {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+}
+
+.doc-card-body dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 0.55rem;
+}
+
+.doc-card-body dt {
+    color: #64748b;
+    font-weight: 700;
+}
+
+.doc-card-body dd {
+    margin: 0;
+    color: #0f172a;
+    text-align: right;
+}
+
+.doc-card-body .total dd {
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.doc-card-actions {
+    justify-content: flex-start;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0.58rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: #0f172a;
+}
+
+.btn-secondary {
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.btn-info {
+    background: #2563eb;
+}
+
+.btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.empty-state-card {
+    text-align: center;
+    padding: 2rem;
+}
+
+.empty-state-card h2 {
+    margin: 0 0 0.5rem;
+    color: #0f172a;
+}
+
+.empty-state-card p {
+    color: #64748b;
+}
+
+@media (max-width: 760px) {
+    .header-actions,
+    .header-actions .btn {
+        width: 100%;
     }
 }
 </style>

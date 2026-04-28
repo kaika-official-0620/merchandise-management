@@ -1,689 +1,600 @@
 {% extends "base.html" %}
 
-{% block title %}{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %} - 株式会社 開花{% endblock %}
+{% set form_items = items if items else [] %}
+{% set is_edit = mitsumori is defined and mitsumori %}
+
+{% block title %}{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-actions">
-    <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類管理に戻る</a>
-</div>
-
-<div class="form-info-box">
-    <p><strong>見積依頼書とは：</strong>法人向けに送付する見積依頼書を作成できます。</p>
-</div>
-
-<form method="POST" class="mitsumori-form">
-    <div class="form-section">
-        <h3>基本情報</h3>
-        <div class="form-grid">
-            <div class="form-group">
-                <label>No.</label>
-                <input type="text" value="{{ document_no }}" readonly class="form-control readonly">
-            </div>
-            <div class="form-group">
-                <label for="issue_date">発行日 <span class="required">*</span></label>
-                <input type="date" id="issue_date" name="issue_date" value="{{ mitsumori.issue_date if mitsumori else today }}" required class="form-control">
-            </div>
-            <div class="form-group">
-                <label for="valid_until">有効期限</label>
-                <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if mitsumori else '' }}" class="form-control">
-            </div>
+<div class="mitsumori-form-page">
+    <div class="page-header">
+        <div>
+            <h1>{% if is_edit %}見積り依頼書編集{% else %}見積り依頼書作成{% endif %}</h1>
+            <p class="page-subtitle">管理画面の書類作成と同じ明細形式で、開花へ送る見積り依頼書を作成します。</p>
         </div>
+        <a href="{{ url_for('documents') }}" class="btn btn-secondary">書類一覧へ戻る</a>
     </div>
 
-    <div class="form-section">
-        <h3>宛先</h3>
-        <div class="form-grid">
-            <div class="form-group full-width">
-                <label for="company_name">会社名</label>
-                <input type="text" id="company_name" name="company_name" value="株式会社 開花" readonly class="form-control readonly">
-            </div>
-        </div>
+    <div class="form-info-box">
+        <strong>見積り依頼書について</strong>
+        <span>商品一覧から選択すると、数量・単価・合計金額が自動で計算されます。下書き保存後は、作成完了にする前であれば編集できます。</span>
     </div>
 
-    <div class="form-section">
-        <h3>依頼内容</h3>
-        <div class="form-group">
-            <label for="subject">件名 <span class="required">*</span></label>
-            <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if mitsumori else '' }}" required placeholder="〇〇に関する見積依頼" class="form-control">
-        </div>
-        <div class="table-responsive">
-            <table class="items-table" id="items-table">
-                <thead>
-                    <tr>
-                        <th width="10%">No.</th>
-                        <th width="80%">品名・内容 <span class="required">*</span></th>
-                        <th width="10%"></th>
-                    </tr>
-                </thead>
-                <tbody id="items-body">
-                    {% if items %}
-                        {% for item in items %}
-                        <tr class="item-row">
-                            <td class="item-no">{{ item.item_no }}</td>
-                            <td><input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required></td>
-                            <td>
-                                <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
-                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        {% for i in range(3) %}
-                        <tr class="item-row">
-                            <td class="item-no">{{ i + 1 }}</td>
-                            <td><input type="text" name="item_name[]" class="form-control"></td>
-                            <td>
-                                <input type="hidden" name="merchandise_id[]" value="">
-                                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% endif %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="3">
-                            <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
-                            {% if my_merchandise %}
-                            <button type="button" class="btn btn-info" id="select-merchandise" style="margin-left: 8px;">📦 商品から選択</button>
-                            {% endif %}
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <div class="form-section">
-        <h3>備考・条件</h3>
-        <div class="form-group">
-            <textarea name="notes" rows="4" class="form-control" placeholder="納期、支払条件、その他備考">{{ mitsumori.notes if mitsumori else '' }}</textarea>
-        </div>
-    </div>
-
-    <div class="form-actions">
-        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-        <button type="submit" name="status" value="completed" class="btn btn-primary">完了として保存</button>
-    </div>
-</form>
-
-<!-- 商品選択モーダル -->
-{% if my_merchandise %}
-<div id="merchandiseModal" class="merchandise-modal">
-    <div class="merchandise-modal-content">
-        <div class="merchandise-modal-header">
-            <h3>📦 商品から選択</h3>
-            <button type="button" class="merchandise-modal-close" onclick="closeMerchandiseModal()">&times;</button>
-        </div>
-        <div class="merchandise-modal-body">
-            <div class="merchandise-search">
-                <input type="text" id="merchandiseSearch" placeholder="商品名・ブランド名で検索..." class="form-control">
-            </div>
-            <div class="merchandise-list" id="merchandiseList">
-                {% for item in my_merchandise %}
-                <div class="merchandise-item" data-id="{{ item.id }}" data-name="{{ item.product_name }}" data-brand="{{ item.brand_name or '' }}">
-                    <div class="merchandise-check">
-                        <input type="checkbox" id="merch_{{ item.id }}" class="merchandise-checkbox">
-                    </div>
-                    <div class="merchandise-photo">
-                        {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename='uploads/' + item.photo_path) }}" alt="">
-                        {% else %}
-                        <div class="no-photo">📷</div>
-                        {% endif %}
-                    </div>
-                    <div class="merchandise-info">
-                        <div class="merchandise-name">{{ item.product_name }}</div>
-                        <div class="merchandise-brand">{{ item.brand_name or '-' }}</div>
-                    </div>
+    <form method="POST" class="mitsumori-form">
+        <section class="form-section">
+            <h2>基本情報</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>No.</label>
+                    <input type="text" value="{{ mitsumori.document_no if is_edit else document_no }}" readonly class="form-control readonly">
                 </div>
-                {% endfor %}
+                <div class="form-group">
+                    <label for="issue_date">発行日 <span class="required">*</span></label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ mitsumori.issue_date if is_edit else today }}" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="valid_until">有効期限</label>
+                    <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if is_edit else '' }}" class="form-control">
+                </div>
             </div>
+        </section>
+
+        <section class="form-section">
+            <h2>送付先</h2>
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label for="company_name">会社名 <span class="required">*</span></label>
+                    <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if is_edit else '株式会社 開花' }}" required class="form-control readonly" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="department">部署名</label>
+                    <input type="text" id="department" name="department" value="{{ mitsumori.department if is_edit else '' }}" placeholder="例: 買取担当" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="contact_person">担当者名</label>
+                    <input type="text" id="contact_person" name="contact_person" value="{{ mitsumori.contact_person if is_edit else '' }}" placeholder="例: ご担当者" class="form-control">
+                </div>
+                <div class="form-group full-width">
+                    <label for="address">住所</label>
+                    <input type="text" id="address" name="address" value="{{ mitsumori.address if is_edit else '' }}" placeholder="必要な場合のみ入力してください" class="form-control">
+                </div>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2>見積依頼内容</h2>
+            <div class="form-group">
+                <label for="subject">件名 <span class="required">*</span></label>
+                <input type="text" id="subject" name="subject" value="{{ mitsumori.subject if is_edit else '見積り依頼書' }}" required placeholder="例: ブランド品の見積り依頼" class="form-control">
+            </div>
+
+            <div class="product-selector">
+                <label for="product-select">商品を追加</label>
+                <select id="product-select" class="form-control product-select-box">
+                    <option value="">-- 商品一覧から選択 --</option>
+                    {% for product in my_merchandise %}
+                    <option
+                        value="{{ product.id }}"
+                        data-product-name="{{ product.product_name or '' }}"
+                        data-brand-name="{{ product.brand_name or '' }}"
+                        data-price="{{ product.listing_price or 0 }}"
+                    >
+                        {{ product.product_name or '商品' }}{% if product.brand_name %} / {{ product.brand_name }}{% endif %}{% if product.listing_price %}（¥{{ "{:,}".format(product.listing_price|int) }}）{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-info" id="add-product-btn">追加</button>
+            </div>
+            <div id="product-select-meta" class="product-select-meta">
+                {% if not my_merchandise %}追加できる商品がありません。手入力で明細を作成できます。{% endif %}
+            </div>
+
+            <div class="table-responsive">
+                <table class="items-table" id="items-table">
+                    <thead>
+                        <tr>
+                            <th class="col-no">No.</th>
+                            <th>商品名・内容 <span class="required">*</span></th>
+                            <th class="col-qty">数量</th>
+                            <th class="col-unit">単位</th>
+                            <th class="col-price">単価</th>
+                            <th class="col-amount">金額</th>
+                            <th class="col-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-body">
+                        {% if form_items %}
+                            {% for item in form_items %}
+                            <tr class="item-row">
+                                <td class="item-no">{{ item.item_no or loop.index }}</td>
+                                <td>
+                                    <input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required>
+                                    <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                </td>
+                                <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="form-control calc-input" min="1"></td>
+                                <td><input type="text" name="unit[]" value="{{ item.unit or '点' }}" class="form-control" placeholder="点"></td>
+                                <td><input type="number" name="unit_price[]" value="{{ item.unit_price or 0 }}" class="form-control calc-input" min="0" step="1"></td>
+                                <td class="row-amount">¥0</td>
+                                <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            {% for i in range(3) %}
+                            <tr class="item-row">
+                                <td class="item-no">{{ i + 1 }}</td>
+                                <td>
+                                    <input type="text" name="item_name[]" class="form-control"{% if i == 0 %} required{% endif %}>
+                                    <input type="hidden" name="merchandise_id[]" value="">
+                                </td>
+                                <td><input type="number" name="quantity[]" value="1" class="form-control calc-input" min="1"></td>
+                                <td><input type="text" name="unit[]" value="点" class="form-control" placeholder="点"></td>
+                                <td><input type="number" name="unit_price[]" value="0" class="form-control calc-input" min="0" step="1"></td>
+                                <td class="row-amount">¥0</td>
+                                <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+                            </tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="7">
+                                <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
+                            </td>
+                        </tr>
+                        <tr class="totals-row">
+                            <td colspan="4"></td>
+                            <td class="text-right"><strong>合計金額</strong></td>
+                            <td id="total-amount">¥0</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2>備考・条件</h2>
+            <div class="form-group">
+                <textarea name="notes" rows="4" class="form-control" placeholder="確認してほしい条件、補足事項など">{{ mitsumori.notes if is_edit else '' }}</textarea>
+            </div>
+        </section>
+
+        <div class="form-actions">
+            <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+            <button type="submit" name="status" value="completed" class="btn btn-primary">作成完了</button>
         </div>
-        <div class="merchandise-modal-footer">
-            <span class="selected-count">0件選択中</span>
-            <button type="button" class="btn btn-secondary" onclick="closeMerchandiseModal()">キャンセル</button>
-            <button type="button" class="btn btn-primary" onclick="addSelectedMerchandise()">選択した商品を追加</button>
-        </div>
-    </div>
+    </form>
 </div>
-{% endif %}
 
 <style>
+.mitsumori-form-page,
 .mitsumori-form {
-    max-width: 1000px;
+    display: grid;
+    gap: 1.25rem;
+}
+
+.mitsumori-form-page {
+    max-width: 1120px;
     margin: 0 auto;
 }
 
-.form-info-box {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    padding: 16px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
+.page-header,
+.form-actions,
+.product-selector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
-.form-info-box p {
+.page-header h1 {
     margin: 0;
-    color: #1e40af;
+    color: #0f172a;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.form-info-box {
+    display: grid;
+    gap: 0.25rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+    color: #1d4ed8;
+    line-height: 1.7;
 }
 
 .form-section {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 1.25rem;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
-.form-section h3 {
-    margin: 0 0 15px 0;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #3b82f6;
-    color: #333;
+.form-section h2 {
+    margin: 0 0 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #60a5fa;
+    color: #0f172a;
+    font-size: 1.08rem;
 }
 
 .form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
 }
 
 .form-group.full-width {
     grid-column: 1 / -1;
 }
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.form-group label {
-    font-weight: 500;
-    margin-bottom: 5px;
-    color: #555;
+.form-group label,
+.product-selector label {
+    color: #334155;
+    font-weight: 700;
 }
 
 .required {
-    color: #ef4444;
+    color: #dc2626;
 }
 
 .form-control {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
+    width: 100%;
+    padding: 0.68rem 0.78rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.95rem;
 }
 
 .form-control.readonly {
-    background: #f5f5f5;
-    color: #666;
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.product-selector {
+    justify-content: flex-start;
+    margin: 0.85rem 0 0.35rem;
+}
+
+.product-selector label {
+    min-width: 88px;
+}
+
+.product-select-box {
+    flex: 1 1 360px;
+    min-width: 240px;
+}
+
+.product-select-meta {
+    min-height: 24px;
+    margin-bottom: 0.75rem;
+    color: #64748b;
+    font-size: 0.9rem;
 }
 
 .table-responsive {
     overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
 }
 
 .items-table {
     width: 100%;
+    min-width: 860px;
     border-collapse: collapse;
-    margin-top: 10px;
 }
 
 .items-table th,
 .items-table td {
-    padding: 8px;
-    border: 1px solid #ddd;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
     text-align: left;
+    vertical-align: middle;
 }
 
 .items-table th {
-    background: #f8f9fa;
-    font-weight: 500;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.88rem;
+    white-space: nowrap;
 }
 
-.items-table .form-control {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
+.items-table tbody tr:last-child td,
+.items-table tfoot tr:last-child td {
+    border-bottom: none;
 }
 
-.form-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin-top: 20px;
+.col-no {
+    width: 56px;
+}
+
+.col-qty,
+.col-unit {
+    width: 105px;
+}
+
+.col-price,
+.col-amount {
+    width: 140px;
+}
+
+.col-action {
+    width: 90px;
+}
+
+.item-no,
+.row-amount,
+#total-amount,
+.text-right {
+    text-align: right;
+}
+
+.row-amount,
+#total-amount {
+    color: #0f172a;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.totals-row td {
+    background: #eff6ff;
+    font-weight: 800;
 }
 
 .btn {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.65rem 0.95rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #fff;
+    font-weight: 800;
     text-decoration: none;
-    display: inline-block;
-}
-
-.btn-primary { background: #3b82f6; color: white; }
-.btn-primary:hover { background: #2563eb; }
-.btn-secondary { background: #6c757d; color: white; }
-.btn-danger { background: #dc3545; color: white; }
-.btn-info { background: #059669; color: white; }
-.btn-info:hover { background: #047857; }
-.btn-sm { padding: 4px 8px; font-size: 12px; }
-
-/* 商品選択モーダル */
-.merchandise-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 10000;
-    align-items: center;
-    justify-content: center;
-}
-
-.merchandise-modal.open {
-    display: flex;
-}
-
-.merchandise-modal-content {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-}
-
-.merchandise-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid #e2e8f0;
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    color: white;
-    border-radius: 12px 12px 0 0;
-}
-
-.merchandise-modal-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-}
-
-.merchandise-modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    color: white;
     cursor: pointer;
-    padding: 0;
-}
-
-.merchandise-modal-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1rem;
-    min-height: 0;
-}
-
-.merchandise-search {
-    margin-bottom: 1rem;
-}
-
-.merchandise-search input {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-}
-
-.merchandise-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.merchandise-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.merchandise-item:hover {
-    border-color: #059669;
-    background: #f0fdf4;
-}
-
-.merchandise-item.selected {
-    border-color: #059669;
-    background: #d1fae5;
-}
-
-.merchandise-check {
-    flex-shrink: 0;
-}
-
-.merchandise-checkbox {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.merchandise-photo {
-    width: 50px;
-    height: 50px;
-    flex-shrink: 0;
-    border-radius: 6px;
-    overflow: hidden;
-    background: #f1f5f9;
-}
-
-.merchandise-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.merchandise-photo .no-photo {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: #94a3b8;
-}
-
-.merchandise-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.merchandise-name {
-    font-weight: 600;
-    color: #1e293b;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-.merchandise-brand {
-    font-size: 0.85rem;
-    color: #64748b;
+.btn-primary {
+    background: #0f172a;
 }
 
-.merchandise-modal-footer {
-    display: flex;
+.btn-secondary {
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.btn-info {
+    background: #2563eb;
+}
+
+.btn-danger {
+    background: #fff;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.btn-sm {
+    min-height: 34px;
+    padding: 0.42rem 0.72rem;
+    font-size: 0.84rem;
+}
+
+.form-actions {
     justify-content: flex-end;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 1.25rem;
-    border-top: 1px solid #e2e8f0;
-    background: #f8fafc;
-    border-radius: 0 0 12px 12px;
 }
 
-.selected-count {
-    margin-right: auto;
-    font-size: 0.9rem;
-    color: #059669;
-    font-weight: 600;
-}
-
-/* スマホ用スタイル */
-@media (max-width: 768px) {
-    .mitsumori-form {
-        max-width: 100%;
-    }
-    
-    .form-info-box {
-        padding: 8px 10px;
-        margin-bottom: 10px;
-        font-size: 0.8rem;
-    }
-    
-    .form-section {
-        padding: 10px;
-        margin-bottom: 10px;
-    }
-    
-    .form-section h3 {
-        font-size: 0.9rem;
-        margin-bottom: 8px;
-        padding-bottom: 6px;
-    }
-    
-    .form-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-    }
-    
-    .form-group label {
-        font-size: 0.75rem;
-        margin-bottom: 2px;
-    }
-    
-    .form-control {
-        padding: 6px;
-        font-size: 0.8rem;
-    }
-    
-    input[type="date"].form-control {
-        padding: 6px 8px;
-        font-size: 0.8rem;
-        min-width: 110px;
-        width: auto;
-        -webkit-appearance: none;
-        appearance: none;
-    }
-    
-    .items-table th,
-    .items-table td {
-        padding: 4px 3px;
-        font-size: 0.75rem;
-    }
-    
-    .items-table th {
-        font-size: 0.7rem;
-    }
-    
-    .items-table .form-control {
-        padding: 5px 4px;
-        font-size: 0.75rem;
-    }
-    
-    .form-actions {
+@media (max-width: 760px) {
+    .page-header,
+    .form-actions,
+    .product-selector {
+        align-items: stretch;
         flex-direction: column;
-        gap: 8px;
     }
-    
-    .form-actions .btn {
+
+    .page-header .btn,
+    .form-actions .btn,
+    .product-selector .btn {
         width: 100%;
-        padding: 10px 16px;
-        font-size: 0.85rem;
-    }
-    
-    .btn-sm {
-        padding: 2px 5px;
-        font-size: 0.65rem;
-    }
-    
-    .page-actions .btn {
-        padding: 6px 10px;
-        font-size: 0.75rem;
     }
 }
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     const itemsBody = document.getElementById('items-body');
-    const addRowBtn = document.getElementById('add-row');
-    
-    // 行を追加
-    function addRow() {
-        const rowCount = itemsBody.querySelectorAll('.item-row').length;
-        const newRow = document.createElement('tr');
-        newRow.className = 'item-row';
-        newRow.innerHTML = `
-            <td class="item-no">${rowCount + 1}</td>
-            <td><input type="text" name="item_name[]" class="form-control"></td>
-            <td>
-                <input type="hidden" name="merchandise_id[]" value="">
-                <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
-            </td>
-        `;
-        itemsBody.appendChild(newRow);
-        attachRowEvents(newRow);
-        renumberRows();
+    const addRowButton = document.getElementById('add-row');
+    const addProductButton = document.getElementById('add-product-btn');
+    const productSelect = document.getElementById('product-select');
+    const productSelectMeta = document.getElementById('product-select-meta');
+
+    function formatYen(value) {
+        const amount = Number(value || 0);
+        return `¥${amount.toLocaleString('ja-JP')}`;
     }
-    
-    addRowBtn.addEventListener('click', addRow);
-    
-    // 行を削除イベント
-    function attachRowEvents(row) {
-        const removeBtn = row.querySelector('.remove-row');
-        
-        removeBtn.addEventListener('click', function() {
-            row.remove();
-            renumberRows();
-        });
-    }
-    
-    // 行番号を振り直す
-    function renumberRows() {
-        const rows = itemsBody.querySelectorAll('.item-row');
-        rows.forEach((row, index) => {
-            row.querySelector('.item-no').textContent = index + 1;
-        });
-    }
-    
-    // 既存の行にイベントを付与
-    document.querySelectorAll('.item-row').forEach(row => {
-        attachRowEvents(row);
-    });
-    
-    // 商品選択モーダル
-    const selectMerchandiseBtn = document.getElementById('select-merchandise');
-    if (selectMerchandiseBtn) {
-        selectMerchandiseBtn.addEventListener('click', openMerchandiseModal);
-    }
-    
-    // 商品アイテムのクリックでチェックボックス切り替え
-    document.querySelectorAll('.merchandise-item').forEach(item => {
-        item.addEventListener('click', function(e) {
-            if (e.target.type !== 'checkbox') {
-                const checkbox = this.querySelector('.merchandise-checkbox');
-                checkbox.checked = !checkbox.checked;
+
+    function updateRowNumbers() {
+        document.querySelectorAll('#items-body .item-row').forEach((row, index) => {
+            const noCell = row.querySelector('.item-no');
+            if (noCell) {
+                noCell.textContent = index + 1;
             }
-            this.classList.toggle('selected', this.querySelector('.merchandise-checkbox').checked);
-            updateSelectedCount();
         });
-    });
-    
-    // 検索機能
-    const searchInput = document.getElementById('merchandiseSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            document.querySelectorAll('.merchandise-item').forEach(item => {
-                const name = item.dataset.name.toLowerCase();
-                const brand = item.dataset.brand.toLowerCase();
-                if (name.includes(query) || brand.includes(query)) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
+    }
+
+    function updateRowAmount(row) {
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        const amountCell = row.querySelector('.row-amount');
+        if (amountCell) {
+            amountCell.textContent = formatYen(quantity * unitPrice);
+        }
+    }
+
+    function updateTotalAmount() {
+        let total = 0;
+        document.querySelectorAll('#items-body .item-row').forEach((row) => {
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            total += quantity * unitPrice;
+        });
+        document.getElementById('total-amount').textContent = formatYen(total);
+    }
+
+    function bindRowEvents(row) {
+        row.querySelectorAll('.calc-input').forEach((input) => {
+            input.addEventListener('input', () => {
+                updateRowAmount(row);
+                updateTotalAmount();
             });
         });
-    }
-});
 
-// モーダル操作
-function openMerchandiseModal() {
-    document.getElementById('merchandiseModal').classList.add('open');
-    // チェック状態をリセット
-    document.querySelectorAll('.merchandise-checkbox').forEach(cb => {
-        cb.checked = false;
-        cb.closest('.merchandise-item').classList.remove('selected');
-    });
-    updateSelectedCount();
-}
-
-function closeMerchandiseModal() {
-    document.getElementById('merchandiseModal').classList.remove('open');
-}
-
-function updateSelectedCount() {
-    const count = document.querySelectorAll('.merchandise-checkbox:checked').length;
-    document.querySelector('.selected-count').textContent = count + '件選択中';
-}
-
-function addSelectedMerchandise() {
-    const itemsBody = document.getElementById('items-body');
-    const selectedItems = document.querySelectorAll('.merchandise-checkbox:checked');
-    
-    selectedItems.forEach(checkbox => {
-        const item = checkbox.closest('.merchandise-item');
-        const merchId = item.dataset.id;
-        const name = item.dataset.name;
-        const brand = item.dataset.brand;
-        const displayName = brand ? `${name}（${brand}）` : name;
-        
-        // 空の行があれば使う、なければ新規追加
-        let emptyRow = null;
-        document.querySelectorAll('.item-row input[name="item_name[]"]').forEach(input => {
-            if (!input.value.trim() && !emptyRow) {
-                emptyRow = input.closest('.item-row');
-            }
-        });
-        
-        if (emptyRow) {
-            emptyRow.querySelector('input[name="item_name[]"]').value = displayName;
-            emptyRow.querySelector('input[name="merchandise_id[]"]').value = merchId;
-        } else {
-            const rowCount = itemsBody.querySelectorAll('.item-row').length;
-            const newRow = document.createElement('tr');
-            newRow.className = 'item-row';
-            newRow.innerHTML = `
-                <td class="item-no">${rowCount + 1}</td>
-                <td><input type="text" name="item_name[]" class="form-control" value="${displayName}"></td>
-                <td>
-                    <input type="hidden" name="merchandise_id[]" value="${merchId}">
-                    <button type="button" class="btn btn-danger btn-sm remove-row">×</button>
-                </td>
-            `;
-            itemsBody.appendChild(newRow);
-            
-            // 削除ボタンにイベント追加
-            newRow.querySelector('.remove-row').addEventListener('click', function() {
-                newRow.remove();
-                renumberRows();
+        const removeButton = row.querySelector('.remove-row');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                const rowCount = itemsBody.querySelectorAll('.item-row').length;
+                if (rowCount <= 1) {
+                    row.querySelector('input[name="item_name[]"]').value = '';
+                    row.querySelector('input[name="merchandise_id[]"]').value = '';
+                    row.querySelector('input[name="quantity[]"]').value = '1';
+                    row.querySelector('input[name="unit[]"]').value = '点';
+                    row.querySelector('input[name="unit_price[]"]').value = '0';
+                    updateRowAmount(row);
+                    updateTotalAmount();
+                    return;
+                }
+                row.remove();
+                updateRowNumbers();
+                updateTotalAmount();
             });
         }
-    });
-    
-    renumberRows();
-    closeMerchandiseModal();
-}
 
-function renumberRows() {
-    const rows = document.querySelectorAll('#items-body .item-row');
-    rows.forEach((row, index) => {
-        row.querySelector('.item-no').textContent = index + 1;
-    });
-}
+        updateRowAmount(row);
+    }
+
+    function createRow(item = {}) {
+        const row = document.createElement('tr');
+        row.className = 'item-row';
+        row.innerHTML = `
+            <td class="item-no"></td>
+            <td>
+                <input type="text" name="item_name[]" class="form-control">
+                <input type="hidden" name="merchandise_id[]" value="">
+            </td>
+            <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
+            <td><input type="text" name="unit[]" class="form-control" placeholder="点" value="点"></td>
+            <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" step="1" value="0"></td>
+            <td class="row-amount">¥0</td>
+            <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
+        `;
+
+        row.querySelector('input[name="item_name[]"]').value = item.itemName || '';
+        row.querySelector('input[name="merchandise_id[]"]').value = item.merchandiseId || '';
+        row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+        row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+        row.querySelector('input[name="unit_price[]"]').value = item.unitPrice || 0;
+
+        itemsBody.appendChild(row);
+        bindRowEvents(row);
+        updateRowNumbers();
+        updateTotalAmount();
+        return row;
+    }
+
+    function findBlankRow() {
+        return Array.from(itemsBody.querySelectorAll('.item-row')).find((row) => {
+            const nameInput = row.querySelector('input[name="item_name[]"]');
+            return nameInput && !nameInput.value.trim();
+        });
+    }
+
+    function fillRow(row, item) {
+        row.querySelector('input[name="item_name[]"]').value = item.itemName || '';
+        row.querySelector('input[name="merchandise_id[]"]').value = item.merchandiseId || '';
+        row.querySelector('input[name="quantity[]"]').value = item.quantity || 1;
+        row.querySelector('input[name="unit[]"]').value = item.unit || '点';
+        row.querySelector('input[name="unit_price[]"]').value = item.unitPrice || 0;
+        updateRowAmount(row);
+        updateTotalAmount();
+    }
+
+    function selectedProductData() {
+        if (!productSelect || !productSelect.value) {
+            return null;
+        }
+        const option = productSelect.options[productSelect.selectedIndex];
+        const productName = option.dataset.productName || option.textContent.trim();
+        const brandName = option.dataset.brandName || '';
+        const displayName = brandName ? `${productName} / ${brandName}` : productName;
+        return {
+            itemName: displayName,
+            merchandiseId: option.value,
+            quantity: 1,
+            unit: '点',
+            unitPrice: Number(option.dataset.price || 0)
+        };
+    }
+
+    function updateProductMeta() {
+        if (!productSelectMeta || !productSelect) {
+            return;
+        }
+        const data = selectedProductData();
+        if (!data) {
+            productSelectMeta.textContent = productSelect.options.length > 1
+                ? '商品を選択すると、明細へ追加できます。'
+                : '追加できる商品がありません。手入力で明細を作成できます。';
+            return;
+        }
+        productSelectMeta.textContent = `${data.itemName} / 参考単価 ${formatYen(data.unitPrice)}`;
+    }
+
+    addRowButton.addEventListener('click', () => createRow());
+
+    if (productSelect) {
+        productSelect.addEventListener('change', updateProductMeta);
+        updateProductMeta();
+    }
+
+    if (addProductButton) {
+        addProductButton.addEventListener('click', () => {
+            const data = selectedProductData();
+            if (!data) {
+                alert('追加する商品を選択してください。');
+                return;
+            }
+            const blankRow = findBlankRow();
+            if (blankRow) {
+                fillRow(blankRow, data);
+            } else {
+                createRow(data);
+            }
+            productSelect.value = '';
+            updateProductMeta();
+        });
+    }
+
+    document.querySelectorAll('#items-body .item-row').forEach(bindRowEvents);
+    updateRowNumbers();
+    updateTotalAmount();
+});
 </script>
 {% endblock %}

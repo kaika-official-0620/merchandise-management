@@ -79,11 +79,9 @@
     <div class="tab-header">
         <div>
             <h2>見積り依頼書</h2>
-            <p class="tab-note">ここで作成した見積り依頼書は開花側へ送られ、案件の受付情報として管理画面にも反映されます。</p>
+            <p class="tab-note">管理画面の書類作成と同じ明細形式で、開花へ送る見積り依頼書を作成・確認できます。</p>
         </div>
-        {% if current_user.is_admin() %}
-        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
-        {% endif %}
+        <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 見積り依頼書を作成</a>
     </div>
     {% if user_mitsumori_list %}
     <div class="doc-cards">
@@ -117,7 +115,7 @@
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細</a>
+                <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
                 {% if doc.status == 'draft' %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
