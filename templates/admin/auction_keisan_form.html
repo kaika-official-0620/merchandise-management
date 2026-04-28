@@ -113,12 +113,69 @@
             </div>
         </div>
 
+        <div class="form-section preview-confirm-section">
+            <div>
+                <h3>書類プレビュー確認</h3>
+                <p>宛名・件名・明細を確認してから送信待機にします。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" id="open-auction-keisan-preview-btn">プレビューを確認する</button>
+        </div>
+
         <div class="form-actions">
             <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">キャンセル</a>
             <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-            <button type="submit" name="status" value="completed" class="btn btn-primary">送信待機にする</button>
         </div>
     </form>
+</div>
+
+<div class="document-preview-modal" id="auction-keisan-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-auction-keisan-preview></div>
+    <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="auction-keisan-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <h3 id="auction-keisan-preview-title">オークション計算書プレビュー</h3>
+                <p>内容に問題がなければ送信待機にしてください。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" data-close-auction-keisan-preview>閉じる</button>
+        </div>
+        <div class="preview-sheet">
+            <div class="preview-title">計算書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient" id="auction-preview-recipient">-</div>
+                    <p class="preview-muted" id="auction-preview-subject">-</p>
+                </div>
+                <div class="preview-meta">
+                    <div>書類No.: <strong>{{ document_no }}</strong></div>
+                    <div>発行日: <strong id="auction-preview-issue-date">-</strong></div>
+                </div>
+            </div>
+            <div class="preview-total-box">
+                <span>合計金額</span>
+                <strong id="auction-preview-total">¥0</strong>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>項目名</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="auction-preview-items-body"></tbody>
+            </table>
+            <div class="preview-notes">
+                <strong>備考</strong>
+                <div id="auction-preview-notes">-</div>
+            </div>
+        </div>
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-auction-keisan-preview>修正する</button>
+            <button type="button" class="btn btn-primary" id="submit-auction-keisan-preview-btn">送信待機にする</button>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -245,11 +302,177 @@
     margin-top: 24px;
 }
 
+.preview-confirm-section,
+.document-preview-toolbar,
+.document-preview-actions,
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.preview-confirm-section {
+    align-items: center;
+}
+
+.preview-confirm-section p,
+.document-preview-toolbar p,
+.preview-muted {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+}
+
+.document-preview-modal.is-open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.document-preview-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1080px, calc(100% - 24px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: auto;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.document-preview-toolbar h3 {
+    margin: 0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 0;
+}
+
+.preview-sheet {
+    width: min(900px, calc(100% - 32px));
+    margin: 1.25rem auto;
+    padding: 2rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+}
+
+.preview-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.4rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-meta {
+    min-width: 220px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-total-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 2px solid #111827;
+}
+
+.preview-total-box strong {
+    color: #1d4ed8;
+    font-size: 1.35rem;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.preview-items-table th,
+.preview-items-table td {
+    padding: 0.5rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th {
+    background: #f3f4f6;
+    text-align: center;
+}
+
+.preview-items-table .text-right {
+    text-align: right;
+}
+
+.preview-items-table .text-center {
+    text-align: center;
+}
+
+.preview-notes {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    white-space: pre-wrap;
+}
+
+.preview-notes strong {
+    display: block;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+
 @media (max-width: 720px) {
     .page-header,
-    .form-actions {
+    .form-actions,
+    .preview-confirm-section,
+    .document-preview-toolbar,
+    .document-preview-actions,
+    .preview-header {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 1rem;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        text-align: left;
     }
 }
 </style>
@@ -270,6 +493,88 @@ function recalculateTotals() {
         total += amount;
     });
     document.getElementById('total-amount').textContent = formatCurrency(total);
+    return total;
+}
+
+function escapePreviewHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[char];
+    });
+}
+
+function setPreviewText(id, value, fallback = '-') {
+    const target = document.getElementById(id);
+    if (target) {
+        target.textContent = value || fallback;
+    }
+}
+
+function collectPreviewItems() {
+    return Array.from(document.querySelectorAll('#items-tbody .item-row')).map((row, index) => {
+        const itemName = row.querySelector('input[name="item_name[]"]')?.value?.trim() || '';
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        return { no: index + 1, itemName, quantity, unitPrice, amount: quantity * unitPrice };
+    }).filter(item => item.itemName || item.amount > 0);
+}
+
+function renderAuctionKeisanPreview() {
+    const total = recalculateTotals();
+    setPreviewText('auction-preview-recipient', document.getElementById('recipient_name')?.value?.trim(), '宛名未入力');
+    setPreviewText('auction-preview-subject', document.getElementById('subject')?.value?.trim(), '件名未入力');
+    setPreviewText('auction-preview-issue-date', document.getElementById('issue_date')?.value);
+    setPreviewText('auction-preview-total', formatCurrency(total));
+    setPreviewText('auction-preview-notes', document.querySelector('textarea[name="notes"]')?.value?.trim());
+
+    const previewBody = document.getElementById('auction-preview-items-body');
+    previewBody.innerHTML = '';
+    const items = collectPreviewItems();
+    const rows = items.length ? items : [{ no: 1, itemName: '明細未入力', quantity: '-', unitPrice: 0, amount: 0 }];
+    rows.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="text-center">${item.no}</td>
+            <td>${escapePreviewHtml(item.itemName)}</td>
+            <td class="text-right">${escapePreviewHtml(item.quantity)}</td>
+            <td class="text-right">${formatCurrency(item.unitPrice)}</td>
+            <td class="text-right">${formatCurrency(item.amount)}</td>
+        `;
+        previewBody.appendChild(tr);
+    });
+}
+
+function openAuctionKeisanPreview() {
+    const form = document.getElementById('keisan-form');
+    if (!form.reportValidity()) {
+        return;
+    }
+    renderAuctionKeisanPreview();
+    const modal = document.getElementById('auction-keisan-preview-modal');
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeAuctionKeisanPreview() {
+    const modal = document.getElementById('auction-keisan-preview-modal');
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function submitAuctionKeisanPreview() {
+    const form = document.getElementById('keisan-form');
+    form.querySelectorAll('input[name="status"][type="hidden"]').forEach(input => input.remove());
+    const statusInput = document.createElement('input');
+    statusInput.type = 'hidden';
+    statusInput.name = 'status';
+    statusInput.value = 'completed';
+    form.appendChild(statusInput);
+    form.submit();
 }
 
 function addRow() {
@@ -309,6 +614,16 @@ function attachRowEvents(row) {
 }
 
 document.querySelectorAll('#items-tbody .item-row').forEach(attachRowEvents);
+document.getElementById('open-auction-keisan-preview-btn')?.addEventListener('click', openAuctionKeisanPreview);
+document.getElementById('submit-auction-keisan-preview-btn')?.addEventListener('click', submitAuctionKeisanPreview);
+document.querySelectorAll('[data-close-auction-keisan-preview]').forEach((button) => {
+    button.addEventListener('click', closeAuctionKeisanPreview);
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('auction-keisan-preview-modal')?.classList.contains('is-open')) {
+        closeAuctionKeisanPreview();
+    }
+});
 recalculateTotals();
 </script>
 {% endblock %}

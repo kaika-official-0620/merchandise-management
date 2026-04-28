@@ -37039,7 +37039,7 @@ def admin_auction_keisan_add_from_documents():
         flash("オークション計算書を作成しました", "success")
         return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
 
-    items = _build_prefill_items_from_request(source_request)
+    items = _build_prefill_items_from_request(source_request) if source_request else []
     return render_template(
         "admin/auction_keisan_form.html",
         today=datetime.now().strftime("%Y-%m-%d"),

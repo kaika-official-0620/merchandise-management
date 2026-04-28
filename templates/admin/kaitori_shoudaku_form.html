@@ -10,7 +10,7 @@
     </div>
 </div>
 
-<form method="POST" class="document-form" enctype="multipart/form-data">
+<form method="POST" class="document-form" id="admin-kaitori-shoudaku-form" enctype="multipart/form-data">
     {% if source_request %}
     <input type="hidden" name="request_id" value="{{ source_request.id }}">
     <div class="form-section">
@@ -173,11 +173,77 @@
         </div>
     </div>
 
+    <div class="form-section preview-confirm-section">
+        <div>
+            <h2>書類プレビュー確認</h2>
+            <p>業者情報・受領ファイル・回答内容を確認してから登録します。登録後の詳細画面は確認専用です。</p>
+        </div>
+        <button type="button" class="btn btn-info" id="open-admin-kaitori-preview-btn">プレビューを確認する</button>
+    </div>
+
     <div class="form-actions">
         <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-secondary">キャンセル</a>
-        <button type="submit" class="btn btn-primary">{% if mode == 'edit' %}更新{% else %}登録{% endif %}</button>
     </div>
 </form>
+
+<div class="document-preview-modal" id="admin-kaitori-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-admin-kaitori-preview></div>
+    <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="admin-kaitori-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <h3 id="admin-kaitori-preview-title">業者買取明細書プレビュー</h3>
+                <p>内容に問題がなければ登録を完了してください。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" data-close-admin-kaitori-preview>閉じる</button>
+        </div>
+        <div class="preview-sheet">
+            <div class="preview-title">業者買取明細書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient" id="admin-preview-company-name">-</div>
+                    <p class="preview-muted">業者から受領した回答内容として登録します。</p>
+                </div>
+                <div class="preview-meta">
+                    <div>受領日: <strong id="admin-preview-issue-date">-</strong></div>
+                    <div>担当者: <strong id="admin-preview-contact-name">-</strong></div>
+                    <div>支払い方法: <strong id="admin-preview-payment-method">-</strong></div>
+                </div>
+            </div>
+            <div class="preview-info-grid">
+                <div><strong>住所</strong><span id="admin-preview-company-address">-</span></div>
+                <div><strong>電話番号</strong><span id="admin-preview-company-phone">-</span></div>
+                <div><strong>振込情報</strong><span id="admin-preview-bank-info">-</span></div>
+                <div><strong>受領ファイル</strong><span id="admin-preview-file">-</span></div>
+            </div>
+            <div class="preview-total-box">
+                <span>合計金額</span>
+                <strong id="admin-preview-total-amount">¥0</strong>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>商品名</th>
+                        <th>ブランド</th>
+                        <th>状態</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-preview-items-body"></tbody>
+            </table>
+            <div class="preview-notes">
+                <strong>備考</strong>
+                <div id="admin-preview-notes">-</div>
+            </div>
+        </div>
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-admin-kaitori-preview>修正する</button>
+            <button type="button" class="btn btn-primary" id="submit-admin-kaitori-preview-btn">{% if mode == 'edit' %}この内容で更新する{% else %}この内容で登録する{% endif %}</button>
+        </div>
+    </div>
+</div>
 
 <style>
 .item-grid {
@@ -241,9 +307,200 @@
     margin-left: 0.5rem;
 }
 
+.preview-confirm-section,
+.document-preview-toolbar,
+.document-preview-actions,
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.preview-confirm-section {
+    align-items: center;
+}
+
+.preview-confirm-section p,
+.document-preview-toolbar p,
+.preview-muted {
+    margin: 0.35rem 0 0;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+}
+
+.document-preview-modal.is-open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.document-preview-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1080px, calc(100% - 24px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: auto;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+}
+
+.document-preview-toolbar h3 {
+    margin: 0;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+}
+
+.preview-sheet {
+    width: min(900px, calc(100% - 32px));
+    margin: 1.25rem auto;
+    padding: 2rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+}
+
+.preview-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.4rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-meta {
+    min-width: 240px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.preview-info-grid div,
+.preview-notes {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.75rem;
+    background: #f9fafb;
+}
+
+.preview-info-grid strong,
+.preview-notes strong {
+    display: block;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+
+.preview-total-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 2px solid #111827;
+}
+
+.preview-total-box strong {
+    color: var(--primary);
+    font-size: 1.35rem;
+}
+
+.preview-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.preview-items-table th,
+.preview-items-table td {
+    padding: 0.5rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th {
+    background: #f3f4f6;
+    text-align: center;
+}
+
+.preview-items-table .text-right {
+    text-align: right;
+}
+
+.preview-items-table .text-center {
+    text-align: center;
+}
+
+.preview-notes {
+    margin-top: 1rem;
+    white-space: pre-wrap;
+}
+
 @media (max-width: 768px) {
     .item-grid {
         grid-template-columns: 1fr;
+    }
+
+    .preview-confirm-section,
+    .document-preview-toolbar,
+    .document-preview-actions,
+    .preview-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .preview-confirm-section .btn,
+    .document-preview-actions .btn {
+        width: 100%;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 1rem;
+    }
+
+    .preview-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        text-align: left;
     }
 }
 </style>
@@ -262,6 +519,106 @@ function updateTotals() {
     document.getElementById('subtotal-amount').textContent = `¥${subtotal.toLocaleString()}`;
     document.getElementById('tax-amount').textContent = `¥${taxAmount.toLocaleString()}`;
     document.getElementById('total-amount').textContent = `¥${total.toLocaleString()}`;
+    return { subtotal, taxAmount, total };
+}
+
+function adminKaitoriFormatYen(value) {
+    return `¥${Number(value || 0).toLocaleString('ja-JP')}`;
+}
+
+function adminKaitoriEscapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[char];
+    });
+}
+
+function adminKaitoriSetText(id, value, fallback = '-') {
+    const target = document.getElementById(id);
+    if (target) {
+        target.textContent = value || fallback;
+    }
+}
+
+function collectAdminKaitoriPreviewItems() {
+    return Array.from(document.querySelectorAll('.item-row')).map((row, index) => {
+        const productName = row.querySelector('input[name="product_name[]"]')?.value?.trim() || '';
+        const brandName = row.querySelector('input[name="brand_name[]"]')?.value?.trim() || '';
+        const condition = row.querySelector('input[name="condition[]"]')?.value?.trim() || '';
+        const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+        const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+        return {
+            no: index + 1,
+            productName,
+            brandName,
+            condition,
+            quantity,
+            unitPrice,
+            amount: quantity * unitPrice
+        };
+    }).filter(item => item.productName || item.amount > 0);
+}
+
+function renderAdminKaitoriPreview() {
+    const totals = updateTotals();
+    adminKaitoriSetText('admin-preview-company-name', document.getElementById('company_name')?.value?.trim(), '業者名未入力');
+    adminKaitoriSetText('admin-preview-company-address', document.getElementById('company_address')?.value?.trim());
+    adminKaitoriSetText('admin-preview-company-phone', document.getElementById('company_phone')?.value?.trim());
+    adminKaitoriSetText('admin-preview-contact-name', document.getElementById('contact_name')?.value?.trim());
+    adminKaitoriSetText('admin-preview-issue-date', document.getElementById('issue_date')?.value);
+    adminKaitoriSetText('admin-preview-payment-method', document.getElementById('payment_method')?.value?.trim());
+    adminKaitoriSetText('admin-preview-bank-info', document.getElementById('bank_info')?.value?.trim());
+    adminKaitoriSetText('admin-preview-notes', document.querySelector('textarea[name="notes"]')?.value?.trim());
+    adminKaitoriSetText('admin-preview-total-amount', adminKaitoriFormatYen(totals.total));
+
+    const fileInput = document.getElementById('vendor_response_file');
+    const existingFileName = {{ (kaitori.vendor_response_file_name if kaitori and kaitori.vendor_response_file_name else '')|tojson }};
+    const fileName = fileInput?.files?.length ? fileInput.files[0].name : existingFileName;
+    adminKaitoriSetText('admin-preview-file', fileName || '添付なし');
+
+    const previewBody = document.getElementById('admin-preview-items-body');
+    previewBody.innerHTML = '';
+    const items = collectAdminKaitoriPreviewItems();
+    const rows = items.length ? items : [{ no: 1, productName: '明細未入力', brandName: '-', condition: '-', quantity: '-', unitPrice: 0, amount: 0 }];
+    rows.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="text-center">${item.no}</td>
+            <td>${adminKaitoriEscapeHtml(item.productName)}</td>
+            <td>${adminKaitoriEscapeHtml(item.brandName || '-')}</td>
+            <td>${adminKaitoriEscapeHtml(item.condition || '-')}</td>
+            <td class="text-right">${adminKaitoriEscapeHtml(item.quantity)}</td>
+            <td class="text-right">${adminKaitoriFormatYen(item.unitPrice)}</td>
+            <td class="text-right">${adminKaitoriFormatYen(item.amount)}</td>
+        `;
+        previewBody.appendChild(tr);
+    });
+}
+
+function openAdminKaitoriPreview() {
+    const form = document.getElementById('admin-kaitori-shoudaku-form');
+    if (!form.reportValidity()) {
+        return;
+    }
+    renderAdminKaitoriPreview();
+    const modal = document.getElementById('admin-kaitori-preview-modal');
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeAdminKaitoriPreview() {
+    const modal = document.getElementById('admin-kaitori-preview-modal');
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function submitAdminKaitoriFromPreview() {
+    document.getElementById('admin-kaitori-shoudaku-form').submit();
 }
 
 document.addEventListener('input', (event) => {
@@ -308,6 +665,17 @@ document.addEventListener('click', (event) => {
     if (event.target.classList.contains('remove-item')) {
         event.target.closest('.item-row')?.remove();
         updateTotals();
+    }
+});
+
+document.getElementById('open-admin-kaitori-preview-btn')?.addEventListener('click', openAdminKaitoriPreview);
+document.getElementById('submit-admin-kaitori-preview-btn')?.addEventListener('click', submitAdminKaitoriFromPreview);
+document.querySelectorAll('[data-close-admin-kaitori-preview]').forEach((button) => {
+    button.addEventListener('click', closeAdminKaitoriPreview);
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('admin-kaitori-preview-modal')?.classList.contains('is-open')) {
+        closeAdminKaitoriPreview();
     }
 });
 
