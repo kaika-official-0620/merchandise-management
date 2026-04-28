@@ -150,7 +150,6 @@
 
         .col-no { width: 35px; }
         .col-qty { width: 56px; }
-        .col-unit { width: 56px; }
         .col-price,
         .col-amount { width: 90px; }
 
@@ -275,7 +274,6 @@
                     <th class="col-no">No.</th>
                     <th>商品名・内容</th>
                     <th class="col-qty">数量</th>
-                    <th class="col-unit">単位</th>
                     <th class="col-price">単価</th>
                     <th class="col-amount">金額(税込)</th>
                 </tr>
@@ -286,7 +284,6 @@
                     <td class="text-center">{{ i + 1 }}</td>
                     <td>{% if items and i < items|length %}{{ items[i].item_name or '' }}{% endif %}</td>
                     <td class="text-center">{% if items and i < items|length %}{{ items[i].quantity or '' }}{% endif %}</td>
-                    <td class="text-center">{% if items and i < items|length %}{{ items[i].unit or '' }}{% endif %}</td>
                     <td class="text-right">{% if items and i < items|length and items[i].unit_price %}¥{{ "{:,}".format(items[i].unit_price|int) }}{% endif %}</td>
                     <td class="text-right">{% if items and i < items|length and items[i].amount %}¥{{ "{:,}".format(items[i].amount|int) }}{% endif %}</td>
                 </tr>

@@ -212,7 +212,7 @@
                 <tr>
                     <td class="text-center">{{ item.item_no or loop.index }}</td>
                     <td>{{ item.item_name }}</td>
-                    <td class="text-center">{{ item.quantity or 1 }}{{ item.unit or '点' }}</td>
+                    <td class="text-center">{{ item.quantity or 1 }}</td>
                     <td class="text-right">¥{{ "{:,}".format(item.amount or 0) }}</td>
                 </tr>
                 {% endfor %}

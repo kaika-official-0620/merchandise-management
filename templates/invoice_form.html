@@ -7,7 +7,7 @@
     <a href="{{ url_for('user_invoice_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
-<form method="POST" class="invoice-form">
+<form method="POST" class="invoice-form" id="invoice-form">
     <div class="form-section">
         <h3>基本情報</h3>
         <div class="form-grid">
@@ -67,10 +67,9 @@
                     <tr>
                         <th width="8%">税区分</th>
                         <th width="11%">仕入れ日</th>
-                        <th width="24%">商品名／品名 *</th>
+                        <th width="30%">商品名／品名 *</th>
                         <th width="12%">商品番号</th>
                         <th width="6%">数量</th>
-                        <th width="8%">単位</th>
                         <th width="12%">単価</th>
                         <th width="12%">金額</th>
                         <th width="5%"></th>
@@ -89,8 +88,10 @@
                             <td><input type="date" name="product_date[]" value="{{ item.product_date }}" class="form-control"></td>
                             <td><input type="text" name="product_name[]" value="{{ item.product_name }}" class="form-control item-name" required></td>
                             <td><input type="text" name="product_code[]" value="{{ item.product_code or '' }}" class="form-control" placeholder="ABC-123"></td>
-                            <td><input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control item-qty" min="1"></td>
-                            <td><input type="text" name="unit[]" value="{{ item.unit }}" class="form-control" placeholder="個"></td>
+                            <td>
+                                <input type="number" name="quantity[]" value="{{ item.quantity }}" class="form-control item-qty" min="1">
+                                <input type="hidden" name="unit[]" value="{{ item.unit or '点' }}">
+                            </td>
                             <td><input type="number" name="unit_price[]" value="{{ item.unit_price }}" class="form-control item-price" min="0"></td>
                             <td class="item-amount">¥{{ "{:,}".format(item.amount) }}</td>
                             <td>
@@ -111,8 +112,10 @@
                             <td><input type="date" name="product_date[]" class="form-control"></td>
                             <td><input type="text" name="product_name[]" class="form-control item-name"></td>
                             <td><input type="text" name="product_code[]" class="form-control" placeholder="ABC-123"></td>
-                            <td><input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1"></td>
-                            <td><input type="text" name="unit[]" class="form-control" placeholder="個"></td>
+                            <td>
+                                <input type="number" name="quantity[]" value="1" class="form-control item-qty" min="1">
+                                <input type="hidden" name="unit[]" value="点">
+                            </td>
                             <td><input type="number" name="unit_price[]" class="form-control item-price" min="0"></td>
                             <td class="item-amount">¥0</td>
                             <td>
@@ -180,11 +183,90 @@
         </div>
     </div>
 
+    <div class="form-section preview-confirm-section">
+        <div>
+            <h3>書類プレビュー確認</h3>
+            <p class="help-text">基本情報・宛名・明細・手数料を確認してから送信できます。</p>
+        </div>
+        <button type="button" class="btn btn-info" id="open-invoice-preview-btn">プレビューを確認する</button>
+    </div>
+
     <div class="form-actions">
         <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
-        <button type="submit" name="status" value="sent" class="btn btn-primary">保存して送信</button>
     </div>
 </form>
+
+<div class="document-preview-modal" id="invoice-preview-modal" aria-hidden="true">
+    <div class="document-preview-backdrop" data-close-invoice-preview></div>
+    <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="invoice-preview-title">
+        <div class="document-preview-toolbar">
+            <div>
+                <h3 id="invoice-preview-title">買取明細書プレビュー</h3>
+                <p>内容に問題がなければ、この画面から送信を確定してください。</p>
+            </div>
+            <button type="button" class="btn btn-secondary" data-close-invoice-preview>閉じる</button>
+        </div>
+        <div class="preview-sheet invoice-preview-sheet">
+            <div class="preview-title">買取明細書</div>
+            <div class="preview-header">
+                <div>
+                    <div class="preview-recipient" id="invoice-preview-recipient">-</div>
+                    <span class="preview-suffix">御中</span>
+                    <p class="preview-muted">下記の通り、買取明細をお知らせいたします。</p>
+                </div>
+                <div class="preview-meta">
+                    <div>書類番号: <strong id="invoice-preview-no">-</strong></div>
+                    <div>発行日: <strong id="invoice-preview-issue-date">-</strong></div>
+                    <div>支払期限: <strong id="invoice-preview-due-date">-</strong></div>
+                    <div>サービス: <strong id="invoice-preview-service">-</strong></div>
+                </div>
+            </div>
+            <div class="preview-amount-row">
+                <div class="preview-amount-box">
+                    <span>請求金額</span>
+                    <strong id="invoice-preview-total">¥0</strong>
+                </div>
+                <div class="preview-sender-box">
+                    <strong>株式会社 開花</strong>
+                    <span>買取・販売代行管理</span>
+                </div>
+            </div>
+            <table class="preview-items-table">
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>税区分</th>
+                        <th>仕入れ日</th>
+                        <th>商品名・品番</th>
+                        <th>数量</th>
+                        <th>単価</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="invoice-preview-items"></tbody>
+            </table>
+            <div class="preview-footer">
+                <div class="preview-note-block">
+                    <strong>振込先</strong>
+                    <div id="invoice-preview-bank">-</div>
+                    <strong>備考</strong>
+                    <div id="invoice-preview-notes">-</div>
+                </div>
+                <table class="preview-summary-table">
+                    <tr><th>小計</th><td id="invoice-preview-subtotal">¥0</td></tr>
+                    <tr><th>消費税(8%)</th><td id="invoice-preview-tax8">¥0</td></tr>
+                    <tr><th>消費税(10%)</th><td id="invoice-preview-tax10">¥0</td></tr>
+                    <tr><th>手数料</th><td id="invoice-preview-commission">¥0</td></tr>
+                    <tr class="preview-summary-total"><th>請求金額</th><td id="invoice-preview-total-summary">¥0</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="document-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close-invoice-preview>修正する</button>
+            <button type="button" class="btn btn-primary" id="send-invoice-from-preview-btn">この内容で送信する</button>
+        </div>
+    </div>
+</div>
 
 <style>
 .invoice-form {
@@ -211,6 +293,203 @@
     color: #666;
     font-size: 13px;
     margin-bottom: 15px;
+}
+
+.preview-confirm-section,
+.document-preview-toolbar,
+.document-preview-actions,
+.preview-header,
+.preview-amount-row,
+.preview-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.preview-confirm-section {
+    align-items: center;
+}
+
+.document-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+}
+
+.document-preview-modal.is-open {
+    display: block;
+}
+
+.document-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.document-preview-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1120px, calc(100% - 24px));
+    max-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: auto;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+}
+
+.document-preview-toolbar,
+.document-preview-actions {
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.document-preview-toolbar h3,
+.document-preview-toolbar p {
+    margin: 0;
+}
+
+.document-preview-toolbar p {
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+.document-preview-actions {
+    justify-content: flex-end;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 0;
+}
+
+.preview-sheet {
+    width: min(920px, calc(100% - 32px));
+    margin: 1.25rem auto;
+    padding: 2rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.preview-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.5rem;
+}
+
+.preview-recipient {
+    display: inline-block;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #111827;
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.preview-suffix {
+    margin-left: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.preview-muted,
+.preview-note-block {
+    color: #4b5563;
+}
+
+.preview-meta {
+    min-width: 240px;
+    text-align: right;
+    line-height: 1.8;
+}
+
+.preview-amount-row {
+    align-items: stretch;
+    margin: 1.2rem 0;
+}
+
+.preview-amount-box,
+.preview-sender-box {
+    flex: 1;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+}
+
+.preview-amount-box {
+    place-items: center;
+    border: 2px solid #111827;
+}
+
+.preview-amount-box strong {
+    color: #1d4ed8;
+    font-size: 1.45rem;
+}
+
+.preview-sender-box {
+    text-align: right;
+}
+
+.preview-items-table,
+.preview-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.preview-items-table {
+    font-size: 0.8rem;
+}
+
+.preview-items-table th,
+.preview-items-table td,
+.preview-summary-table th,
+.preview-summary-table td {
+    padding: 0.48rem 0.55rem;
+    border: 1px solid #111827;
+}
+
+.preview-items-table th,
+.preview-summary-table th {
+    background: #f3f4f6;
+}
+
+.preview-items-table th,
+.preview-items-table .text-center {
+    text-align: center;
+}
+
+.preview-items-table .text-right,
+.preview-summary-table td {
+    text-align: right;
+}
+
+.preview-footer {
+    align-items: flex-start;
+    margin-top: 1rem;
+}
+
+.preview-note-block {
+    flex: 1;
+    white-space: pre-wrap;
+}
+
+.preview-note-block strong {
+    display: block;
+    margin-top: 0.5rem;
+    color: #111827;
+}
+
+.preview-summary-table {
+    width: 320px;
+}
+
+.preview-summary-total th,
+.preview-summary-total td {
+    font-weight: 900;
 }
 
 .form-grid {
@@ -479,6 +758,35 @@
         padding: 10px 16px;
         font-size: 0.85rem;
     }
+
+    .preview-confirm-section,
+    .document-preview-toolbar,
+    .document-preview-actions,
+    .preview-header,
+    .preview-amount-row,
+    .preview-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .preview-confirm-section .btn,
+    .document-preview-actions .btn {
+        width: 100%;
+    }
+
+    .preview-sheet {
+        width: calc(100% - 16px);
+        padding: 18px;
+    }
+
+    .preview-meta,
+    .preview-sender-box {
+        text-align: left;
+    }
+
+    .preview-summary-table {
+        width: 100%;
+    }
     
     .btn-sm {
         padding: 3px 5px;
@@ -501,6 +809,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const soldDaysFilter = document.getElementById('sold-days-filter');
     const addProductBtn = document.getElementById('add-product-btn');
     const serviceTypeSelect = document.getElementById('service_type');
+    const form = document.getElementById('invoice-form');
+    const previewModal = document.getElementById('invoice-preview-modal');
+    const openPreviewBtn = document.getElementById('open-invoice-preview-btn');
+    const sendFromPreviewBtn = document.getElementById('send-invoice-from-preview-btn');
     
     let products = [];
     
@@ -632,8 +944,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <td><input type="date" name="product_date[]" value="${date}" class="form-control"></td>
             <td><input type="text" name="product_name[]" value="${name}" class="form-control item-name"></td>
             <td><input type="text" name="product_code[]" value="${code}" class="form-control" placeholder="ABC-123"></td>
-            <td><input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1"></td>
-            <td><input type="text" name="unit[]" value="${unit}" class="form-control" placeholder="個"></td>
+            <td>
+                <input type="number" name="quantity[]" value="${qty}" class="form-control item-qty" min="1">
+                <input type="hidden" name="unit[]" value="${unit || '点'}">
+            </td>
             <td><input type="number" name="unit_price[]" value="${price}" class="form-control item-price" min="0"></td>
             <td class="item-amount">¥${(qty * price).toLocaleString()}</td>
             <td>
@@ -725,10 +1039,137 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('commission-rate-input').value = rate;
         document.getElementById('total-amount').textContent = '¥' + totalAmount.toLocaleString();
     }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, function(char) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[char];
+        });
+    }
+
+    function setPreviewText(id, value, fallback = '-') {
+        const target = document.getElementById(id);
+        if (target) {
+            target.textContent = value || fallback;
+        }
+    }
+
+    function collectInvoicePreviewData() {
+        calculateTotals();
+        const serviceOption = serviceTypeSelect.options[serviceTypeSelect.selectedIndex];
+        const rows = Array.from(itemsBody.querySelectorAll('.item-row')).map((row, index) => {
+            const name = row.querySelector('input[name="product_name[]"]')?.value?.trim() || '';
+            const code = row.querySelector('input[name="product_code[]"]')?.value?.trim() || '';
+            const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
+            const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
+            const tax = row.querySelector('select[name="tax_category[]"]')?.value || '10';
+            const date = row.querySelector('input[name="product_date[]"]')?.value || '-';
+            return {
+                no: index + 1,
+                tax,
+                date,
+                name,
+                code,
+                quantity,
+                unitPrice,
+                amount: quantity * unitPrice
+            };
+        }).filter((item) => item.name || item.amount > 0);
+
+        return {
+            documentNo: document.querySelector('.invoice-form input[readonly]')?.value || '-',
+            recipient: document.getElementById('recipient_name')?.value?.trim() || 'お客様',
+            service: serviceOption ? serviceOption.textContent.trim() : '-',
+            issueDate: document.getElementById('issue_date')?.value || '-',
+            dueDate: document.getElementById('payment_due_date')?.value || '-',
+            bankInfo: document.querySelector('textarea[name="bank_info"]')?.value?.trim() || '-',
+            notes: document.querySelector('textarea[name="notes"]')?.value?.trim() || '-',
+            subtotal: document.getElementById('subtotal')?.textContent || '¥0',
+            tax8: document.getElementById('tax-8')?.textContent || '¥0',
+            tax10: document.getElementById('tax-10')?.textContent || '¥0',
+            commission: document.getElementById('commission-amount')?.textContent || '¥0',
+            total: document.getElementById('total-amount')?.textContent || '¥0',
+            items: rows
+        };
+    }
+
+    function renderInvoicePreview() {
+        const data = collectInvoicePreviewData();
+        setPreviewText('invoice-preview-recipient', data.recipient);
+        setPreviewText('invoice-preview-no', data.documentNo);
+        setPreviewText('invoice-preview-issue-date', data.issueDate);
+        setPreviewText('invoice-preview-due-date', data.dueDate);
+        setPreviewText('invoice-preview-service', data.service);
+        setPreviewText('invoice-preview-total', data.total);
+        setPreviewText('invoice-preview-total-summary', data.total);
+        setPreviewText('invoice-preview-subtotal', data.subtotal);
+        setPreviewText('invoice-preview-tax8', data.tax8);
+        setPreviewText('invoice-preview-tax10', data.tax10);
+        setPreviewText('invoice-preview-commission', data.commission);
+        setPreviewText('invoice-preview-bank', data.bankInfo);
+        setPreviewText('invoice-preview-notes', data.notes);
+
+        const previewItems = document.getElementById('invoice-preview-items');
+        previewItems.innerHTML = '';
+        const rows = data.items.length ? data.items : [{ no: 1, tax: '-', date: '-', name: '明細未入力', code: '', quantity: '-', unitPrice: 0, amount: 0 }];
+        rows.forEach((item) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-center">${item.no}</td>
+                <td class="text-center">${escapeHtml(item.tax)}%</td>
+                <td>${escapeHtml(item.date)}</td>
+                <td>${escapeHtml(item.name)}${item.code ? `<br><span class="preview-muted">${escapeHtml(item.code)}</span>` : ''}</td>
+                <td class="text-right">${escapeHtml(item.quantity)}</td>
+                <td class="text-right">¥${Number(item.unitPrice || 0).toLocaleString('ja-JP')}</td>
+                <td class="text-right">¥${Number(item.amount || 0).toLocaleString('ja-JP')}</td>
+            `;
+            previewItems.appendChild(row);
+        });
+    }
+
+    function openInvoicePreview() {
+        if (!form.reportValidity()) {
+            return;
+        }
+        renderInvoicePreview();
+        previewModal.classList.add('is-open');
+        previewModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeInvoicePreview() {
+        previewModal.classList.remove('is-open');
+        previewModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function submitInvoiceFromPreview() {
+        form.querySelectorAll('input[name="status"][type="hidden"]').forEach((input) => input.remove());
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = 'sent';
+        form.appendChild(statusInput);
+        form.submit();
+    }
     
     // 既存の行にイベントを付与
     document.querySelectorAll('.item-row').forEach(row => {
         attachRowEvents(row);
+    });
+
+    openPreviewBtn.addEventListener('click', openInvoicePreview);
+    sendFromPreviewBtn.addEventListener('click', submitInvoiceFromPreview);
+    previewModal.querySelectorAll('[data-close-invoice-preview]').forEach((button) => {
+        button.addEventListener('click', closeInvoicePreview);
+    });
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && previewModal.classList.contains('is-open')) {
+            closeInvoicePreview();
+        }
     });
     
     // 初期計算

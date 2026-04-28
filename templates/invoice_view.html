@@ -59,9 +59,8 @@
             <tr>
                 <th width="8%">税区分</th>
                 <th width="12%">日付</th>
-                <th width="32%">品名・品番</th>
+                <th width="40%">品名・品番</th>
                 <th width="10%">数量</th>
-                <th width="8%">単位</th>
                 <th width="15%">単価</th>
                 <th width="15%">合計</th>
             </tr>
@@ -73,7 +72,6 @@
                 <td>{{ item.product_date or '-' }}</td>
                 <td>{{ item.product_name }}</td>
                 <td class="text-right">{{ item.quantity }}</td>
-                <td class="text-center">{{ item.unit or '-' }}</td>
                 <td class="text-right">¥{{ "{:,}".format(item.unit_price) }}</td>
                 <td class="text-right">¥{{ "{:,}".format(item.amount) }}</td>
             </tr>
@@ -86,13 +84,12 @@
                 <td></td>
                 <td></td>
                 <td></td>
-                <td></td>
             </tr>
             {% endfor %}
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="4" rowspan="4" class="footer-notes">
+                <td colspan="3" rowspan="4" class="footer-notes">
                     {% if invoice.notes %}
                     <strong>備考：</strong><br>
                     {{ invoice.notes|replace('\n', '<br>')|safe }}

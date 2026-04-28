@@ -105,7 +105,6 @@
                                 <th>日付</th>
                                 <th>品名・品番</th>
                                 <th>数量</th>
-                                <th>単位</th>
                                 <th>単価</th>
                                 <th>金額</th>
                             </tr>
@@ -119,35 +118,34 @@
                                 <td>{{ item.product_date or item.purchase_date or '-' }}</td>
                                 <td>{{ item.product_name or '-' }}</td>
                                 <td class="text-right">{{ item.quantity or 1 }}</td>
-                                <td>{{ item.unit or '点' }}</td>
                                 <td class="text-right">¥{{ "{:,}".format(row_unit_price) }}</td>
                                 <td class="text-right">¥{{ "{:,}".format(row_amount) }}</td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="7" class="admin-doc-empty">明細はまだ登録されていません。</td>
+                                <td colspan="6" class="admin-doc-empty">明細はまだ登録されていません。</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="6" class="text-right">小計</td>
+                                <td colspan="5" class="text-right">小計</td>
                                 <td class="text-right">¥{{ "{:,}".format(subtotal) }}</td>
                             </tr>
                             {% if tax_amount_8 %}
                             <tr>
-                                <td colspan="6" class="text-right">消費税(8%)</td>
+                                <td colspan="5" class="text-right">消費税(8%)</td>
                                 <td class="text-right">¥{{ "{:,}".format(tax_amount_8) }}</td>
                             </tr>
                             {% endif %}
                             {% if tax_amount_10 %}
                             <tr>
-                                <td colspan="6" class="text-right">消費税(10%)</td>
+                                <td colspan="5" class="text-right">消費税(10%)</td>
                                 <td class="text-right">¥{{ "{:,}".format(tax_amount_10) }}</td>
                             </tr>
                             {% endif %}
                             <tr class="total-row">
-                                <td colspan="6" class="text-right">合計</td>
+                                <td colspan="5" class="text-right">合計</td>
                                 <td class="text-right">¥{{ "{:,}".format(total_amount) }}</td>
                             </tr>
                         </tfoot>

@@ -96,7 +96,6 @@
                             <th class="col-no">No.</th>
                             <th>商品名・内容 <span class="required">*</span></th>
                             <th class="col-qty">数量</th>
-                            <th class="col-unit">単位</th>
                             <th class="col-price">単価</th>
                             <th class="col-amount">金額</th>
                             <th class="col-action"></th>
@@ -110,9 +109,9 @@
                                 <td>
                                     <input type="text" name="item_name[]" value="{{ item.item_name }}" class="form-control" required>
                                     <input type="hidden" name="merchandise_id[]" value="{{ item.merchandise_id or '' }}">
+                                    <input type="hidden" name="unit[]" value="{{ item.unit or '点' }}">
                                 </td>
                                 <td><input type="number" name="quantity[]" value="{{ item.quantity or 1 }}" class="form-control calc-input" min="1"></td>
-                                <td><input type="text" name="unit[]" value="{{ item.unit or '点' }}" class="form-control" placeholder="点"></td>
                                 <td><input type="number" name="unit_price[]" value="{{ item.unit_price or 0 }}" class="form-control calc-input" min="0" step="1"></td>
                                 <td class="row-amount">¥0</td>
                                 <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
@@ -125,9 +124,9 @@
                                 <td>
                                     <input type="text" name="item_name[]" class="form-control">
                                     <input type="hidden" name="merchandise_id[]" value="">
+                                    <input type="hidden" name="unit[]" value="点">
                                 </td>
                                 <td><input type="number" name="quantity[]" value="1" class="form-control calc-input" min="1"></td>
-                                <td><input type="text" name="unit[]" value="点" class="form-control" placeholder="点"></td>
                                 <td><input type="number" name="unit_price[]" value="0" class="form-control calc-input" min="0" step="1"></td>
                                 <td class="row-amount">¥0</td>
                                 <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
@@ -137,12 +136,12 @@
                     </tbody>
                     <tfoot>
                         <tr>
-                            <td colspan="7">
+                            <td colspan="6">
                                 <button type="button" class="btn btn-secondary" id="add-row">+ 行を追加</button>
                             </td>
                         </tr>
                         <tr class="totals-row">
-                            <td colspan="4"></td>
+                            <td colspan="3"></td>
                             <td class="text-right"><strong>合計金額</strong></td>
                             <td id="total-amount">¥0</td>
                             <td></td>
@@ -219,7 +218,6 @@
                             <th>No.</th>
                             <th>商品名・内容</th>
                             <th>数量</th>
-                            <th>単位</th>
                             <th>単価</th>
                             <th>金額(税込)</th>
                         </tr>
@@ -419,8 +417,7 @@
     width: 56px;
 }
 
-.col-qty,
-.col-unit {
+.col-qty {
     width: 105px;
 }
 
@@ -854,9 +851,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <td>
                 <input type="text" name="item_name[]" class="form-control">
                 <input type="hidden" name="merchandise_id[]" value="">
+                <input type="hidden" name="unit[]" value="点">
             </td>
             <td><input type="number" name="quantity[]" class="form-control calc-input" min="1" value="1"></td>
-            <td><input type="text" name="unit[]" class="form-control" placeholder="点" value="点"></td>
             <td><input type="number" name="unit_price[]" class="form-control calc-input" min="0" step="1" value="0"></td>
             <td class="row-amount">¥0</td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">削除</button></td>
@@ -938,12 +935,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const quantity = Number(row.querySelector('input[name="quantity[]"]')?.value || 0);
-            const unit = row.querySelector('input[name="unit[]"]')?.value.trim() || '点';
             const unitPrice = Number(row.querySelector('input[name="unit_price[]"]')?.value || 0);
             rows.push({
                 itemName,
                 quantity: quantity || 1,
-                unit,
                 unitPrice,
                 amount: (quantity || 1) * unitPrice
             });
@@ -989,13 +984,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const item = data.rows[index];
             const row = document.createElement('tr');
             const values = item
-                ? [index + 1, item.itemName, item.quantity, item.unit, formatYen(item.unitPrice), formatYen(item.amount)]
-                : [index + 1, '', '', '', '', ''];
+                ? [index + 1, item.itemName, item.quantity, formatYen(item.unitPrice), formatYen(item.amount)]
+                : [index + 1, '', '', '', ''];
             values.forEach((value, valueIndex) => {
                 const cell = document.createElement('td');
                 cell.textContent = value;
-                if ([0, 2, 3, 4, 5].includes(valueIndex)) {
-                    cell.classList.add(valueIndex >= 4 ? 'text-right' : 'text-center');
+                if ([0, 2, 3, 4].includes(valueIndex)) {
+                    cell.classList.add(valueIndex >= 3 ? 'text-right' : 'text-center');
                 }
                 row.appendChild(cell);
             });
