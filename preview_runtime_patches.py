@@ -87,6 +87,22 @@ def apply(module: Any) -> None:
     resolve_internal_back_url = getattr(module, "resolve_internal_back_url", None)
     derive_appraisal_status = getattr(module, "derive_appraisal_status", lambda status: "completed" if status == "sold" else ("waiting" if status == "listed" else "none"))
     db_boolean_param = getattr(module, "db_boolean_param", None)
+    ensure_user_profile_columns = getattr(module, "ensure_user_profile_columns", lambda: None)
+    get_inventory_summary_period_options = getattr(
+        module,
+        "get_inventory_summary_period_options",
+        lambda: [
+            {"key": "all", "label": "全期間"},
+            {"key": "current_month", "label": "今月"},
+            {"key": "previous_month", "label": "先月"},
+            {"key": "last_3_months", "label": "直近3か月"},
+        ],
+    )
+    normalize_inventory_summary_period = getattr(module, "normalize_inventory_summary_period", lambda value: (value or "all"))
+    get_monthly_plan_options = getattr(module, "get_monthly_plan_options", lambda: [])
+    normalize_monthly_plan_key = getattr(module, "normalize_monthly_plan_key", lambda value: (value or "").strip())
+    get_monthly_plan_label = getattr(module, "get_monthly_plan_label", lambda value: "")
+    resolve_plan_effective_month = getattr(module, "resolve_plan_effective_month", lambda value: "")
 
     if not callable(db_boolean_param):
         def db_boolean_param(value):
@@ -160,6 +176,13 @@ def apply(module: Any) -> None:
 
     def rows_to_dicts(rows):
         return [dict(row) for row in rows]
+
+    def client_form_context(user=None):
+        return {
+            "user": user,
+            "plan_options": get_monthly_plan_options(),
+            "summary_period_options": get_inventory_summary_period_options(),
+        }
 
     def as_timestamp_text(value):
         if not value:
@@ -699,18 +722,30 @@ def apply(module: Any) -> None:
             )
             users = rows_to_dicts(cur.fetchall())
             for user in users:
-                cur.execute(
-                    f"""
-                    SELECT COUNT(*) AS count
-                    FROM merchandise
-                    WHERE user_id = {placeholder}
-                      AND strftime('%Y-%m', COALESCE(purchase_date, date('now'))) = strftime('%Y-%m', 'now')
-                    """,
-                    (user["id"],),
-                )
+                if DATABASE_URL:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*) AS count
+                        FROM merchandise
+                        WHERE user_id = {placeholder}
+                          AND DATE_TRUNC('month', COALESCE(purchase_date::date, CURRENT_DATE)) = DATE_TRUNC('month', CURRENT_DATE)
+                        """,
+                        (user["id"],),
+                    )
+                else:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*) AS count
+                        FROM merchandise
+                        WHERE user_id = {placeholder}
+                          AND strftime('%Y-%m', COALESCE(purchase_date, date('now'))) = strftime('%Y-%m', 'now')
+                        """,
+                        (user["id"],),
+                    )
                 count_row = cur.fetchone()
                 user["monthly_item_count"] = dict(count_row).get("count", 0) if count_row else 0
                 user["monthly_fee"] = get_monthly_fee(user["monthly_item_count"])
+                user["requested_plan_label"] = get_monthly_plan_label(user.get("requested_monthly_plan"))
 
                 cur.execute(
                     f"""
@@ -764,6 +799,7 @@ def apply(module: Any) -> None:
         denied = ensure_permission("users")
         if denied:
             return denied
+        ensure_user_profile_columns()
         search_query = request.args.get("search", "").strip()
         return render_template("admin/clients.html", users=fetch_client_rows(search_query), search_query=search_query)
 
@@ -771,21 +807,29 @@ def apply(module: Any) -> None:
         denied = ensure_permission("users")
         if denied:
             return denied
+        ensure_user_profile_columns()
 
         if request.method == "POST":
             username = (request.form.get("username") or "").strip()
             email = (request.form.get("email") or "").strip()
             password = request.form.get("password") or ""
             display_name = (request.form.get("display_name") or "").strip()
+            phone = (request.form.get("phone") or "").strip()
+            postal_code = (request.form.get("postal_code") or "").strip()
+            address = (request.form.get("address") or "").strip()
+            inventory_summary_period_default = normalize_inventory_summary_period(request.form.get("inventory_summary_period_default"))
+            requested_monthly_plan = normalize_monthly_plan_key(request.form.get("requested_monthly_plan"))
+            plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
+            plan_change_requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if requested_monthly_plan else None
             proxy_service_budget = request.form.get("proxy_service_budget", "0").strip()
             tuition_exempt = 1 if request.form.get("tuition_exempt") == "1" else 0
 
             if not username or not email or not password:
                 flash("ユーザー名、メール、パスワードは必須です。", "error")
-                return render_template("admin/client_form.html", user=None)
+                return render_template("admin/client_form.html", **client_form_context(None))
             if len(password) < 6:
                 flash("パスワードは6文字以上で設定してください。", "error")
-                return render_template("admin/client_form.html", user=None)
+                return render_template("admin/client_form.html", **client_form_context(None))
 
             try:
                 budget_value = int(proxy_service_budget or 0)
@@ -798,8 +842,15 @@ def apply(module: Any) -> None:
                 cur.execute(
                     f"""
                     INSERT INTO users
-                    (username, email, password_hash, role, display_name, proxy_service_budget, tuition_exempt)
-                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                    (
+                        username, email, password_hash, role, display_name, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_change_effective_month,
+                        plan_change_requested_at, proxy_service_budget, tuition_exempt
+                    )
+                    VALUES (
+                        {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder},
+                        {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
+                    )
                     """,
                     (
                         username,
@@ -807,6 +858,13 @@ def apply(module: Any) -> None:
                         generate_password_hash(password),
                         "user",
                         display_name or username,
+                        phone,
+                        postal_code,
+                        address,
+                        inventory_summary_period_default,
+                        requested_monthly_plan,
+                        plan_effective_month,
+                        plan_change_requested_at,
                         budget_value,
                         tuition_exempt,
                     ),
@@ -821,12 +879,14 @@ def apply(module: Any) -> None:
                 cur.close()
                 conn.close()
 
-        return render_template("admin/client_form.html", user=None)
+        ensure_user_profile_columns()
+        return render_template("admin/client_form.html", **client_form_context(None))
 
     def admin_edit_client_view(id):
         denied = ensure_permission("users")
         if denied:
             return denied
+        ensure_user_profile_columns()
 
         user = fetch_management_user(id)
         if not user or user.get("role") != "user":
@@ -836,6 +896,13 @@ def apply(module: Any) -> None:
         if request.method == "POST":
             display_name = (request.form.get("display_name") or "").strip()
             email = (request.form.get("email") or "").strip()
+            phone = (request.form.get("phone") or "").strip()
+            postal_code = (request.form.get("postal_code") or "").strip()
+            address = (request.form.get("address") or "").strip()
+            inventory_summary_period_default = normalize_inventory_summary_period(request.form.get("inventory_summary_period_default"))
+            requested_monthly_plan = normalize_monthly_plan_key(request.form.get("requested_monthly_plan"))
+            plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
+            plan_change_requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if requested_monthly_plan else None
             new_password = request.form.get("new_password") or ""
             proxy_service_budget = request.form.get("proxy_service_budget", "0").strip()
             tuition_exempt = 1 if request.form.get("tuition_exempt") == "1" else 0
@@ -850,12 +917,19 @@ def apply(module: Any) -> None:
                 if new_password:
                     if len(new_password) < 6:
                         flash("パスワードは6文字以上で設定してください。", "error")
-                        return render_template("admin/client_form.html", user=user)
+                        return render_template("admin/client_form.html", **client_form_context(user))
                     cur.execute(
                         f"""
                         UPDATE users
                         SET display_name = {placeholder},
                             email = {placeholder},
+                            phone = {placeholder},
+                            postal_code = {placeholder},
+                            address = {placeholder},
+                            inventory_summary_period_default = {placeholder},
+                            requested_monthly_plan = {placeholder},
+                            plan_change_effective_month = {placeholder},
+                            plan_change_requested_at = {placeholder},
                             password_hash = {placeholder},
                             proxy_service_budget = {placeholder},
                             tuition_exempt = {placeholder},
@@ -865,6 +939,13 @@ def apply(module: Any) -> None:
                         (
                             display_name or user.get("username"),
                             email,
+                            phone,
+                            postal_code,
+                            address,
+                            inventory_summary_period_default,
+                            requested_monthly_plan,
+                            plan_effective_month,
+                            plan_change_requested_at,
                             generate_password_hash(new_password),
                             budget_value,
                             tuition_exempt,
@@ -877,6 +958,13 @@ def apply(module: Any) -> None:
                         UPDATE users
                         SET display_name = {placeholder},
                             email = {placeholder},
+                            phone = {placeholder},
+                            postal_code = {placeholder},
+                            address = {placeholder},
+                            inventory_summary_period_default = {placeholder},
+                            requested_monthly_plan = {placeholder},
+                            plan_change_effective_month = {placeholder},
+                            plan_change_requested_at = {placeholder},
                             proxy_service_budget = {placeholder},
                             tuition_exempt = {placeholder},
                             role = 'user'
@@ -885,6 +973,13 @@ def apply(module: Any) -> None:
                         (
                             display_name or user.get("username"),
                             email,
+                            phone,
+                            postal_code,
+                            address,
+                            inventory_summary_period_default,
+                            requested_monthly_plan,
+                            plan_effective_month,
+                            plan_change_requested_at,
                             budget_value,
                             tuition_exempt,
                             id,
@@ -900,7 +995,7 @@ def apply(module: Any) -> None:
                 cur.close()
                 conn.close()
 
-        return render_template("admin/client_form.html", user=user)
+        return render_template("admin/client_form.html", **client_form_context(user))
 
     def admin_delete_client_view(id):
         denied = ensure_permission("users")

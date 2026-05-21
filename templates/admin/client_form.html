@@ -51,6 +51,38 @@
         </div>
 
         <div class="form-section">
+            <h2>表示・月額プラン設定</h2>
+
+            <div class="form-group">
+                <label for="inventory_summary_period_default">商品一覧の初期集計期間</label>
+                <select id="inventory_summary_period_default" name="inventory_summary_period_default">
+                    {% for option in summary_period_options %}
+                    <option value="{{ option.key }}" {% if (user.inventory_summary_period_default if user else 'all') == option.key %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>ユーザー本人の商品一覧で最初に表示する集計期間です。</small>
+            </div>
+
+            <div class="form-group">
+                <label for="requested_monthly_plan">月額プラン変更希望</label>
+                <select id="requested_monthly_plan" name="requested_monthly_plan">
+                    <option value="">変更希望なし</option>
+                    {% for plan in plan_options %}
+                    <option value="{{ plan.key }}" {% if user and user.requested_monthly_plan == plan.key %}selected{% endif %}>
+                        {{ plan.label }}{% if plan.fee > 0 %}（¥{{ "{:,}".format(plan.fee) }}）{% else %}（個別相談）{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>10日までの変更は当月扱い、10日以降は翌月変更として記録します。空にすると変更希望を解除します。</small>
+                {% if user and user.requested_monthly_plan %}
+                <small>現在の反映予定: {{ user.plan_change_effective_month or '-' }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-section">
             <h2>運用設定</h2>
 
             <div class="form-group">

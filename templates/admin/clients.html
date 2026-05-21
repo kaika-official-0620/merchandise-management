@@ -50,7 +50,14 @@
                     <td>{{ user.display_name or '-' }}</td>
                     <td>{{ user.email }}</td>
                     <td class="text-center">{{ user.monthly_item_count }}点</td>
-                    <td class="text-center">¥{{ "{:,}".format(user.monthly_fee|int) }}</td>
+                    <td class="text-center">
+                        ¥{{ "{:,}".format(user.monthly_fee|int) }}
+                        {% if user.requested_plan_label %}
+                        <div class="plan-request-note">
+                            変更希望: {{ user.requested_plan_label }}{% if user.plan_change_effective_month %} / {{ user.plan_change_effective_month }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td class="text-center">¥{{ "{:,}".format(user.kaika_fee|int) }}</td>
                     <td class="text-center">¥{{ "{:,}".format(user.proxy_service_budget|int) }}</td>
                     <td class="text-center">
@@ -130,6 +137,13 @@
 .status-badge.neutral {
     color: #475569;
     background: #e2e8f0;
+}
+
+.plan-request-note {
+    margin-top: 0.35rem;
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 </style>
 {% endblock %}
