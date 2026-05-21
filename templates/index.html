@@ -16,11 +16,11 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-        padding: 0.75rem 1rem;
+        gap: 0.6rem;
+        margin-bottom: 0.6rem;
+        padding: 0.55rem 0.7rem;
         border: 1px solid #e2e8f0;
-        border-radius: 10px;
+        border-radius: 12px;
         background: #ffffff;
     }
 
@@ -31,32 +31,34 @@
 
     .stats-toolbar__title strong {
         color: #0f172a;
-        font-size: 0.95rem;
+        font-size: 0.88rem;
     }
 
     .stats-toolbar__title span {
         color: #64748b;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
     }
 
     .stats-period-tabs {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem;
+        flex-wrap: nowrap;
+        gap: 0.28rem;
         justify-content: flex-end;
+        overflow-x: auto;
+        scrollbar-width: thin;
     }
 
     .stats-period-tab {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 34px;
-        padding: 0.35rem 0.78rem;
+        min-height: 30px;
+        padding: 0.26rem 0.58rem;
         border: 1px solid #cbd5e1;
         border-radius: 999px;
         background: #ffffff;
         color: #334155;
-        font-size: 0.82rem;
+        font-size: 0.76rem;
         font-weight: 700;
         text-decoration: none;
         white-space: nowrap;
@@ -123,6 +125,20 @@
         font-weight: 700;
     }
 
+    .action-cell .btn-detail,
+    .card-actions .btn-detail {
+        min-height: 36px;
+        padding: 0.5rem 0.9rem;
+        border-radius: 9px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+
+    .action-cell .btn-detail {
+        min-width: 72px;
+    }
+
     @media (max-width: 768px) {
         .stats-summary {
             display: grid;
@@ -132,11 +148,12 @@
 
         .stats-toolbar {
             display: grid;
-            padding: 0.75rem;
+            padding: 0.55rem;
         }
 
         .stats-period-tabs {
             justify-content: flex-start;
+            padding-bottom: 0.15rem;
         }
 
         .stats-item {
@@ -2004,7 +2021,7 @@
     </div>
     <div class="stats-period-tabs" aria-label="集計期間">
         {% for option in summary_period_options %}
-        <a href="{{ url_for('index', summary_period=option.key, filter=filter_type, search=search) }}"
+        <a href="{{ url_for('index', summary_period=option.key, filter=filter_type, search=search, sort=sort_mode) }}"
            class="stats-period-tab {% if summary_period == option.key %}active{% endif %}">
             {{ option.label }}
         </a>
@@ -2089,19 +2106,20 @@
         <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
         <button class="filter-tab-btn" onclick="showFilterTab('text', event)">テキスト検索</button>
         <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('sort', event)">並び替え</button>
     </div>
 
     <!-- 期間フィルター -->
     <div class="filter-tab-content active" id="filter-period">
         <div class="filter-group">
-            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
-            <a href="{{ url_for('index', filter='today') }}"
+            <a href="{{ url_for('index', summary_period=summary_period, sort=sort_mode) }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='today', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'today' %}active{% endif %}">今日</a>
-            <a href="{{ url_for('index', filter='yesterday') }}"
+            <a href="{{ url_for('index', filter='yesterday', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'yesterday' %}active{% endif %}">昨日</a>
-            <a href="{{ url_for('index', filter='week') }}"
+            <a href="{{ url_for('index', filter='week', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'week' %}active{% endif %}">今週</a>
-            <a href="{{ url_for('index', filter='month') }}"
+            <a href="{{ url_for('index', filter='month', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'month' %}active{% endif %}">今月</a>
             <div class="filter-item">
                 <label>日付指定</label>
@@ -2113,10 +2131,10 @@
     <!-- 状態フィルター -->
     <div class="filter-tab-content" id="filter-status-tab">
         <div class="filter-group">
-            <a href="{{ url_for('index') }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
-            <a href="{{ url_for('index', filter='sold') }}"
+            <a href="{{ url_for('index', summary_period=summary_period, sort=sort_mode) }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='sold', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
-            <a href="{{ url_for('index', filter='unsold') }}"
+            <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
             <div class="filter-item">
                 <label>状態</label>
@@ -2197,6 +2215,22 @@
         </div>
     </div>
 
+    <div class="filter-tab-content" id="filter-sort">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label for="tab-sort-order">並び替え順</label>
+                <select id="tab-sort-order" onchange="applySortOrder()">
+                    {% for option in sort_options %}
+                    <option value="{{ option.key }}" {% if sort_mode == option.key %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>売却済みの商品は、通常の並び替えでは下の方にまとまるようにしています。</small>
+            </div>
+        </div>
+    </div>
+
     <!-- フッターボタン -->
     <div class="filter-panel-footer">
         <button class="filter-reset-btn" onclick="resetAllFilters()">リセット</button>
@@ -2239,7 +2273,9 @@
                     data-purchase-price="{{ item.wholesale_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
-            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-sale-date="{{ item.sale_date or '' }}"
+                    data-status-priority="{{ item.status_priority or 50 }}"
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}'
@@ -2329,7 +2365,7 @@
                         {% endif %}
                     </td>
                     <td class="action-cell">
-                        <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                        <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-detail">詳細</a>
                         {% if current_user.is_admin() %}
                         <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                         {% if is_shared_view and not item.sale_date and current_user.can_manage_proxy_service() %}
@@ -2456,6 +2492,8 @@
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
             data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+            data-sale-date="{{ item.sale_date or '' }}"
+            data-status-priority="{{ item.status_priority or 50 }}"
             data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
@@ -2559,7 +2597,7 @@
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
+                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-detail">詳細</a>
                 {% if current_user.is_admin() %}
                 <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 {% if item.can_delete %}
@@ -2680,6 +2718,7 @@
             case 'status': contentId = 'filter-status-tab'; break;
             case 'text': contentId = 'filter-text'; break;
             case 'price': contentId = 'filter-price'; break;
+            case 'sort': contentId = 'filter-sort'; break;
         }
 
         // 選択したタブを表示
@@ -2710,6 +2749,8 @@
         document.getElementById('tab-filter-sale-max').value = '';
         document.getElementById('tab-filter-profit-min').value = '';
         document.getElementById('tab-filter-profit-max').value = '';
+        const sortOrder = document.getElementById('tab-sort-order');
+        if (sortOrder) sortOrder.value = 'priority';
 
         filterTable();
         updateFilterCount();
@@ -2750,6 +2791,15 @@
         } else {
             countEl.style.display = 'none';
         }
+    }
+
+    function applySortOrder() {
+        const sortOrder = document.getElementById('tab-sort-order');
+        if (!sortOrder) return;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', sortOrder.value || 'priority');
+        window.location.href = url.toString();
     }
 
     // テーブルフィルター機能（PC・スマホ両対応）

@@ -51,19 +51,7 @@
         </div>
 
         <div class="form-section">
-            <h2>表示・月額プラン設定</h2>
-
-            <div class="form-group">
-                <label for="inventory_summary_period_default">商品一覧の初期集計期間</label>
-                <select id="inventory_summary_period_default" name="inventory_summary_period_default">
-                    {% for option in summary_period_options %}
-                    <option value="{{ option.key }}" {% if (user.inventory_summary_period_default if user else 'all') == option.key %}selected{% endif %}>
-                        {{ option.label }}
-                    </option>
-                    {% endfor %}
-                </select>
-                <small>ユーザー本人の商品一覧で最初に表示する集計期間です。</small>
-            </div>
+            <h2>月額プラン設定</h2>
 
             <div class="form-group">
                 <label for="requested_monthly_plan">月額プラン変更希望</label>

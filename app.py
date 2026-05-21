@@ -7042,7 +7042,6 @@ def profile():
         phone = (request.form.get('phone') or '').strip()
         postal_code = (request.form.get('postal_code') or '').strip()
         address = (request.form.get('address') or '').strip()
-        inventory_summary_period_default = normalize_inventory_summary_period(request.form.get('inventory_summary_period_default'))
         requested_monthly_plan = normalize_monthly_plan_key(request.form.get('requested_monthly_plan'))
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
@@ -7080,13 +7079,12 @@ def profile():
                     phone = %s,
                     postal_code = %s,
                     address = %s,
-                    inventory_summary_period_default = %s,
                     requested_monthly_plan = %s,
                     plan_change_effective_month = %s,
                     plan_change_requested_at = CASE WHEN %s <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = %s
             """, (
-                display_name, email, phone, postal_code, address, inventory_summary_period_default,
+                display_name, email, phone, postal_code, address,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
         else:
@@ -7097,13 +7095,12 @@ def profile():
                     phone = ?,
                     postal_code = ?,
                     address = ?,
-                    inventory_summary_period_default = ?,
                     requested_monthly_plan = ?,
                     plan_change_effective_month = ?,
                     plan_change_requested_at = CASE WHEN ? <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = ?
             """, (
-                display_name, email, phone, postal_code, address, inventory_summary_period_default,
+                display_name, email, phone, postal_code, address,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
         
@@ -7207,15 +7204,12 @@ def profile():
     
     fee_settings = get_fee_settings()
     plan_options = get_monthly_plan_options()
-    summary_period_options = get_inventory_summary_period_options()
-
     return render_template(
         'profile.html',
         billing_info=billing_info,
         fee_settings=fee_settings,
         profile_user=profile_user,
         plan_options=plan_options,
-        summary_period_options=summary_period_options,
         proxy_service_history=proxy_service_history,
     )
 
@@ -7286,10 +7280,23 @@ def index():
     
     filter_type = request.args.get('filter', '')
     search = request.args.get('search', '')
-    summary_period = (request.args.get('summary_period') or getattr(current_user, 'inventory_summary_period_default', None) or 'all').strip()
+    summary_period = (request.args.get('summary_period') or 'all').strip()
     allowed_summary_periods = {'all', 'current_month', 'previous_month', 'last_3_months'}
     if summary_period not in allowed_summary_periods:
         summary_period = 'all'
+    sort_mode = (request.args.get('sort') or 'priority').strip()
+    allowed_sort_modes = {
+        'priority',
+        'newest',
+        'oldest',
+        'purchase_high',
+        'purchase_low',
+        'sale_high',
+        'profit_high',
+        'sold_newest',
+    }
+    if sort_mode not in allowed_sort_modes:
+        sort_mode = 'priority'
     
     conn = get_db()
     
@@ -7696,6 +7703,29 @@ def index():
             )
 
         apply_inventory_display_metrics(item_dict, scope='user', fee_settings=fee_settings)
+
+        def resolve_status_priority(row):
+            if row.get('sale_date'):
+                return 90
+            if row.get('pending_sales_agency'):
+                return 5
+            if row.get('pending_completion_request'):
+                return 8
+            if row.get('pending_shipping_request'):
+                return 10
+            if not row.get('is_listed'):
+                return 12
+            if row.get('can_send_completion_report'):
+                return 20
+            if row.get('approved_shipping_request'):
+                return 25
+            if row.get('appraisal_status') == 'waiting':
+                return 30
+            if row.get('is_listed'):
+                return 40
+            return 50
+
+        item_dict['status_priority'] = resolve_status_priority(item_dict)
         
         # 全画像リスト（メイン + 追加）
         item_dict['all_photos'] = []
@@ -7709,6 +7739,93 @@ def index():
                 pass
         
         processed_items.append(item_dict)
+
+    def parse_sort_datetime(value):
+        if not value:
+            return datetime.min
+        if isinstance(value, datetime):
+            return value
+        if hasattr(value, 'date') and callable(value.date):
+            try:
+                parsed_date = value.date()
+                return datetime.combine(parsed_date, datetime.min.time())
+            except Exception:
+                pass
+        value_text = str(value).strip()
+        if not value_text:
+            return datetime.min
+        for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(value_text[:26], fmt)
+            except ValueError:
+                continue
+        return datetime.min
+
+    def safe_sort_number(value):
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def sold_sort_rank(row):
+        return 1 if row.get('sale_date') else 0
+
+    def item_sort_id(row):
+        return int(row.get('id') or 0)
+
+    def sort_timestamp(value):
+        parsed = parse_sort_datetime(value)
+        if parsed == datetime.min:
+            return 0.0
+        try:
+            return parsed.timestamp()
+        except (OverflowError, OSError, ValueError):
+            return 0.0
+
+    sort_handlers = {
+        'priority': lambda row: (
+            sold_sort_rank(row),
+            int(row.get('status_priority') or 50),
+            -sort_timestamp(row.get('created_at') or row.get('purchase_date')),
+            -item_sort_id(row),
+        ),
+        'newest': lambda row: (
+            sold_sort_rank(row),
+            -sort_timestamp(row.get('created_at') or row.get('purchase_date')),
+            -item_sort_id(row),
+        ),
+        'oldest': lambda row: (
+            sold_sort_rank(row),
+            sort_timestamp(row.get('created_at') or row.get('purchase_date')),
+            item_sort_id(row),
+        ),
+        'purchase_high': lambda row: (
+            sold_sort_rank(row),
+            -safe_sort_number(row.get('wholesale_price') or row.get('purchase_price')),
+            -item_sort_id(row),
+        ),
+        'purchase_low': lambda row: (
+            sold_sort_rank(row),
+            safe_sort_number(row.get('wholesale_price') or row.get('purchase_price')),
+            -item_sort_id(row),
+        ),
+        'sale_high': lambda row: (
+            sold_sort_rank(row),
+            -safe_sort_number(row.get('display_sale_price') or row.get('sale_price')),
+            -item_sort_id(row),
+        ),
+        'profit_high': lambda row: (
+            sold_sort_rank(row),
+            -safe_sort_number(row.get('profit') if row.get('sale_date') else row.get('expected_profit')),
+            -item_sort_id(row),
+        ),
+        'sold_newest': lambda row: (
+            0 if row.get('sale_date') else 1,
+            -sort_timestamp(row.get('sale_date')),
+            -item_sort_id(row),
+        ),
+    }
+    processed_items.sort(key=sort_handlers.get(sort_mode, sort_handlers['priority']))
     
     # アクティブなお知らせを取得
     announcements = get_active_announcements(current_user, limit=5, for_banner=True)
@@ -7721,13 +7838,25 @@ def index():
     }
 
     summary_period_options = get_inventory_summary_period_options()
+    sort_options = [
+        {'key': 'priority', 'label': 'おすすめ順（未出品・対応待ち優先）'},
+        {'key': 'newest', 'label': '新しい順'},
+        {'key': 'oldest', 'label': '古い順'},
+        {'key': 'purchase_high', 'label': '仕入額が高い順'},
+        {'key': 'purchase_low', 'label': '仕入額が低い順'},
+        {'key': 'sale_high', 'label': '売上が高い順'},
+        {'key': 'profit_high', 'label': '利益が高い順'},
+        {'key': 'sold_newest', 'label': '売却日が新しい順'},
+    ]
 
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements,
                          is_shared_view=is_shared_view, all_users=all_users,
                          proxy_service_info=proxy_service_info,
                          summary_period=summary_period,
-                         summary_period_options=summary_period_options)
+                         summary_period_options=summary_period_options,
+                         sort_mode=sort_mode,
+                         sort_options=sort_options)
 
 # ===================
 # レポート機能

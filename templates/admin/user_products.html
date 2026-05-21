@@ -1451,17 +1451,28 @@
         </button>
     </div>
     <div class="action-buttons-group">
-        {% if long_term_only %}
         <div class="sort-control">
             <label for="sortControl">並び替え</label>
             <select id="sortControl" onchange="applySortSelection()">
+                {% if long_term_only %}
                 <option value="storage_desc">保管期間が長い順</option>
                 <option value="storage_asc">保管期間が短い順</option>
                 <option value="purchase_oldest">登録日が古い順</option>
                 <option value="purchase_newest">登録日が新しい順</option>
                 <option value="product_asc">商品名順</option>
+                {% else %}
+                <option value="status_priority">未売却・対応待ち優先</option>
+                <option value="purchase_newest">仕入日が新しい順</option>
+                <option value="purchase_oldest">仕入日が古い順</option>
+                <option value="purchase_high">仕入額が高い順</option>
+                <option value="purchase_low">仕入額が低い順</option>
+                <option value="sale_high">売上が高い順</option>
+                <option value="profit_high">利益が高い順</option>
+                <option value="owner_asc">クライアント名順</option>
+                {% endif %}
             </select>
         </div>
+        {% if long_term_only %}
         <span class="long-term-scope-note">一般ユーザー商品を登録から90日で自動表示</span>
         {% else %}
         <a href="{{ url_for('admin_add_item', mode='user') }}" class="btn btn-primary">+ ユーザー商品登録</a>
@@ -1636,6 +1647,7 @@
                     data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
+                    data-status-rank="{% if item.sale_date %}90{% elif item.is_listed %}30{% else %}10{% endif %}"
                     data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
                     {% if not long_term_only %}
                     <td>
@@ -1785,6 +1797,7 @@
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-owner="{{ item.owner_display_name or item.owner_username or '' }}" data-owner-id="{{ item.user_id or '' }}"
+            data-status-rank="{% if item.sale_date %}90{% elif item.is_listed %}30{% else %}10{% endif %}"
             data-status="{% if item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
@@ -2230,9 +2243,10 @@
         listing_price: 'listingPrice',
         sale_price: 'salePrice',
         profit: 'profit',
-        days_since_purchase: 'daysSincePurchase'
+        days_since_purchase: 'daysSincePurchase',
+        status_rank: 'statusRank'
     };
-    const numericSortColumns = new Set(['purchase_price', 'listing_price', 'sale_price', 'profit', 'days_since_purchase']);
+    const numericSortColumns = new Set(['purchase_price', 'listing_price', 'sale_price', 'profit', 'days_since_purchase', 'status_rank']);
 
     document.querySelectorAll('.sortable').forEach(th => {
         th.addEventListener('click', function () {
@@ -2283,10 +2297,15 @@
         if (!sortControl) return;
 
         const sortMap = {
+            status_priority: ['status_rank', true],
             storage_desc: ['days_since_purchase', false],
             storage_asc: ['days_since_purchase', true],
             purchase_oldest: ['purchase_date', true],
             purchase_newest: ['purchase_date', false],
+            purchase_high: ['purchase_price', false],
+            purchase_low: ['purchase_price', true],
+            sale_high: ['sale_price', false],
+            profit_high: ['profit', false],
             owner_asc: ['owner_name', true],
             product_asc: ['product_name', true]
         };
@@ -2295,6 +2314,8 @@
         sortDirection[column] = ascending;
         sortTable(column, ascending);
     }
+
+    document.addEventListener('DOMContentLoaded', applySortSelection);
 
     // ========== ライトボックス機能 ==========
     let currentPhotos = [];

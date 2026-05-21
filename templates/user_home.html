@@ -144,7 +144,8 @@
 }
 
 .user-home-read-all,
-.user-home-more-button {
+.user-home-more-button,
+.user-home-menu-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -164,7 +165,9 @@
 }
 
 .user-home-read-all:hover:not(:disabled),
-.user-home-more-button:hover {
+.user-home-more-button:hover,
+.user-home-menu-toggle:hover,
+.user-home-menu-toggle.is-open {
     border-color: #93c5fd;
     background: #eff6ff;
     color: #1d4ed8;
@@ -402,6 +405,91 @@
     line-height: 1.8;
 }
 
+.user-home-menu-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 0.9rem;
+    padding: 0.9rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.user-home-menu-picker[hidden] {
+    display: none;
+}
+
+.user-home-menu-chip {
+    padding: 0.48rem 0.78rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #475569;
+    font-size: 0.84rem;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.user-home-menu-chip:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.user-home-menu-chip.is-active {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.user-home-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
+}
+
+.user-home-shortcut {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    text-decoration: none;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.user-home-shortcut[hidden] {
+    display: none;
+}
+
+.user-home-shortcut:hover {
+    transform: translateY(-2px);
+    border-color: #93c5fd;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+}
+
+.user-home-shortcut h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.user-home-shortcut p {
+    margin: 0;
+    color: #475569;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 900px) {
     .user-home-section__header {
         display: grid;
@@ -443,6 +531,9 @@
         padding: 0 0.9rem 0.9rem;
     }
 
+    .user-home-shortcuts {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 
@@ -488,6 +579,89 @@
             <button type="button" class="user-home-more-button" id="userHomeAnnouncementMore">もっと見る</button>
         </div>
         <script type="application/json" id="userHomeAnnouncementsData">{{ announcement_payloads|tojson }}</script>
+    </section>
+
+    <section class="user-home-card user-home-section">
+        <div class="user-home-section__header">
+            <div class="user-home-section__copy">
+                <span class="user-home-eyebrow">FAVORITES</span>
+                <h2>よく使うメニュー</h2>
+                <p>普段よく使う画面をホームからすぐ開けます。表示するメニューは自由に切り替えできます。</p>
+            </div>
+            <div>
+                <button type="button" class="user-home-menu-toggle" id="favoriteMenuToggle" aria-expanded="false" aria-controls="favoriteMenuPicker">
+                    表示メニューを選ぶ
+                </button>
+            </div>
+        </div>
+
+        <div class="user-home-menu-picker" id="favoriteMenuPicker" hidden>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="home">ホーム</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="inventory">商品一覧</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期保存商品</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="requests">販売代行申請</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類管理</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="estimate">見積り依頼書</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="approval">買取承諾書</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="analytics">管理分析</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="reports">レポート</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="inquiry-list">問い合わせ一覧</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="inquiry-new">問い合わせ作成</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="service">代行仕入れサービス</button>
+        </div>
+
+        <div class="user-home-shortcuts" id="favoriteMenuGrid">
+            <a href="{{ url_for('user_home') }}" class="user-home-shortcut" data-menu-id="home">
+                <h3>ホーム</h3>
+                <p>お知らせと利用状況を確認します。</p>
+            </a>
+            <a href="{{ url_for('index') }}" class="user-home-shortcut" data-menu-id="inventory">
+                <h3>商品一覧</h3>
+                <p>登録商品、販売状況、詳細を確認します。</p>
+            </a>
+            <a href="{{ url_for('long_term_items') }}" class="user-home-shortcut" data-menu-id="long-term">
+                <h3>長期保存商品</h3>
+                <p>長期保管中の商品と処理申請を確認します。</p>
+            </a>
+            <a href="{{ url_for('sales_agency_my_requests') }}" class="user-home-shortcut" data-menu-id="requests">
+                <h3>販売代行申請</h3>
+                <p>業者販売、同時出品、オークション申請を確認します。</p>
+            </a>
+            <a href="{{ url_for('documents') }}" class="user-home-shortcut" data-menu-id="documents">
+                <h3>書類管理</h3>
+                <p>各種書類の作成、確認、履歴を開きます。</p>
+            </a>
+            <a href="{{ url_for('user_mitsumori_list') }}" class="user-home-shortcut" data-menu-id="estimate">
+                <h3>見積り依頼書</h3>
+                <p>見積り依頼書の作成と履歴を確認します。</p>
+            </a>
+            <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="user-home-shortcut" data-menu-id="approval">
+                <h3>買取承諾書</h3>
+                <p>買取承諾書の作成と履歴を確認します。</p>
+            </a>
+            <a href="{{ url_for('user_analytics') }}" class="user-home-shortcut" data-menu-id="analytics">
+                <h3>管理分析</h3>
+                <p>売上や在庫の分析を確認します。</p>
+            </a>
+            <a href="{{ url_for('reports') }}" class="user-home-shortcut" data-menu-id="reports">
+                <h3>レポート</h3>
+                <p>CSVや分析レポートを確認します。</p>
+            </a>
+            <a href="{{ url_for('inquiry_list') }}" class="user-home-shortcut" data-menu-id="inquiry-list">
+                <h3>問い合わせ一覧</h3>
+                <p>これまでの問い合わせと返信を確認します。</p>
+            </a>
+            <a href="{{ url_for('inquiry_new') }}" class="user-home-shortcut" data-menu-id="inquiry-new">
+                <h3>問い合わせ作成</h3>
+                <p>運営への問い合わせを新規作成します。</p>
+            </a>
+            <a href="{{ url_for('public_proxy_service_list') }}" class="user-home-shortcut" data-menu-id="service">
+                <h3>代行仕入れサービス</h3>
+                <p>公開中、公開前、参加履歴を確認します。</p>
+            </a>
+        </div>
+
+        <div class="user-home-empty" id="favoriteMenuEmpty" hidden>表示するメニューが選択されていません。</div>
     </section>
 
 </div>
@@ -694,6 +868,81 @@
         }
         syncVisibleCount();
         renderAnnouncements();
+    })();
+
+    (function setupFavoriteMenus() {
+        const toggleButton = document.getElementById('favoriteMenuToggle');
+        const picker = document.getElementById('favoriteMenuPicker');
+        const grid = document.getElementById('favoriteMenuGrid');
+        const emptyState = document.getElementById('favoriteMenuEmpty');
+        if (!toggleButton || !picker || !grid || !emptyState) return;
+
+        const storageKey = 'kaika:user-home:favorites:v2';
+        const defaultMenus = ['inventory', 'documents', 'reports', 'analytics'];
+        const chips = Array.from(picker.querySelectorAll('[data-menu-toggle]'));
+        const cards = Array.from(grid.querySelectorAll('[data-menu-id]'));
+
+        function readSelectedMenus() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+                if (Array.isArray(saved)) return new Set(saved);
+            } catch (error) {
+                // localStorageを読めない場合は標準メニューを表示
+            }
+            return new Set(defaultMenus);
+        }
+
+        let selectedMenus = readSelectedMenus();
+
+        function saveSelectedMenus() {
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(Array.from(selectedMenus)));
+            } catch (error) {
+                // 保存できない場合も表示切替だけ継続
+            }
+        }
+
+        function renderMenus() {
+            let visibleCount = 0;
+
+            chips.forEach((chip) => {
+                const menuId = chip.getAttribute('data-menu-toggle');
+                chip.classList.toggle('is-active', selectedMenus.has(menuId));
+            });
+
+            cards.forEach((card) => {
+                const menuId = card.getAttribute('data-menu-id');
+                const isVisible = selectedMenus.has(menuId);
+                card.hidden = !isVisible;
+                if (isVisible) visibleCount++;
+            });
+
+            emptyState.hidden = visibleCount > 0;
+        }
+
+        toggleButton.addEventListener('click', function () {
+            const isOpen = picker.hidden;
+            picker.hidden = !isOpen;
+            toggleButton.classList.toggle('is-open', isOpen);
+            toggleButton.setAttribute('aria-expanded', String(isOpen));
+        });
+
+        chips.forEach((chip) => {
+            chip.addEventListener('click', function () {
+                const menuId = chip.getAttribute('data-menu-toggle');
+                if (!menuId) return;
+
+                if (selectedMenus.has(menuId)) {
+                    selectedMenus.delete(menuId);
+                } else {
+                    selectedMenus.add(menuId);
+                }
+                saveSelectedMenus();
+                renderMenus();
+            });
+        });
+
+        renderMenus();
     })();
 </script>
 {% endblock %}

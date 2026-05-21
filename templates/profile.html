@@ -74,8 +74,8 @@
                 </div>
             </div>
         </div>
-        <div class="budget-history">
-            <h3>仕入れ利用履歴</h3>
+        <details class="budget-history">
+            <summary>仕入れ利用履歴の詳細を見る</summary>
             {% if proxy_service_history %}
             <div class="budget-history-list">
                 {% for row in proxy_service_history %}
@@ -89,7 +89,7 @@
             {% else %}
             <p class="budget-history-empty">まだ代行仕入れの利用履歴はありません。</p>
             {% endif %}
-        </div>
+        </details>
     </div>
     {% endif %}
 
@@ -127,21 +127,10 @@
         </div>
 
         <div class="form-section">
-            <h2>表示・プラン設定</h2>
+            <h2>月額プラン変更申請</h2>
 
             <div class="form-group">
-                <label for="inventory_summary_period_default">商品一覧の初期集計期間</label>
-                <select id="inventory_summary_period_default" name="inventory_summary_period_default">
-                    {% for option in summary_period_options %}
-                    <option value="{{ option.key }}" {% if (profile_user.inventory_summary_period_default or 'all') == option.key %}selected{% endif %}>
-                        {{ option.label }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="requested_monthly_plan">月額プラン変更希望</label>
+                <label for="requested_monthly_plan">変更希望プラン</label>
                 <select id="requested_monthly_plan" name="requested_monthly_plan">
                     <option value="">変更しない</option>
                     {% for plan in plan_options %}
@@ -174,7 +163,7 @@
         
         <div class="form-actions">
             <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" class="btn btn-primary">保存</button>
+            <button type="submit" class="btn btn-primary">保存・プラン変更を申請</button>
         </div>
     </form>
 </div>
@@ -398,10 +387,30 @@
     background: #fffbeb;
 }
 
-.budget-history h3 {
-    margin: 0 0 0.75rem;
+.budget-history summary {
+    margin: 0;
     color: #78350f;
     font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.budget-history[open] summary {
+    margin-bottom: 0.75rem;
+}
+
+.budget-history summary::marker {
+    color: #d97706;
+}
+
+.budget-history summary::-webkit-details-marker {
+    color: #d97706;
+}
+
+.budget-history summary:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 4px;
+    border-radius: 6px;
 }
 
 .budget-history-list {
