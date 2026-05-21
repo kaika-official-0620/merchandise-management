@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}お知らせ - 開花管理{% endblock %}
+
+{% block content %}
+<style>
+.announcements-page {
+    max-width: 960px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+}
+
+.announcements-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.announcements-header h1 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.5rem;
+}
+
+.announcements-home-link {
+    color: #2563eb;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.announcements-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.announcement-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.9rem;
+    align-items: start;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.announcement-card__badge {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 54px;
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.announcement-card.important .announcement-card__badge {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.announcement-card.warning .announcement-card__badge {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.announcement-card.success .announcement-card__badge {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.announcement-card__title {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.announcement-card__content {
+    margin: 0;
+    color: #475569;
+    font-size: 0.92rem;
+    line-height: 1.75;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.announcement-card__date {
+    display: block;
+    margin-top: 0.55rem;
+    color: #94a3b8;
+    font-size: 0.78rem;
+}
+
+.announcement-card__delete {
+    min-height: 38px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff5f5;
+    color: #b91c1c;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.announcement-card__delete:hover {
+    background: #fee2e2;
+}
+
+.announcements-empty {
+    padding: 1.2rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #64748b;
+}
+
+@media (max-width: 640px) {
+    .announcements-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .announcement-card {
+        grid-template-columns: 1fr auto;
+        gap: 0.65rem;
+        padding: 0.85rem;
+    }
+
+    .announcement-card__badge {
+        grid-column: 1 / -1;
+        width: fit-content;
+    }
+}
+</style>
+
+<div class="announcements-page">
+    <div class="announcements-header">
+        <h1>お知らせ</h1>
+        <a href="{{ url_for('user_home') }}" class="announcements-home-link">ホームへ戻る</a>
+    </div>
+
+    {% if announcements %}
+    <div class="announcements-list">
+        {% for ann in announcements %}
+        <article class="announcement-card {{ ann.announcement_type }}">
+            <span class="announcement-card__badge">
+                {% if ann.announcement_type == 'important' %}重要
+                {% elif ann.announcement_type == 'warning' %}注意
+                {% elif ann.announcement_type == 'success' %}更新
+                {% else %}お知らせ
+                {% endif %}
+            </span>
+            <div>
+                <h2 class="announcement-card__title">{{ ann.title }}</h2>
+                <p class="announcement-card__content">{{ ann.content }}</p>
+                <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>
+            </div>
+            <form method="POST" action="{{ url_for('user_announcement_delete_page', announcement_id=ann.id) }}">
+                <button type="submit" class="announcement-card__delete" onclick="return confirm('このお知らせを削除しますか？')">削除</button>
+            </form>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="announcements-empty">現在表示中のお知らせはありません。</div>
+    {% endif %}
+</div>
+{% endblock %}

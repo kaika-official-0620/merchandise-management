@@ -6188,6 +6188,18 @@ def ensure_announcement_delivery_schema():
                     UNIQUE (announcement_id, user_id)
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS announcement_user_status (
+                    id SERIAL PRIMARY KEY,
+                    announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    banner_hidden_at TIMESTAMP,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (announcement_id, user_id)
+                )
+            """)
             cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS line_notify_enabled BOOLEAN DEFAULT FALSE")
             cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS line_notified_at TIMESTAMP")
             cur.execute("UPDATE announcements SET line_notify_enabled = FALSE WHERE line_notify_enabled IS NULL")
@@ -6200,6 +6212,20 @@ def ensure_announcement_delivery_schema():
                     announcement_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (announcement_id, user_id),
+                    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS announcement_user_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    announcement_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    banner_hidden_at TIMESTAMP,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (announcement_id, user_id),
                     FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -6323,6 +6349,150 @@ def mark_announcements_read_for_user(user_id, announcement_ids):
         conn.close()
 
 
+def normalize_announcement_ids(announcement_ids):
+    cleaned_ids = []
+    seen = set()
+    for raw_id in announcement_ids or []:
+        try:
+            announcement_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if announcement_id <= 0 or announcement_id in seen:
+            continue
+        seen.add(announcement_id)
+        cleaned_ids.append(announcement_id)
+    return cleaned_ids
+
+
+def get_announcement_user_status_map(user_id, announcement_ids):
+    if not user_id:
+        return {}
+
+    cleaned_ids = normalize_announcement_ids(announcement_ids)
+    if not cleaned_ids:
+        return {}
+
+    conn = get_db()
+    cur = None
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            placeholders = ','.join(['%s'] * len(cleaned_ids))
+            cur.execute(
+                f"""
+                SELECT announcement_id, banner_hidden_at, deleted_at
+                FROM announcement_user_status
+                WHERE user_id = %s
+                  AND announcement_id IN ({placeholders})
+                """,
+                tuple([int(user_id)] + cleaned_ids),
+            )
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            placeholders = ','.join(['?'] * len(cleaned_ids))
+            cur.execute(
+                f"""
+                SELECT announcement_id, banner_hidden_at, deleted_at
+                FROM announcement_user_status
+                WHERE user_id = ?
+                  AND announcement_id IN ({placeholders})
+                """,
+                tuple([int(user_id)] + cleaned_ids),
+            )
+
+        status_map = {}
+        for row in cur.fetchall():
+            row_dict = dict(row)
+            status_map[int(row_dict.get('announcement_id') or 0)] = row_dict
+        return status_map
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False, delete=False):
+    if not user_id:
+        return 0
+
+    cleaned_ids = normalize_announcement_ids(announcement_ids)
+    if not cleaned_ids:
+        return 0
+
+    now = datetime.now()
+    conn = get_db()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.executemany(
+                """
+                INSERT INTO announcement_user_status (
+                    announcement_id, user_id, banner_hidden_at, deleted_at, created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (announcement_id, user_id) DO UPDATE SET
+                    banner_hidden_at = COALESCE(announcement_user_status.banner_hidden_at, EXCLUDED.banner_hidden_at),
+                    deleted_at = COALESCE(EXCLUDED.deleted_at, announcement_user_status.deleted_at),
+                    updated_at = EXCLUDED.updated_at
+                """,
+                [
+                    (
+                        announcement_id,
+                        int(user_id),
+                        now if hide_banner else None,
+                        now if delete else None,
+                        now,
+                        now,
+                    )
+                    for announcement_id in cleaned_ids
+                ],
+            )
+        else:
+            now_text = now.strftime('%Y-%m-%d %H:%M:%S')
+            cur.executemany(
+                """
+                INSERT INTO announcement_user_status (
+                    announcement_id, user_id, banner_hidden_at, deleted_at, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(announcement_id, user_id) DO UPDATE SET
+                    banner_hidden_at = COALESCE(banner_hidden_at, excluded.banner_hidden_at),
+                    deleted_at = COALESCE(excluded.deleted_at, deleted_at),
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    (
+                        announcement_id,
+                        int(user_id),
+                        now_text if hide_banner else None,
+                        now_text if delete else None,
+                        now_text,
+                        now_text,
+                    )
+                    for announcement_id in cleaned_ids
+                ],
+            )
+        conn.commit()
+        return len(cleaned_ids)
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+def hide_announcement_banner_for_user(user_id, announcement_ids):
+    return upsert_announcement_user_status(user_id, announcement_ids, hide_banner=True)
+
+
+def delete_announcement_for_user(user_id, announcement_ids):
+    count = upsert_announcement_user_status(user_id, announcement_ids, hide_banner=True, delete=True)
+    if count:
+        mark_announcements_read_for_user(user_id, announcement_ids)
+    return count
+
+
 def get_visible_announcement_ids_for_user(user):
     if not user or not getattr(user, 'is_authenticated', False):
         return []
@@ -6333,7 +6503,7 @@ def get_visible_announcement_ids_for_user(user):
     ]
 
 
-def get_active_announcements(user=None, limit=None):
+def get_active_announcements(user=None, limit=None, for_banner=False):
     """アクティブなお知らせを取得"""
     conn = get_db()
     now = datetime.now()
@@ -6378,6 +6548,24 @@ def get_active_announcements(user=None, limit=None):
     if target_user is None and has_request_context() and getattr(current_user, 'is_authenticated', False):
         target_user = current_user
 
+    if target_user and not getattr(target_user, 'is_admin', lambda: False)() and not getattr(target_user, 'is_owner', lambda: False)():
+        status_map = get_announcement_user_status_map(
+            getattr(target_user, 'id', None),
+            [announcement.get('id') for announcement in announcements],
+        )
+        filtered_announcements = []
+        for announcement in announcements:
+            announcement_id = int(announcement.get('id') or 0)
+            user_status = status_map.get(announcement_id) or {}
+            announcement['banner_hidden_at'] = user_status.get('banner_hidden_at')
+            announcement['deleted_at'] = user_status.get('deleted_at')
+            if user_status.get('deleted_at'):
+                continue
+            if for_banner and user_status.get('banner_hidden_at'):
+                continue
+            filtered_announcements.append(announcement)
+        announcements = filtered_announcements
+
     read_map = {}
     if target_user and not getattr(target_user, 'is_admin', lambda: False)() and not getattr(target_user, 'is_owner', lambda: False)():
         read_map = get_announcement_read_map(
@@ -6417,6 +6605,8 @@ def serialize_announcement_payload(announcement):
         'recipient_summary': announcement.get('recipient_summary') or get_announcement_recipient_summary(announcement),
         'is_read': bool(announcement.get('is_read')),
         'read_at': serialize_announcement_datetime(announcement.get('read_at')),
+        'banner_hidden_at': serialize_announcement_datetime(announcement.get('banner_hidden_at')),
+        'deleted_at': serialize_announcement_datetime(announcement.get('deleted_at')),
         'publish_at': serialize_announcement_datetime(announcement.get('publish_at')),
         'created_at': serialize_announcement_datetime(announcement.get('created_at')),
     }
@@ -7173,7 +7363,7 @@ def index():
         processed_items.append(item_dict)
     
     # アクティブなお知らせを取得
-    announcements = get_active_announcements(current_user)
+    announcements = get_active_announcements(current_user, limit=5, for_banner=True)
     
     # 代行仕入れサービスの利用可能残高を取得
     proxy_service_info = {
@@ -9511,6 +9701,78 @@ def user_announcement_mark_all_read_api():
         'unread_count': 0,
         'announcements': announcements,
     })
+
+
+@app.route('/api/user-announcements/<int:announcement_id>/delete', methods=['POST'])
+@login_required
+def user_announcement_delete_api(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        return jsonify({'success': False, 'error': 'クライアントのみ利用できます'}), 403
+
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    if announcement_id not in visible_ids:
+        return jsonify({'success': False, 'error': 'お知らせが見つかりません'}), 404
+
+    delete_count = delete_announcement_for_user(current_user.id, [announcement_id])
+    announcements = [
+        serialize_announcement_payload(announcement)
+        for announcement in get_active_announcements(current_user, limit=None)
+    ]
+    unread_count = sum(1 for announcement in announcements if not announcement.get('is_read'))
+    return jsonify({
+        'success': True,
+        'delete_count': delete_count,
+        'unread_count': unread_count,
+        'announcements': announcements,
+    })
+
+
+@app.route('/api/announcements/hide-banner', methods=['POST'])
+@login_required
+def api_hide_announcement_banner():
+    if current_user.is_admin() or current_user.is_owner():
+        return jsonify({'success': False, 'error': 'クライアントのみ利用できます'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    requested_ids = normalize_announcement_ids(payload.get('ids'))
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    target_ids = [announcement_id for announcement_id in requested_ids if announcement_id in visible_ids]
+    hide_count = hide_announcement_banner_for_user(current_user.id, target_ids)
+    return jsonify({'success': True, 'hide_count': hide_count})
+
+
+@app.route('/announcements')
+@login_required
+def user_announcements_page():
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_dashboard'))
+
+    announcements = get_active_announcements(current_user, limit=None)
+    visible_ids = [announcement.get('id') for announcement in announcements]
+    if visible_ids:
+        mark_announcements_read_for_user(current_user.id, visible_ids)
+        for announcement in announcements:
+            announcement['is_read'] = True
+
+    return render_template('announcements.html', announcements=announcements)
+
+
+@app.route('/announcements/delete/<int:announcement_id>', methods=['POST'])
+@login_required
+def user_announcement_delete_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        flash('クライアントのみ利用できます', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    if announcement_id not in visible_ids:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
+
+    delete_announcement_for_user(current_user.id, [announcement_id])
+    flash('お知らせを削除しました', 'success')
+    return redirect(url_for('user_announcements_page'))
+
 
 @app.route('/api/report/<report_type>')
 @login_required

@@ -131,14 +131,28 @@
     /* お知らせエリア */
     .announcement-area {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 12px 20px;
         margin-bottom: 15px;
         color: white;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
         box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        max-height: 160px;
+        overflow: hidden;
+        transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.25s ease, margin 0.25s ease, padding 0.25s ease;
+    }
+
+    .announcement-area.is-hiding {
+        opacity: 0;
+        transform: translateY(-8px);
+        max-height: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        pointer-events: none;
     }
 
     .announcement-slider {
@@ -221,6 +235,24 @@
     #annCounter {
         font-size: 0.8rem;
         opacity: 0.8;
+    }
+
+    .announcement-close {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 50%;
+        margin-left: 12px;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        flex: 0 0 auto;
+    }
+
+    .announcement-close:hover {
+        background: rgba(255, 255, 255, 0.3);
     }
 
     /* 検索＆アクションバー */
@@ -551,18 +583,33 @@
         }
 
         .announcement-area {
-            flex-direction: column;
-            gap: 10px;
-            text-align: center;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 10px 44px 10px 12px;
         }
 
         .announcement-item {
-            flex-direction: column;
+            flex-direction: row;
+            align-items: flex-start;
             gap: 6px;
+            flex-wrap: wrap;
+            width: 100%;
         }
 
         .announcement-nav {
             margin-left: 0;
+        }
+
+        .announcement-close {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            margin-left: 0;
+        }
+
+        .announcement-content {
+            width: 100%;
+            line-height: 1.45;
         }
 
         .filter-panel {
@@ -2072,7 +2119,7 @@
 
 <!-- お知らせエリア -->
 {% if announcements %}
-<div class="announcement-area">
+<div class="announcement-area" id="announcementBanner" data-announcement-ids='{{ announcements|map(attribute="id")|list|tojson }}'>
     <div class="announcement-slider" id="announcementSlider">
         {% for ann in announcements %}
         <div class="announcement-item announcement-{{ ann.announcement_type }}" {% if not loop.first
@@ -2096,6 +2143,7 @@
         <button onclick="nextAnnouncement()" class="ann-nav-btn">&gt;</button>
     </div>
     {% endif %}
+    <button type="button" class="announcement-close" onclick="hideAnnouncementBanner()" aria-label="お知らせを閉じる">&times;</button>
 </div>
 {% endif %}
 
@@ -3119,6 +3167,48 @@
     // 自動スライド（5秒ごと）
     if (totalAnnouncements > 1) {
         setInterval(nextAnnouncement, 5000);
+    }
+
+    const announcementBanner = document.getElementById('announcementBanner');
+
+    function getAnnouncementBannerIds() {
+        if (!announcementBanner) return [];
+        try {
+            return JSON.parse(announcementBanner.dataset.announcementIds || '[]');
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function markAnnouncementBannerHidden() {
+        if (!announcementBanner || announcementBanner.dataset.hiddenSent === '1') return;
+        const ids = getAnnouncementBannerIds();
+        if (!ids.length) return;
+
+        announcementBanner.dataset.hiddenSent = '1';
+        fetch('{{ url_for("api_hide_announcement_banner") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ ids: ids })
+        }).catch(() => {});
+    }
+
+    function hideAnnouncementBanner() {
+        if (!announcementBanner) return;
+        markAnnouncementBannerHidden();
+        announcementBanner.classList.add('is-hiding');
+        setTimeout(() => {
+            if (announcementBanner && announcementBanner.parentNode) {
+                announcementBanner.parentNode.removeChild(announcementBanner);
+            }
+        }, 260);
+    }
+
+    if (announcementBanner) {
+        setTimeout(hideAnnouncementBanner, 8000);
     }
 
     // 代行サービス掲載切り替え
