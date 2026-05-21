@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}{{ announcement.title }} - お知らせ{% endblock %}
+
+{% block content %}
+<style>
+.announcement-detail-page {
+    max-width: 1040px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+}
+
+.announcement-detail-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.announcement-detail-nav a {
+    color: #2563eb;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.announcement-detail {
+    display: grid;
+    gap: 1.2rem;
+    padding: 1.35rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.announcement-detail__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+}
+
+.announcement-detail__badge,
+.announcement-detail__read,
+.announcement-detail__scope {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.announcement-detail__badge {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.announcement-detail.important .announcement-detail__badge {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.announcement-detail.warning .announcement-detail__badge {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.announcement-detail.success .announcement-detail__badge {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.announcement-detail__read {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.announcement-detail__read.is-read {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.announcement-detail__scope {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.announcement-detail__title {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.55rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.announcement-detail__date {
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.announcement-detail__content {
+    min-height: 220px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 1rem;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.announcement-detail__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.65rem;
+}
+
+.announcement-detail__button {
+    min-height: 42px;
+    padding: 0.55rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #334155;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.announcement-detail__button--primary {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.announcement-detail__button--danger {
+    border-color: #fecaca;
+    background: #fff5f5;
+    color: #b91c1c;
+}
+
+.announcement-detail__button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+    .announcement-detail-nav {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .announcement-detail {
+        padding: 1rem;
+    }
+
+    .announcement-detail__title {
+        font-size: 1.25rem;
+    }
+
+    .announcement-detail__content {
+        min-height: 260px;
+        font-size: 0.95rem;
+    }
+
+    .announcement-detail__actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .announcement-detail__button {
+        width: 100%;
+    }
+}
+</style>
+
+<div class="announcement-detail-page">
+    <div class="announcement-detail-nav">
+        <a href="{{ url_for('user_announcements_page') }}">お知らせ一覧へ戻る</a>
+        <a href="{{ url_for('user_home') }}">ホームへ戻る</a>
+    </div>
+
+    <article class="announcement-detail {{ announcement.announcement_type }}">
+        <div class="announcement-detail__meta">
+            <span class="announcement-detail__badge">
+                {% if announcement.announcement_type == 'important' %}重要
+                {% elif announcement.announcement_type == 'warning' %}注意
+                {% elif announcement.announcement_type == 'success' %}更新
+                {% else %}お知らせ
+                {% endif %}
+            </span>
+            <span class="announcement-detail__read {% if announcement.is_read %}is-read{% endif %}">
+                {% if announcement.is_read %}既読{% else %}未読{% endif %}
+            </span>
+            <span class="announcement-detail__scope">
+                {{ announcement.recipient_summary or announcement.recipient_scope_label }}
+            </span>
+        </div>
+
+        <header>
+            <h1 class="announcement-detail__title">{{ announcement.title }}</h1>
+            <div class="announcement-detail__date">{{ ((announcement.publish_at or announcement.created_at)|string)[:16] }}</div>
+        </header>
+
+        <div class="announcement-detail__content">{{ announcement.content }}</div>
+
+        <div class="announcement-detail__actions">
+            <form method="POST" action="{{ url_for('user_announcement_read_page', announcement_id=announcement.id) }}">
+                <button type="submit" class="announcement-detail__button announcement-detail__button--primary" {% if announcement.is_read %}disabled{% endif %}>
+                    {% if announcement.is_read %}既読済み{% else %}既読にする{% endif %}
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('user_announcement_delete_page', announcement_id=announcement.id) }}">
+                <button type="submit" class="announcement-detail__button announcement-detail__button--danger" onclick="return confirm('このお知らせを削除しますか？')">削除</button>
+            </form>
+        </div>
+    </article>
+</div>
+{% endblock %}

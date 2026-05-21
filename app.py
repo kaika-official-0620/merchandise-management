@@ -6393,6 +6393,7 @@ def get_announcement_user_status_map(user_id, announcement_ids):
         return {}
 
     conn = get_db()
+    cur = None
     try:
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -6426,7 +6427,8 @@ def get_announcement_user_status_map(user_id, announcement_ids):
             status_map[int(row_dict.get('announcement_id') or 0)] = row_dict
         return status_map
     finally:
-        cur.close()
+        if cur:
+            cur.close()
         conn.close()
 
 
@@ -6440,6 +6442,7 @@ def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False
 
     now = datetime.now()
     conn = get_db()
+    cur = None
     try:
         cur = conn.cursor()
         if DATABASE_URL:
@@ -6474,9 +6477,9 @@ def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False
                     announcement_id, user_id, banner_hidden_at, deleted_at, created_at, updated_at
                 )
                 VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT (announcement_id, user_id) DO UPDATE SET
-                    banner_hidden_at = COALESCE(announcement_user_status.banner_hidden_at, excluded.banner_hidden_at),
-                    deleted_at = COALESCE(excluded.deleted_at, announcement_user_status.deleted_at),
+                ON CONFLICT(announcement_id, user_id) DO UPDATE SET
+                    banner_hidden_at = COALESCE(banner_hidden_at, excluded.banner_hidden_at),
+                    deleted_at = COALESCE(excluded.deleted_at, deleted_at),
                     updated_at = excluded.updated_at
                 """,
                 [
@@ -6494,7 +6497,8 @@ def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False
         conn.commit()
         return len(cleaned_ids)
     finally:
-        cur.close()
+        if cur:
+            cur.close()
         conn.close()
 
 
@@ -6502,11 +6506,11 @@ def hide_announcement_banner_for_user(user_id, announcement_ids):
     return upsert_announcement_user_status(user_id, announcement_ids, hide_banner=True)
 
 
-def delete_announcement_for_user(user_id, announcement_id):
-    deleted_count = upsert_announcement_user_status(user_id, [announcement_id], hide_banner=True, delete=True)
-    if deleted_count:
-        mark_announcements_read_for_user(user_id, [announcement_id])
-    return deleted_count
+def delete_announcement_for_user(user_id, announcement_ids):
+    count = upsert_announcement_user_status(user_id, announcement_ids, hide_banner=True, delete=True)
+    if count:
+        mark_announcements_read_for_user(user_id, announcement_ids)
+    return count
 
 
 def get_visible_announcement_ids_for_user(user):
@@ -6564,25 +6568,23 @@ def get_active_announcements(user=None, limit=None, for_banner=False):
     if target_user is None and has_request_context() and getattr(current_user, 'is_authenticated', False):
         target_user = current_user
 
-    status_map = {}
-    if target_user:
+    if target_user and not getattr(target_user, 'is_admin', lambda: False)() and not getattr(target_user, 'is_owner', lambda: False)():
         status_map = get_announcement_user_status_map(
             getattr(target_user, 'id', None),
             [announcement.get('id') for announcement in announcements],
         )
-
-    visible_announcements = []
-    for announcement in announcements:
-        announcement_id = int(announcement.get('id') or 0)
-        status = status_map.get(announcement_id, {})
-        announcement['banner_hidden_at'] = status.get('banner_hidden_at')
-        announcement['deleted_at'] = status.get('deleted_at')
-        if announcement.get('deleted_at'):
-            continue
-        if for_banner and announcement.get('banner_hidden_at'):
-            continue
-        visible_announcements.append(announcement)
-    announcements = visible_announcements
+        filtered_announcements = []
+        for announcement in announcements:
+            announcement_id = int(announcement.get('id') or 0)
+            user_status = status_map.get(announcement_id) or {}
+            announcement['banner_hidden_at'] = user_status.get('banner_hidden_at')
+            announcement['deleted_at'] = user_status.get('deleted_at')
+            if user_status.get('deleted_at'):
+                continue
+            if for_banner and user_status.get('banner_hidden_at'):
+                continue
+            filtered_announcements.append(announcement)
+        announcements = filtered_announcements
 
     read_map = {}
     if target_user and not getattr(target_user, 'is_admin', lambda: False)() and not getattr(target_user, 'is_owner', lambda: False)():
@@ -9733,7 +9735,7 @@ def user_announcement_delete_api(announcement_id):
     if announcement_id not in visible_ids:
         return jsonify({'success': False, 'error': 'お知らせが見つかりません'}), 404
 
-    deleted_count = delete_announcement_for_user(current_user.id, announcement_id)
+    delete_count = delete_announcement_for_user(current_user.id, [announcement_id])
     announcements = [
         serialize_announcement_payload(announcement)
         for announcement in get_active_announcements(current_user, limit=None)
@@ -9741,7 +9743,7 @@ def user_announcement_delete_api(announcement_id):
     unread_count = sum(1 for announcement in announcements if not announcement.get('is_read'))
     return jsonify({
         'success': True,
-        'deleted_count': deleted_count,
+        'delete_count': delete_count,
         'unread_count': unread_count,
         'announcements': announcements,
     })
@@ -9750,9 +9752,15 @@ def user_announcement_delete_api(announcement_id):
 @app.route('/api/announcements/hide-banner', methods=['POST'])
 @login_required
 def api_hide_announcement_banner():
-    data = request.get_json(silent=True) or {}
-    hide_announcement_banner_for_user(current_user.id, data.get('ids', []))
-    return jsonify({'success': True})
+    if current_user.is_admin() or current_user.is_owner():
+        return jsonify({'success': False, 'error': 'クライアントのみ利用できます'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    requested_ids = normalize_announcement_ids(payload.get('ids'))
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    target_ids = [announcement_id for announcement_id in requested_ids if announcement_id in visible_ids]
+    hide_count = hide_announcement_banner_for_user(current_user.id, target_ids)
+    return jsonify({'success': True, 'hide_count': hide_count})
 
 
 @app.route('/announcements')
@@ -9762,29 +9770,68 @@ def user_announcements_page():
         return redirect(url_for('admin_dashboard'))
 
     announcements = get_active_announcements(current_user, limit=None)
-    mark_announcements_read_for_user(current_user.id, [announcement.get('id') for announcement in announcements])
-    announcements = get_active_announcements(current_user, limit=None)
-    announcement_payloads = [
-        serialize_announcement_payload(announcement)
-        for announcement in get_active_announcements(current_user, limit=None)
-    ]
-    return render_template('announcements.html', announcements=announcements, announcement_payloads=announcement_payloads)
+    return render_template('announcements.html', announcements=announcements)
+
+
+def get_visible_announcement_for_user(user, announcement_id):
+    try:
+        target_id = int(announcement_id)
+    except (TypeError, ValueError):
+        return None
+
+    for announcement in get_active_announcements(user, limit=None):
+        if int(announcement.get('id') or 0) == target_id:
+            return announcement
+    return None
+
+
+@app.route('/announcements/<int:announcement_id>')
+@login_required
+def user_announcement_detail_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_dashboard'))
+
+    announcement = get_visible_announcement_for_user(current_user, announcement_id)
+    if not announcement:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
+
+    return render_template('announcement_detail.html', announcement=announcement)
+
+
+@app.route('/announcements/<int:announcement_id>/read', methods=['POST'])
+@login_required
+def user_announcement_read_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        flash('クライアントのみ利用できます', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    announcement = get_visible_announcement_for_user(current_user, announcement_id)
+    if not announcement:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
+
+    mark_announcements_read_for_user(current_user.id, [announcement_id])
+    flash('お知らせを既読にしました', 'success')
+    return redirect(url_for('user_announcement_detail_page', announcement_id=announcement_id))
 
 
 @app.route('/announcements/delete/<int:announcement_id>', methods=['POST'])
 @login_required
 def user_announcement_delete_page(announcement_id):
     if current_user.is_admin() or current_user.is_owner():
+        flash('クライアントのみ利用できます', 'error')
         return redirect(url_for('admin_dashboard'))
 
     visible_ids = set(get_visible_announcement_ids_for_user(current_user))
-    if announcement_id in visible_ids:
-        delete_announcement_for_user(current_user.id, announcement_id)
-        flash('お知らせを削除しました', 'success')
-    else:
+    if announcement_id not in visible_ids:
         flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
 
+    delete_announcement_for_user(current_user.id, [announcement_id])
+    flash('お知らせを削除しました', 'success')
     return redirect(url_for('user_announcements_page'))
+
 
 @app.route('/api/report/<report_type>')
 @login_required
@@ -38313,4 +38360,3 @@ else:
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-

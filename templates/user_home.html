@@ -159,6 +159,7 @@
     font-weight: 600;
     line-height: 1.4;
     cursor: pointer;
+    text-decoration: none;
     transition: all 0.18s ease;
     white-space: nowrap;
 }
@@ -389,16 +390,34 @@
     line-height: 1.5;
 }
 
+.user-home-announcement__detail-link,
 .user-home-announcement__delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 36px;
     padding: 0.45rem 0.8rem;
-    border: 1px solid #fecaca;
     border-radius: 8px;
-    background: #fff5f5;
-    color: #b91c1c;
     font-size: 0.82rem;
     font-weight: 700;
+    text-decoration: none;
     cursor: pointer;
+}
+
+.user-home-announcement__detail-link {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.user-home-announcement__detail-link:hover {
+    background: #dbeafe;
+}
+
+.user-home-announcement__delete {
+    border: 1px solid #fecaca;
+    background: #fff5f5;
+    color: #b91c1c;
 }
 
 .user-home-announcement__delete:hover {
@@ -582,6 +601,7 @@
             </div>
             <div class="user-home-announcement-tools">
                 <span class="user-home-announcement-status" id="userHomeAnnouncementStatus">未読 0件 / 全0件</span>
+                <a href="{{ url_for('user_announcements_page') }}" class="user-home-read-all">一覧</a>
                 <button type="button" class="user-home-read-all" id="markAllAnnouncementsRead">一括既読</button>
             </div>
         </div>
@@ -695,6 +715,7 @@
         const readUrlTemplate = "{{ url_for('user_announcement_mark_read_api', announcement_id=0) }}";
         const readAllUrl = "{{ url_for('user_announcement_mark_all_read_api') }}";
         const deleteUrlTemplate = "{{ url_for('user_announcement_delete_api', announcement_id=0) }}";
+        const detailUrlTemplate = "{{ url_for('user_announcement_detail_page', announcement_id=0) }}";
         const expandedIds = new Set();
         const announcementTypeLabels = {
             info: '通常',
@@ -809,6 +830,7 @@
                                     ${timestamp ? `<span class="user-home-announcement__detail-chip">${escapeHtml(timestamp)}</span>` : ''}
                                 </div>
                                 <div class="user-home-announcement__actions">
+                                    <a href="${detailUrlTemplate.replace('/0', `/${announcement.id}`)}" class="user-home-announcement__detail-link">詳細を見る</a>
                                     <button type="button" class="user-home-announcement__delete" data-announcement-delete="${announcement.id}">削除</button>
                                 </div>
                             </div>
@@ -874,9 +896,11 @@
             try {
                 const response = await fetch(deleteUrlTemplate.replace('/0/delete', `/${announcementId}/delete`), {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
-                        'Content-Type': 'application/json'
-                    }
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
