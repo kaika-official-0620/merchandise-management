@@ -406,51 +406,18 @@ def is_proxy_service_user_allowed(conn, user_id, auction_id):
 
     ensure_proxy_service_auction_user_table(conn)
 
-    if proxy_service_auction_has_user_config(conn, auction_id):
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute(
-                """
-                SELECT 1
-                FROM proxy_service_auction_users
-                WHERE auction_id = %s
-                  AND user_id = %s
-                  AND COALESCE(is_enabled, TRUE) = TRUE
-                LIMIT 1
-                """,
-                (auction_id, user_id),
-            )
-            allowed = cur.fetchone() is not None
-            cur.close()
-            return allowed
-
-        cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """
             SELECT 1
             FROM proxy_service_auction_users
-            WHERE auction_id = ?
-              AND user_id = ?
-              AND COALESCE(is_enabled, 1) = 1
-            LIMIT 1
-            """,
-            (auction_id, user_id),
-        )
-        allowed = cur.fetchone() is not None
-        cur.close()
-        return allowed
-
-    if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT 1
-            FROM proxy_service_users
-            WHERE user_id = %s
+            WHERE auction_id = %s
+              AND user_id = %s
               AND COALESCE(is_enabled, TRUE) = TRUE
             LIMIT 1
             """,
-            (user_id,),
+            (auction_id, user_id),
         )
         allowed = cur.fetchone() is not None
         cur.close()
@@ -460,12 +427,13 @@ def is_proxy_service_user_allowed(conn, user_id, auction_id):
     cur.execute(
         """
         SELECT 1
-        FROM proxy_service_users
-        WHERE user_id = ?
+        FROM proxy_service_auction_users
+        WHERE auction_id = ?
+          AND user_id = ?
           AND COALESCE(is_enabled, 1) = 1
         LIMIT 1
         """,
-        (user_id,),
+        (auction_id, user_id),
     )
     allowed = cur.fetchone() is not None
     cur.close()
@@ -2722,10 +2690,9 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None, al
 
     for auction in raw_auctions:
         if not allow_all:
-            if current_user_id:
-                if not is_proxy_service_user_allowed(conn, current_user_id, auction.get('id')):
-                    continue
-            elif proxy_service_auction_has_user_config(conn, auction.get('id')):
+            if not current_user_id:
+                continue
+            if not is_proxy_service_user_allowed(conn, current_user_id, auction.get('id')):
                 continue
         auction_state = get_proxy_service_auction_state(auction, now=now)
         annotated_items, summary, winner_results = annotate_proxy_service_items(
@@ -15138,6 +15105,7 @@ def admin_proxy_service_create():
 
     if request.method == 'POST':
         conn = get_db()
+        ensure_proxy_service_auction_user_table(conn)
         auction_name = (request.form.get('auction_name') or '').strip() or 'オークション'
         page_title = (request.form.get('page_title') or '').strip() or '代行仕入れサービス'
         page_description = (request.form.get('page_description') or '').strip()
@@ -15147,6 +15115,9 @@ def admin_proxy_service_create():
         if sale_mode not in {'auction', 'fixed'}:
             sale_mode = 'auction'
         is_public = request.form.get('is_public') == 'on'
+        is_draft_save = request.form.get('submit_action') == 'draft'
+        if is_draft_save:
+            is_public = False
 
         start_dt = parse_proxy_service_datetime(start_datetime)
         end_dt = parse_proxy_service_datetime(end_datetime)
@@ -15165,6 +15136,13 @@ def admin_proxy_service_create():
                     RETURNING id
                 """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
                 new_id = cur.fetchone()[0]
+                cur.execute(
+                    """
+                    INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (%s, NULL, FALSE)
+                    """,
+                    (new_id,),
+                )
             else:
                 cur = conn.cursor()
                 cur.execute("""
@@ -15173,10 +15151,20 @@ def admin_proxy_service_create():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
                 new_id = cur.lastrowid
+                cur.execute(
+                    """
+                    INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (?, NULL, 0)
+                    """,
+                    (new_id,),
+                )
 
             conn.commit()
             cur.close()
-            flash(f'オークション「{auction_name}」を作成しました', 'success')
+            if is_draft_save:
+                flash(f'ページ「{auction_name}」を一時保存しました', 'success')
+            else:
+                flash(f'オークション「{auction_name}」を作成しました', 'success')
             return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
         except Exception as e:
             conn.rollback()
@@ -15242,10 +15230,10 @@ def admin_proxy_service_detail(auction_id):
                 LEFT JOIN users u ON m.user_id = u.id
                 WHERE m.sale_date IS NULL
                   AND COALESCE(m.scope, 'admin') = 'admin'
-                  AND (m.auction_id IS NULL OR m.auction_id = %s)
+                  AND m.auction_id IS NULL
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id,))
+            """)
             available_items = [dict(row) for row in cur.fetchall()]
         else:
             import sqlite3
@@ -15284,10 +15272,10 @@ def admin_proxy_service_detail(auction_id):
                 LEFT JOIN users u ON m.user_id = u.id
                 WHERE m.sale_date IS NULL
                   AND COALESCE(m.scope, 'admin') = 'admin'
-                  AND (m.auction_id IS NULL OR m.auction_id = ?)
+                  AND m.auction_id IS NULL
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id,))
+            """)
             available_items = [dict(row) for row in cur.fetchall()]
 
         for item in available_items:
@@ -15473,6 +15461,99 @@ def admin_proxy_service_start(auction_id):
             pass
         return jsonify({'success': False, 'error': '公開処理に失敗しました'}), 500
 
+@app.route('/admin/proxy-service/<int:auction_id>/visibility', methods=['POST'])
+@login_required
+def admin_proxy_service_visibility(auction_id):
+    """公開/非公開の切り替えを即時反映"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    payload = request.get_json(silent=True) or request.form
+    requested_value = payload.get('is_public')
+    if isinstance(requested_value, str):
+        is_public = requested_value.lower() in {'1', 'true', 'on', 'yes'}
+    else:
+        is_public = bool(requested_value)
+
+    conn = get_db()
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = proxy_service_row_to_dict(cur.fetchone())
+            if not settings:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state.get('status') == 'ended':
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': '終了済みのため公開状態を変更できません'}), 400
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = %s,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (is_public, current_user.id, auction_id))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            row = cur.fetchone()
+            settings = proxy_service_row_to_dict(row)
+            if not settings:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state.get('status') == 'ended':
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': '終了済みのため公開状態を変更できません'}), 400
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (1 if is_public else 0, current_user.id, auction_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        settings['is_public'] = is_public
+        auction_state = get_proxy_service_auction_state(settings, now=now)
+        return jsonify({
+            'success': True,
+            'is_public': is_public,
+            'auction_state': {
+                'status': auction_state.get('status'),
+                'status_label': auction_state.get('status_label'),
+                'is_public': auction_state.get('is_public'),
+                'is_open': auction_state.get('is_open'),
+                'is_not_started': auction_state.get('is_not_started'),
+                'is_ended': auction_state.get('is_ended'),
+            },
+        })
+    except Exception as e:
+        conn.rollback()
+        try:
+            conn.close()
+        except Exception:
+            pass
+        print(f"Proxy service visibility error: {e}")
+        return jsonify({'success': False, 'error': '公開状態の更新に失敗しました'}), 500
+
 @app.route('/admin/proxy-service/<int:auction_id>/delete', methods=['POST'])
 @login_required
 def admin_proxy_service_delete(auction_id):
@@ -15483,36 +15564,60 @@ def admin_proxy_service_delete(auction_id):
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
 
-    data = request.get_json(silent=True) or request.form
-    raw_proxy_price = data.get('proxy_price')
-    proxy_price = None
-    if raw_proxy_price not in (None, ''):
-        try:
-            proxy_price = int(raw_proxy_price)
-        except (TypeError, ValueError):
-            return jsonify({'success': False, 'error': '公開価格は整数で入力してください'}), 400
-        if proxy_price <= 0:
-            return jsonify({'success': False, 'error': '公開価格は1円以上で入力してください'}), 400
-
     conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor()
-        # 関連する商品のauction_idをNULLに
-        cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = FALSE WHERE auction_id = %s", (auction_id,))
-        # オークション削除
-        cur.execute("DELETE FROM proxy_service_settings WHERE id = %s", (auction_id,))
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('ページが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service'))
+
+            auction_state = get_proxy_service_auction_state(dict(settings), now=now)
+            if auction_state.get('status') not in {'private', 'scheduled'}:
+                cur.close()
+                conn.close()
+                flash('公開前のページだけ削除できます。公開中または終了済みのページは削除できません。', 'error')
+                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
+
+            cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = FALSE WHERE auction_id = %s", (auction_id,))
+            cur.execute("DELETE FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('ページが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service'))
+
+            auction_state = get_proxy_service_auction_state(dict(settings), now=now)
+            if auction_state.get('status') not in {'private', 'scheduled'}:
+                cur.close()
+                conn.close()
+                flash('公開前のページだけ削除できます。公開中または終了済みのページは削除できません。', 'error')
+                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
+
+            cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = 0 WHERE auction_id = ?", (auction_id,))
+            cur.execute("DELETE FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
         conn.commit()
-    else:
-        cur = conn.cursor()
-        cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = 0 WHERE auction_id = ?", (auction_id,))
-        cur.execute("DELETE FROM proxy_service_settings WHERE id = ?", (auction_id,))
-        conn.commit()
-    
-    cur.close()
-    conn.close()
-    
-    flash('オークションを削除しました', 'success')
-    return redirect(url_for('admin_proxy_service'))
+        cur.close()
+        conn.close()
+
+        flash('ページを削除しました', 'success')
+        return redirect(url_for('admin_proxy_service'))
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"Proxy service delete error: {e}")
+        flash('ページ削除中にエラーが発生しました', 'error')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
 
 @app.route('/admin/proxy-service/<int:auction_id>/settings', methods=['POST'])
 @login_required
@@ -15526,6 +15631,9 @@ def admin_proxy_service_settings(auction_id):
         return get_proxy_publish_denied_response()
     
     is_public = request.form.get('is_public') == 'on'
+    is_draft_save = request.form.get('submit_action') == 'draft'
+    if is_draft_save:
+        is_public = False
     auction_name = request.form.get('auction_name', 'オークション')
     page_title = request.form.get('page_title', '代行仕入れサービス')
     page_description = request.form.get('page_description', '')
@@ -15653,7 +15761,10 @@ def admin_proxy_service_settings(auction_id):
     cur.close()
     conn.close()
     
-    flash('オークション設定を更新しました', 'success')
+    if is_draft_save:
+        flash('ページを一時保存しました', 'success')
+    else:
+        flash('オークション設定を更新しました', 'success')
     return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
 
 @app.route('/admin/proxy-service/<int:auction_id>/toggle-item/<int:item_id>', methods=['POST'])
@@ -15794,8 +15905,16 @@ def admin_proxy_service_bulk_toggle(auction_id):
     if not isinstance(data, dict):
         data = request.form
     item_ids = data.get('item_ids', [])
+    item_payloads = data.get('items', []) if isinstance(data.get('items', []), list) else []
     action = data.get('action', 'add')  # 'add' or 'remove'
     item_prices = data.get('item_prices', {}) or {}
+    if not item_ids and item_payloads:
+        item_ids = [item.get('id') for item in item_payloads if item.get('id')]
+        item_prices = {
+            str(item.get('id')): item.get('listing_price')
+            for item in item_payloads
+            if item.get('id')
+        }
     
     if not item_ids:
         return jsonify({'success': False, 'error': '商品が選択されていません'}), 400
@@ -17469,7 +17588,7 @@ def public_proxy_service_list():
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
     all_sections = None
-    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+    if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
         all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     proxy_service_info = None
     if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
@@ -17506,7 +17625,7 @@ def public_proxy_service_history():
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
     all_sections = None
-    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+    if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
         all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     conn.close()
 
@@ -17635,7 +17754,7 @@ def public_proxy_service_status(auction_id):
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
 
-    if not current_user.is_authenticated and proxy_service_auction_has_user_config(conn, auction_id):
+    if not current_user.is_authenticated:
         conn.close()
         return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
 
@@ -18024,7 +18143,7 @@ def proxy_service_purchase():
             access_cur.close()
             access_auction_id = dict(access_row).get('auction_id') if access_row else None
 
-        if access_auction_id and not is_proxy_service_user_allowed(conn, current_user.id, access_auction_id):
+        if not access_auction_id or not is_proxy_service_user_allowed(conn, current_user.id, access_auction_id):
             conn.close()
             return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     
@@ -37894,4 +38013,3 @@ else:
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-

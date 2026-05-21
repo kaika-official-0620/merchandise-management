@@ -42,6 +42,11 @@
         {% if show_public_link %}
         <a href="{{ url_for('public_proxy_service', auction_id=auction.id) }}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">{{ public_label }}</a>
         {% endif %}
+        {% if auction.status in ['private', 'scheduled'] %}
+        <form method="POST" action="{{ url_for('admin_proxy_service_delete', auction_id=auction.id) }}" class="inline-delete-form" onsubmit="return confirm('このページを削除しますか？\n\n掲載中の商品は商品追加欄に戻ります。');">
+            <button type="submit" class="btn btn-outline-danger btn-sm">ページを削除</button>
+        </form>
+        {% endif %}
     </div>
 </article>
 {%- endmacro %}
@@ -295,6 +300,22 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.inline-delete-form {
+    margin: 0;
+}
+
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger);
+    color: white;
 }
 
 .auction-badges {
