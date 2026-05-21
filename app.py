@@ -5121,7 +5121,23 @@ class User(UserMixin):
         'backup': 'バックアップ'
     }
     
-    def __init__(self, id, username, email, role, display_name, admin_permissions=None, subscription_status=None, proxy_service_budget=0):
+    def __init__(
+        self,
+        id,
+        username,
+        email,
+        role,
+        display_name,
+        admin_permissions=None,
+        subscription_status=None,
+        proxy_service_budget=0,
+        phone='',
+        postal_code='',
+        address='',
+        inventory_summary_period_default='all',
+        requested_monthly_plan='',
+        plan_change_effective_month='',
+    ):
         self.id = id
         self.username = username
         self.email = email
@@ -5129,6 +5145,12 @@ class User(UserMixin):
         self.display_name = display_name or username
         self.subscription_status = subscription_status or 'inactive'
         self.proxy_service_budget = proxy_service_budget or 0
+        self.phone = phone or ''
+        self.postal_code = postal_code or ''
+        self.address = address or ''
+        self.inventory_summary_period_default = inventory_summary_period_default or 'all'
+        self.requested_monthly_plan = requested_monthly_plan or ''
+        self.plan_change_effective_month = plan_change_effective_month or ''
         # admin_permissionsはJSON文字列またはリスト
         if admin_permissions:
             if isinstance(admin_permissions, str):
@@ -5181,27 +5203,45 @@ class User(UserMixin):
         return False
     
     def get_proxy_service_used_amount(self):
-        """代行仕入れサービスで使用済みの金額を取得"""
+        """代行仕入れサービスで過去に購入・落札した合計金額を取得"""
         conn = get_db()
         used_amount = 0
+        buyer_names = [name for name in {self.display_name, self.username} if name]
+        patterns = []
+        for buyer_name in buyer_names:
+            patterns.extend([
+                f'即決購入: {buyer_name}%',
+                f'即決購入：{buyer_name}%',
+                f'代行仕入れ購入: {buyer_name}%',
+                f'代行仕入れ落札: {buyer_name}%',
+            ])
         
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            # 即決購入で購入した商品の合計金額
-            cur.execute("""
-                SELECT COALESCE(SUM(sale_price), 0) as total
-                FROM merchandise
-                WHERE sales_destination LIKE %s AND sale_date IS NOT NULL
-            """, (f'即決購入: {self.display_name}%',))
+            if patterns:
+                conditions = ' OR '.join(['sales_destination LIKE %s'] * len(patterns))
+                cur.execute(f"""
+                    SELECT COALESCE(SUM(sale_price), 0) as total
+                    FROM merchandise
+                    WHERE sale_date IS NOT NULL
+                      AND ({conditions})
+                """, patterns)
+            else:
+                cur.execute("SELECT 0 as total")
             result = cur.fetchone()
             used_amount = result['total'] if result else 0
         else:
             cur = conn.cursor()
-            cur.execute("""
-                SELECT COALESCE(SUM(sale_price), 0) as total
-                FROM merchandise
-                WHERE sales_destination LIKE ? AND sale_date IS NOT NULL
-            """, (f'即決購入: {self.display_name}%',))
+            if patterns:
+                conditions = ' OR '.join(['sales_destination LIKE ?'] * len(patterns))
+                cur.execute(f"""
+                    SELECT COALESCE(SUM(sale_price), 0) as total
+                    FROM merchandise
+                    WHERE sale_date IS NOT NULL
+                      AND ({conditions})
+                """, patterns)
+            else:
+                cur.execute("SELECT 0 as total")
             result = cur.fetchone()
             used_amount = result[0] if result else 0
         
@@ -5210,11 +5250,8 @@ class User(UserMixin):
         return used_amount
     
     def get_proxy_service_remaining_budget(self):
-        """代行仕入れサービスの残り利用可能金額を取得"""
-        if self.proxy_service_budget == 0:
-            return 0  # 0は0円（使えない）
-        used = self.get_proxy_service_used_amount()
-        return max(0, self.proxy_service_budget - used)
+        """代行仕入れサービスの現在残高を取得"""
+        return max(0, self.proxy_service_budget or 0)
     
     def can_purchase_proxy_item(self, price):
         """代行仕入れサービスで指定金額の商品を購入できるか"""
@@ -5250,18 +5287,24 @@ def build_user_from_record(user):
 
     try:
         admin_permissions = user['admin_permissions']
-    except (KeyError, TypeError):
+    except (KeyError, IndexError, TypeError):
         admin_permissions = None
 
     try:
         subscription_status = user['subscription_status']
-    except (KeyError, TypeError):
+    except (KeyError, IndexError, TypeError):
         subscription_status = 'inactive'
 
     try:
         proxy_service_budget = user['proxy_service_budget'] or 0
-    except (KeyError, TypeError):
+    except (KeyError, IndexError, TypeError):
         proxy_service_budget = 0
+
+    def get_optional_user_field(field_name, default=''):
+        try:
+            return user[field_name] or default
+        except (KeyError, IndexError, TypeError):
+            return default
 
     return User(
         user['id'],
@@ -5271,8 +5314,51 @@ def build_user_from_record(user):
         user['display_name'],
         admin_permissions,
         subscription_status,
-        proxy_service_budget
+        proxy_service_budget,
+        get_optional_user_field('phone'),
+        get_optional_user_field('postal_code'),
+        get_optional_user_field('address'),
+        get_optional_user_field('inventory_summary_period_default', 'all'),
+        get_optional_user_field('requested_monthly_plan'),
+        get_optional_user_field('plan_change_effective_month'),
     )
+
+
+def ensure_user_profile_columns():
+    """ユーザー自身が管理する基本情報・表示設定カラムを後方互換で追加する"""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            for ddl in (
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS inventory_summary_period_default VARCHAR(30) DEFAULT 'all'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_monthly_plan VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_change_effective_month VARCHAR(20)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_change_requested_at TIMESTAMP",
+            ):
+                cur.execute(ddl)
+        else:
+            cur.execute("PRAGMA table_info(users)")
+            existing_columns = {row[1] for row in cur.fetchall()}
+            sqlite_columns = {
+                'phone': "ALTER TABLE users ADD COLUMN phone TEXT",
+                'postal_code': "ALTER TABLE users ADD COLUMN postal_code TEXT",
+                'address': "ALTER TABLE users ADD COLUMN address TEXT",
+                'inventory_summary_period_default': "ALTER TABLE users ADD COLUMN inventory_summary_period_default TEXT DEFAULT 'all'",
+                'requested_monthly_plan': "ALTER TABLE users ADD COLUMN requested_monthly_plan TEXT",
+                'plan_change_effective_month': "ALTER TABLE users ADD COLUMN plan_change_effective_month TEXT",
+                'plan_change_requested_at': "ALTER TABLE users ADD COLUMN plan_change_requested_at TEXT",
+            }
+            for column_name, ddl in sqlite_columns.items():
+                if column_name not in existing_columns:
+                    cur.execute(ddl)
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
 
 
 def get_all_admin_permission_keys():
@@ -6132,6 +6218,55 @@ def fetch_announcement_target_users(recipient_scope='all', recipient_user_ids=No
         conn.close()
 
 
+def get_inventory_summary_period_options():
+    """商品一覧の集計期間選択肢"""
+    return [
+        {'key': 'all', 'label': '全期間'},
+        {'key': 'current_month', 'label': '今月'},
+        {'key': 'previous_month', 'label': '先月'},
+        {'key': 'last_3_months', 'label': '直近3か月'},
+    ]
+
+
+def normalize_inventory_summary_period(value):
+    allowed_values = {option['key'] for option in get_inventory_summary_period_options()}
+    normalized = (value or 'all').strip()
+    return normalized if normalized in allowed_values else 'all'
+
+
+def get_monthly_plan_options():
+    """マスター設定に連動した月額プラン選択肢"""
+    fee_settings = get_fee_settings()
+    return [
+        {'key': 'monthly_plan_20', 'label': fee_settings.get('monthly_plan_20', 'ライト'), 'fee': int(fee_settings.get('monthly_fee_20') or 2980)},
+        {'key': 'monthly_plan_50', 'label': fee_settings.get('monthly_plan_50', 'スタンダード'), 'fee': int(fee_settings.get('monthly_fee_50') or 5980)},
+        {'key': 'monthly_plan_100', 'label': fee_settings.get('monthly_plan_100', 'プロ'), 'fee': int(fee_settings.get('monthly_fee_100') or 9800)},
+        {'key': 'monthly_plan_300', 'label': fee_settings.get('monthly_plan_300', 'ビジネス'), 'fee': int(fee_settings.get('monthly_fee_300') or 19800)},
+        {'key': 'monthly_plan_over', 'label': fee_settings.get('monthly_plan_over', 'エンタープライズ'), 'fee': int(fee_settings.get('monthly_fee_over') or 0)},
+    ]
+
+
+def normalize_monthly_plan_key(value):
+    normalized = (value or '').strip()
+    allowed_values = {option['key'] for option in get_monthly_plan_options()}
+    return normalized if normalized in allowed_values else ''
+
+
+def get_monthly_plan_label(plan_key):
+    for option in get_monthly_plan_options():
+        if option['key'] == plan_key:
+            return option['label']
+    return ''
+
+
+def resolve_plan_effective_month(requested_monthly_plan):
+    if not requested_monthly_plan:
+        return ''
+    today_for_plan = get_jst_now().date()
+    effective_base = today_for_plan if today_for_plan.day <= 10 else (today_for_plan.replace(day=1) + timedelta(days=32))
+    return effective_base.strftime('%Y-%m')
+
+
 def fetch_announcement_recipient_users():
     return fetch_announcement_target_users('all')
 
@@ -6900,11 +7035,18 @@ def logout():
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
+    ensure_user_profile_columns()
     if request.method == 'POST':
-        display_name = request.form.get('display_name')
-        email = request.form.get('email')
+        display_name = (request.form.get('display_name') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        phone = (request.form.get('phone') or '').strip()
+        postal_code = (request.form.get('postal_code') or '').strip()
+        address = (request.form.get('address') or '').strip()
+        inventory_summary_period_default = normalize_inventory_summary_period(request.form.get('inventory_summary_period_default'))
+        requested_monthly_plan = normalize_monthly_plan_key(request.form.get('requested_monthly_plan'))
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
+        plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
         
         conn = get_db()
         if DATABASE_URL:
@@ -6931,11 +7073,39 @@ def profile():
         
         # プロフィール更新
         if DATABASE_URL:
-            cur.execute("UPDATE users SET display_name = %s, email = %s WHERE id = %s",
-                       (display_name, email, current_user.id))
+            cur.execute("""
+                UPDATE users
+                SET display_name = %s,
+                    email = %s,
+                    phone = %s,
+                    postal_code = %s,
+                    address = %s,
+                    inventory_summary_period_default = %s,
+                    requested_monthly_plan = %s,
+                    plan_change_effective_month = %s,
+                    plan_change_requested_at = CASE WHEN %s <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
+                WHERE id = %s
+            """, (
+                display_name, email, phone, postal_code, address, inventory_summary_period_default,
+                requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
+            ))
         else:
-            cur.execute("UPDATE users SET display_name = ?, email = ? WHERE id = ?",
-                       (display_name, email, current_user.id))
+            cur.execute("""
+                UPDATE users
+                SET display_name = ?,
+                    email = ?,
+                    phone = ?,
+                    postal_code = ?,
+                    address = ?,
+                    inventory_summary_period_default = ?,
+                    requested_monthly_plan = ?,
+                    plan_change_effective_month = ?,
+                    plan_change_requested_at = CASE WHEN ? <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
+                WHERE id = ?
+            """, (
+                display_name, email, phone, postal_code, address, inventory_summary_period_default,
+                requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
+            ))
         
         conn.commit()
         cur.close()
@@ -6952,6 +7122,9 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
+                   u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.inventory_summary_period_default, u.requested_monthly_plan,
+                   u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
@@ -6965,6 +7138,9 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
+                   u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.inventory_summary_period_default, u.requested_monthly_plan,
+                   u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
@@ -6974,6 +7150,41 @@ def profile():
         """, (current_user.id,))
         user_info = cur.fetchone()
         user_info = dict(user_info) if user_info else {}
+
+    profile_user = dict(user_info or {})
+    proxy_service_history = []
+    buyer_names = [name for name in {current_user.display_name, current_user.username} if name]
+    patterns = []
+    for buyer_name in buyer_names:
+        patterns.extend([
+            f'即決購入: {buyer_name}%',
+            f'即決購入：{buyer_name}%',
+            f'代行仕入れ購入: {buyer_name}%',
+            f'代行仕入れ落札: {buyer_name}%',
+        ])
+    if patterns:
+        if DATABASE_URL:
+            conditions = ' OR '.join(['sales_destination LIKE %s'] * len(patterns))
+            cur.execute(f"""
+                SELECT sale_date, product_name, sale_price, sales_destination
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND ({conditions})
+                ORDER BY sale_date DESC, id DESC
+                LIMIT 20
+            """, patterns)
+            proxy_service_history = [dict(row) for row in cur.fetchall()]
+        else:
+            conditions = ' OR '.join(['sales_destination LIKE ?'] * len(patterns))
+            cur.execute(f"""
+                SELECT sale_date, product_name, sale_price, sales_destination
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND ({conditions})
+                ORDER BY sale_date DESC, id DESC
+                LIMIT 20
+            """, patterns)
+            proxy_service_history = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -6994,7 +7205,19 @@ def profile():
         'next_payment_date': user_info.get('next_payment_date') if user_info else None
     }
     
-    return render_template('profile.html', billing_info=billing_info, fee_settings=get_fee_settings())
+    fee_settings = get_fee_settings()
+    plan_options = get_monthly_plan_options()
+    summary_period_options = get_inventory_summary_period_options()
+
+    return render_template(
+        'profile.html',
+        billing_info=billing_info,
+        fee_settings=fee_settings,
+        profile_user=profile_user,
+        plan_options=plan_options,
+        summary_period_options=summary_period_options,
+        proxy_service_history=proxy_service_history,
+    )
 
 # ===================
 # 商品管理ルート
@@ -7063,6 +7286,10 @@ def index():
     
     filter_type = request.args.get('filter', '')
     search = request.args.get('search', '')
+    summary_period = (request.args.get('summary_period') or getattr(current_user, 'inventory_summary_period_default', None) or 'all').strip()
+    allowed_summary_periods = {'all', 'current_month', 'previous_month', 'last_3_months'}
+    if summary_period not in allowed_summary_periods:
+        summary_period = 'all'
     
     conn = get_db()
     
@@ -7214,8 +7441,109 @@ def index():
                     COALESCE(SUM(CASE WHEN sale_date IS NULL THEN purchase_price ELSE 0 END), 0) as inventory_value
                 FROM merchandise WHERE user_id = ?
             """, (current_user.id,))
-    
+
     stats = cur.fetchone()
+
+    # 商品一覧上部の集計は、一覧検索とは別に「全期間 / 今月 / 先月 / 直近3か月」で切替できるようにする
+    if DATABASE_URL:
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['%s'] * len(shared_user_ids))
+            cur.execute(f"""
+                SELECT purchase_date, sale_date, purchase_price, sale_price, shipping_cost, commission
+                FROM merchandise
+                WHERE user_id IN ({placeholders})
+            """, shared_user_ids)
+        else:
+            cur.execute("""
+                SELECT purchase_date, sale_date, purchase_price, sale_price, shipping_cost, commission
+                FROM merchandise
+                WHERE user_id = %s
+            """, (current_user.id,))
+    else:
+        if is_shared_view and shared_user_ids:
+            placeholders = ','.join(['?'] * len(shared_user_ids))
+            cur.execute(f"""
+                SELECT purchase_date, sale_date, purchase_price, sale_price, shipping_cost, commission
+                FROM merchandise
+                WHERE user_id IN ({placeholders})
+            """, shared_user_ids)
+        else:
+            cur.execute("""
+                SELECT purchase_date, sale_date, purchase_price, sale_price, shipping_cost, commission
+                FROM merchandise
+                WHERE user_id = ?
+            """, (current_user.id,))
+
+    stats_rows = [dict(row) for row in cur.fetchall()]
+    period_today = datetime.now().date()
+    current_month_start = period_today.replace(day=1)
+    previous_month_end = current_month_start - timedelta(days=1)
+    previous_month_start = previous_month_end.replace(day=1)
+    last_3_months_start = (current_month_start - timedelta(days=62)).replace(day=1)
+
+    period_ranges = {
+        'current_month': (current_month_start, period_today),
+        'previous_month': (previous_month_start, previous_month_end),
+        'last_3_months': (last_3_months_start, period_today),
+    }
+    selected_period_range = period_ranges.get(summary_period)
+
+    def parse_summary_date(value):
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if hasattr(value, 'date') and callable(value.date):
+            try:
+                return value.date()
+            except Exception:
+                pass
+        value_text = str(value).strip()
+        if not value_text:
+            return None
+        for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f'):
+            try:
+                return datetime.strptime(value_text[:26], fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def is_in_summary_period(value):
+        if summary_period == 'all':
+            return True
+        parsed = parse_summary_date(value)
+        if not parsed or not selected_period_range:
+            return False
+        start_date, end_date = selected_period_range
+        return start_date <= parsed <= end_date
+
+    computed_stats = {
+        'total_items': 0,
+        'total_purchase': 0,
+        'total_sales': 0,
+        'total_profit': 0,
+        'sold_count': 0,
+        'inventory_value': 0,
+    }
+    for row in stats_rows:
+        purchase_price = int(row.get('purchase_price') or 0)
+        sale_price = int(row.get('sale_price') or 0)
+        shipping_cost = int(row.get('shipping_cost') or 0)
+        commission = int(row.get('commission') or 0)
+        purchase_in_period = is_in_summary_period(row.get('purchase_date'))
+        sale_in_period = bool(row.get('sale_date')) and is_in_summary_period(row.get('sale_date'))
+
+        if purchase_in_period:
+            computed_stats['total_items'] += 1
+            computed_stats['total_purchase'] += purchase_price
+            if not row.get('sale_date'):
+                computed_stats['inventory_value'] += purchase_price
+        if sale_in_period:
+            computed_stats['sold_count'] += 1
+            computed_stats['total_sales'] += sale_price
+            computed_stats['total_profit'] += sale_price - purchase_price - shipping_cost - commission
+
+    stats = computed_stats
     cur.close()
     conn.close()
     
@@ -7263,7 +7591,7 @@ def index():
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
                 WHERE sar.status IN ('pending', 'approved')
-                  AND sar.service_type IN ('wholesale', 'auction')
+                  AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         else:
             cur3 = conn3.cursor()
@@ -7272,7 +7600,7 @@ def index():
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
                 WHERE sar.status IN ('pending', 'approved')
-                  AND sar.service_type IN ('wholesale', 'auction')
+                  AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         for req in cur3.fetchall():
             req_dict = dict(req)
@@ -7391,11 +7719,15 @@ def index():
         'used': current_user.get_proxy_service_used_amount(),
         'remaining': current_user.get_proxy_service_remaining_budget()
     }
-    
+
+    summary_period_options = get_inventory_summary_period_options()
+
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements,
                          is_shared_view=is_shared_view, all_users=all_users,
-                         proxy_service_info=proxy_service_info)
+                         proxy_service_info=proxy_service_info,
+                         summary_period=summary_period,
+                         summary_period_options=summary_period_options)
 
 # ===================
 # レポート機能
@@ -9713,6 +10045,7 @@ def user_announcement_mark_all_read_api():
 
     visible_ids = get_visible_announcement_ids_for_user(current_user)
     read_count = mark_announcements_read_for_user(current_user.id, visible_ids)
+    hide_announcement_banner_for_user(current_user.id, visible_ids)
     announcements = [
         serialize_announcement_payload(announcement)
         for announcement in get_active_announcements(current_user, limit=None)
@@ -9795,6 +10128,9 @@ def user_announcement_detail_page(announcement_id):
     if not announcement:
         flash('お知らせが見つかりません', 'error')
         return redirect(url_for('user_announcements_page'))
+
+    mark_announcements_read_for_user(current_user.id, [announcement_id])
+    announcement['is_read'] = True
 
     return render_template('announcement_detail.html', announcement=announcement)
 
@@ -12261,6 +12597,47 @@ def view_item(id):
     if item_dict.get('photo_path'):
         item_dict['all_photos'].append(item_dict['photo_path'])
     item_dict['all_photos'].extend(item_dict.get('additional_photos_list', []))
+
+    item_dict['pending_sales_agency'] = False
+    item_dict['sales_agency_request'] = None
+    if not (current_user.is_admin() or current_user.is_owner()):
+        try:
+            conn_sa = get_db()
+            if DATABASE_URL:
+                cur_sa = conn_sa.cursor(cursor_factory=RealDictCursor)
+                cur_sa.execute("""
+                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at
+                    FROM sales_agency_request_items sari
+                    JOIN sales_agency_requests sar ON sari.request_id = sar.id
+                    WHERE sari.merchandise_id = %s
+                      AND sar.user_id = %s
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting')
+                    ORDER BY sar.created_at DESC
+                    LIMIT 1
+                """, (id, current_user.id))
+            else:
+                cur_sa = conn_sa.cursor()
+                cur_sa.execute("""
+                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at
+                    FROM sales_agency_request_items sari
+                    JOIN sales_agency_requests sar ON sari.request_id = sar.id
+                    WHERE sari.merchandise_id = ?
+                      AND sar.user_id = ?
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting')
+                    ORDER BY sar.created_at DESC
+                    LIMIT 1
+                """, (id, current_user.id))
+            request_row = cur_sa.fetchone()
+            cur_sa.close()
+            conn_sa.close()
+            if request_row:
+                request_dict = dict(request_row)
+                request_dict['service_name'] = get_sales_agency_service_name(request_dict.get('service_type'))
+                request_dict['status_label'] = get_sales_agency_status_label(request_dict.get('status'), viewer='client')
+                item_dict['pending_sales_agency'] = True
+                item_dict['sales_agency_request'] = request_dict
+        except Exception as e:
+            print(f"Error fetching item sales agency status: {e}", flush=True)
     
     if item_dict.get('sale_date'):
         item_dict['profit'] = calculate_profit(
@@ -12290,7 +12667,7 @@ def view_item(id):
         back_url = url_for('index')
     back_url = get_item_back_url(back_url)
 
-    return render_template('view.html', item=item_dict, back_url=back_url)
+    return render_template('view.html', item=item_dict, back_url=back_url, sales_agency_service_types=SALES_AGENCY_SERVICE_TYPES)
 
 @app.route('/delete/<int:id>')
 @login_required
@@ -13244,7 +13621,11 @@ def admin_dashboard():
 @login_required
 @permission_required('users')
 def admin_users():
+    ensure_user_profile_columns()
     conn = get_db()
+    fee_settings = get_fee_settings()
+    plan_options = get_monthly_plan_options()
+    plan_label_map = {option['key']: option['label'] for option in plan_options}
     
     # 検索クエリパラメータを取得
     search_query = request.args.get('search', '').strip()
@@ -13309,6 +13690,7 @@ def admin_users():
         # 月額利用料を計算（DB設定参照）
         count = user['monthly_item_count']
         user['monthly_fee'] = get_monthly_fee(count)
+        user['requested_plan_label'] = plan_label_map.get(user.get('requested_monthly_plan'), '')
         
         # 開花手数料（sale_typeがnormal以外の手数料合計）
         if DATABASE_URL:
@@ -13335,7 +13717,7 @@ def admin_users():
     cur.close()
     conn.close()
     
-    return render_template('admin/users.html', users=users, search_query=search_query, fee_settings=get_fee_settings())
+    return render_template('admin/users.html', users=users, search_query=search_query, fee_settings=fee_settings)
 
 @app.route('/admin/users/<int:id>/toggle_admin')
 @login_required
@@ -13479,11 +13861,21 @@ def delete_user(id):
 @login_required
 @permission_required('users')
 def admin_add_user():
+    ensure_user_profile_columns()
+    plan_options = get_monthly_plan_options()
+    summary_period_options = get_inventory_summary_period_options()
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
         display_name = request.form.get('display_name')
+        phone = (request.form.get('phone') or '').strip()
+        postal_code = (request.form.get('postal_code') or '').strip()
+        address = (request.form.get('address') or '').strip()
+        inventory_summary_period_default = normalize_inventory_summary_period(request.form.get('inventory_summary_period_default'))
+        requested_monthly_plan = normalize_monthly_plan_key(request.form.get('requested_monthly_plan'))
+        plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
+        plan_change_requested_at = get_jst_now().strftime('%Y-%m-%d %H:%M:%S') if requested_monthly_plan else None
         role = request.form.get('role', 'user')
         
         # 管理者権限の設定を取得
@@ -13496,26 +13888,40 @@ def admin_add_user():
         
         if not username or not email or not password:
             flash('ユーザー名、メール、パスワードは必須です', 'error')
-            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
+            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS, plan_options=plan_options, summary_period_options=summary_period_options)
         
         if len(password) < 6:
             flash('パスワードは6文字以上必要です', 'error')
-            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
+            return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS, plan_options=plan_options, summary_period_options=summary_period_options)
         
         conn = get_db()
         try:
             if DATABASE_URL:
                 cur = conn.cursor()
                 cur.execute('''
-                    INSERT INTO users (username, email, password_hash, role, display_name, admin_permissions)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                ''', (username, email, generate_password_hash(password), role, display_name or username, admin_permissions_json))
+                    INSERT INTO users (
+                        username, email, password_hash, role, display_name, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_change_effective_month,
+                        plan_change_requested_at, admin_permissions
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (
+                    username, email, generate_password_hash(password), role, display_name or username, phone, postal_code, address,
+                    inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at, admin_permissions_json
+                ))
             else:
                 cur = conn.cursor()
                 cur.execute('''
-                    INSERT INTO users (username, email, password_hash, role, display_name, admin_permissions)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (username, email, generate_password_hash(password), role, display_name or username, admin_permissions_json))
+                    INSERT INTO users (
+                        username, email, password_hash, role, display_name, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_change_effective_month,
+                        plan_change_requested_at, admin_permissions
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    username, email, generate_password_hash(password), role, display_name or username, phone, postal_code, address,
+                    inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at, admin_permissions_json
+                ))
             conn.commit()
             flash('ユーザーを作成しました', 'success')
             return redirect(url_for('admin_users'))
@@ -13524,12 +13930,15 @@ def admin_add_user():
         finally:
             conn.close()
     
-    return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
+    return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS, plan_options=plan_options, summary_period_options=summary_period_options)
 
 @app.route('/admin/users/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 @permission_required('users')
 def admin_edit_user(id):
+    ensure_user_profile_columns()
+    plan_options = get_monthly_plan_options()
+    summary_period_options = get_inventory_summary_period_options()
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -13546,6 +13955,13 @@ def admin_edit_user(id):
     if request.method == 'POST':
         display_name = request.form.get('display_name')
         email = request.form.get('email')
+        phone = (request.form.get('phone') or '').strip()
+        postal_code = (request.form.get('postal_code') or '').strip()
+        address = (request.form.get('address') or '').strip()
+        inventory_summary_period_default = normalize_inventory_summary_period(request.form.get('inventory_summary_period_default'))
+        requested_monthly_plan = normalize_monthly_plan_key(request.form.get('requested_monthly_plan'))
+        plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
+        plan_change_requested_at = get_jst_now().strftime('%Y-%m-%d %H:%M:%S') if requested_monthly_plan else None
         role = request.form.get('role', 'user')
         new_password = request.form.get('new_password')
         proxy_service_budget_raw = request.form.get('proxy_service_budget', '0')
@@ -13583,27 +13999,97 @@ def admin_edit_user(id):
                 print(f"[DEBUG] ハッシュ生成完了: {hashed_password[:20]}...")
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, password_hash = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
+                        UPDATE users
+                        SET display_name = %s,
+                            email = %s,
+                            phone = %s,
+                            postal_code = %s,
+                            address = %s,
+                            inventory_summary_period_default = %s,
+                            requested_monthly_plan = %s,
+                            plan_change_effective_month = %s,
+                            plan_change_requested_at = %s,
+                            role = %s,
+                            password_hash = %s,
+                            admin_permissions = %s,
+                            proxy_service_budget = %s,
+                            tuition_exempt = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, hashed_password, admin_permissions_json, proxy_service_budget, tuition_exempt, id))
+                    ''', (
+                        display_name, email, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at,
+                        role, hashed_password, admin_permissions_json, proxy_service_budget, tuition_exempt, id
+                    ))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, password_hash = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
+                        UPDATE users
+                        SET display_name = ?,
+                            email = ?,
+                            phone = ?,
+                            postal_code = ?,
+                            address = ?,
+                            inventory_summary_period_default = ?,
+                            requested_monthly_plan = ?,
+                            plan_change_effective_month = ?,
+                            plan_change_requested_at = ?,
+                            role = ?,
+                            password_hash = ?,
+                            admin_permissions = ?,
+                            proxy_service_budget = ?,
+                            tuition_exempt = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, hashed_password, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
+                    ''', (
+                        display_name, email, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at,
+                        role, hashed_password, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id
+                    ))
                 print(f"[DEBUG] UPDATE実行完了、rowcount={cur.rowcount}")
             else:
                 print(f"[DEBUG] パスワード更新なし（空または6文字未満）")
                 if DATABASE_URL:
                     cur.execute('''
-                        UPDATE users SET display_name = %s, email = %s, role = %s, admin_permissions = %s, proxy_service_budget = %s, tuition_exempt = %s
+                        UPDATE users
+                        SET display_name = %s,
+                            email = %s,
+                            phone = %s,
+                            postal_code = %s,
+                            address = %s,
+                            inventory_summary_period_default = %s,
+                            requested_monthly_plan = %s,
+                            plan_change_effective_month = %s,
+                            plan_change_requested_at = %s,
+                            role = %s,
+                            admin_permissions = %s,
+                            proxy_service_budget = %s,
+                            tuition_exempt = %s
                         WHERE id = %s
-                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, tuition_exempt, id))
+                    ''', (
+                        display_name, email, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at,
+                        role, admin_permissions_json, proxy_service_budget, tuition_exempt, id
+                    ))
                 else:
                     cur.execute('''
-                        UPDATE users SET display_name = ?, email = ?, role = ?, admin_permissions = ?, proxy_service_budget = ?, tuition_exempt = ?
+                        UPDATE users
+                        SET display_name = ?,
+                            email = ?,
+                            phone = ?,
+                            postal_code = ?,
+                            address = ?,
+                            inventory_summary_period_default = ?,
+                            requested_monthly_plan = ?,
+                            plan_change_effective_month = ?,
+                            plan_change_requested_at = ?,
+                            role = ?,
+                            admin_permissions = ?,
+                            proxy_service_budget = ?,
+                            tuition_exempt = ?
                         WHERE id = ?
-                    ''', (display_name, email, role, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id))
+                    ''', (
+                        display_name, email, phone, postal_code, address,
+                        inventory_summary_period_default, requested_monthly_plan, plan_effective_month, plan_change_requested_at,
+                        role, admin_permissions_json, proxy_service_budget, 1 if tuition_exempt else 0, id
+                    ))
                 print(f"[DEBUG] UPDATE実行完了、rowcount={cur.rowcount}")
             
             conn.commit()
@@ -13641,7 +14127,13 @@ def admin_edit_user(id):
     else:
         user_dict['admin_permissions_list'] = get_all_admin_permission_keys() if user_dict.get('role') == 'admin' else []
     
-    return render_template('admin/user_form.html', user=user_dict, permission_options=User.ADMIN_PERMISSION_OPTIONS)
+    return render_template(
+        'admin/user_form.html',
+        user=user_dict,
+        permission_options=User.ADMIN_PERMISSION_OPTIONS,
+        plan_options=plan_options,
+        summary_period_options=summary_period_options,
+    )
 
 @app.route('/admin/users/<int:id>/items')
 @login_required
@@ -18552,6 +19044,12 @@ def proxy_service_purchase():
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (%s, %s, %s, %s)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
 
+        cur.execute("""
+            UPDATE users
+            SET proxy_service_budget = GREATEST(0, COALESCE(proxy_service_budget, 0) - %s)
+            WHERE id = %s
+        """, (purchase_price, user_id))
+
         upsert_proxy_service_keisan_document(
             conn,
             auction_id=auction_id,
@@ -18741,6 +19239,12 @@ def proxy_service_purchase():
         # 入札履歴にも記録
         cur.execute("INSERT INTO proxy_service_bids (merchandise_id, user_id, bidder_name, bid_amount) VALUES (?, ?, ?, ?)",
                    (merchandise_id, user_id, f'{buyer_name}（購入）', purchase_price))
+
+        cur.execute("""
+            UPDATE users
+            SET proxy_service_budget = MAX(0, COALESCE(proxy_service_budget, 0) - ?)
+            WHERE id = ?
+        """, (purchase_price, user_id))
 
         upsert_proxy_service_keisan_document(
             conn,
@@ -34348,21 +34852,44 @@ def sales_agency_apply():
     """販売代行サービス申請"""
     service_type = request.form.get('service_type')
     merchandise_ids = request.form.getlist('merchandise_ids')
+    next_url = request.form.get('next') or url_for('index')
+    if not str(next_url).startswith('/'):
+        next_url = url_for('index')
     print(f"[DEBUG] sales_agency_apply: service_type={service_type}, merchandise_ids={merchandise_ids}", flush=True)
     
     if not service_type or service_type not in SALES_AGENCY_SERVICE_TYPES:
         flash('サービス種別を選択してください', 'error')
-        return redirect(url_for('index'))
+        return redirect(next_url)
     
     if not merchandise_ids:
         flash('商品を選択してください', 'error')
-        return redirect(url_for('index'))
+        return redirect(next_url)
+
+    try:
+        merchandise_ids = [int(m_id) for m_id in merchandise_ids]
+    except (TypeError, ValueError):
+        flash('商品を正しく選択してください', 'error')
+        return redirect(next_url)
     
     try:
         conn = get_db()
         print(f"[DEBUG] sales_agency_apply: got DB connection, DATABASE_URL is set: {DATABASE_URL is not None}", flush=True)
         if DATABASE_URL:
             cur = conn.cursor()
+            placeholders = ','.join(['%s'] * len(merchandise_ids))
+            cur.execute(f"""
+                SELECT id
+                FROM merchandise
+                WHERE user_id = %s
+                  AND sale_date IS NULL
+                  AND id IN ({placeholders})
+            """, [current_user.id] + merchandise_ids)
+            valid_ids = {row[0] for row in cur.fetchall()}
+            if valid_ids != set(merchandise_ids):
+                cur.close()
+                conn.close()
+                flash('申請できない商品が含まれています', 'error')
+                return redirect(next_url)
             print(f"[DEBUG] sales_agency_apply: inserting into sales_agency_requests for user_id={current_user.id}, service_type={service_type}", flush=True)
             # 申請を作成
             cur.execute('''
@@ -34380,9 +34907,23 @@ def sales_agency_apply():
                 cur.execute('''
                     INSERT INTO sales_agency_request_items (request_id, merchandise_id)
                     VALUES (%s, %s)
-                ''', (request_id, int(m_id)))
+                ''', (request_id, m_id))
         else:
             cur = conn.cursor()
+            placeholders = ','.join(['?'] * len(merchandise_ids))
+            cur.execute(f"""
+                SELECT id
+                FROM merchandise
+                WHERE user_id = ?
+                  AND sale_date IS NULL
+                  AND id IN ({placeholders})
+            """, [current_user.id] + merchandise_ids)
+            valid_ids = {row[0] for row in cur.fetchall()}
+            if valid_ids != set(merchandise_ids):
+                cur.close()
+                conn.close()
+                flash('申請できない商品が含まれています', 'error')
+                return redirect(next_url)
             cur.execute('''
                 INSERT INTO sales_agency_requests (user_id, service_type)
                 VALUES (?, ?)
@@ -34393,7 +34934,7 @@ def sales_agency_apply():
                 cur.execute('''
                     INSERT INTO sales_agency_request_items (request_id, merchandise_id)
                     VALUES (?, ?)
-                ''', (request_id, int(m_id)))
+                ''', (request_id, m_id))
         
         conn.commit()
         print(f"[DEBUG] sales_agency_apply: request_id={request_id} created successfully", flush=True)
@@ -34438,7 +34979,7 @@ def sales_agency_apply():
         print(f"Sales agency apply error: {e}")
         flash('申請に失敗しました', 'error')
     
-    return redirect(url_for('index'))
+    return redirect(next_url)
 
 @app.route('/sales-agency/my-requests')
 @login_required

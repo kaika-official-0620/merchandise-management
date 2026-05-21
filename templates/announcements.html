@@ -37,18 +37,21 @@
 
 .announcement-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.85rem;
     align-items: stretch;
     padding: 0.95rem;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    background: #ffffff;
+    background: #111827;
+    color: #e5e7eb;
 }
 
 .announcement-card.is-unread {
-    border-color: #93c5fd;
-    box-shadow: inset 4px 0 0 #2563eb;
+    border-color: #dbeafe;
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
 }
 
 .announcement-card__link {
@@ -63,8 +66,7 @@
     color: #2563eb;
 }
 
-.announcement-card__badge,
-.announcement-card__read {
+.announcement-card__badge {
     display: inline-flex;
     justify-content: center;
     align-items: center;
@@ -77,24 +79,12 @@
 }
 
 .announcement-card__badge {
-    min-width: 54px;
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.announcement-card.important .announcement-card__badge {
     background: #fee2e2;
     color: #b91c1c;
 }
 
-.announcement-card.warning .announcement-card__badge {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.announcement-card.success .announcement-card__badge {
-    background: #dcfce7;
-    color: #15803d;
+.announcement-card__badge:empty {
+    display: none;
 }
 
 .announcement-card__body {
@@ -112,25 +102,15 @@
 
 .announcement-card__title {
     margin: 0;
-    color: #0f172a;
+    color: inherit;
     font-size: 1rem;
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
 
-.announcement-card__read {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.announcement-card__read.is-read {
-    background: #e2e8f0;
-    color: #475569;
-}
-
 .announcement-card__content {
     margin: 0;
-    color: #475569;
+    color: inherit;
     font-size: 0.92rem;
     line-height: 1.7;
     overflow-wrap: anywhere;
@@ -146,22 +126,6 @@
 .announcement-card__date {
     color: #94a3b8;
     font-size: 0.78rem;
-}
-
-.announcement-card__delete {
-    min-height: 38px;
-    padding: 0.45rem 0.8rem;
-    border: 1px solid #fecaca;
-    border-radius: 8px;
-    background: #fff5f5;
-    color: #b91c1c;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.announcement-card__delete:hover {
-    background: #fee2e2;
 }
 
 .announcements-empty {
@@ -198,9 +162,6 @@
         display: grid;
     }
 
-    .announcement-card__delete {
-        width: 100%;
-    }
 }
 </style>
 
@@ -216,26 +177,16 @@
         <article class="announcement-card {{ ann.announcement_type }} {% if not ann.is_read %}is-unread{% endif %}">
             <a href="{{ url_for('user_announcement_detail_page', announcement_id=ann.id) }}" class="announcement-card__link">
                 <span class="announcement-card__badge">
-                    {% if ann.announcement_type == 'important' %}重要
-                    {% elif ann.announcement_type == 'warning' %}注意
-                    {% elif ann.announcement_type == 'success' %}更新
-                    {% else %}お知らせ
-                    {% endif %}
+                    {% if ann.announcement_type == 'important' %}重要{% endif %}
                 </span>
                 <div class="announcement-card__body">
                     <div class="announcement-card__title-row">
                         <h2 class="announcement-card__title">{{ ann.title }}</h2>
-                        <span class="announcement-card__read {% if ann.is_read %}is-read{% endif %}">
-                            {% if ann.is_read %}既読{% else %}未読{% endif %}
-                        </span>
                     </div>
                     <p class="announcement-card__content announcement-card__content--preview">{{ ann.content }}</p>
                     <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>
                 </div>
             </a>
-            <form method="POST" action="{{ url_for('user_announcement_delete_page', announcement_id=ann.id) }}">
-                <button type="submit" class="announcement-card__delete" onclick="return confirm('このお知らせを削除しますか？')">削除</button>
-            </form>
         </article>
         {% endfor %}
     </div>

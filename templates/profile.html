@@ -69,19 +69,26 @@
                     <span class="budget-amount">¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</span>
                 </div>
                 <div class="budget-detail">
-                    <span class="detail-item">利用上限: <strong>¥{{ "{:,}".format(current_user.proxy_service_budget) }}</strong></span>
-                    <span class="detail-item">使用済み: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_used_amount() or 0) }}</strong></span>
+                    <span class="detail-item">現在の入金残高: <strong>¥{{ "{:,}".format(current_user.proxy_service_budget) }}</strong></span>
+                    <span class="detail-item">過去の仕入れ利用額: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_used_amount() or 0) }}</strong></span>
                 </div>
             </div>
-            <div class="budget-progress">
-                {% set remaining = current_user.get_proxy_service_remaining_budget() or 0 %}
-                {% set budget = current_user.proxy_service_budget %}
-                {% set percentage = ((budget - remaining) / budget * 100) if budget > 0 else 0 %}
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {{ percentage }}%"></div>
+        </div>
+        <div class="budget-history">
+            <h3>仕入れ利用履歴</h3>
+            {% if proxy_service_history %}
+            <div class="budget-history-list">
+                {% for row in proxy_service_history %}
+                <div class="budget-history-row">
+                    <span>{{ (row.sale_date|string)[:10] }}</span>
+                    <strong>{{ row.product_name or '代行仕入れ商品' }}</strong>
+                    <span>¥{{ "{:,}".format(row.sale_price or 0) }}</span>
                 </div>
-                <span class="progress-text">{{ "%.0f"|format(percentage) }}% 使用済み</span>
+                {% endfor %}
             </div>
+            {% else %}
+            <p class="budget-history-empty">まだ代行仕入れの利用履歴はありません。</p>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -93,13 +100,60 @@
             <div class="form-group">
                 <label for="display_name">表示名</label>
                 <input type="text" id="display_name" name="display_name" 
-                       value="{{ current_user.display_name }}">
+                       value="{{ profile_user.display_name or current_user.display_name }}">
             </div>
             
             <div class="form-group">
                 <label for="email">メールアドレス</label>
                 <input type="email" id="email" name="email" 
-                       value="{{ current_user.email }}">
+                       value="{{ profile_user.email or current_user.email }}">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">電話番号</label>
+                <input type="text" id="phone" name="phone" value="{{ profile_user.phone or '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="postal_code">郵便番号</label>
+                <input type="text" id="postal_code" name="postal_code" value="{{ profile_user.postal_code or '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="address">住所・発送先</label>
+                <textarea id="address" name="address" rows="3" placeholder="未登録">{{ profile_user.address or '' }}</textarea>
+                <small>管理側が発送先・返送先を確認するときに使用します。</small>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2>表示・プラン設定</h2>
+
+            <div class="form-group">
+                <label for="inventory_summary_period_default">商品一覧の初期集計期間</label>
+                <select id="inventory_summary_period_default" name="inventory_summary_period_default">
+                    {% for option in summary_period_options %}
+                    <option value="{{ option.key }}" {% if (profile_user.inventory_summary_period_default or 'all') == option.key %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="requested_monthly_plan">月額プラン変更希望</label>
+                <select id="requested_monthly_plan" name="requested_monthly_plan">
+                    <option value="">変更しない</option>
+                    {% for plan in plan_options %}
+                    <option value="{{ plan.key }}" {% if profile_user.requested_monthly_plan == plan.key %}selected{% endif %}>
+                        {{ plan.label }}{% if plan.fee > 0 %}（¥{{ "{:,}".format(plan.fee) }}）{% else %}（個別相談）{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>毎月10日までの変更は当月扱い、10日以降は翌月変更として管理側に反映されます。</small>
+                {% if profile_user.requested_monthly_plan %}
+                <small>現在の変更希望: {{ profile_user.plan_change_effective_month or '-' }} 反映予定</small>
+                {% endif %}
             </div>
         </div>
         
@@ -336,6 +390,62 @@
     color: #92400e;
 }
 
+.budget-history {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+}
+
+.budget-history h3 {
+    margin: 0 0 0.75rem;
+    color: #78350f;
+    font-size: 0.95rem;
+}
+
+.budget-history-list {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.budget-history-row {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid #fde68a;
+    color: #78350f;
+    font-size: 0.86rem;
+}
+
+.budget-history-row:last-child {
+    border-bottom: none;
+}
+
+.budget-history-row strong {
+    color: #1f2937;
+    overflow-wrap: anywhere;
+}
+
+.budget-history-empty {
+    margin: 0;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+
+.profile-form textarea,
+.profile-form select {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font: inherit;
+}
+
 .budget-progress {
     display: flex;
     flex-direction: column;
@@ -374,6 +484,11 @@
     .budget-progress {
         width: 100%;
         align-items: flex-start;
+    }
+
+    .budget-history-row {
+        grid-template-columns: 1fr;
+        gap: 0.2rem;
     }
 }
 </style>

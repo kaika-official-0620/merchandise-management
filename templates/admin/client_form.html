@@ -33,13 +33,28 @@
                 <label for="email">メールアドレス *</label>
                 <input type="email" id="email" name="email" required value="{{ user.email if user else '' }}">
             </div>
+
+            <div class="form-group">
+                <label for="phone">電話番号</label>
+                <input type="text" id="phone" name="phone" value="{{ user.phone if user else '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="postal_code">郵便番号</label>
+                <input type="text" id="postal_code" name="postal_code" value="{{ user.postal_code if user else '' }}" placeholder="未登録">
+            </div>
+
+            <div class="form-group">
+                <label for="address">住所・発送先</label>
+                <textarea id="address" name="address" rows="3" placeholder="未登録">{{ user.address if user else '' }}</textarea>
+            </div>
         </div>
 
         <div class="form-section">
             <h2>運用設定</h2>
 
             <div class="form-group">
-                <label for="proxy_service_budget">代行予算</label>
+                <label for="proxy_service_budget">代行仕入れ入金残高</label>
                 <input type="number" id="proxy_service_budget" name="proxy_service_budget" min="0" step="1000" value="{{ user.proxy_service_budget if user else 0 }}">
             </div>
 

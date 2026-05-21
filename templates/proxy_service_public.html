@@ -993,7 +993,7 @@
             <span class="budget-info">
                 {% if current_user.proxy_service_budget > 0 %}
                 利用可能残高: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</strong>
-                <small>/ ¥{{ "{:,}".format(current_user.proxy_service_budget) }}</small>
+                <small>入金残高</small>
                 {% else %}
                 利用可能残高: <strong class="no-budget">¥0</strong>
                 <small>（利用不可）</small>

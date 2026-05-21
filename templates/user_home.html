@@ -144,8 +144,7 @@
 }
 
 .user-home-read-all,
-.user-home-more-button,
-.user-home-menu-toggle {
+.user-home-more-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -165,8 +164,7 @@
 }
 
 .user-home-read-all:hover:not(:disabled),
-.user-home-more-button:hover,
-.user-home-menu-toggle:hover {
+.user-home-more-button:hover {
     border-color: #93c5fd;
     background: #eff6ff;
     color: #1d4ed8;
@@ -177,12 +175,6 @@
     opacity: 0.48;
 }
 
-.user-home-menu-toggle.is-open {
-    border-color: #2563eb;
-    background: #2563eb;
-    color: #ffffff;
-}
-
 .user-home-announcements {
     display: grid;
     gap: 0.8rem;
@@ -191,18 +183,27 @@
 .user-home-announcement {
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    background: #f8fafc;
+    background: #ffffff;
     overflow: hidden;
 }
 
 .user-home-announcement.is-unread {
-    border-color: #bfdbfe;
-    background: #f8fbff;
-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.06);
+    border-color: #dbeafe;
+    background: #ffffff;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
 }
 
 .user-home-announcement.is-read {
-    background: #ffffff;
+    border-color: #1f2937;
+    background: #111827;
+    color: #e5e7eb;
+}
+
+.user-home-announcement.is-read .user-home-announcement__title,
+.user-home-announcement.is-read .user-home-announcement__snippet-line,
+.user-home-announcement.is-read .user-home-announcement__timestamp,
+.user-home-announcement.is-read .user-home-announcement__chevron {
+    color: #e5e7eb;
 }
 
 .user-home-announcement__summary {
@@ -227,14 +228,12 @@
     align-items: center;
 }
 
-.user-home-announcement__badge,
-.user-home-announcement__scope,
-.user-home-announcement__read {
+.user-home-announcement__badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 28px;
-    padding: 0.2rem 0.72rem;
+    min-height: 24px;
+    padding: 0.16rem 0.6rem;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 700;
@@ -242,39 +241,12 @@
 }
 
 .user-home-announcement__badge {
-    min-width: 84px;
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.user-home-announcement[data-type="important"] .user-home-announcement__badge {
     background: #fee2e2;
     color: #b91c1c;
 }
 
-.user-home-announcement[data-type="warning"] .user-home-announcement__badge {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.user-home-announcement[data-type="success"] .user-home-announcement__badge {
-    background: #dcfce7;
-    color: #15803d;
-}
-
-.user-home-announcement__scope {
-    background: #e2e8f0;
-    color: #475569;
-}
-
-.user-home-announcement__read {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-.user-home-announcement__read.is-read {
-    background: #e2e8f0;
-    color: #475569;
+.user-home-announcement__badge:empty {
+    display: none;
 }
 
 .user-home-announcement__title-row {
@@ -310,19 +282,9 @@
 }
 
 .user-home-announcement__snippet-line {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
     color: #475569;
     font-size: 0.86rem;
     line-height: 1.75;
-}
-
-.user-home-announcement__snippet-index {
-    flex: 0 0 auto;
-    color: #94a3b8;
-    font-size: 0.76rem;
-    font-weight: 700;
 }
 
 .user-home-announcement__snippet-text {
@@ -354,13 +316,14 @@
 
 .user-home-announcement__line-list {
     margin: 0;
-    padding: 0 0 0 1.35rem;
+    padding: 0;
     display: grid;
     gap: 0.48rem;
     color: #334155;
 }
 
-.user-home-announcement__line-list li {
+.user-home-announcement__line-list p {
+    margin: 0;
     line-height: 1.85;
     overflow-wrap: anywhere;
 }
@@ -439,90 +402,6 @@
     line-height: 1.8;
 }
 
-.user-home-menu-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.55rem;
-    margin-bottom: 0.9rem;
-    padding: 0.9rem;
-    border: 1px dashed #cbd5e1;
-    border-radius: 10px;
-    background: #f8fafc;
-}
-
-.user-home-menu-picker[hidden] {
-    display: none;
-}
-
-.user-home-menu-chip {
-    padding: 0.48rem 0.78rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #475569;
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1.4;
-    cursor: pointer;
-    transition: all 0.18s ease;
-}
-
-.user-home-menu-chip:hover {
-    border-color: #93c5fd;
-    background: #eff6ff;
-    color: #1d4ed8;
-}
-
-.user-home-menu-chip.is-active {
-    border-color: #2563eb;
-    background: #2563eb;
-    color: #ffffff;
-}
-
-.user-home-shortcuts {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.8rem;
-}
-
-.user-home-shortcut {
-    display: grid;
-    gap: 0.35rem;
-    min-width: 0;
-    height: 100%;
-    padding: 1rem;
-    border: 1px solid #dbeafe;
-    border-radius: 12px;
-    background: #f8fbff;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-
-.user-home-shortcut[hidden] {
-    display: none;
-}
-
-.user-home-shortcut:hover {
-    transform: translateY(-2px);
-    border-color: #93c5fd;
-    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
-}
-
-.user-home-shortcut h3 {
-    margin: 0;
-    color: #0f172a;
-    font-size: 0.95rem;
-    line-height: 1.55;
-    overflow-wrap: anywhere;
-}
-
-.user-home-shortcut p {
-    margin: 0;
-    color: #475569;
-    font-size: 0.82rem;
-    line-height: 1.7;
-    overflow-wrap: anywhere;
-}
-
 @media (max-width: 900px) {
     .user-home-section__header {
         display: grid;
@@ -564,16 +443,13 @@
         padding: 0 0.9rem 0.9rem;
     }
 
-    .user-home-shortcuts {
-        grid-template-columns: 1fr;
-    }
 }
 </style>
 
 <div class="page-header user-home-header">
     <div>
         <h1>ホーム</h1>
-        <p>利用状況とお知らせ、よく使うメニューをここからまとめて確認できます。</p>
+        <p>利用状況と未読のお知らせをここから確認できます。</p>
     </div>
 </div>
 
@@ -588,7 +464,7 @@
         <article class="user-home-summary-card user-home-summary-card--balance">
             <span class="user-home-summary__label">利用可能残高</span>
             <strong class="user-home-summary__value">¥{{ "{:,}".format(proxy_service_info.remaining or 0) }}</strong>
-            <span class="user-home-summary__subvalue">設定上限 ¥{{ "{:,}".format(proxy_service_info.budget or 0) }}</span>
+            <span class="user-home-summary__subvalue">入金残高から代行仕入れ利用分を差し引いた現在の残高です。</span>
         </article>
     </section>
 
@@ -597,105 +473,23 @@
             <div class="user-home-section__copy">
                 <span class="user-home-eyebrow">NEWS</span>
                 <h2>お知らせ</h2>
-                <p>お知らせは複数表示されます。開くと既読になり、まとめて既読にすることもできます。</p>
+                <p>ホームには未読のお知らせだけを表示します。一括既読にすると、この画面から非表示になります。</p>
             </div>
             <div class="user-home-announcement-tools">
-                <span class="user-home-announcement-status" id="userHomeAnnouncementStatus">未読 0件 / 全0件</span>
+                <span class="user-home-announcement-status" id="userHomeAnnouncementStatus">未読 0件</span>
                 <a href="{{ url_for('user_announcements_page') }}" class="user-home-read-all">一覧</a>
                 <button type="button" class="user-home-read-all" id="markAllAnnouncementsRead">一括既読</button>
             </div>
         </div>
 
         <div class="user-home-announcements" id="userHomeAnnouncementList"></div>
-        <div class="user-home-empty" id="userHomeAnnouncementEmpty" hidden>現在表示中のお知らせはありません。</div>
+        <div class="user-home-empty" id="userHomeAnnouncementEmpty" hidden>未読のお知らせはありません。</div>
         <div class="user-home-more-wrap" id="userHomeAnnouncementMoreWrap" hidden>
             <button type="button" class="user-home-more-button" id="userHomeAnnouncementMore">もっと見る</button>
         </div>
         <script type="application/json" id="userHomeAnnouncementsData">{{ announcement_payloads|tojson }}</script>
     </section>
 
-    <section class="user-home-card user-home-section">
-        <div class="user-home-section__header">
-            <div class="user-home-section__copy">
-                <span class="user-home-eyebrow">FAVORITES</span>
-                <h2>よく使うメニュー</h2>
-                <p>左メニューにある機能を、自分で選んでここに表示できます。</p>
-            </div>
-            <div>
-                <button type="button" class="user-home-menu-toggle" id="favoriteMenuToggle" aria-expanded="false" aria-controls="favoriteMenuPicker">
-                    よく使うメニューに登録
-                </button>
-            </div>
-        </div>
-
-        <div class="user-home-menu-picker" id="favoriteMenuPicker" hidden>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="home">ホーム</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="inventory">商品一覧</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期保存商品</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="requests">販売代行申請履歴</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類一覧</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="estimate">見積依頼書</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="approval">買取承諾書</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="analytics">My分析</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="reports">レポート・CSV</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="inquiry-list">問い合わせ一覧</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="inquiry-new">新規問い合わせ</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="service">代行仕入れサービス</button>
-        </div>
-
-        <div class="user-home-shortcuts" id="favoriteMenuGrid">
-            <a href="{{ url_for('user_home') }}" class="user-home-shortcut" data-menu-id="home">
-                <h3>ホーム</h3>
-                <p>利用状況やお知らせ、登録したメニューを確認できます。</p>
-            </a>
-            <a href="{{ url_for('index') }}" class="user-home-shortcut" data-menu-id="inventory">
-                <h3>商品一覧</h3>
-                <p>現在の在庫と販売状況を確認できます。</p>
-            </a>
-            <a href="{{ url_for('long_term_items') }}" class="user-home-shortcut" data-menu-id="long-term">
-                <h3>長期保存商品</h3>
-                <p>長期保管中の商品をまとめて確認できます。</p>
-            </a>
-            <a href="{{ url_for('sales_agency_my_requests') }}" class="user-home-shortcut" data-menu-id="requests">
-                <h3>販売代行申請履歴</h3>
-                <p>これまでの申請状況を一覧で確認できます。</p>
-            </a>
-            <a href="{{ url_for('documents') }}" class="user-home-shortcut" data-menu-id="documents">
-                <h3>書類一覧</h3>
-                <p>届いている書類や保存済み書類を確認できます。</p>
-            </a>
-            <a href="{{ url_for('user_mitsumori_list') }}" class="user-home-shortcut" data-menu-id="estimate">
-                <h3>見積依頼書</h3>
-                <p>見積依頼の作成や確認ができます。</p>
-            </a>
-            <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="user-home-shortcut" data-menu-id="approval">
-                <h3>買取承諾書</h3>
-                <p>買取承諾書の確認や提出ができます。</p>
-            </a>
-            <a href="{{ url_for('user_analytics') }}" class="user-home-shortcut" data-menu-id="analytics">
-                <h3>My分析</h3>
-                <p>ご自身の売上や在庫の傾向を確認できます。</p>
-            </a>
-            <a href="{{ url_for('reports') }}" class="user-home-shortcut" data-menu-id="reports">
-                <h3>レポート・CSV</h3>
-                <p>売上や在庫のCSVを出力できます。</p>
-            </a>
-            <a href="{{ url_for('inquiry_list') }}" class="user-home-shortcut" data-menu-id="inquiry-list">
-                <h3>問い合わせ一覧</h3>
-                <p>これまでの問い合わせ履歴を確認できます。</p>
-            </a>
-            <a href="{{ url_for('inquiry_new') }}" class="user-home-shortcut" data-menu-id="inquiry-new">
-                <h3>新規問い合わせ</h3>
-                <p>新しく問い合わせを送信できます。</p>
-            </a>
-            <a href="{{ url_for('public_proxy_service_list') }}" class="user-home-shortcut" data-menu-id="service">
-                <h3>代行仕入れサービス</h3>
-                <p>公開中の代行仕入れサービスを確認できます。</p>
-            </a>
-        </div>
-
-        <div class="user-home-empty" id="favoriteMenuEmpty" hidden>表示したいメニューを上の登録ボタンから選んでください。</div>
-    </section>
 </div>
 {% endblock %}
 
@@ -712,17 +506,9 @@
         if (!list || !emptyState || !status || !markAllButton || !moreWrap || !moreButton || !dataScript) return;
 
         const defaultVisibleCount = 5;
-        const readUrlTemplate = "{{ url_for('user_announcement_mark_read_api', announcement_id=0) }}";
         const readAllUrl = "{{ url_for('user_announcement_mark_all_read_api') }}";
-        const deleteUrlTemplate = "{{ url_for('user_announcement_delete_api', announcement_id=0) }}";
         const detailUrlTemplate = "{{ url_for('user_announcement_detail_page', announcement_id=0) }}";
         const expandedIds = new Set();
-        const announcementTypeLabels = {
-            info: '通常',
-            important: '重要',
-            warning: '注意',
-            success: '更新',
-        };
         let visibleCount = defaultVisibleCount;
         let announcements = [];
 
@@ -767,19 +553,21 @@
         }
 
         function syncVisibleCount() {
+            const unreadAnnouncements = announcements.filter((announcement) => !announcement.is_read);
             if (visibleCount > defaultVisibleCount) {
-                visibleCount = announcements.length;
+                visibleCount = unreadAnnouncements.length;
                 return;
             }
-            visibleCount = Math.min(defaultVisibleCount, announcements.length || defaultVisibleCount);
+            visibleCount = Math.min(defaultVisibleCount, unreadAnnouncements.length || defaultVisibleCount);
         }
 
         function renderAnnouncements() {
-            const unreadCount = announcements.filter((announcement) => !announcement.is_read).length;
-            status.textContent = `未読 ${unreadCount}件 / 全${announcements.length}件`;
+            const unreadAnnouncements = announcements.filter((announcement) => !announcement.is_read);
+            const unreadCount = unreadAnnouncements.length;
+            status.textContent = `未読 ${unreadCount}件`;
             markAllButton.disabled = unreadCount === 0;
 
-            if (!announcements.length) {
+            if (!unreadAnnouncements.length) {
                 list.innerHTML = '';
                 list.hidden = true;
                 emptyState.hidden = false;
@@ -790,32 +578,32 @@
             list.hidden = false;
             emptyState.hidden = true;
 
-            const visibleAnnouncements = announcements.slice(0, visibleCount);
+            const visibleAnnouncements = unreadAnnouncements.slice(0, visibleCount);
             list.innerHTML = visibleAnnouncements.map((announcement) => {
                 const lines = announcement.content_lines || [];
                 const previewLines = (lines.length ? lines : ['本文はありません']).slice(0, 2);
                 const detailLines = lines.length
-                    ? `<ol class="user-home-announcement__line-list">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ol>`
+                    ? `<div class="user-home-announcement__line-list">${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</div>`
                     : '<div class="user-home-empty">本文はありません。</div>';
                 const isOpen = expandedIds.has(announcement.id);
                 const timestamp = formatAnnouncementTime(announcement.publish_at || announcement.created_at);
+                const importantBadge = announcement.announcement_type === 'important'
+                    ? '<span class="user-home-announcement__badge">重要</span>'
+                    : '';
 
                 return `
                     <article class="user-home-announcement ${announcement.is_read ? 'is-read' : 'is-unread'} ${isOpen ? 'is-open' : ''}" data-type="${escapeHtml(announcement.announcement_type || 'info')}" data-announcement-id="${announcement.id}">
                         <button type="button" class="user-home-announcement__summary" data-announcement-toggle="${announcement.id}">
                             <div class="user-home-announcement__meta">
-                                <span class="user-home-announcement__badge">${escapeHtml(announcementTypeLabels[announcement.announcement_type] || announcementTypeLabels.info)}</span>
-                                <span class="user-home-announcement__scope">${escapeHtml(announcement.recipient_scope_label || (announcement.recipient_scope === 'selected' ? '個別通知' : '一斉通知'))}</span>
-                                <span class="user-home-announcement__read ${announcement.is_read ? 'is-read' : ''}">${announcement.is_read ? '既読' : '未読'}</span>
+                                ${importantBadge}
                             </div>
                             <div class="user-home-announcement__title-row">
                                 <h3 class="user-home-announcement__title">${escapeHtml(announcement.title || 'お知らせ')}</h3>
                                 <span class="user-home-announcement__chevron">▼</span>
                             </div>
                             <div class="user-home-announcement__snippet">
-                                ${previewLines.map((line, index) => `
+                                ${previewLines.map((line) => `
                                     <div class="user-home-announcement__snippet-line">
-                                        <span class="user-home-announcement__snippet-index">${index + 1}.</span>
                                         <span class="user-home-announcement__snippet-text">${escapeHtml(line)}</span>
                                     </div>
                                 `).join('')}
@@ -825,13 +613,8 @@
                         <div class="user-home-announcement__detail">
                             <div class="user-home-announcement__detail-inner">
                                 ${detailLines}
-                                <div class="user-home-announcement__detail-meta">
-                                    <span class="user-home-announcement__detail-chip">${escapeHtml(announcement.recipient_summary || (announcement.recipient_scope === 'selected' ? '個別通知' : '一斉通知'))}</span>
-                                    ${timestamp ? `<span class="user-home-announcement__detail-chip">${escapeHtml(timestamp)}</span>` : ''}
-                                </div>
                                 <div class="user-home-announcement__actions">
                                     <a href="${detailUrlTemplate.replace('/0', `/${announcement.id}`)}" class="user-home-announcement__detail-link">詳細を見る</a>
-                                    <button type="button" class="user-home-announcement__delete" data-announcement-delete="${announcement.id}">削除</button>
                                 </div>
                             </div>
                         </div>
@@ -839,32 +622,11 @@
                 `;
             }).join('');
 
-            if (announcements.length > visibleCount) {
+            if (unreadAnnouncements.length > visibleCount) {
                 moreWrap.hidden = false;
-                moreButton.textContent = `もっと見る（残り${announcements.length - visibleCount}件）`;
+                moreButton.textContent = `もっと見る（残り${unreadAnnouncements.length - visibleCount}件）`;
             } else {
                 moreWrap.hidden = true;
-            }
-        }
-
-        async function markAnnouncementRead(announcementId) {
-            try {
-                const response = await fetch(readUrlTemplate.replace('/0/read', `/${announcementId}/read`), {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-                if (!response.ok) return;
-                const data = await response.json();
-                if (Array.isArray(data.announcements)) {
-                    announcements = normalizeAnnouncements(data.announcements);
-                    syncVisibleCount();
-                    renderAnnouncements();
-                }
-            } catch (error) {
-                // 既読更新失敗時は画面表示のみ継続
             }
         }
 
@@ -890,45 +652,7 @@
             }
         }
 
-        async function deleteAnnouncement(announcementId) {
-            if (!window.confirm('このお知らせを削除しますか？')) return;
-
-            try {
-                const response = await fetch(deleteUrlTemplate.replace('/0/delete', `/${announcementId}/delete`), {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.error || 'お知らせを削除できませんでした');
-                }
-                expandedIds.delete(announcementId);
-                if (Array.isArray(data.announcements)) {
-                    announcements = normalizeAnnouncements(data.announcements);
-                } else {
-                    announcements = announcements.filter((item) => item.id !== announcementId);
-                }
-                visibleCount = Math.min(visibleCount, announcements.length || defaultVisibleCount);
-                renderAnnouncements();
-            } catch (error) {
-                alert(error.message || 'お知らせを削除できませんでした');
-            }
-        }
-
         list.addEventListener('click', function (event) {
-            const deleteButton = event.target.closest('[data-announcement-delete]');
-            if (deleteButton) {
-                const announcementId = Number(deleteButton.getAttribute('data-announcement-delete'));
-                if (announcementId) {
-                    deleteAnnouncement(announcementId);
-                }
-                return;
-            }
-
             const toggle = event.target.closest('[data-announcement-toggle]');
             if (!toggle) return;
 
@@ -942,23 +666,13 @@
             }
 
             expandedIds.add(announcementId);
-            const announcement = announcements.find((item) => item.id === announcementId);
-            if (announcement && !announcement.is_read) {
-                announcements = announcements.map((item) => (
-                    item.id === announcementId ? { ...item, is_read: true } : item
-                ));
-                renderAnnouncements();
-                markAnnouncementRead(announcementId);
-                return;
-            }
-
             renderAnnouncements();
         });
 
         markAllButton.addEventListener('click', markAllAnnouncementsRead);
 
         moreButton.addEventListener('click', function () {
-            visibleCount = announcements.length;
+            visibleCount = announcements.filter((announcement) => !announcement.is_read).length;
             renderAnnouncements();
         });
 
@@ -980,87 +694,6 @@
         }
         syncVisibleCount();
         renderAnnouncements();
-    })();
-
-    (function setupFavoriteMenus() {
-        const toggleButton = document.getElementById('favoriteMenuToggle');
-        const picker = document.getElementById('favoriteMenuPicker');
-        const grid = document.getElementById('favoriteMenuGrid');
-        const emptyState = document.getElementById('favoriteMenuEmpty');
-        if (!toggleButton || !picker || !grid || !emptyState) return;
-
-        const storageKey = 'kaika:user-home:favorites:v2';
-        const defaultMenus = ['inventory', 'documents', 'reports', 'analytics'];
-        const chips = Array.from(picker.querySelectorAll('[data-menu-toggle]'));
-        const cards = Array.from(grid.querySelectorAll('[data-menu-id]'));
-
-        function readFavorites() {
-            try {
-                const saved = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
-                if (Array.isArray(saved) && saved.length) {
-                    return saved;
-                }
-            } catch (error) {
-                // 保存値が壊れている場合は初期値を使う
-            }
-            return defaultMenus.slice();
-        }
-
-        function writeFavorites(menuIds) {
-            try {
-                window.localStorage.setItem(storageKey, JSON.stringify(menuIds));
-            } catch (error) {
-                // 保存できない場合も画面表示は継続
-            }
-        }
-
-        function renderFavorites(menuIds) {
-            const enabledIds = menuIds.filter((id) => cards.some((card) => card.dataset.menuId === id));
-
-            chips.forEach((chip) => {
-                const isActive = enabledIds.includes(chip.dataset.menuToggle);
-                chip.classList.toggle('is-active', isActive);
-                chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            });
-
-            cards.forEach((card) => {
-                card.hidden = !enabledIds.includes(card.dataset.menuId);
-            });
-
-            emptyState.hidden = enabledIds.length > 0;
-            grid.hidden = enabledIds.length === 0;
-            writeFavorites(enabledIds);
-        }
-
-        function setPickerOpen(isOpen) {
-            picker.hidden = !isOpen;
-            toggleButton.classList.toggle('is-open', isOpen);
-            toggleButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            toggleButton.textContent = isOpen ? '登録メニューを閉じる' : 'よく使うメニューに登録';
-        }
-
-        let currentMenus = readFavorites();
-        renderFavorites(currentMenus);
-        setPickerOpen(false);
-
-        toggleButton.addEventListener('click', function () {
-            setPickerOpen(toggleButton.getAttribute('aria-expanded') !== 'true');
-        });
-
-        chips.forEach((chip) => {
-            chip.addEventListener('click', function () {
-                const menuId = chip.dataset.menuToggle;
-                if (!menuId) return;
-
-                if (currentMenus.includes(menuId)) {
-                    currentMenus = currentMenus.filter((id) => id !== menuId);
-                } else {
-                    currentMenus = currentMenus.concat(menuId);
-                }
-
-                renderFavorites(currentMenus);
-            });
-        });
     })();
 </script>
 {% endblock %}

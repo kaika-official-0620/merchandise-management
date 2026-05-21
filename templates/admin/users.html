@@ -38,7 +38,7 @@
                     <th>当月商品数<br><small style="font-weight:normal;color:#64748b;">月末締め</small></th>
                     <th>月額利用料</th>
                     <th>開花手数料<br><small style="font-weight:normal;color:#64748b;">累計</small></th>
-                    <th>利用可能金額</th>
+                    <th>入金残高</th>
                     <th>登録日</th>
                     <th>最終ログイン</th>
                     <th>操作</th>
@@ -82,6 +82,11 @@
                         <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
                             ¥{{ "{:,}".format(user.monthly_fee) }}
                         </span>
+                        {% if user.requested_plan_label %}
+                        <div class="plan-request-note">
+                            変更希望: {{ user.requested_plan_label }}{% if user.plan_change_effective_month %} / {{ user.plan_change_effective_month }}{% endif %}
+                        </div>
+                        {% endif %}
                     </td>
                     <td class="text-center">
                         <span class="kaika-fee-badge">
@@ -377,6 +382,13 @@
     padding: 4px 10px;
     font-weight: bold;
     font-size: 0.875rem;
+}
+
+.plan-request-note {
+    margin-top: 0.35rem;
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .fee-low {

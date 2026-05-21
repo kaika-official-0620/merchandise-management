@@ -12,6 +12,62 @@
         flex-wrap: wrap;
     }
 
+    .stats-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #ffffff;
+    }
+
+    .stats-toolbar__title {
+        display: grid;
+        gap: 0.12rem;
+    }
+
+    .stats-toolbar__title strong {
+        color: #0f172a;
+        font-size: 0.95rem;
+    }
+
+    .stats-toolbar__title span {
+        color: #64748b;
+        font-size: 0.78rem;
+    }
+
+    .stats-period-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: flex-end;
+    }
+
+    .stats-period-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 0.35rem 0.78rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #334155;
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .stats-period-tab.active {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+    }
+
     .stats-item {
         flex: 1;
         min-width: 100px;
@@ -74,6 +130,15 @@
             gap: 0.3rem;
         }
 
+        .stats-toolbar {
+            display: grid;
+            padding: 0.75rem;
+        }
+
+        .stats-period-tabs {
+            justify-content: flex-start;
+        }
+
         .stats-item {
             min-width: 0;
             padding: 0.4rem 0.3rem;
@@ -98,161 +163,6 @@
         .stats-value .short-value {
             display: inline;
         }
-    }
-
-    /* 代行仕入れサービス利用可能残高 */
-    .proxy-service-card {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border-radius: 10px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 1rem;
-        border: 1px solid #f59e0b;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-
-    .proxy-service-card .proxy-icon {
-        font-size: 1.25rem;
-    }
-
-    .proxy-service-card .proxy-label {
-        font-size: 0.9rem;
-        color: #92400e;
-    }
-
-    .proxy-service-card .proxy-value {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: #d97706;
-        margin-left: 0.5rem;
-    }
-
-    /* お知らせエリア */
-    .announcement-area {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 8px;
-        padding: 12px 20px;
-        margin-bottom: 15px;
-        color: white;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        max-height: 160px;
-        overflow: hidden;
-        transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.25s ease, margin 0.25s ease, padding 0.25s ease;
-    }
-
-    .announcement-area.is-hiding {
-        opacity: 0;
-        transform: translateY(-8px);
-        max-height: 0;
-        margin-bottom: 0;
-        padding-top: 0;
-        padding-bottom: 0;
-        pointer-events: none;
-    }
-
-    .announcement-slider {
-        flex: 1;
-    }
-
-    .announcement-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(-5px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    .announcement-badge {
-        background: rgba(255, 255, 255, 0.2);
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        white-space: nowrap;
-    }
-
-    .announcement-important .announcement-badge {
-        background: #ef4444;
-    }
-
-    .announcement-warning .announcement-badge {
-        background: #f59e0b;
-    }
-
-    .announcement-success .announcement-badge {
-        background: #10b981;
-    }
-
-    .announcement-title {
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-
-    .announcement-content {
-        font-size: 0.85rem;
-        opacity: 0.9;
-    }
-
-    .announcement-nav {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-left: 15px;
-    }
-
-    .ann-nav-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        color: white;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        cursor: pointer;
-        font-size: 0.75rem;
-        transition: background 0.2s;
-    }
-
-    .ann-nav-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-
-    #annCounter {
-        font-size: 0.8rem;
-        opacity: 0.8;
-    }
-
-    .announcement-close {
-        width: 28px;
-        height: 28px;
-        border: none;
-        border-radius: 50%;
-        margin-left: 12px;
-        background: rgba(255, 255, 255, 0.2);
-        color: white;
-        cursor: pointer;
-        font-size: 1rem;
-        line-height: 1;
-        flex: 0 0 auto;
-    }
-
-    .announcement-close:hover {
-        background: rgba(255, 255, 255, 0.3);
     }
 
     /* 検索＆アクションバー */
@@ -580,36 +490,6 @@
         .search-toggle-btn {
             padding: 0.5rem 0.75rem;
             font-size: 0.85rem;
-        }
-
-        .announcement-area {
-            align-items: flex-start;
-            gap: 8px;
-            padding: 10px 44px 10px 12px;
-        }
-
-        .announcement-item {
-            flex-direction: row;
-            align-items: flex-start;
-            gap: 6px;
-            flex-wrap: wrap;
-            width: 100%;
-        }
-
-        .announcement-nav {
-            margin-left: 0;
-        }
-
-        .announcement-close {
-            position: absolute;
-            right: 8px;
-            top: 8px;
-            margin-left: 0;
-        }
-
-        .announcement-content {
-            width: 100%;
-            line-height: 1.45;
         }
 
         .filter-panel {
@@ -2116,47 +1996,21 @@
     }
 </style>
 
-
-<!-- お知らせエリア -->
-{% if announcements %}
-<div class="announcement-area" id="announcementBanner" data-announcement-ids='{{ announcements|map(attribute="id")|list|tojson }}'>
-    <div class="announcement-slider" id="announcementSlider">
-        {% for ann in announcements %}
-        <div class="announcement-item announcement-{{ ann.announcement_type }}" {% if not loop.first
-            %}style="display: none;" {% endif %}>
-            <span class="announcement-badge">
-                {% if ann.announcement_type == 'important' %}重要
-                {% elif ann.announcement_type == 'warning' %}注意
-                {% elif ann.announcement_type == 'success' %}完了
-                {% else %}お知らせ
-                {% endif %}
-            </span>
-            <span class="announcement-title">{{ ann.title }}</span>
-            <span class="announcement-content">{{ ann.content }}</span>
-        </div>
+<!-- 統計サマリー -->
+<div class="stats-toolbar">
+    <div class="stats-toolbar__title">
+        <strong>商品一覧の集計</strong>
+        <span>登録数・販売済み数・仕入額・保管額・売上を期間ごとに確認できます。</span>
+    </div>
+    <div class="stats-period-tabs" aria-label="集計期間">
+        {% for option in summary_period_options %}
+        <a href="{{ url_for('index', summary_period=option.key, filter=filter_type, search=search) }}"
+           class="stats-period-tab {% if summary_period == option.key %}active{% endif %}">
+            {{ option.label }}
+        </a>
         {% endfor %}
     </div>
-    {% if announcements|length > 1 %}
-    <div class="announcement-nav">
-        <button onclick="prevAnnouncement()" class="ann-nav-btn">&lt;</button>
-        <span id="annCounter">1/{{ announcements|length }}</span>
-        <button onclick="nextAnnouncement()" class="ann-nav-btn">&gt;</button>
-    </div>
-    {% endif %}
-    <button type="button" class="announcement-close" onclick="hideAnnouncementBanner()" aria-label="お知らせを閉じる">&times;</button>
 </div>
-{% endif %}
-
-<!-- 代行仕入れサービス利用可能残高 -->
-{% if proxy_service_info and proxy_service_info.budget > 0 %}
-<div class="proxy-service-card">
-    <span class="proxy-icon">🛒</span>
-    <span class="proxy-label">利用可能残高:</span>
-    <span class="proxy-value">¥{{ "{:,}".format(proxy_service_info.remaining) }}</span>
-</div>
-{% endif %}
-
-<!-- 統計サマリー -->
 <div class="stats-summary">
     <div class="stats-item">
         <span class="stats-label">総登録</span>
@@ -2219,9 +2073,7 @@
         </button>
     </div>
     <div class="action-buttons">
-        <a href="{{ url_for('export_csv') }}" class="btn btn-export">CSV</a>
         {% if not current_user.is_admin() %}
-        <a href="{{ url_for('reports') }}" class="btn btn-export">レポート</a>
         <button type="button" class="btn btn-sales-agency" onclick="openSalesAgencyModal()">販売代行</button>
         {% endif %}
         {% if current_user.is_admin() %}
@@ -3137,78 +2989,6 @@
             'profit': 15
         };
         return map[column] || 2;
-    }
-
-    // お知らせスライダー
-    let currentAnnouncement = 0;
-    const announcementItems = document.querySelectorAll('.announcement-item');
-    const totalAnnouncements = announcementItems.length;
-
-    function showAnnouncement(index) {
-        announcementItems.forEach((item, i) => {
-            item.style.display = i === index ? 'flex' : 'none';
-        });
-        const counter = document.getElementById('annCounter');
-        if (counter) {
-            counter.textContent = (index + 1) + '/' + totalAnnouncements;
-        }
-    }
-
-    function nextAnnouncement() {
-        currentAnnouncement = (currentAnnouncement + 1) % totalAnnouncements;
-        showAnnouncement(currentAnnouncement);
-    }
-
-    function prevAnnouncement() {
-        currentAnnouncement = (currentAnnouncement - 1 + totalAnnouncements) % totalAnnouncements;
-        showAnnouncement(currentAnnouncement);
-    }
-
-    // 自動スライド（5秒ごと）
-    if (totalAnnouncements > 1) {
-        setInterval(nextAnnouncement, 5000);
-    }
-
-    const announcementBanner = document.getElementById('announcementBanner');
-
-    function getAnnouncementBannerIds() {
-        if (!announcementBanner) return [];
-        try {
-            return JSON.parse(announcementBanner.dataset.announcementIds || '[]');
-        } catch (e) {
-            return [];
-        }
-    }
-
-    function markAnnouncementBannerHidden() {
-        if (!announcementBanner || announcementBanner.dataset.hiddenSent === '1') return;
-        const ids = getAnnouncementBannerIds();
-        if (!ids.length) return;
-
-        announcementBanner.dataset.hiddenSent = '1';
-        fetch('{{ url_for("api_hide_announcement_banner") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({ ids: ids })
-        }).catch(() => {});
-    }
-
-    function hideAnnouncementBanner() {
-        if (!announcementBanner) return;
-        markAnnouncementBannerHidden();
-        announcementBanner.classList.add('is-hiding');
-        setTimeout(() => {
-            if (announcementBanner && announcementBanner.parentNode) {
-                announcementBanner.parentNode.removeChild(announcementBanner);
-            }
-        }, 260);
-    }
-
-    if (announcementBanner) {
-        setTimeout(hideAnnouncementBanner, 8000);
     }
 
     // 代行サービス掲載切り替え

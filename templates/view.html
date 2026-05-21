@@ -73,6 +73,61 @@
     min-width: 160px;
 }
 
+.sales-agency-detail-panel {
+    margin: 0 0 1rem;
+    padding: 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.sales-agency-detail-panel h3 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.sales-agency-detail-panel p {
+    margin: 0 0 0.85rem;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+.sales-agency-detail-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+}
+
+.sales-agency-detail-form label {
+    display: grid;
+    gap: 0.25rem;
+    min-width: min(100%, 260px);
+    color: #334155;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.sales-agency-detail-form select {
+    min-height: 40px;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+
+.sales-agency-status-note {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    color: #475569;
+}
+
 /* コピーボタン */
 .copy-btn {
     display: inline-flex;
@@ -520,6 +575,37 @@
         <a href="{{ back_url }}" class="btn btn-secondary">一覧に戻る</a>
     </div>
 </div>
+
+{% if not current_user.is_admin() %}
+<section class="sales-agency-detail-panel">
+    <h3>販売代行申請</h3>
+    {% if item.sale_date %}
+    <p>売却済みの商品は販売代行を申請できません。</p>
+    {% elif item.pending_sales_agency and item.sales_agency_request %}
+    <p class="sales-agency-status-note">
+        <span>この商品は申請中です。</span>
+        <span class="request-pill type">{{ item.sales_agency_request.service_name }}</span>
+        <span class="request-pill status">{{ item.sales_agency_request.status_label }}</span>
+    </p>
+    {% else %}
+    <p>この商品の詳細を確認したまま、業者卸販売・同時出品・業者オークション出品の申請ができます。</p>
+    <form method="POST" action="{{ url_for('sales_agency_apply') }}" class="sales-agency-detail-form">
+        <input type="hidden" name="merchandise_ids" value="{{ item.id }}">
+        <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+        <label>
+            サービス種別
+            <select name="service_type" required>
+                <option value="">選択してください</option>
+                {% for key, label in sales_agency_service_types.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary">この商品で申請する</button>
+    </form>
+    {% endif %}
+</section>
+{% endif %}
 
 <div class="view-container">
     <div class="view-image">

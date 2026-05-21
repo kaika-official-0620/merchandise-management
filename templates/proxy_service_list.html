@@ -27,11 +27,11 @@
     </div>
     <dl>
         <div>
-            <dt>設定上限</dt>
+            <dt>入金残高</dt>
             <dd>¥{{ "{:,}".format(proxy_service_info.budget or 0) }}</dd>
         </div>
         <div>
-            <dt>利用中</dt>
+            <dt>過去利用額</dt>
             <dd>¥{{ "{:,}".format(proxy_service_info.used or 0) }}</dd>
         </div>
         {% if upcoming_auctions %}
