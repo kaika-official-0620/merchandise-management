@@ -9748,13 +9748,50 @@ def user_announcements_page():
         return redirect(url_for('admin_dashboard'))
 
     announcements = get_active_announcements(current_user, limit=None)
-    visible_ids = [announcement.get('id') for announcement in announcements]
-    if visible_ids:
-        mark_announcements_read_for_user(current_user.id, visible_ids)
-        for announcement in announcements:
-            announcement['is_read'] = True
-
     return render_template('announcements.html', announcements=announcements)
+
+
+def get_visible_announcement_for_user(user, announcement_id):
+    try:
+        target_id = int(announcement_id)
+    except (TypeError, ValueError):
+        return None
+
+    for announcement in get_active_announcements(user, limit=None):
+        if int(announcement.get('id') or 0) == target_id:
+            return announcement
+    return None
+
+
+@app.route('/announcements/<int:announcement_id>')
+@login_required
+def user_announcement_detail_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_dashboard'))
+
+    announcement = get_visible_announcement_for_user(current_user, announcement_id)
+    if not announcement:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
+
+    return render_template('announcement_detail.html', announcement=announcement)
+
+
+@app.route('/announcements/<int:announcement_id>/read', methods=['POST'])
+@login_required
+def user_announcement_read_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        flash('クライアントのみ利用できます', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    announcement = get_visible_announcement_for_user(current_user, announcement_id)
+    if not announcement:
+        flash('お知らせが見つかりません', 'error')
+        return redirect(url_for('user_announcements_page'))
+
+    mark_announcements_read_for_user(current_user.id, [announcement_id])
+    flash('お知らせを既読にしました', 'success')
+    return redirect(url_for('user_announcement_detail_page', announcement_id=announcement_id))
 
 
 @app.route('/announcements/delete/<int:announcement_id>', methods=['POST'])

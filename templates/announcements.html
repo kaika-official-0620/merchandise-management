@@ -4,7 +4,7 @@
 {% block content %}
 <style>
 .announcements-page {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 0 auto;
     display: grid;
     gap: 1rem;
@@ -37,26 +37,49 @@
 
 .announcement-card {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.9rem;
-    align-items: start;
-    padding: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.85rem;
+    align-items: stretch;
+    padding: 0.95rem;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #ffffff;
 }
 
-.announcement-card__badge {
+.announcement-card.is-unread {
+    border-color: #93c5fd;
+    box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.announcement-card__link {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.9rem;
+    color: inherit;
+    text-decoration: none;
+}
+
+.announcement-card__link:hover .announcement-card__title {
+    color: #2563eb;
+}
+
+.announcement-card__badge,
+.announcement-card__read {
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    min-width: 54px;
-    padding: 0.3rem 0.55rem;
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
     border-radius: 999px;
-    background: #dbeafe;
-    color: #1d4ed8;
     font-size: 0.75rem;
     font-weight: 700;
+    white-space: nowrap;
+}
+
+.announcement-card__badge {
+    min-width: 54px;
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .announcement-card.important .announcement-card__badge {
@@ -74,25 +97,53 @@
     color: #15803d;
 }
 
+.announcement-card__body {
+    min-width: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.announcement-card__title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
 .announcement-card__title {
-    margin: 0 0 0.35rem;
+    margin: 0;
     color: #0f172a;
     font-size: 1rem;
     line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.announcement-card__read {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.announcement-card__read.is-read {
+    background: #e2e8f0;
+    color: #475569;
 }
 
 .announcement-card__content {
     margin: 0;
     color: #475569;
     font-size: 0.92rem;
-    line-height: 1.75;
-    white-space: pre-line;
+    line-height: 1.7;
     overflow-wrap: anywhere;
 }
 
+.announcement-card__content--preview {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
 .announcement-card__date {
-    display: block;
-    margin-top: 0.55rem;
     color: #94a3b8;
     font-size: 0.78rem;
 }
@@ -129,14 +180,26 @@
     }
 
     .announcement-card {
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr;
         gap: 0.65rem;
         padding: 0.85rem;
     }
 
+    .announcement-card__link {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+    }
+
     .announcement-card__badge {
-        grid-column: 1 / -1;
         width: fit-content;
+    }
+
+    .announcement-card__title-row {
+        display: grid;
+    }
+
+    .announcement-card__delete {
+        width: 100%;
     }
 }
 </style>
@@ -150,19 +213,26 @@
     {% if announcements %}
     <div class="announcements-list">
         {% for ann in announcements %}
-        <article class="announcement-card {{ ann.announcement_type }}">
-            <span class="announcement-card__badge">
-                {% if ann.announcement_type == 'important' %}重要
-                {% elif ann.announcement_type == 'warning' %}注意
-                {% elif ann.announcement_type == 'success' %}更新
-                {% else %}お知らせ
-                {% endif %}
-            </span>
-            <div>
-                <h2 class="announcement-card__title">{{ ann.title }}</h2>
-                <p class="announcement-card__content">{{ ann.content }}</p>
-                <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>
-            </div>
+        <article class="announcement-card {{ ann.announcement_type }} {% if not ann.is_read %}is-unread{% endif %}">
+            <a href="{{ url_for('user_announcement_detail_page', announcement_id=ann.id) }}" class="announcement-card__link">
+                <span class="announcement-card__badge">
+                    {% if ann.announcement_type == 'important' %}重要
+                    {% elif ann.announcement_type == 'warning' %}注意
+                    {% elif ann.announcement_type == 'success' %}更新
+                    {% else %}お知らせ
+                    {% endif %}
+                </span>
+                <div class="announcement-card__body">
+                    <div class="announcement-card__title-row">
+                        <h2 class="announcement-card__title">{{ ann.title }}</h2>
+                        <span class="announcement-card__read {% if ann.is_read %}is-read{% endif %}">
+                            {% if ann.is_read %}既読{% else %}未読{% endif %}
+                        </span>
+                    </div>
+                    <p class="announcement-card__content announcement-card__content--preview">{{ ann.content }}</p>
+                    <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>
+                </div>
+            </a>
             <form method="POST" action="{{ url_for('user_announcement_delete_page', announcement_id=ann.id) }}">
                 <button type="submit" class="announcement-card__delete" onclick="return confirm('このお知らせを削除しますか？')">削除</button>
             </form>
