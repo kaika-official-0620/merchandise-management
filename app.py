@@ -147,9 +147,29 @@ def build_proxy_service_origin_note(original_item_id, mode='auction'):
     return f'{note_prefix} / 元商品ID:{original_item_id}'
 
 
+def is_garbled_display_text(value):
+    text = str(value or '').strip()
+    if not text:
+        return False
+    if '�' in text or '????' in text:
+        return True
+    mojibake_markers = ('繧', '縺', '譁', '譖', '邱', '荳', '髢', '蜃', '鬘', '竊', '蛯', '險', '雋')
+    return sum(1 for marker in mojibake_markers if marker in text) >= 2
+
+
+def clean_display_text(value, fallback='-'):
+    text = str(value or '').strip()
+    if not text:
+        return fallback
+    clean_lines = [line.strip() for line in text.splitlines() if line.strip() and not is_garbled_display_text(line)]
+    if clean_lines:
+        return '\n'.join(clean_lines)
+    return fallback
+
+
 def append_proxy_service_origin_note(existing_notes, original_item_id, mode='auction'):
     origin_note = build_proxy_service_origin_note(original_item_id, mode=mode)
-    notes = (existing_notes or '').strip()
+    notes = clean_display_text(existing_notes, fallback='').strip()
     if origin_note in notes:
         return notes
     return f'{notes}\n{origin_note}' if notes else origin_note
@@ -406,51 +426,18 @@ def is_proxy_service_user_allowed(conn, user_id, auction_id):
 
     ensure_proxy_service_auction_user_table(conn)
 
-    if proxy_service_auction_has_user_config(conn, auction_id):
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute(
-                """
-                SELECT 1
-                FROM proxy_service_auction_users
-                WHERE auction_id = %s
-                  AND user_id = %s
-                  AND COALESCE(is_enabled, TRUE) = TRUE
-                LIMIT 1
-                """,
-                (auction_id, user_id),
-            )
-            allowed = cur.fetchone() is not None
-            cur.close()
-            return allowed
-
-        cur = conn.cursor()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """
             SELECT 1
             FROM proxy_service_auction_users
-            WHERE auction_id = ?
-              AND user_id = ?
-              AND COALESCE(is_enabled, 1) = 1
-            LIMIT 1
-            """,
-            (auction_id, user_id),
-        )
-        allowed = cur.fetchone() is not None
-        cur.close()
-        return allowed
-
-    if DATABASE_URL:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT 1
-            FROM proxy_service_users
-            WHERE user_id = %s
+            WHERE auction_id = %s
+              AND user_id = %s
               AND COALESCE(is_enabled, TRUE) = TRUE
             LIMIT 1
             """,
-            (user_id,),
+            (auction_id, user_id),
         )
         allowed = cur.fetchone() is not None
         cur.close()
@@ -460,12 +447,13 @@ def is_proxy_service_user_allowed(conn, user_id, auction_id):
     cur.execute(
         """
         SELECT 1
-        FROM proxy_service_users
-        WHERE user_id = ?
+        FROM proxy_service_auction_users
+        WHERE auction_id = ?
+          AND user_id = ?
           AND COALESCE(is_enabled, 1) = 1
         LIMIT 1
         """,
-        (user_id,),
+        (auction_id, user_id),
     )
     allowed = cur.fetchone() is not None
     cur.close()
@@ -2722,10 +2710,9 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None, al
 
     for auction in raw_auctions:
         if not allow_all:
-            if current_user_id:
-                if not is_proxy_service_user_allowed(conn, current_user_id, auction.get('id')):
-                    continue
-            elif proxy_service_auction_has_user_config(conn, auction.get('id')):
+            if not current_user_id:
+                continue
+            if not is_proxy_service_user_allowed(conn, current_user_id, auction.get('id')):
                 continue
         auction_state = get_proxy_service_auction_state(auction, now=now)
         annotated_items, summary, winner_results = annotate_proxy_service_items(
@@ -6221,6 +6208,18 @@ def ensure_announcement_delivery_schema():
                     UNIQUE (announcement_id, user_id)
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS announcement_user_status (
+                    id SERIAL PRIMARY KEY,
+                    announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    banner_hidden_at TIMESTAMP,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (announcement_id, user_id)
+                )
+            """)
             cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS line_notify_enabled BOOLEAN DEFAULT FALSE")
             cur.execute("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS line_notified_at TIMESTAMP")
             cur.execute("UPDATE announcements SET line_notify_enabled = FALSE WHERE line_notify_enabled IS NULL")
@@ -6233,6 +6232,20 @@ def ensure_announcement_delivery_schema():
                     announcement_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (announcement_id, user_id),
+                    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS announcement_user_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    announcement_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    banner_hidden_at TIMESTAMP,
+                    deleted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (announcement_id, user_id),
                     FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -6356,6 +6369,146 @@ def mark_announcements_read_for_user(user_id, announcement_ids):
         conn.close()
 
 
+def normalize_announcement_ids(announcement_ids):
+    cleaned_ids = []
+    seen = set()
+    for raw_id in announcement_ids or []:
+        try:
+            announcement_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if announcement_id <= 0 or announcement_id in seen:
+            continue
+        seen.add(announcement_id)
+        cleaned_ids.append(announcement_id)
+    return cleaned_ids
+
+
+def get_announcement_user_status_map(user_id, announcement_ids):
+    if not user_id:
+        return {}
+
+    cleaned_ids = normalize_announcement_ids(announcement_ids)
+    if not cleaned_ids:
+        return {}
+
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            placeholders = ','.join(['%s'] * len(cleaned_ids))
+            cur.execute(
+                f"""
+                SELECT announcement_id, banner_hidden_at, deleted_at
+                FROM announcement_user_status
+                WHERE user_id = %s
+                  AND announcement_id IN ({placeholders})
+                """,
+                tuple([int(user_id)] + cleaned_ids),
+            )
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            placeholders = ','.join(['?'] * len(cleaned_ids))
+            cur.execute(
+                f"""
+                SELECT announcement_id, banner_hidden_at, deleted_at
+                FROM announcement_user_status
+                WHERE user_id = ?
+                  AND announcement_id IN ({placeholders})
+                """,
+                tuple([int(user_id)] + cleaned_ids),
+            )
+
+        status_map = {}
+        for row in cur.fetchall():
+            row_dict = dict(row)
+            status_map[int(row_dict.get('announcement_id') or 0)] = row_dict
+        return status_map
+    finally:
+        cur.close()
+        conn.close()
+
+
+def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False, delete=False):
+    if not user_id:
+        return 0
+
+    cleaned_ids = normalize_announcement_ids(announcement_ids)
+    if not cleaned_ids:
+        return 0
+
+    now = datetime.now()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.executemany(
+                """
+                INSERT INTO announcement_user_status (
+                    announcement_id, user_id, banner_hidden_at, deleted_at, created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (announcement_id, user_id) DO UPDATE SET
+                    banner_hidden_at = COALESCE(announcement_user_status.banner_hidden_at, EXCLUDED.banner_hidden_at),
+                    deleted_at = COALESCE(EXCLUDED.deleted_at, announcement_user_status.deleted_at),
+                    updated_at = EXCLUDED.updated_at
+                """,
+                [
+                    (
+                        announcement_id,
+                        int(user_id),
+                        now if hide_banner else None,
+                        now if delete else None,
+                        now,
+                        now,
+                    )
+                    for announcement_id in cleaned_ids
+                ],
+            )
+        else:
+            now_text = now.strftime('%Y-%m-%d %H:%M:%S')
+            cur.executemany(
+                """
+                INSERT INTO announcement_user_status (
+                    announcement_id, user_id, banner_hidden_at, deleted_at, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (announcement_id, user_id) DO UPDATE SET
+                    banner_hidden_at = COALESCE(announcement_user_status.banner_hidden_at, excluded.banner_hidden_at),
+                    deleted_at = COALESCE(excluded.deleted_at, announcement_user_status.deleted_at),
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    (
+                        announcement_id,
+                        int(user_id),
+                        now_text if hide_banner else None,
+                        now_text if delete else None,
+                        now_text,
+                        now_text,
+                    )
+                    for announcement_id in cleaned_ids
+                ],
+            )
+        conn.commit()
+        return len(cleaned_ids)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def hide_announcement_banner_for_user(user_id, announcement_ids):
+    return upsert_announcement_user_status(user_id, announcement_ids, hide_banner=True)
+
+
+def delete_announcement_for_user(user_id, announcement_id):
+    deleted_count = upsert_announcement_user_status(user_id, [announcement_id], hide_banner=True, delete=True)
+    if deleted_count:
+        mark_announcements_read_for_user(user_id, [announcement_id])
+    return deleted_count
+
+
 def get_visible_announcement_ids_for_user(user):
     if not user or not getattr(user, 'is_authenticated', False):
         return []
@@ -6366,7 +6519,7 @@ def get_visible_announcement_ids_for_user(user):
     ]
 
 
-def get_active_announcements(user=None, limit=None):
+def get_active_announcements(user=None, limit=None, for_banner=False):
     """アクティブなお知らせを取得"""
     conn = get_db()
     now = datetime.now()
@@ -6411,6 +6564,26 @@ def get_active_announcements(user=None, limit=None):
     if target_user is None and has_request_context() and getattr(current_user, 'is_authenticated', False):
         target_user = current_user
 
+    status_map = {}
+    if target_user:
+        status_map = get_announcement_user_status_map(
+            getattr(target_user, 'id', None),
+            [announcement.get('id') for announcement in announcements],
+        )
+
+    visible_announcements = []
+    for announcement in announcements:
+        announcement_id = int(announcement.get('id') or 0)
+        status = status_map.get(announcement_id, {})
+        announcement['banner_hidden_at'] = status.get('banner_hidden_at')
+        announcement['deleted_at'] = status.get('deleted_at')
+        if announcement.get('deleted_at'):
+            continue
+        if for_banner and announcement.get('banner_hidden_at'):
+            continue
+        visible_announcements.append(announcement)
+    announcements = visible_announcements
+
     read_map = {}
     if target_user and not getattr(target_user, 'is_admin', lambda: False)() and not getattr(target_user, 'is_owner', lambda: False)():
         read_map = get_announcement_read_map(
@@ -6450,6 +6623,8 @@ def serialize_announcement_payload(announcement):
         'recipient_summary': announcement.get('recipient_summary') or get_announcement_recipient_summary(announcement),
         'is_read': bool(announcement.get('is_read')),
         'read_at': serialize_announcement_datetime(announcement.get('read_at')),
+        'banner_hidden_at': serialize_announcement_datetime(announcement.get('banner_hidden_at')),
+        'deleted_at': serialize_announcement_datetime(announcement.get('deleted_at')),
         'publish_at': serialize_announcement_datetime(announcement.get('publish_at')),
         'created_at': serialize_announcement_datetime(announcement.get('created_at')),
     }
@@ -7206,7 +7381,7 @@ def index():
         processed_items.append(item_dict)
     
     # アクティブなお知らせを取得
-    announcements = get_active_announcements(current_user)
+    announcements = get_active_announcements(current_user, limit=5, for_banner=True)
     
     # 代行仕入れサービスの利用可能残高を取得
     proxy_service_info = {
@@ -7513,9 +7688,10 @@ def build_report_merchandise_row(row, scope='user', fee_settings=None):
     shipping_cost = safe_int(row.get('shipping_cost'))
     commission = safe_int(row.get('commission'))
     sale_type_label = ' / '.join(get_sale_type_labels(row.get('sale_type'))) or '-'
-    supplier_name = (row.get('store_name') or row.get('supplier_detail') or '').strip() or '-'
-    sales_destination = (row.get('sales_destination') or '').strip() or '-'
-    notes_text = ' '.join((row.get('notes') or '').split())
+    product_name = clean_display_text(row.get('product_name'), fallback='商品名未登録')
+    supplier_name = clean_display_text(row.get('store_name') or row.get('supplier_detail'), fallback='-')
+    sales_destination = clean_display_text(row.get('sales_destination'), fallback='-')
+    notes_text = ' '.join(clean_display_text(row.get('notes'), fallback='').split())
     if len(notes_text) > 60:
         notes_text = notes_text[:57] + '...'
     days_to_sell = None
@@ -7527,6 +7703,7 @@ def build_report_merchandise_row(row, scope='user', fee_settings=None):
         'purchase_date_value': purchase_date_value,
         'sale_date_value': sale_date_value,
         'purchase_price': purchase_price,
+        'product_name': product_name,
         'listing_price': listing_price,
         'sale_price': sale_price,
         'shipping_cost': shipping_cost,
@@ -8681,7 +8858,7 @@ def build_analytics_item_detail_rows(items, item_kind='sale'):
     for item in items:
         detail_rows.append({
             'id': item.get('id') or '',
-            'product_name': item.get('product_name') or '-',
+            'product_name': clean_display_text(item.get('product_name'), fallback='商品名未登録'),
             'brand_name': item.get('brand_name') or '-',
             'purchase_date': item.get('purchase_date_display') or '-',
             'sale_date': item.get('sale_date_display') or '-',
@@ -9544,6 +9721,70 @@ def user_announcement_mark_all_read_api():
         'unread_count': 0,
         'announcements': announcements,
     })
+
+
+@app.route('/api/user-announcements/<int:announcement_id>/delete', methods=['POST'])
+@login_required
+def user_announcement_delete_api(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        return jsonify({'success': False, 'error': 'クライアントのみ利用できます'}), 403
+
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    if announcement_id not in visible_ids:
+        return jsonify({'success': False, 'error': 'お知らせが見つかりません'}), 404
+
+    deleted_count = delete_announcement_for_user(current_user.id, announcement_id)
+    announcements = [
+        serialize_announcement_payload(announcement)
+        for announcement in get_active_announcements(current_user, limit=None)
+    ]
+    unread_count = sum(1 for announcement in announcements if not announcement.get('is_read'))
+    return jsonify({
+        'success': True,
+        'deleted_count': deleted_count,
+        'unread_count': unread_count,
+        'announcements': announcements,
+    })
+
+
+@app.route('/api/announcements/hide-banner', methods=['POST'])
+@login_required
+def api_hide_announcement_banner():
+    data = request.get_json(silent=True) or {}
+    hide_announcement_banner_for_user(current_user.id, data.get('ids', []))
+    return jsonify({'success': True})
+
+
+@app.route('/announcements')
+@login_required
+def user_announcements_page():
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_dashboard'))
+
+    announcements = get_active_announcements(current_user, limit=None)
+    mark_announcements_read_for_user(current_user.id, [announcement.get('id') for announcement in announcements])
+    announcements = get_active_announcements(current_user, limit=None)
+    announcement_payloads = [
+        serialize_announcement_payload(announcement)
+        for announcement in get_active_announcements(current_user, limit=None)
+    ]
+    return render_template('announcements.html', announcements=announcements, announcement_payloads=announcement_payloads)
+
+
+@app.route('/announcements/delete/<int:announcement_id>', methods=['POST'])
+@login_required
+def user_announcement_delete_page(announcement_id):
+    if current_user.is_admin() or current_user.is_owner():
+        return redirect(url_for('admin_dashboard'))
+
+    visible_ids = set(get_visible_announcement_ids_for_user(current_user))
+    if announcement_id in visible_ids:
+        delete_announcement_for_user(current_user.id, announcement_id)
+        flash('お知らせを削除しました', 'success')
+    else:
+        flash('お知らせが見つかりません', 'error')
+
+    return redirect(url_for('user_announcements_page'))
 
 @app.route('/api/report/<report_type>')
 @login_required
@@ -12644,7 +12885,7 @@ def admin_dashboard():
 
         recent_sales.append({
             'id': item.get('id'),
-            'product_name': item.get('product_name') or '-',
+            'product_name': clean_display_text(item.get('product_name'), fallback='商品名未登録'),
             'sale_date': sale_date,
             'sales_destination': format_sales_destination(item.get('sales_destination'), item.get('sale_type')),
             'sale_price': sale_price,
@@ -15138,6 +15379,7 @@ def admin_proxy_service_create():
 
     if request.method == 'POST':
         conn = get_db()
+        ensure_proxy_service_auction_user_table(conn)
         auction_name = (request.form.get('auction_name') or '').strip() or 'オークション'
         page_title = (request.form.get('page_title') or '').strip() or '代行仕入れサービス'
         page_description = (request.form.get('page_description') or '').strip()
@@ -15147,6 +15389,9 @@ def admin_proxy_service_create():
         if sale_mode not in {'auction', 'fixed'}:
             sale_mode = 'auction'
         is_public = request.form.get('is_public') == 'on'
+        is_draft_save = request.form.get('submit_action') == 'draft'
+        if is_draft_save:
+            is_public = False
 
         start_dt = parse_proxy_service_datetime(start_datetime)
         end_dt = parse_proxy_service_datetime(end_datetime)
@@ -15165,6 +15410,13 @@ def admin_proxy_service_create():
                     RETURNING id
                 """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, is_public, current_user.id))
                 new_id = cur.fetchone()[0]
+                cur.execute(
+                    """
+                    INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (%s, NULL, FALSE)
+                    """,
+                    (new_id,),
+                )
             else:
                 cur = conn.cursor()
                 cur.execute("""
@@ -15173,10 +15425,20 @@ def admin_proxy_service_create():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (auction_name, page_title, page_description, start_datetime, end_datetime, sale_mode, 1 if is_public else 0, current_user.id))
                 new_id = cur.lastrowid
+                cur.execute(
+                    """
+                    INSERT INTO proxy_service_auction_users (auction_id, user_id, is_enabled)
+                    VALUES (?, NULL, 0)
+                    """,
+                    (new_id,),
+                )
 
             conn.commit()
             cur.close()
-            flash(f'オークション「{auction_name}」を作成しました', 'success')
+            if is_draft_save:
+                flash(f'ページ「{auction_name}」を一時保存しました', 'success')
+            else:
+                flash(f'オークション「{auction_name}」を作成しました', 'success')
             return redirect(url_for('admin_proxy_service_detail', auction_id=new_id))
         except Exception as e:
             conn.rollback()
@@ -15242,10 +15504,10 @@ def admin_proxy_service_detail(auction_id):
                 LEFT JOIN users u ON m.user_id = u.id
                 WHERE m.sale_date IS NULL
                   AND COALESCE(m.scope, 'admin') = 'admin'
-                  AND (m.auction_id IS NULL OR m.auction_id = %s)
+                  AND m.auction_id IS NULL
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id,))
+            """)
             available_items = [dict(row) for row in cur.fetchall()]
         else:
             import sqlite3
@@ -15284,10 +15546,10 @@ def admin_proxy_service_detail(auction_id):
                 LEFT JOIN users u ON m.user_id = u.id
                 WHERE m.sale_date IS NULL
                   AND COALESCE(m.scope, 'admin') = 'admin'
-                  AND (m.auction_id IS NULL OR m.auction_id = ?)
+                  AND m.auction_id IS NULL
                 ORDER BY m.id DESC
                 LIMIT 100
-            """, (auction_id,))
+            """)
             available_items = [dict(row) for row in cur.fetchall()]
 
         for item in available_items:
@@ -15473,6 +15735,99 @@ def admin_proxy_service_start(auction_id):
             pass
         return jsonify({'success': False, 'error': '公開処理に失敗しました'}), 500
 
+@app.route('/admin/proxy-service/<int:auction_id>/visibility', methods=['POST'])
+@login_required
+def admin_proxy_service_visibility(auction_id):
+    """公開/非公開の切り替えを即時反映"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    payload = request.get_json(silent=True) or request.form
+    requested_value = payload.get('is_public')
+    if isinstance(requested_value, str):
+        is_public = requested_value.lower() in {'1', 'true', 'on', 'yes'}
+    else:
+        is_public = bool(requested_value)
+
+    conn = get_db()
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = proxy_service_row_to_dict(cur.fetchone())
+            if not settings:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state.get('status') == 'ended':
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': '終了済みのため公開状態を変更できません'}), 400
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = %s,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (is_public, current_user.id, auction_id))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            row = cur.fetchone()
+            settings = proxy_service_row_to_dict(row)
+            if not settings:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state.get('status') == 'ended':
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': '終了済みのため公開状態を変更できません'}), 400
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (1 if is_public else 0, current_user.id, auction_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        settings['is_public'] = is_public
+        auction_state = get_proxy_service_auction_state(settings, now=now)
+        return jsonify({
+            'success': True,
+            'is_public': is_public,
+            'auction_state': {
+                'status': auction_state.get('status'),
+                'status_label': auction_state.get('status_label'),
+                'is_public': auction_state.get('is_public'),
+                'is_open': auction_state.get('is_open'),
+                'is_not_started': auction_state.get('is_not_started'),
+                'is_ended': auction_state.get('is_ended'),
+            },
+        })
+    except Exception as e:
+        conn.rollback()
+        try:
+            conn.close()
+        except Exception:
+            pass
+        print(f"Proxy service visibility error: {e}")
+        return jsonify({'success': False, 'error': '公開状態の更新に失敗しました'}), 500
+
 @app.route('/admin/proxy-service/<int:auction_id>/delete', methods=['POST'])
 @login_required
 def admin_proxy_service_delete(auction_id):
@@ -15483,36 +15838,60 @@ def admin_proxy_service_delete(auction_id):
     if not current_user.can_manage_proxy_service():
         return get_proxy_publish_denied_response(json_response=True)
 
-    data = request.get_json(silent=True) or request.form
-    raw_proxy_price = data.get('proxy_price')
-    proxy_price = None
-    if raw_proxy_price not in (None, ''):
-        try:
-            proxy_price = int(raw_proxy_price)
-        except (TypeError, ValueError):
-            return jsonify({'success': False, 'error': '公開価格は整数で入力してください'}), 400
-        if proxy_price <= 0:
-            return jsonify({'success': False, 'error': '公開価格は1円以上で入力してください'}), 400
-
     conn = get_db()
-    if DATABASE_URL:
-        cur = conn.cursor()
-        # 関連する商品のauction_idをNULLに
-        cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = FALSE WHERE auction_id = %s", (auction_id,))
-        # オークション削除
-        cur.execute("DELETE FROM proxy_service_settings WHERE id = %s", (auction_id,))
+    now = get_jst_now()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('ページが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service'))
+
+            auction_state = get_proxy_service_auction_state(dict(settings), now=now)
+            if auction_state.get('status') not in {'private', 'scheduled'}:
+                cur.close()
+                conn.close()
+                flash('公開前のページだけ削除できます。公開中または終了済みのページは削除できません。', 'error')
+                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
+
+            cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = FALSE WHERE auction_id = %s", (auction_id,))
+            cur.execute("DELETE FROM proxy_service_settings WHERE id = %s", (auction_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('ページが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service'))
+
+            auction_state = get_proxy_service_auction_state(dict(settings), now=now)
+            if auction_state.get('status') not in {'private', 'scheduled'}:
+                cur.close()
+                conn.close()
+                flash('公開前のページだけ削除できます。公開中または終了済みのページは削除できません。', 'error')
+                return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
+
+            cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = 0 WHERE auction_id = ?", (auction_id,))
+            cur.execute("DELETE FROM proxy_service_settings WHERE id = ?", (auction_id,))
+
         conn.commit()
-    else:
-        cur = conn.cursor()
-        cur.execute("UPDATE merchandise SET auction_id = NULL, show_in_proxy_service = 0 WHERE auction_id = ?", (auction_id,))
-        cur.execute("DELETE FROM proxy_service_settings WHERE id = ?", (auction_id,))
-        conn.commit()
-    
-    cur.close()
-    conn.close()
-    
-    flash('オークションを削除しました', 'success')
-    return redirect(url_for('admin_proxy_service'))
+        cur.close()
+        conn.close()
+
+        flash('ページを削除しました', 'success')
+        return redirect(url_for('admin_proxy_service'))
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"Proxy service delete error: {e}")
+        flash('ページ削除中にエラーが発生しました', 'error')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
 
 @app.route('/admin/proxy-service/<int:auction_id>/settings', methods=['POST'])
 @login_required
@@ -15526,6 +15905,9 @@ def admin_proxy_service_settings(auction_id):
         return get_proxy_publish_denied_response()
     
     is_public = request.form.get('is_public') == 'on'
+    is_draft_save = request.form.get('submit_action') == 'draft'
+    if is_draft_save:
+        is_public = False
     auction_name = request.form.get('auction_name', 'オークション')
     page_title = request.form.get('page_title', '代行仕入れサービス')
     page_description = request.form.get('page_description', '')
@@ -15653,7 +16035,10 @@ def admin_proxy_service_settings(auction_id):
     cur.close()
     conn.close()
     
-    flash('オークション設定を更新しました', 'success')
+    if is_draft_save:
+        flash('ページを一時保存しました', 'success')
+    else:
+        flash('オークション設定を更新しました', 'success')
     return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id))
 
 @app.route('/admin/proxy-service/<int:auction_id>/toggle-item/<int:item_id>', methods=['POST'])
@@ -15794,8 +16179,16 @@ def admin_proxy_service_bulk_toggle(auction_id):
     if not isinstance(data, dict):
         data = request.form
     item_ids = data.get('item_ids', [])
+    item_payloads = data.get('items', []) if isinstance(data.get('items', []), list) else []
     action = data.get('action', 'add')  # 'add' or 'remove'
     item_prices = data.get('item_prices', {}) or {}
+    if not item_ids and item_payloads:
+        item_ids = [item.get('id') for item in item_payloads if item.get('id')]
+        item_prices = {
+            str(item.get('id')): item.get('listing_price')
+            for item in item_payloads
+            if item.get('id')
+        }
     
     if not item_ids:
         return jsonify({'success': False, 'error': '商品が選択されていません'}), 400
@@ -17469,7 +17862,7 @@ def public_proxy_service_list():
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
     all_sections = None
-    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+    if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
         all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     proxy_service_info = None
     if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
@@ -17506,7 +17899,7 @@ def public_proxy_service_history():
         current_user_id=current_user.id if current_user.is_authenticated else None,
     )
     all_sections = None
-    if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
+    if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
         all_sections = build_public_proxy_service_sections(conn, now=now, allow_all=True)
     conn.close()
 
@@ -17525,7 +17918,7 @@ def public_proxy_service(auction_id):
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
 
-    if not current_user.is_authenticated and proxy_service_auction_has_user_config(conn, auction_id):
+    if not current_user.is_authenticated:
         conn.close()
         return render_template('proxy_service_closed.html', reason='not_allowed')
     
@@ -17635,7 +18028,7 @@ def public_proxy_service_status(auction_id):
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
 
-    if not current_user.is_authenticated and proxy_service_auction_has_user_config(conn, auction_id):
+    if not current_user.is_authenticated:
         conn.close()
         return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
 
@@ -18024,7 +18417,7 @@ def proxy_service_purchase():
             access_cur.close()
             access_auction_id = dict(access_row).get('auction_id') if access_row else None
 
-        if access_auction_id and not is_proxy_service_user_allowed(conn, current_user.id, access_auction_id):
+        if not access_auction_id or not is_proxy_service_user_allowed(conn, current_user.id, access_auction_id):
             conn.close()
             return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     
@@ -18724,8 +19117,8 @@ def admin_master_settings_init():
                 ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
                 ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
-                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
-                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
+                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '精算書デフォルト備考', 1),
+                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '精算書デフォルト支払条件', 2),
                 ('invoice_default_tax_rate', '10', 'number', 'invoice', '精算書デフォルト消費税率（%）', 1),
                 ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '精算書デフォルト支払期限', 2),
                 ('invoice_default_notes', '', 'textarea', 'invoice', '精算書デフォルト備考', 3),
@@ -18796,8 +19189,8 @@ def admin_master_settings_init():
                 ('seisan_default_notes', '', 'textarea', 'seisan', '精算書デフォルト備考', 2),
                 ('kaitori_default_tax_rate', '10', 'number', 'kaitori', '買取明細書デフォルト消費税率（%）', 1),
                 ('kaitori_default_notes', '', 'textarea', 'kaitori', '買取明細書デフォルト備考', 2),
-                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '仕切押し書デフォルト備考', 1),
-                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '仕切押し書デフォルト支払条件', 2),
+                ('shikiriosho_default_notes', '', 'textarea', 'shikiriosho', '精算書デフォルト備考', 1),
+                ('shikiriosho_default_payment_terms', '30日以内', 'text', 'shikiriosho', '精算書デフォルト支払条件', 2),
                 ('invoice_default_tax_rate', '10', 'number', 'invoice', '精算書デフォルト消費税率（%）', 1),
                 ('invoice_default_payment_terms', '30日以内', 'text', 'invoice', '精算書デフォルト支払期限', 2),
                 ('invoice_default_notes', '', 'textarea', 'invoice', '精算書デフォルト備考', 3),
@@ -21402,6 +21795,9 @@ def admin_items():
     # 利益計算と利益率の追加、最終更新者名の追加
     all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
     for item in items:
+        item['product_name'] = clean_display_text(item.get('product_name'), fallback='商品名未登録')
+        item['notes'] = clean_display_text(item.get('notes'), fallback='')
+        item['store_name'] = clean_display_text(item.get('store_name'), fallback='-')
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
         if item.get('sale_date'):
@@ -22711,10 +23107,15 @@ def admin_shikiriosho_list():
         """)
     
     shikiriosho_list = [dict(row) for row in cur.fetchall()]
+    if DATABASE_URL:
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name, username")
+    else:
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name, username")
+    recipient_users = [dict(row) for row in cur.fetchall()]
     cur.close()
     conn.close()
     
-    return render_template('admin/shikiriosho_list.html', shikiriosho_list=shikiriosho_list)
+    return render_template('admin/shikiriosho_list.html', shikiriosho_list=shikiriosho_list, recipient_users=recipient_users)
 
 @app.route('/admin/shikiriosho/add', methods=['GET', 'POST'])
 @login_required
@@ -22815,10 +23216,10 @@ def admin_shikiriosho_add():
     # ユーザー一覧取得
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
     else:
         cur = conn.cursor()
-        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
     
     users = [dict(row) for row in cur.fetchall()]
     cur.close()
@@ -22932,7 +23333,7 @@ def admin_shikiriosho_edit(id):
         shikiriosho = dict(row) if row else None
         cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
-        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
         users = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
@@ -22941,7 +23342,7 @@ def admin_shikiriosho_edit(id):
         shikiriosho = dict(row) if row else None
         cur.execute("SELECT * FROM shikiriosho_items WHERE shikiriosho_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
-        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
         users = [dict(row) for row in cur.fetchall()]
     
     cur.close()
@@ -23004,7 +23405,7 @@ def admin_shikiriosho_send(id):
 @login_required
 @permission_required('shikiriosho')
 def admin_shikiriosho_send_bulk():
-    """完成済みの仕切書をまとめて送信済みにする"""
+    """完成済みの精算書をまとめて送信済みにする"""
     send_scope = request.form.get('send_scope', 'selected')
     selected_ids = []
     for raw_id in request.form.getlist('document_ids'):
@@ -23036,7 +23437,7 @@ def admin_shikiriosho_send_bulk():
                     (selected_ids,),
                 )
             else:
-                flash('送信対象の仕切書を選択してください', 'warning')
+                flash('送信対象の精算書を選択してください', 'warning')
                 return redirect(url_for('admin_shikiriosho_list'))
             updated_count = cur.rowcount or 0
         else:
@@ -23060,15 +23461,15 @@ def admin_shikiriosho_send_bulk():
                     tuple(selected_ids),
                 )
             else:
-                flash('送信対象の仕切書を選択してください', 'warning')
+                flash('送信対象の精算書を選択してください', 'warning')
                 return redirect(url_for('admin_shikiriosho_list'))
             updated_count = cur.rowcount or 0
 
         conn.commit()
-        flash(f'仕切書を{updated_count}件送信済みにしました', 'success')
+        flash(f'精算書を{updated_count}件送信済みにしました', 'success')
     except Exception as exc:
         conn.rollback()
-        flash(f'仕切書の一括送信に失敗しました: {exc}', 'error')
+        flash(f'精算書の一括送信に失敗しました: {exc}', 'error')
     finally:
         try:
             cur.close()
@@ -34631,7 +35032,7 @@ def normalize_admin_document_history_row_v2(row):
             normalized['document_key'] = 'vendor_estimate'
             normalized['direction_key'] = 'vendor_outgoing'
             normalized['direction_label'] = '開花 → 業者'
-            normalized['document_type'] = '業者向け見積依頼書'
+            normalized['document_type'] = '業者向け依頼書'
         else:
             normalized['document_key'] = 'client_mitsumori'
             normalized['direction_key'] = 'client_incoming'
@@ -34651,7 +35052,7 @@ def normalize_admin_document_history_row_v2(row):
         normalized['document_key'] = 'shikiriosho'
         normalized['direction_key'] = 'client_outgoing'
         normalized['direction_label'] = '開花 → クライアント'
-        normalized['document_type'] = '仕切書'
+        normalized['document_type'] = '精算書'
     elif kind == 'user_keisan':
         normalized['document_key'] = 'auction_keisan'
         normalized['direction_key'] = 'client_outgoing'
@@ -34676,8 +35077,8 @@ def build_admin_document_type_cards_v2(rows):
             'direction': 'client_incoming',
         },
         {
-            'title': '業者向け見積依頼書',
-            'description': '開花から業者へ出した見積り依頼書の履歴です。',
+            'title': '業者向け依頼書',
+            'description': '開花から業者へ出した依頼書の履歴です。',
             'doc_type': 'user_mitsumori',
             'direction': 'vendor_outgoing',
         },
@@ -34695,18 +35096,18 @@ def build_admin_document_type_cards_v2(rows):
         },
         {
             'title': '買取明細書',
-            'description': 'クライアントへ返送した買取明細書の履歴です。',
+            'description': 'クライアントへ返送した買取明細書・精算書・計算書の履歴です。',
             'doc_type': 'invoice',
             'direction': 'client_outgoing',
         },
         {
-            'title': '仕切書',
-            'description': '仕切書の発行履歴をクライアント別に確認します。',
+            'title': '精算書',
+            'description': '精算書の発行履歴をクライアント別に確認します。',
             'doc_type': 'shikiriosho',
             'direction': 'client_outgoing',
         },
         {
-            'title': 'オークション計算書',
+            'title': '代行仕入れ計算書',
             'description': '代行仕入れの計算書と送付状況を確認します。',
             'doc_type': 'user_keisan',
             'direction': 'client_outgoing',
@@ -34794,7 +35195,7 @@ def admin_documents_dashboard_v2():
                 normalized['document_key'] = 'vendor_estimate'
                 normalized['direction_key'] = 'vendor_outgoing'
                 normalized['direction_label'] = '開花 → 業者'
-                normalized['document_type'] = '業者向け見積依頼書'
+                normalized['document_type'] = '業者向け依頼書'
             else:
                 normalized['document_key'] = 'client_mitsumori'
                 normalized['direction_key'] = 'client_incoming'
@@ -34814,7 +35215,7 @@ def admin_documents_dashboard_v2():
             normalized['document_key'] = 'shikiriosho'
             normalized['direction_key'] = 'client_outgoing'
             normalized['direction_label'] = '開花 → クライアント'
-            normalized['document_type'] = '仕切書'
+            normalized['document_type'] = '精算書'
         elif kind == 'user_keisan':
             normalized['document_key'] = 'auction_keisan'
             normalized['direction_key'] = 'client_outgoing'
@@ -35006,12 +35407,12 @@ def admin_documents_dashboard_v2():
             request_row['next_document_label'] = 'クライアント向け買取明細書を作成'
         elif vendor_mitsumori_id:
             request_row['document_flow_key'] = 'vendor_estimate'
-            request_row['document_flow_label'] = '業者向け見積依頼書を作成済み'
+            request_row['document_flow_label'] = '業者向け依頼書を作成済み'
             request_row['next_document_label'] = '業者買取明細書を登録'
         else:
             request_row['document_flow_key'] = 'user_request'
             request_row['document_flow_label'] = 'クライアントから受付'
-            request_row['next_document_label'] = '業者向け見積依頼書を作成'
+            request_row['next_document_label'] = '業者向け依頼書を作成'
 
         request_row['request_can_create_vendor_estimate'] = can_create_vendor_estimate
         request_row['request_can_register_vendor_kaitori'] = can_register_vendor_kaitori
@@ -35054,7 +35455,7 @@ def admin_documents_dashboard_v2():
         },
         'client_incoming': {
             'title': 'クライアント受付と次の作業',
-            'note': 'クライアントから届いた依頼書を確認する段階です。ここで内容を確認して、必要に応じて業者向け見積依頼書の作成へ進みます。',
+            'note': 'クライアントから届いた依頼書を確認する段階です。ここで内容を確認して、必要に応じて業者向け依頼書の作成へ進みます。',
             'flow_label': 'クライアント → 開花',
             'stage_title': '1. クライアントから受付',
             'summary': 'クライアントが作成した見積依頼書と買取依頼書を確認する段階です。ここで依頼内容とサービス種別を確認し、次の作業へ進みます。',
@@ -35062,20 +35463,20 @@ def admin_documents_dashboard_v2():
             'check_points': [
                 '見積依頼書または買取依頼書の内容を確認する',
                 '対象サービスと商品内容が合っているかを確認する',
-                '次に業者向け見積依頼書を作成すべき案件か判断する',
+                '次に業者向け依頼書を作成すべき案件か判断する',
             ],
             'action_title': '進行中の案件',
             'action_note': 'サービス別に絞り込みながら、今対応中の案件を確認できます。',
         },
         'vendor_outgoing': {
             'title': '開花から業者へ依頼する段階',
-            'note': '開花名義で業者向け見積依頼書を作成し、業者へ査定依頼を出す段階です。次は業者買取明細書の受領へ進みます。',
+            'note': '開花名義で業者向け依頼書を作成し、業者へ査定依頼を出す段階です。次は業者買取明細書の受領へ進みます。',
             'flow_label': '開花 → 業者',
             'stage_title': '2. 開花から業者へ依頼',
-            'summary': 'クライアントから受けた依頼内容をもとに、開花名義で業者向け見積依頼書を作成して送る段階です。',
-            'documents': ['業者向け見積依頼書'],
+            'summary': 'クライアントから受けた依頼内容をもとに、開花名義で業者向け依頼書を作成して送る段階です。',
+            'documents': ['業者向け依頼書'],
             'check_points': [
-                '業者向け見積依頼書が作成済みか確認する',
+                '業者向け依頼書が作成済みか確認する',
                 '送付対象の商品とサービスが正しいか確認する',
                 '次に業者買取明細書の受領待ちへ進めるかを確認する',
             ],
@@ -35099,11 +35500,11 @@ def admin_documents_dashboard_v2():
         },
         'client_outgoing': {
             'title': 'クライアントへ返送する段階',
-            'note': '最終確認が完了したら、ユーザー向け買取明細書・仕切書・オークション計算書を発行してクライアントへ返送します。',
+            'note': '最終確認が完了したら、ユーザー向け買取明細書・精算書・オークション計算書を発行してクライアントへ返送します。',
             'flow_label': '開花 → クライアント',
             'stage_title': '4. クライアントへ返送',
-            'summary': '最終確定後に、ユーザー向け買取明細書や仕切書、オークション計算書を発行してクライアントへ返送する段階です。',
-            'documents': ['ユーザー向け買取明細書', '仕切書', 'オークション計算書'],
+            'summary': '最終確定後に、ユーザー向け買取明細書や精算書、オークション計算書を発行してクライアントへ返送する段階です。',
+            'documents': ['ユーザー向け買取明細書', '精算書', 'オークション計算書'],
             'check_points': [
                 'クライアントへ返送する書類が作成済みか確認する',
                 '送付先と対象案件が正しいか確認する',
@@ -35129,8 +35530,8 @@ def admin_documents_dashboard_v2():
             'key': 'vendor_outgoing',
             'title': '2. 開花から業者へ依頼',
             'flow_label': '開花 → 業者',
-            'summary': 'クライアントから受けた依頼をもとに、開花名義で業者向け見積依頼書を作成して送る段階です。',
-            'documents': ['業者向け見積依頼書'],
+            'summary': 'クライアントから受けた依頼をもとに、開花名義で業者向け依頼書を作成して送る段階です。',
+            'documents': ['業者向け依頼書'],
             'current_count': current_counts['vendor_outgoing'],
             'history_count': history_counts['vendor_outgoing'],
             'url': url_for('admin_documents_dashboard', group='vendor_outgoing'),
@@ -35149,8 +35550,8 @@ def admin_documents_dashboard_v2():
             'key': 'client_outgoing',
             'title': '4. クライアントへ返送',
             'flow_label': '開花 → クライアント',
-            'summary': 'ユーザー向け買取明細書、仕切書、オークション計算書を作成し、クライアントへ返送する段階です。',
-            'documents': ['ユーザー向け買取明細書', '仕切書', 'オークション計算書'],
+            'summary': 'ユーザー向け買取明細書、精算書、オークション計算書を作成し、クライアントへ返送する段階です。',
+            'documents': ['ユーザー向け買取明細書', '精算書', 'オークション計算書'],
             'current_count': current_counts['client_outgoing'],
             'history_count': history_counts['client_outgoing'],
             'url': url_for('admin_documents_dashboard', group='client_outgoing'),
@@ -35231,8 +35632,8 @@ def admin_documents_history_v2():
     client_options = sorted({row.get('client_name') for row in all_rows if row.get('client_name') and row.get('client_name') != '-'})
     status_options = sorted({(row.get('status'), row.get('status_label')) for row in all_rows if row.get('status')})
     document_type_options = [
-        ('shikiriosho', '仕切書'),
-        ('user_mitsumori', '見積り依頼書 / 業者向け見積依頼書'),
+        ('shikiriosho', '精算書'),
+        ('user_mitsumori', '見積り依頼書 / 業者向け依頼書'),
         ('user_kaitori_shoudaku', '買取依頼書'),
         ('invoice', '買取明細書'),
         ('user_keisan', 'オークション計算書'),
@@ -35259,7 +35660,7 @@ def admin_documents_history_v2():
         },
         {
             'step': '2',
-            'title': '開花から業者への見積依頼書',
+            'title': '開花から業者への依頼書',
             'copy': '開花から業者へ送った依頼書の履歴を確認します。',
             'count_label': f"{count_document_history(direction='vendor_outgoing')}件",
             'url': url_for('admin_documents_history', direction='vendor_outgoing'),
@@ -35274,21 +35675,21 @@ def admin_documents_history_v2():
         {
             'step': '4',
             'title': 'クライアントへ返送した書類',
-            'copy': 'クライアントへ返送した買取明細書の履歴を確認します。',
+            'copy': 'クライアントへ返送した買取明細書・精算書・計算書の履歴を確認します。',
             'count_label': f"{count_document_history(doc_type='invoice', direction='client_outgoing')}件",
             'url': url_for('admin_documents_history', doc_type='invoice', direction='client_outgoing'),
         },
         {
             'step': '5',
-            'title': 'クライアント返送見積依頼書',
-            'copy': '返送済みの見積依頼書を後から確認します。',
+            'title': 'クライアント返信確認',
+            'copy': 'クライアント側から届いた見積依頼書や確認書類を後から確認します。',
             'count_label': f"{count_document_history(doc_type='user_mitsumori', direction='client_outgoing')}件",
             'url': url_for('admin_documents_history', doc_type='user_mitsumori', direction='client_outgoing'),
         },
         {
             'step': '6',
-            'title': '仕切書',
-            'copy': '仕切書の作成・送付履歴をクライアント別に確認します。',
+            'title': '精算書',
+            'copy': '精算書の作成・送付履歴をクライアント別に確認します。',
             'count_label': f"{count_document_history(doc_type='shikiriosho', direction='client_outgoing')}件",
             'url': url_for('admin_documents_history', doc_type='shikiriosho', direction='client_outgoing'),
         },
@@ -36257,8 +36658,8 @@ def admin_documents_dashboard_preview():
             "key": "vendor_outgoing",
             "title": "2. 開花から業者へ依頼",
             "flow_label": "開花 -> 業者",
-            "summary": "受付した案件をもとに、開花名義で業者向け見積依頼書を作成します。",
-            "documents": ["業者向け見積依頼書"],
+            "summary": "受付した案件をもとに、開花名義で業者向け依頼書を作成します。",
+            "documents": ["業者向け依頼書"],
             "url": url_for("admin_documents_dashboard", group="vendor_outgoing"),
             "current_count": 0,
         },
@@ -36275,8 +36676,8 @@ def admin_documents_dashboard_preview():
             "key": "client_outgoing",
             "title": "4. クライアントへ返送",
             "flow_label": "開花 -> クライアント",
-            "summary": "最終確認後に、クライアント向け買取明細書・仕切書・オークション計算書を作成します。",
-            "documents": ["クライアント向け買取明細書", "仕切書", "オークション計算書"],
+            "summary": "最終確認後に、クライアント向け買取明細書・精算書・オークション計算書を作成します。",
+            "documents": ["クライアント向け買取明細書", "精算書", "オークション計算書"],
             "url": url_for("admin_documents_dashboard", group="client_outgoing"),
             "current_count": 0,
         },
@@ -36291,17 +36692,17 @@ def admin_documents_dashboard_preview():
             "check_points": ["受信した依頼書の内容確認", "対象商品とサービスの確認", "次の業者向け書類作成へ進める"],
             "create_guidance": "ユーザーから届いた書類はここでは作成せず、内容確認と案件整理を行います。",
             "action_title": "進行中の案件",
-            "action_note": "ここではユーザーから届いた依頼書を確認し、必要なら業者向け見積依頼書を作成します。",
+            "action_note": "ここではユーザーから届いた依頼書を確認し、必要なら業者向け依頼書を作成します。",
         },
         "vendor_outgoing": {
             "flow_label": "開花 -> 業者",
             "stage_title": "2. 開花から業者へ依頼",
-            "summary": "受付内容を引用して、開花名義の業者向け見積依頼書を作成します。",
-            "documents": ["業者向け見積依頼書"],
+            "summary": "受付内容を引用して、開花名義の業者向け依頼書を作成します。",
+            "documents": ["業者向け依頼書"],
             "check_points": ["クライアント受付内容の確認", "業者へ出す見積依頼書の作成", "回答待ちへ進める"],
             "create_guidance": "開花から業者へ出す書類は、クライアント受付データを引用してここで作成します。",
             "action_title": "進行中の案件",
-            "action_note": "業者向け見積依頼書の作成と確認をここで行います。",
+            "action_note": "業者向け依頼書の作成と確認をここで行います。",
         },
         "vendor_incoming": {
             "flow_label": "業者 -> 開花",
@@ -36317,11 +36718,11 @@ def admin_documents_dashboard_preview():
             "flow_label": "開花 -> クライアント",
             "stage_title": "4. クライアントへ返送",
             "summary": "業者回答を引用して、クライアント向けの最終書類をここで作成します。",
-            "documents": ["クライアント向け買取明細書", "仕切書", "オークション計算書"],
+            "documents": ["クライアント向け買取明細書", "精算書", "オークション計算書"],
             "check_points": ["業者回答を引用した最終書類の作成", "送付前の内容確認", "クライアント向け返送"],
             "create_guidance": "クライアントへ返す書類は、ここで案件データを引用して作成します。",
             "action_title": "進行中の案件",
-            "action_note": "クライアント向け買取明細書・仕切書・オークション計算書をここで作成します。",
+            "action_note": "クライアント向け買取明細書・精算書・オークション計算書をここで作成します。",
         },
     }
 
@@ -36359,7 +36760,7 @@ def admin_documents_dashboard_preview():
 
         if not vendor_estimate_id:
             stage_key = "client_incoming"
-            next_document_label = "業者向け見積依頼書を作成"
+            next_document_label = "業者向け依頼書を作成"
         elif not vendor_statement_id:
             stage_key = "vendor_outgoing"
             next_document_label = "業者買取明細書を登録"
@@ -36374,7 +36775,7 @@ def admin_documents_dashboard_preview():
         if vendor_estimate_id:
             related_documents.append(
                 {
-                    "document_type": "業者向け見積依頼書",
+                    "document_type": "業者向け依頼書",
                     "document_no": f"ID:{vendor_estimate_id}",
                     "issue_date": "",
                     "status": "completed",
@@ -36434,7 +36835,7 @@ def admin_documents_dashboard_preview():
         if shikiriosho_id:
             related_documents.append(
                 {
-                    "document_type": "仕切書",
+                    "document_type": "精算書",
                     "document_no": f"ID:{shikiriosho_id}",
                     "issue_date": "",
                     "status": "completed",
@@ -36616,7 +37017,7 @@ def admin_mitsumori_add_from_documents():
             cur.close()
             conn.close()
         _update_sales_agency_request_link(request_id, {"vendor_mitsumori_id": mitsumori_id})
-        flash("業者向け見積依頼書を作成しました", "success")
+        flash("業者向け依頼書を作成しました", "success")
         return redirect(url_for("admin_documents_dashboard", group="vendor_outgoing"))
 
     items = _build_prefill_items_from_request(source_request)
@@ -36633,7 +37034,7 @@ def admin_mitsumori_add_from_documents():
         department_default="",
         contact_person_default="",
         address_default="",
-        subject_default=f"{source_request.get('service_name')} 業者向け見積依頼書",
+        subject_default=f"{source_request.get('service_name')} 業者向け依頼書",
         notes_default=f"{source_request.get('service_name')} の受付内容を引用しています",
     )
 
@@ -36929,13 +37330,13 @@ def admin_shikiriosho_add_from_documents():
         finally:
             cur.close()
             conn.close()
-        flash("仕切書を作成しました", "success")
+        flash("精算書を作成しました", "success")
         return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
 
     items = _build_prefill_items_from_request(source_request)
     conn, cur = _docs_open_cursor()
     try:
-        cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+        cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
         users = _docs_rows_to_dicts(cur.fetchall())
     finally:
         cur.close()
@@ -37194,7 +37595,13 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
             merchandise_id = actual_merchandise_id or item.get('request_merchandise_id')
             item['id'] = merchandise_id
             if not item.get('product_name'):
-                item['product_name'] = f"商品ID {item.get('request_merchandise_id')}（参照元データを確認してください）"
+                fallback_parts = [
+                    item.get('brand_name'),
+                    item.get('model_number'),
+                    item.get('kaika_product_code'),
+                ]
+                fallback_name = " / ".join(str(part).strip() for part in fallback_parts if str(part or "").strip())
+                item['product_name'] = fallback_name or f"商品名未登録（商品ID {merchandise_id or item.get('request_merchandise_id') or '-'}）"
             if not item.get('brand_name'):
                 item['brand_name'] = ''
             item['detail_url'] = url_for('view_item', id=actual_merchandise_id) if actual_merchandise_id else None
@@ -37239,14 +37646,15 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         shikiriosho_id = linked_docs.get('shikiriosho_id')
         auction_keisan_id = linked_docs.get('auction_keisan_id')
 
+        handled_vendor_services = {'wholesale', 'auction', 'simultaneous'}
         can_create_vendor_estimate = (
-            service_type == 'wholesale'
+            service_type in handled_vendor_services
             and request_row.get('status') in {'pending', 'approved', 'appraising', 'inspecting', 'completed'}
             and active_count > 0
             and not vendor_mitsumori_id
         )
         can_register_vendor_kaitori = (
-            service_type == 'wholesale'
+            service_type in handled_vendor_services
             and bool(vendor_mitsumori_id)
             and not vendor_kaitori_id
             and active_count > 0
@@ -37269,7 +37677,7 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
             and not shikiriosho_id
         )
         can_create_auction_keisan = (
-            service_type == 'auction'
+            service_type in {'auction', 'simultaneous'}
             and active_count > 0
             and not auction_keisan_id
         )
@@ -37395,7 +37803,7 @@ def _build_dashboard_related_documents(request_row):
     if vendor_estimate_id:
         related_documents.append(
             {
-                "document_type": "業者向け見積依頼書",
+                "document_type": "業者向け依頼書",
                 "document_no": f"ID:{vendor_estimate_id}",
                 "issue_date": "",
                 "status": "completed",
@@ -37438,7 +37846,7 @@ def _build_dashboard_related_documents(request_row):
     if linked_docs.get("shikiriosho_id"):
         related_documents.append(
             {
-                "document_type": "仕切書",
+                "document_type": "精算書",
                 "document_no": f"ID:{linked_docs['shikiriosho_id']}",
                 "issue_date": "",
                 "status": "completed",
@@ -37467,24 +37875,23 @@ def _matches_documents_group(request_row, group_key):
     service_type = request_row.get("service_type")
     active_item_count = int(request_row.get("active_item_count") or 0)
     status = request_row.get("status") or ""
+    handled_services = {"wholesale", "auction", "simultaneous"}
     if group_key == "client_incoming":
         return True
     if active_item_count <= 0 or status == "rejected":
         return False
     if group_key == "vendor_outgoing":
-        return service_type == "wholesale" and not request_row.get("vendor_kaitori_shoudaku_id")
+        return service_type in handled_services and not request_row.get("vendor_mitsumori_id")
     if group_key == "vendor_incoming":
-        return service_type == "wholesale" and bool(request_row.get("vendor_mitsumori_id"))
+        return service_type in handled_services and bool(request_row.get("vendor_mitsumori_id")) and not request_row.get("vendor_kaitori_shoudaku_id")
     if group_key == "client_outgoing":
-        if service_type == "wholesale":
-            return bool(request_row.get("vendor_kaitori_shoudaku_id"))
-        return True
+        return service_type in handled_services and bool(request_row.get("vendor_kaitori_shoudaku_id"))
     return False
 
 
 def _build_service_breakdown_rows(filtered_rows, selected_group, selected_service_type, selected_month):
     breakdown = []
-    if selected_group == "client_incoming":
+    if selected_group in {"client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing"}:
         service_options = [
             {"key": "all", "label": "すべてのサービス"},
             {"key": "wholesale", "label": "業者卸販売"},
@@ -37500,35 +37907,8 @@ def _build_service_breakdown_rows(filtered_rows, selected_group, selected_servic
                     "current_count": current_count,
                     "is_selected": selected_service_type == option["key"],
                     "url": url_for("admin_documents_dashboard", group=selected_group, service_type=option["key"]),
-                }
-            )
-    elif selected_group == "vendor_incoming":
-        month_counts = {}
-        for row in filtered_rows:
-            month_value = row.get("vendor_statement_month")
-            if not month_value:
-                continue
-            month_counts[month_value] = month_counts.get(month_value, 0) + 1
-        month_keys = sorted(month_counts.keys(), reverse=True)[:12]
-        breakdown.append(
-            {
-                "key": "all",
-                "label": "すべての期間",
-                "current_count": len(filtered_rows),
-                "is_selected": selected_month == "all",
-                "url": url_for("admin_documents_dashboard", group=selected_group, month="all"),
-            }
-        )
-        for month_value in month_keys:
-            breakdown.append(
-                {
-                    "key": month_value,
-                    "label": f"{month_value} の書類",
-                    "current_count": month_counts.get(month_value, 0),
-                    "is_selected": selected_month == month_value,
-                    "url": url_for("admin_documents_dashboard", group=selected_group, month=month_value),
-                }
-            )
+                    }
+                )
     return breakdown
 
 
@@ -37554,8 +37934,8 @@ def admin_documents_dashboard_preview():
             "key": "vendor_outgoing",
             "title": "2. 開花から業者へ依頼",
             "flow_label": "開花 -> 業者",
-            "summary": "業者卸販売サービスの商品だけを業者へ流す段階です。業者向け見積依頼書はここで作成します。",
-            "documents": ["業者向け見積依頼書"],
+            "summary": "業者卸販売・業者オークション・同時出品の対象商品を、販売方式ごとに業者へ依頼する段階です。",
+            "documents": ["業者向け依頼書"],
             "url": url_for("admin_documents_dashboard", group="vendor_outgoing"),
             "current_count": 0,
         },
@@ -37573,7 +37953,7 @@ def admin_documents_dashboard_preview():
             "title": "4. クライアントへ返送",
             "flow_label": "開花 -> クライアント",
             "summary": "各サービスに応じた最終書類を作成し、クライアントへ返送する段階です。",
-            "documents": ["買取明細書", "仕切書", "オークション計算書"],
+            "documents": ["買取明細書", "精算書", "オークション計算書"],
             "url": url_for("admin_documents_dashboard", group="client_outgoing"),
             "current_count": 0,
         },
@@ -37593,29 +37973,29 @@ def admin_documents_dashboard_preview():
         "vendor_outgoing": {
             "flow_label": "開花 -> 業者",
             "stage_title": "2. 開花から業者へ依頼",
-            "summary": "業者卸販売サービスの案件だけを業者へ流します。クライアント受付内容を引用して書類を作成します。",
-            "documents": ["業者向け見積依頼書"],
-            "check_points": ["業者卸販売サービスのみ対象", "受付内容を引用して業者向け見積依頼書を作成", "作成後は業者回答待ちへ進める"],
-            "create_guidance": "業者向け見積依頼書はこの段階で作成します。1番では作成しません。",
-            "action_title": "業者へ依頼する案件",
-            "action_note": "対象は業者卸販売サービスのみです。この画面から業者向け見積依頼書を作成します。",
+            "summary": "業者卸販売・業者オークション・同時出品の対象商品を、販売方式ごとに業者へ依頼する段階です。",
+            "documents": ["業者向け依頼書"],
+            "check_points": ["業者卸販売・業者オークション・同時出品を分類して確認", "受付内容の商品を引用して業者向け依頼書を作成", "作成後は業者回答受領へ進める"],
+            "create_guidance": "業者向け依頼書はこの段階で作成します。1番では作成しません。",
+            "action_title": "業者へ依頼する商品",
+            "action_note": "業者卸販売・業者オークション・同時出品ごとに、対象商品を確認して業者向け依頼書を作成します。",
         },
         "vendor_incoming": {
             "flow_label": "業者 -> 開花",
             "stage_title": "3. 業者から回答受領",
             "summary": "業者から届いた回答ファイルや明細書を登録し、必要に応じてダウンロードして確認する段階です。",
             "documents": ["業者買取明細書", "回答ファイル"],
-            "check_points": ["業者から届いたPDFや画像の登録", "回答月で絞り込み", "登録後にクライアント向け書類へ引き継ぐ"],
+            "check_points": ["業者から届いたPDFや画像の登録", "販売方式ごとの回答状況確認", "登録後にクライアント向け書類へ引き継ぐ"],
             "create_guidance": "メールやスキャンで届いたファイルを業者買取明細書に添付して保存できます。",
             "action_title": "業者から届いた回答書類",
-            "action_note": "月別に絞り込みながら、登録済みの回答ファイルをダウンロードして確認できます。",
+            "action_note": "業者卸販売・業者オークション・同時出品ごとに、回答ファイルと金額を登録して確認します。",
         },
         "client_outgoing": {
             "flow_label": "開花 -> クライアント",
             "stage_title": "4. クライアントへ返送",
             "summary": "各サービスに応じた書類をここで作成し、クライアントへ返送します。",
-            "documents": ["買取明細書", "仕切書", "オークション計算書"],
-            "check_points": ["業者卸販売は業者回答を引用", "業者オークションと同時出品は申請内容を引用", "クライアント向け書類だけを作成"],
+            "documents": ["買取明細書", "精算書", "オークション計算書"],
+            "check_points": ["業者回答を引用して最終書類を作成", "業者オークションと同時出品は計算書へ反映", "クライアント向け書類だけを作成"],
             "create_guidance": "クライアントへ返す書類は、この段階で案件データを引用して作成します。",
             "action_title": "クライアントへ返送する案件",
             "action_note": "クライアントへ返す書類だけをここで作成・確認します。",
@@ -37648,12 +38028,24 @@ def admin_documents_dashboard_preview():
         active_item_count = int(request_row.get("active_item_count") or 0)
         canceled_item_count = int(request_row.get("canceled_item_count") or 0)
         service_type = request_row.get("service_type") or ""
+        active_items = [
+            item for item in (request_row.get("merchandise_items") or [])
+            if (item.get("item_status") or "active") != "canceled"
+        ]
+        item_names = [
+            (item.get("product_name") or item.get("item_name") or f"商品ID {item.get('id')}")
+            for item in active_items
+        ]
+        item_summary = " / ".join(item_names[:3]) if item_names else "-"
+        if len(item_names) > 3:
+            item_summary = f"{item_summary} ほか{len(item_names) - 3}点"
 
         row = {
             "id": request_id,
             "client_name": request_row.get("client_name"),
             "service_type": service_type,
             "service_name": request_row.get("service_name") or "",
+            "item_summary": item_summary,
             "status": request_row.get("status") or "",
             "status_label": get_sales_agency_status_label(request_row.get("status"), viewer="admin"),
             "detail_url": url_for("admin_sales_agency_request_detail", id=request_id),
@@ -37698,30 +38090,30 @@ def admin_documents_dashboard_preview():
         if _matches_documents_group(request_row, "vendor_outgoing"):
             vendor_out_row = dict(row)
             vendor_out_row["document_flow_label"] = group_meta["vendor_outgoing"]["flow_label"]
-            vendor_out_row["next_document_label"] = "業者回答待ち" if vendor_estimate_id else "業者向け見積依頼書を作成"
+            vendor_out_row["next_document_label"] = "業者向け依頼書を作成"
             vendor_out_row["create_vendor_estimate_url"] = (
                 url_for("admin_mitsumori_add", request_id=request_id)
-                if service_type == "wholesale" and not vendor_estimate_id and row["active_item_count"] > 0
+                if service_type in {"wholesale", "auction", "simultaneous"} and not vendor_estimate_id and row["active_item_count"] > 0
                 else None
             )
             vendor_out_row["related_documents"] = [
                 doc for doc in row["related_documents"]
-                if doc.get("document_type") in {"業者向け見積依頼書"}
+                if doc.get("document_type") in {"業者向け依頼書", "業者向け見積依頼書"}
             ]
             stage_row_map["vendor_outgoing"].append(vendor_out_row)
 
         if _matches_documents_group(request_row, "vendor_incoming"):
             vendor_in_row = dict(row)
             vendor_in_row["document_flow_label"] = group_meta["vendor_incoming"]["flow_label"]
-            vendor_in_row["next_document_label"] = "登録済みの回答を確認" if vendor_statement_id else "業者回答ファイルを登録"
+            vendor_in_row["next_document_label"] = "業者回答ファイルを登録"
             vendor_in_row["create_vendor_kaitori_url"] = (
                 url_for("admin_kaitori_shoudaku_add", request_id=request_id)
-                if service_type == "wholesale" and vendor_estimate_id and not vendor_statement_id and row["active_item_count"] > 0
+                if service_type in {"wholesale", "auction", "simultaneous"} and vendor_estimate_id and not vendor_statement_id and row["active_item_count"] > 0
                 else None
             )
             vendor_in_row["related_documents"] = [
                 doc for doc in row["related_documents"]
-                if doc.get("document_type") in {"業者向け見積依頼書", "業者買取明細書"}
+                if doc.get("document_type") in {"業者向け依頼書", "業者向け見積依頼書", "業者買取明細書"}
             ]
             stage_row_map["vendor_incoming"].append(vendor_in_row)
 
@@ -37734,7 +38126,7 @@ def admin_documents_dashboard_preview():
                 client_out_row["create_shikiriosho_url"] = url_for("admin_shikiriosho_add", request_id=request_id) if vendor_statement_id and not linked_docs.get("shikiriosho_id") else None
                 client_out_row["related_documents"] = [
                     doc for doc in row["related_documents"]
-                    if doc.get("document_type") in {"クライアント向け買取明細書", "仕切書"}
+                    if doc.get("document_type") in {"クライアント向け買取明細書", "精算書"}
                 ]
             elif service_type in {"auction", "simultaneous"}:
                 client_out_row["next_document_label"] = "クライアント向け買取明細書・計算書を作成"
@@ -37765,18 +38157,12 @@ def admin_documents_dashboard_preview():
     stage_request_rows = []
     if selected_group != "all":
         filtered_rows = list(stage_row_map.get(selected_group, []))
-        if selected_group == "client_incoming":
+        if selected_group in {"client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing"}:
             service_breakdown = _build_service_breakdown_rows(filtered_rows, selected_group, selected_service_type, selected_month)
             stage_request_rows = [
                 row for row in filtered_rows
                 if selected_service_type == "all" or row.get("service_type") == selected_service_type
             ]
-        elif selected_group == "vendor_incoming":
-            service_breakdown = _build_service_breakdown_rows(filtered_rows, selected_group, selected_service_type, selected_month)
-            if selected_month != "all":
-                stage_request_rows = [row for row in filtered_rows if row.get("vendor_statement_month") == selected_month]
-            else:
-                stage_request_rows = filtered_rows
         else:
             stage_request_rows = filtered_rows
         selected_group_current_count = len(stage_request_rows)
@@ -37799,6 +38185,38 @@ def admin_documents_dashboard_preview():
         (card.get("doc_type"), card.get("direction")): int(card.get("count") or 0)
         for card in document_type_cards
     }
+    attention_rows = [
+        row
+        for _request_row, row, _vendor_statement_doc, _linked_docs in base_rows
+        if int(row.get("active_item_count") or 0) <= 0 or (row.get("item_summary") or "-") == "-"
+    ]
+    total_pending = sum(len(stage_row_map.get(key, [])) for key in ("client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing"))
+    work_queue_cards = [
+        {
+            "title": "今日対応が必要",
+            "count_label": f"{total_pending}件",
+            "description": "現在いずれかの処理段階で止まっている案件です。まずここから未処理を確認できます。",
+            "url": url_for("admin_documents_dashboard"),
+        },
+        {
+            "title": "業者回答待ち",
+            "count_label": f"{len(stage_row_map.get('vendor_incoming', []))}件",
+            "description": "業者から届いた回答ファイルや金額を登録する案件です。",
+            "url": url_for("admin_documents_dashboard", group="vendor_incoming"),
+        },
+        {
+            "title": "送付前確認",
+            "count_label": f"{len(stage_row_map.get('client_outgoing', []))}件",
+            "description": "クライアントへ送る前に、書類・金額・商品反映を確認する案件です。",
+            "url": url_for("admin_documents_dashboard", group="client_outgoing"),
+        },
+        {
+            "title": "不足・要確認",
+            "count_label": f"{len(attention_rows)}件",
+            "description": "商品名や対象商品の紐づきが不足している可能性がある案件です。",
+            "url": url_for("admin_documents_dashboard"),
+        },
+    ]
     document_flow_cards = [
         {
             "step": "1",
@@ -37823,21 +38241,21 @@ def admin_documents_dashboard_preview():
         },
         {
             "step": "4",
-            "title": "買取明細書",
-            "description": "クライアントごとに買取明細書を作成し、送付後にユーザー書類・商品ページへ反映します。",
+            "title": "最終書類作成・クライアント返送",
+            "description": "業者回答をもとに買取明細書・精算書・計算書など、クライアントへ返す最終書類を作成して送付します。",
             "count_label": f"{len(stage_row_map.get('client_outgoing', []))}件返送準備",
             "url": url_for("admin_documents_dashboard", group="client_outgoing"),
         },
         {
             "step": "5",
-            "title": "クライアント返送見積依頼書",
-            "description": "買取明細書送付後に、ユーザーから見積依頼書として返送された書類を確認します。",
-            "count_label": "返送待ちを確認",
+            "title": "クライアント返信確認",
+            "description": "クライアント側から届いた見積依頼書や確認書類を、管理画面で受領・確認する専用画面です。ここでは新規作成せず受信内容だけを確認します。",
+            "count_label": "受領書類を確認",
             "url": url_for("admin_mitsumori_list"),
         },
         {
             "step": "6",
-            "title": "仕切書",
+            "title": "精算書",
             "description": "月額利用料と撮影・梱包・発送代行サポート費用を月締めで確認・送付します。",
             "count_label": f"{document_card_counts.get(('shikiriosho', 'client_outgoing'), 0)}件",
             "url": url_for("admin_shikiriosho_list"),
@@ -37871,6 +38289,7 @@ def admin_documents_dashboard_preview():
         selected_group_service_label=selected_group_service_label,
         document_type_cards=document_type_cards,
         document_flow_cards=document_flow_cards,
+        work_queue_cards=work_queue_cards,
     )
 
 

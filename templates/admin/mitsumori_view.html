@@ -11,7 +11,7 @@
 <div class="admin-doc-page">
     <div class="admin-doc-toolbar">
         <div>
-            <h1>{{ '業者向け見積依頼書' if is_vendor_doc else '見積依頼書' }}</h1>
+            <h1>{{ '業者向け依頼書' if is_vendor_doc else '見積依頼書' }}</h1>
             <p>{{ '開花から業者へ送付する見積依頼書です。' if is_vendor_doc else 'クライアントから届いた見積依頼書です。' }}</p>
         </div>
         <div class="admin-doc-actions">
@@ -24,7 +24,7 @@
         <header class="admin-doc-hero">
             <div>
                 <div class="admin-doc-kicker">{{ '開花から業者へ送付' if is_vendor_doc else 'クライアントから受付' }}</div>
-                <h2 class="admin-doc-title">{{ '業者向け見積依頼書' if is_vendor_doc else '見積依頼書' }}</h2>
+                <h2 class="admin-doc-title">{{ '業者向け依頼書' if is_vendor_doc else '見積依頼書' }}</h2>
                 <p class="admin-doc-no">{{ mitsumori.document_no or '-' }}</p>
             </div>
             <div class="admin-doc-status">

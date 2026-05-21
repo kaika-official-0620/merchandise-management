@@ -659,7 +659,7 @@
                 <div class="request-doc-links">
                     <span class="meta-sub">書類進行: {{ req.document_flow_label }}</span>
                     {% if req.request_can_create_vendor_estimate %}
-                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">業者向け見積依頼書</a>
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-outline">業者向け依頼書</a>
                     {% endif %}
                     {% if req.vendor_mitsumori_id %}
                     <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-outline">業者見積を見る</a>

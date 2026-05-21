@@ -335,7 +335,7 @@
                     <span class="archive-flow-step">{{ card.step }}</span>
                     <h2>{{ card.title }}</h2>
                 </div>
-                <p>{{ card.copy or card.description }}</p>
+                <p>{{ card.get('copy') or card.description }}</p>
                 <span class="archive-flow-count">{{ card.count_label or ((card.count or 0) ~ '件') }}</span>
             </a>
             {% endfor %}
@@ -458,7 +458,7 @@
                                 {% if row.detail_url %}
                                 <a href="{{ row.detail_url }}" class="btn btn-info btn-sm">書類詳細</a>
                                 {% else %}
-                                <span class="service-name">詳細リンク準備中</span>
+                                <span class="service-name">-</span>
                                 {% endif %}
                                 {% if row.request_url %}
                                 <a href="{{ row.request_url }}" class="btn btn-secondary btn-sm">案件詳細</a>

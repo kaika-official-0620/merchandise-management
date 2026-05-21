@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 
 SALES_AGENCY_DOCUMENT_FLOW_STEPS = [
     ("user_request", "ユーザー依頼受領"),
-    ("vendor_estimate", "業者向け見積依頼書"),
+    ("vendor_estimate", "業者向け依頼書"),
     ("vendor_statement", "業者買取明細書"),
     ("client_invoice", "ユーザー向け買取明細書"),
     ("completed", "処理完了"),
@@ -590,7 +590,7 @@ def apply(module: Any) -> None:
             current_label = "業者買取明細書受領済み"
         elif request_row.get("vendor_mitsumori_id"):
             current_key = "vendor_estimate"
-            current_label = "業者向け見積依頼書作成済み"
+            current_label = "業者向け依頼書作成済み"
         else:
             current_key = "user_request"
             current_label = "ユーザー依頼受付"
@@ -738,7 +738,7 @@ def apply(module: Any) -> None:
                         "document_key": "shikiriosho",
                         "id": row["id"],
                         "request_id": row.get("sales_agency_request_id"),
-                        "document_type": "仕切書",
+                        "document_type": "精算書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": row.get("client_name") or row.get("recipient_name") or row.get("username") or "未設定",
                         "service_type": request_info.get("service_type") or "",
@@ -776,7 +776,7 @@ def apply(module: Any) -> None:
                         "document_key": "vendor_estimate" if is_vendor_outgoing else "client_mitsumori",
                         "id": row["id"],
                         "request_id": request_info.get("id"),
-                        "document_type": "業者向け見積依頼書" if is_vendor_outgoing else "見積り依頼書",
+                        "document_type": "業者向け依頼書" if is_vendor_outgoing else "見積り依頼書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": row.get("client_name") or row.get("username") or "未設定",
                         "service_type": request_info.get("service_type") or "",
@@ -1303,13 +1303,13 @@ def apply(module: Any) -> None:
             request_row["create_shikiriosho_url"] = safe_url("admin_shikiriosho_add", request_id=request_row.get("id")) if request_row.get("request_can_create_shikiriosho") else None
             request_row["create_auction_keisan_url"] = safe_url("admin_auction_keisan_add", request_id=request_row.get("id")) if request_row.get("request_can_create_auction_keisan") else None
             if request_row.get("request_can_create_vendor_estimate"):
-                request_row["next_document_label"] = "業者向け見積依頼書を作成"
+                request_row["next_document_label"] = "業者向け依頼書を作成"
             elif request_row.get("request_can_register_vendor_kaitori"):
                 request_row["next_document_label"] = "業者買取明細書を登録"
             elif request_row.get("request_can_create_client_invoice"):
                 request_row["next_document_label"] = "ユーザー向け買取明細書を確認・発行"
             elif request_row.get("request_can_create_shikiriosho"):
-                request_row["next_document_label"] = "仕切書・計算書を作成"
+                request_row["next_document_label"] = "精算書・計算書を作成"
             else:
                 request_row["next_document_label"] = "次の書類待ちまたは処理完了"
             request_rows.append(request_row)
@@ -1408,7 +1408,7 @@ def apply(module: Any) -> None:
                 "stage_title": "2. 開花から業者へ依頼",
                 "summary": "クライアントの依頼内容を確認し、開花名義で業者へ見積り依頼を出す段階です。",
                 "documents": ["業者向け見積り依頼書"],
-                "create_guidance": "各案件行の「業者向け見積依頼書を作成」から、クライアントの依頼内容を引用した業者向け書類を作成できます。",
+                "create_guidance": "各案件行の「業者向け依頼書を作成」から、クライアントの依頼内容を引用した業者向け書類を作成できます。",
                 "check_points": [
                     "クライアントから届いた内容を業者へ流す前に再確認します。",
                     "業者への依頼はサービス別に分けず、開花から業者への依頼書としてまとめて管理します。",
@@ -1423,7 +1423,7 @@ def apply(module: Any) -> None:
                 "stage_title": "3. 業者から回答受領",
                 "summary": "業者から届いた回答書類を登録し、内容を確認する段階です。",
                 "documents": ["業者買取明細書", "回答添付ファイル"],
-                "create_guidance": "各案件行の「業者買取明細書を登録」から、業者向け見積依頼書の内容を引用しつつ、届いたPDFや画像を添付して回答書類を登録できます。",
+                "create_guidance": "各案件行の「業者買取明細書を登録」から、業者向け依頼書の内容を引用しつつ、届いたPDFや画像を添付して回答書類を登録できます。",
                 "check_points": [
                     "メールやPDF、画像で届いた回答を対象案件に紐付けて登録します。",
                     "この段階ではサービス別に分けず、業者から開花へ届いた書類として扱います。",
@@ -1439,8 +1439,8 @@ def apply(module: Any) -> None:
                 "flow_label": "開花 → クライアント",
                 "stage_title": "4. クライアントへ返送",
                 "summary": "業者回答を確認後、クライアント向けの書類を作成して返送する段階です。",
-                "documents": ["ユーザー向け買取明細書", "仕切書", "オークション計算書"],
-                "create_guidance": "各案件行から、ユーザー向け買取明細書・仕切書・オークション計算書を作成できます。既に作成済みの書類は関連書類としてその場で確認できます。",
+                "documents": ["ユーザー向け買取明細書", "精算書", "オークション計算書"],
+                "create_guidance": "各案件行から、ユーザー向け買取明細書・精算書・オークション計算書を作成できます。既に作成済みの書類は関連書類としてその場で確認できます。",
                 "check_points": [
                     "業者から届いた回答内容を確認したうえで、クライアント向けの書類を作成します。",
                     "各クライアントへ返送する書類は、この段階から作成・送信します。",
@@ -1598,10 +1598,10 @@ def apply(module: Any) -> None:
         document_type_options = [
             ("client_mitsumori", "見積り依頼書"),
             ("client_kaitori_request", "買取依頼書"),
-            ("vendor_estimate", "業者向け見積依頼書"),
+            ("vendor_estimate", "業者向け依頼書"),
             ("vendor_statement", "業者買取明細書"),
             ("client_invoice", "ユーザー向け買取明細書"),
-            ("shikiriosho", "仕切書"),
+            ("shikiriosho", "精算書"),
             ("auction_keisan", "オークション計算書"),
         ]
         return render_template(
@@ -1759,7 +1759,7 @@ def apply(module: Any) -> None:
     def user_mitsumori_view_v2(id: int):
         mitsumori = (load_mitsumori_for_user(id) or [None])[0]
         if mitsumori and is_admin_vendor_mitsumori(mitsumori):
-            flash("業者向け見積依頼書はユーザー画面には表示されません。", "error")
+            flash("業者向け依頼書はユーザー画面には表示されません。", "error")
             return redirect(url_for("documents"))
         return originals["user_mitsumori_view"](id)
 
@@ -1838,7 +1838,7 @@ def apply(module: Any) -> None:
                 if source_request:
                     target_user_id = target_user_id or source_request.get("user_id")
                     if source_request.get("vendor_mitsumori_id"):
-                        flash("この申請ではすでに業者向け見積依頼書を作成済みです。", "info")
+                        flash("この申請ではすでに業者向け依頼書を作成済みです。", "info")
                         return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
 
             if not target_user_id:
@@ -1956,7 +1956,7 @@ def apply(module: Any) -> None:
                     )
 
                 conn.commit()
-                flash("業者向け見積依頼書を作成しました。", "success")
+                flash("業者向け依頼書を作成しました。", "success")
                 if request_id:
                     return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
                 return redirect(url_for("admin_mitsumori_view", id=mitsumori_id))
@@ -1975,7 +1975,7 @@ def apply(module: Any) -> None:
                 return redirect(url_for("admin_sales_agency_requests"))
             target_user_id = target_user_id or source_request.get("user_id")
             if source_request.get("vendor_mitsumori_id"):
-                flash("この申請ではすでに業者向け見積依頼書を作成済みです。", "info")
+                flash("この申請ではすでに業者向け依頼書を作成済みです。", "info")
                 return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
 
         today = datetime.now()
@@ -1990,7 +1990,7 @@ def apply(module: Any) -> None:
             department_default="",
             contact_person_default="",
             address_default="",
-            subject_default=f"{source_request.get('service_name')} 業者向け見積依頼書" if source_request else "見積依頼書",
+            subject_default=f"{source_request.get('service_name')} 業者向け依頼書" if source_request else "見積依頼書",
             notes_default="",
             source_request=source_request,
             source_request_products=source_request_products,
@@ -2033,7 +2033,7 @@ def apply(module: Any) -> None:
                     flash("この申請ではすでに業者買取明細書を登録済みです。", "info")
                     return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
                 if not source_request.get("vendor_mitsumori_id"):
-                    flash("先に業者向け見積依頼書を作成してください。", "error")
+                    flash("先に業者向け依頼書を作成してください。", "error")
                     return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
 
             subtotal = 0
@@ -2202,7 +2202,7 @@ def apply(module: Any) -> None:
                 flash("この申請ではすでに業者買取明細書を登録済みです。", "info")
                 return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
             if not source_request.get("vendor_mitsumori_id"):
-                flash("先に業者向け見積依頼書を作成してください。", "error")
+                flash("先に業者向け依頼書を作成してください。", "error")
                 return redirect(url_for("admin_sales_agency_request_detail", id=request_id))
             source_vendor_items = load_vendor_mitsumori_items(source_request)
 
@@ -2501,7 +2501,7 @@ def apply(module: Any) -> None:
                 total_amount += amount
 
             if not items:
-                flash("仕切書に追加する商品を1件以上入力してください。", "error")
+                flash("精算書に追加する商品を1件以上入力してください。", "error")
                 return redirect(request.url)
 
             tax_amount = int(total_amount * tax_rate / (100 + tax_rate)) if tax_rate >= 0 else 0
@@ -2590,7 +2590,7 @@ def apply(module: Any) -> None:
                 cur.close()
                 conn.close()
 
-            flash(f"仕切書 {document_no} を作成しました。", "success")
+            flash(f"精算書 {document_no} を作成しました。", "success")
             if request_id:
                 return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
             return redirect(url_for("admin_shikiriosho_list"))
@@ -2604,7 +2604,7 @@ def apply(module: Any) -> None:
 
         conn, cur = open_cursor()
         try:
-            cur.execute("SELECT id, username, display_name FROM users WHERE role != 'admin' ORDER BY display_name")
+            cur.execute("SELECT id, username, display_name FROM users WHERE role = 'user' ORDER BY display_name")
             users = rows_to_dicts(cur.fetchall())
         finally:
             cur.close()

@@ -43,7 +43,7 @@
         <h3>案件情報</h3>
         <div class="attachment-info">
             <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
-            <p>この案件に紐づく既存データを引用して仕切書を作成します。明細は必要に応じて編集できます。</p>
+            <p>この案件に紐づく既存データを引用して精算書を作成します。明細は必要に応じて編集できます。</p>
         </div>
     </div>
     {% endif %}
@@ -200,13 +200,13 @@
     <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="shikiriosho-preview-title">
         <div class="document-preview-toolbar">
             <div>
-                <h3 id="shikiriosho-preview-title">仕切書プレビュー</h3>
+                <h3 id="shikiriosho-preview-title">精算書プレビュー</h3>
                 <p>内容に問題がなければ送信待機にしてください。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-shikiriosho-preview>閉じる</button>
         </div>
         <div class="preview-sheet">
-            <div class="preview-title">仕切書</div>
+            <div class="preview-title">精算書</div>
             <div class="preview-header">
                 <div>
                     <div class="preview-recipient" id="shikiri-preview-recipient">-</div>

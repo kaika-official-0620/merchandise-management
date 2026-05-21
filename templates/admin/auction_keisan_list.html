@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}クライアント別オークション計算書 - 株式会社開花{% endblock %}
+{% block title %}クライアント別代行仕入れ計算書 - 株式会社開花{% endblock %}
 
 {% block content %}
 <style>
@@ -165,6 +165,7 @@
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 700;
+    white-space: nowrap;
 }
 
 .status-draft {
@@ -212,7 +213,7 @@
 <div class="keisan-page">
     <div class="keisan-header">
         <div>
-            <h1>クライアント別オークション計算書</h1>
+            <h1>クライアント別代行仕入れ計算書</h1>
             <p>終了した代行仕入れの結果をクライアント単位でまとめています。商品一覧への反映内容を確認しながら、一人ずつ送付できます。</p>
         </div>
         <div class="header-actions">
@@ -272,7 +273,7 @@
         {% if auction_id %}
         <input type="hidden" name="auction_id" value="{{ auction_id }}">
         {% endif %}
-        <div class="table-wrap">
+        <div class="table-wrap js-edge-hover-scroll">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -299,15 +300,17 @@
                         <td class="client-cell">
                             <strong>{{ doc.user_name or doc.username or '-' }}</strong>
                             <span class="subtext">
-                                <a href="{{ url_for('admin_user_products', owner_id=doc.user_id) }}">クライアント商品一覧を見る</a>
+                                <a href="{{ url_for('admin_user_products', owner_id=doc.user_id) }}">商品反映先を確認</a>
                             </span>
                         </td>
                         <td>
-                            <strong>{{ doc.auction_name_display }}</strong>
+                            {% set clean_auction_name = (doc.auction_name_display or '')|replace('【プレビュー確認用】', '')|trim %}
+                            <strong>{{ clean_auction_name or doc.auction_name_display }}</strong>
                             <span class="subtext">終了 {{ doc.end_display }}</span>
                         </td>
                         <td class="item-summary">
-                            {{ doc.item_summary }}
+                            {% set clean_item_summary = (doc.item_summary or '')|replace('【プレビュー確認用】', '')|trim %}
+                            {{ clean_item_summary or doc.item_summary }}
                             <span class="subtext">{{ doc.item_count }}件</span>
                         </td>
                         <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
@@ -324,7 +327,7 @@
                                     {% if auction_id %}
                                     <input type="hidden" name="auction_id" value="{{ auction_id }}">
                                     {% endif %}
-                                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('この計算書をクライアントへ送付しますか？')">送付する</button>
+                                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('宛先・商品・金額・PDF内容を確認済みですか？この計算書をクライアントへ送付し、商品反映を進めます。')">送付する</button>
                                 </form>
                                 {% endif %}
                             </div>

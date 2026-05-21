@@ -73,6 +73,7 @@ def apply(module: Any) -> None:
     User = module.User
     send_line_push = getattr(module, "send_line_push", None)
     safe_int = getattr(module, "safe_int", None)
+    clean_display_text = getattr(module, "clean_display_text", lambda value, fallback="-": (value or fallback))
     format_sales_destination = getattr(module, "format_sales_destination", None)
     is_kaika_inventory_item = getattr(module, "is_kaika_inventory_item", None)
     build_user_fee_components = getattr(module, "build_user_fee_components", None)
@@ -495,7 +496,7 @@ def apply(module: Any) -> None:
                         "sale_date": sale_date,
                         "sale_date_text": sale_date.strftime("%Y-%m-%d"),
                         "scope_label": "クライアント" if scope == "user" else "開花",
-                        "product_name": item.get("product_name") or "-",
+                        "product_name": clean_display_text(item.get("product_name"), fallback="商品名未登録"),
                         "owner_name": user_lookup.get(item.get("user_id")) if scope == "user" else "開花",
                         "destination_label": format_destination_label(item),
                         "sale_price": sale_price,
@@ -1138,7 +1139,7 @@ def apply(module: Any) -> None:
                     {
                         "kind": "shikiriosho",
                         "id": row["id"],
-                        "document_type": "仕切書",
+                        "document_type": "精算書",
                         "document_no": row.get("document_no") or "-",
                         "client_name": client_name,
                         "service_type": "",
@@ -1253,9 +1254,20 @@ def apply(module: Any) -> None:
                         "direction_label": "開花→クライアント",
                         "subject": row.get("subject") or "",
                         "notes": row.get("notes") or "",
-                        "detail_endpoint": "user_keisan_view",
+                        "detail_endpoint": "admin_auction_keisan_view",
                     }
                 )
+
+            for history_row in rows:
+                endpoint = history_row.get("detail_endpoint")
+                history_row["request_url"] = None
+                if endpoint and history_row.get("id") and endpoint in app.view_functions:
+                    try:
+                        history_row["detail_url"] = url_for(endpoint, id=history_row["id"])
+                    except Exception:
+                        history_row["detail_url"] = None
+                else:
+                    history_row["detail_url"] = None
 
             rows.sort(key=lambda row: (row.get("issue_date") or "", row.get("document_no") or ""), reverse=True)
             return rows
@@ -1386,8 +1398,8 @@ def apply(module: Any) -> None:
         client_options = sorted({row.get("client_name") for row in all_rows if row.get("client_name")})
         status_options = sorted({(row.get("status"), row.get("status_label")) for row in all_rows if row.get("status")})
         document_type_options = [
-            ("shikiriosho", "仕切書"),
-            ("user_mitsumori", "見積依頼書 / 業者向け見積依頼書"),
+            ("shikiriosho", "精算書"),
+            ("user_mitsumori", "見積依頼書 / 業者向け依頼書"),
             ("user_kaitori_shoudaku", "買取依頼書"),
             ("invoice", "買取明細書"),
             ("user_keisan", "計算書"),
@@ -1412,7 +1424,7 @@ def apply(module: Any) -> None:
             },
             {
                 "step": "2",
-                "title": "開花から業者への見積依頼書",
+                "title": "開花から業者への依頼書",
                 "copy": "開花から業者へ送った依頼書の履歴を確認します。",
                 "count_label": f"{count_document_history(direction='vendor_outgoing')}件",
                 "url": url_for("admin_documents_history", direction="vendor_outgoing"),
@@ -1427,21 +1439,21 @@ def apply(module: Any) -> None:
             {
                 "step": "4",
                 "title": "クライアントへ返送した書類",
-                "copy": "クライアントへ返送した買取明細書の履歴を確認します。",
+                "copy": "クライアントへ返送した買取明細書・精算書・計算書の履歴を確認します。",
                 "count_label": f"{count_document_history(doc_type='invoice', direction='client_outgoing')}件",
                 "url": url_for("admin_documents_history", doc_type="invoice", direction="client_outgoing"),
             },
             {
                 "step": "5",
-                "title": "クライアント返送見積依頼書",
-                "copy": "返送済みの見積依頼書を後から確認します。",
+                "title": "クライアント返信確認",
+                "copy": "クライアント側から届いた見積依頼書や確認書類を後から確認します。",
                 "count_label": f"{count_document_history(doc_type='user_mitsumori', direction='client_outgoing')}件",
                 "url": url_for("admin_documents_history", doc_type="user_mitsumori", direction="client_outgoing"),
             },
             {
                 "step": "6",
-                "title": "仕切書",
-                "copy": "仕切書の作成・送付履歴をクライアント別に確認します。",
+                "title": "精算書",
+                "copy": "精算書の作成・送付履歴をクライアント別に確認します。",
                 "count_label": f"{count_document_history(doc_type='shikiriosho', direction='client_outgoing')}件",
                 "url": url_for("admin_documents_history", doc_type="shikiriosho", direction="client_outgoing"),
             },

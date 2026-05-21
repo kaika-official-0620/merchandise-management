@@ -9,7 +9,7 @@
 <div class="admin-nav">
     <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-item active">概要</a>
     <a href="{{ url_for('admin_users') }}" class="admin-nav-item">ユーザー管理</a>
-    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">仕切書</a>
+    <a href="{{ url_for('admin_shikiriosho_list') }}" class="admin-nav-item">精算書</a>
     <a href="{{ url_for('admin_invoice_list') }}" class="admin-nav-item">請求書{% if unread_invoice_count > 0 %}<span class="badge-count">{{ unread_invoice_count }}</span>{% endif %}</a>
     <a href="{{ url_for('admin_announcements') }}" class="admin-nav-item">お知らせ</a>
     <a href="{{ url_for('admin_analytics') }}" class="admin-nav-item">分析</a>

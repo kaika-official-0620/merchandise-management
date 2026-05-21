@@ -26,13 +26,18 @@
 .data-table tbody tr:hover { background: #f8fafc; }
 .doc-no { font-family: monospace; font-weight: 700; color: #1d4ed8; }
 .amount { font-weight: 800; color: #047857; white-space: nowrap; }
-.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.status-chip { display: inline-flex; align-items: center; padding: .34rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
 .status-draft { background: #fef3c7; color: #92400e; }
 .status-ready { background: #d1fae5; color: #065f46; }
 .status-sent { background: #dbeafe; color: #1d4ed8; }
 .checkbox-col { width: 44px; text-align: center; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
+.recipient-panel { background: #fff; border: 1px solid #dbeafe; border-radius: 16px; padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
+.recipient-panel h2 { margin: 0 0 .4rem; font-size: 1rem; color: #0f172a; }
+.recipient-panel p { margin: 0 0 .85rem; color: #64748b; line-height: 1.7; }
+.recipient-list { display: flex; flex-wrap: wrap; gap: .55rem; }
+.recipient-chip { display: inline-flex; align-items: center; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: .38rem .78rem; font-weight: 700; font-size: .84rem; }
 @media (max-width: 768px) { .stats { grid-template-columns: 1fr; } .queue-header { flex-direction: column; } }
 </style>
 
@@ -40,13 +45,25 @@
     <div class="queue-header">
         <div>
             <h1>精算書送信待機</h1>
-            <p class="queue-note">代行仕入れで購入された内容から自動反映された精算書です。管理側で確認して送信待機にし、完成した書類だけ個別送信または一括送信できます。</p>
+            <p class="queue-note">月額利用料や撮影・梱包・発送代行サポート費用をクライアントごとに確認して送付する精算書です。管理側で確認して送信待機にし、完成した書類だけ個別送信または一括送信できます。</p>
         </div>
         <div class="queue-actions">
             <form action="{{ url_for('admin_shikiriosho_send_bulk') }}" method="POST">
                 <input type="hidden" name="send_scope" value="all">
                 <button type="submit" class="btn btn-success" onclick="return confirm('送信待機中の完成書類をまとめて送信しますか？')">完成書類を一括送信</button>
             </form>
+        </div>
+    </div>
+
+    <div class="recipient-panel">
+        <h2>送付先クライアント</h2>
+        <p>登録されているクライアントを全員表示しています。精算書を作成する際は、作成画面でこの中から送付先を選択できます。</p>
+        <div class="recipient-list">
+            {% for user in recipient_users|default([]) %}
+            <span class="recipient-chip">{{ user.display_name or user.username }}</span>
+            {% else %}
+            <span class="text-muted">送付先クライアントがまだ登録されていません。</span>
+            {% endfor %}
         </div>
     </div>
 
@@ -70,7 +87,7 @@
     </div>
 
     <form action="{{ url_for('admin_shikiriosho_send_bulk') }}" method="POST">
-        <div class="table-wrap">
+        <div class="table-wrap js-edge-hover-scroll">
             <table class="data-table">
                 <thead>
                     <tr>

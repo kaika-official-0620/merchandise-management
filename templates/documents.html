@@ -11,7 +11,7 @@
 <div class="doc-tabs">
     <button class="doc-tab active" data-tab="kaitori">買取明細書</button>
     <button class="doc-tab" data-tab="mitsumori">見積り依頼書</button>
-    <button class="doc-tab" data-tab="shikiri">仕切書</button>
+    <button class="doc-tab" data-tab="shikiri">精算書</button>
     <button class="doc-tab" data-tab="keisan">計算書</button>
     <button class="doc-tab" data-tab="flow">反映の流れ</button>
 </div>
@@ -135,8 +135,8 @@
 <div class="tab-content" id="tab-shikiri">
     <div class="tab-header">
         <div>
-            <h2>仕切書</h2>
-            <p class="tab-note">開花側で作成した仕切書が、このタブに自動で反映されます。</p>
+            <h2>精算書</h2>
+            <p class="tab-note">開花側で作成した精算書が、このタブに自動で反映されます。</p>
         </div>
     </div>
     {% if shikiriosho_list %}
@@ -171,7 +171,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📘</div>
-        <p>仕切書はまだ届いていません。</p>
+        <p>精算書はまだ届いていません。</p>
     </div>
     {% endif %}
 </div>
@@ -180,7 +180,7 @@
     <div class="tab-header">
         <div>
             <h2>計算書</h2>
-            <p class="tab-note">計算書は開花側で作成後にここへ反映されます。下書きの間だけクライアント側で編集できます。</p>
+            <p class="tab-note">計算書は開花側で作成・確認後にここへ反映されます。クライアント側では内容確認とPDF確認のみ行えます。</p>
         </div>
         {% if current_user.is_admin() %}
         <a href="{{ url_for('user_keisan_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -255,14 +255,14 @@
             <div class="flow-step-number">2</div>
             <div class="flow-step-body">
                 <h3>開花側が業者へ確認するとき</h3>
-                <p>開花側は受け取った依頼内容をもとに、まず業者向け見積依頼書を作成します。その後、業者からの回答書類を受け取ってから、ユーザー向けの最終書類を準備します。</p>
+                <p>開花側は受け取った依頼内容をもとに、まず業者向け依頼書を作成します。その後、業者からの回答書類を受け取ってから、ユーザー向けの最終書類を準備します。</p>
             </div>
         </div>
         <div class="flow-step">
             <div class="flow-step-number">3</div>
             <div class="flow-step-body">
                 <h3>最終的にユーザーへ届く書類</h3>
-                <p>業者からの回答確認後に、開花側で確定した買取明細書、仕切書、計算書がこの画面へ順次反映されます。届いた書類は各タブから内容確認とダウンロードができます。</p>
+                <p>業者からの回答確認後に、開花側で確定した買取明細書、精算書、計算書がこの画面へ順次反映されます。届いた書類は各タブから内容確認とダウンロードができます。</p>
             </div>
         </div>
         <div class="flow-step">

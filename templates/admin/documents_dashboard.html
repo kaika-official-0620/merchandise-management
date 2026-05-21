@@ -12,6 +12,7 @@
 {% set stage_request_rows = stage_request_rows if stage_request_rows is defined else [] %}
 {% set document_type_cards = document_type_cards if document_type_cards is defined else [] %}
 {% set document_flow_cards = document_flow_cards if document_flow_cards is defined else [] %}
+{% set work_queue_cards = work_queue_cards if work_queue_cards is defined else [] %}
 
 {% macro service_badge(service_type, service_name) -%}
     {% set normalized = service_type or '' %}
@@ -28,7 +29,7 @@
     <a href="{{ row.detail_url }}" class="btn btn-info btn-sm">申請詳細</a>
     {% endif %}
     {% if row.create_vendor_estimate_url %}
-    <a href="{{ row.create_vendor_estimate_url }}" class="btn btn-primary btn-sm">業者向け見積依頼書を作成</a>
+    <a href="{{ row.create_vendor_estimate_url }}" class="btn btn-primary btn-sm">業者向け依頼書を作成</a>
     {% endif %}
     {% if row.create_vendor_kaitori_url %}
     <a href="{{ row.create_vendor_kaitori_url }}" class="btn btn-primary btn-sm">業者買取明細書を登録</a>
@@ -37,9 +38,9 @@
     <a href="{{ row.create_client_invoice_url }}" class="btn btn-primary btn-sm">クライアント向け買取明細書を作成</a>
     {% endif %}
     {% if row.shikiriosho_url %}
-    <a href="{{ row.shikiriosho_url }}" class="btn btn-outline btn-sm">仕切書を確認</a>
+    <a href="{{ row.shikiriosho_url }}" class="btn btn-outline btn-sm">精算書を確認</a>
     {% elif row.create_shikiriosho_url %}
-    <a href="{{ row.create_shikiriosho_url }}" class="btn btn-primary btn-sm">仕切書を作成</a>
+    <a href="{{ row.create_shikiriosho_url }}" class="btn btn-primary btn-sm">精算書を作成</a>
     {% endif %}
     {% if row.auction_keisan_url %}
     <a href="{{ row.auction_keisan_url }}" class="btn btn-outline btn-sm">計算書を確認</a>
@@ -81,23 +82,37 @@
 {%- endmacro %}
 
 {% macro request_table(rows) -%}
-<div class="table-scroll">
+<div class="table-scroll js-edge-hover-scroll">
     <table class="dashboard-table">
         <thead>
             <tr>
+                {% if selected_group in ['vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
+                <th>対象商品</th>
+                <th class="col-service">販売方式</th>
+                <th>受付日</th>
+                <th>処理状況</th>
+                <th>書類と次の作業</th>
+                <th>操作</th>
+                {% else %}
                 <th>クライアント</th>
                 <th class="col-service">サービス</th>
                 <th>受付日</th>
                 <th>現在の状況</th>
                 <th>書類と次の作業</th>
                 <th>操作</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody>
             {% for row in rows %}
             <tr>
                 <td>
+                    {% if selected_group in ['vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
+                    <div class="cell-title">{{ row.item_summary or '-' }}</div>
+                    <div class="cell-sub">{{ '返送先' if selected_group == 'client_outgoing' else '依頼元' }}: {{ row.client_name or '-' }}</div>
+                    {% else %}
                     <div class="cell-title">{{ row.client_name or '-' }}</div>
+                    {% endif %}
                 </td>
                 <td class="col-service">{{ service_badge(row.service_type, row.service_name) }}</td>
                 <td>{{ row.created_date_label or '-' }}</td>
@@ -227,6 +242,45 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
+}
+
+.operation-queue-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-top: 1rem;
+}
+
+.operation-queue-card {
+    display: grid;
+    gap: 0.55rem;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #bfdbfe;
+    border-radius: 18px;
+    padding: 1rem;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.operation-queue-card strong {
+    color: #0f172a;
+}
+
+.operation-queue-card p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.55;
+    font-size: 0.86rem;
+}
+
+.operation-queue-count {
+    justify-self: start;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    padding: 0.26rem 0.7rem;
+    font-weight: 800;
+    font-size: 0.8rem;
 }
 
 .archive-flow-card {
@@ -636,6 +690,7 @@
 
 @media (max-width: 1100px) {
     .archive-flow-grid,
+    .operation-queue-grid,
     .overview-grid,
     .document-type-grid,
     .service-filter-grid {
@@ -645,6 +700,7 @@
 
 @media (max-width: 720px) {
     .archive-flow-grid,
+    .operation-queue-grid,
     .overview-grid,
     .document-type-grid,
     .service-filter-grid {
@@ -689,6 +745,25 @@
     </section>
 
     {% if selected_group == 'all' %}
+    {% if work_queue_cards %}
+    <section class="section-card">
+        <div class="stage-topbar">
+            <div>
+                <h2>運用チェック</h2>
+                <p class="helper-text">事務作業で先に見る場所をまとめました。書類の作成漏れ・送付漏れをここから確認できます。</p>
+            </div>
+        </div>
+        <div class="operation-queue-grid">
+            {% for card in work_queue_cards %}
+            <a href="{{ card.url }}" class="operation-queue-card">
+                <strong>{{ card.title }}</strong>
+                <span class="operation-queue-count">{{ card.count_label }}</span>
+                <p>{{ card.description }}</p>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
     <section class="section-card">
         <div class="stage-topbar">
             <div>
@@ -747,16 +822,22 @@
         </div>
     </section>
 
-    {% if selected_group in ['client_incoming', 'vendor_incoming'] %}
+    {% if selected_group in ['client_incoming', 'vendor_outgoing', 'vendor_incoming', 'client_outgoing'] %}
     <section class="section-card">
         <div class="stage-topbar">
             <div>
                 {% if selected_group == 'client_incoming' %}
                 <h3>サービス別に確認する</h3>
                 <p class="helper-text">クライアントからの受付は、サービスごとに現在進行中の案件を絞り込んで確認できます。</p>
+                {% elif selected_group == 'vendor_outgoing' %}
+                <h3>販売方式別に確認する</h3>
+                <p class="helper-text">業者へ依頼する対象商品を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
+                {% elif selected_group == 'vendor_incoming' %}
+                <h3>販売方式別に確認する</h3>
+                <p class="helper-text">業者から届いた回答書類を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
                 {% else %}
-                <h3>回答月で確認する</h3>
-                <p class="helper-text">業者から届いた回答書類は、登録月ごとに絞り込んで確認できます。</p>
+                <h3>返送書類を販売方式別に確認する</h3>
+                <p class="helper-text">クライアントへ返送する書類を、業者卸販売・業者オークション・同時出品ごとに確認できます。</p>
                 {% endif %}
             </div>
         </div>

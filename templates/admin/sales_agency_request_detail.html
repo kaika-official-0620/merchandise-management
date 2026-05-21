@@ -456,10 +456,10 @@
                     {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.request_can_create_shikiriosho or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id or req.shikiriosho_url %}
                 <div class="document-links">
                     {% if req.request_can_create_vendor_estimate %}
-                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">業者向け見積依頼書を作成</a>
+                    <a href="{{ url_for('admin_mitsumori_add', request_id=req.id) }}" class="btn btn-secondary">業者向け依頼書を作成</a>
                     {% endif %}
                     {% if req.vendor_mitsumori_id %}
-                    <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-secondary">業者向け見積依頼書を見る</a>
+                    <a href="{{ url_for('admin_mitsumori_view', id=req.vendor_mitsumori_id) }}" class="btn btn-secondary">業者向け依頼書を見る</a>
                     {% endif %}
                     {% if req.request_can_register_vendor_kaitori %}
                     <a href="{{ url_for('admin_kaitori_shoudaku_add', request_id=req.id) }}" class="btn btn-secondary">業者買取明細書を登録</a>
@@ -474,13 +474,13 @@
                     <a href="{{ url_for('admin_kaitori_view', id=req.client_invoice_id) }}" class="btn btn-secondary">ユーザー向け買取明細書を見る</a>
                     {% endif %}
                     {% if req.request_can_create_shikiriosho %}
-                    <a href="{{ url_for('admin_shikiriosho_add', request_id=req.id) }}" class="btn btn-secondary">仕切書を作成</a>
+                    <a href="{{ url_for('admin_shikiriosho_add', request_id=req.id) }}" class="btn btn-secondary">精算書を作成</a>
                     {% endif %}
                     {% if req.shikiriosho_url %}
-                    <a href="{{ req.shikiriosho_url }}" class="btn btn-secondary">仕切書を見る</a>
+                    <a href="{{ req.shikiriosho_url }}" class="btn btn-secondary">精算書を見る</a>
                     {% endif %}
                 </div>
-                <div class="muted-text" style="margin-top: 0.6rem;">書類は「ユーザー依頼受領 → 業者向け見積依頼書 → 業者買取明細書 → ユーザー向け買取明細書」の順で扱います。</div>
+                <div class="muted-text" style="margin-top: 0.6rem;">書類は「ユーザー依頼受領 → 業者向け依頼書 → 業者買取明細書 → ユーザー向け買取明細書」の順で扱います。</div>
                 {% endif %}
 
                 {% if req.available_actions %}

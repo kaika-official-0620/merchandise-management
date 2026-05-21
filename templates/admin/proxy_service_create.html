@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}新規オークション作成 - 株式会社 開花{% endblock %}
+{% block title %}新規ページ作成 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>新規オークション作成</h1>
+    <h1>新規ページ作成</h1>
     <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">← 一覧に戻る</a>
 </div>
 
@@ -96,7 +96,8 @@
 
         <div class="form-actions">
             <a href="{{ url_for('admin_proxy_service') }}" class="btn btn-secondary">キャンセル</a>
-            <button type="submit" class="btn btn-primary">オークションを作成して設定へ進む</button>
+            <button type="submit" name="submit_action" value="draft" class="btn btn-secondary">一時保存</button>
+            <button type="submit" name="submit_action" value="continue" class="btn btn-primary">ページを作成して設定へ進む</button>
         </div>
     </form>
 </div>

@@ -10,7 +10,15 @@
     </h1>
     <div class="header-actions">
         {% if not result_only_mode %}
-        <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank">公開ページを確認</a>
+        {% if not is_open_edit_locked %}
+        <button type="submit" form="proxy-settings-form" name="submit_action" value="draft" id="page-draft-save" class="btn btn-primary page-draft-button" onclick="setPublic(false)">
+            一時保存
+        </button>
+        {% endif %}
+        <a href="{{ url_for('public_proxy_service', auction_id=auction_id) }}" class="btn btn-secondary" target="_blank" onclick="return openPublicPreview(event, this.href)">公開ページを確認</a>
+        {% if auction_state.status in ['private', 'scheduled'] %}
+        <button type="button" class="btn btn-outline-danger" onclick="deleteAuction()">ページを削除</button>
+        {% endif %}
         {% if not auction_state.is_ended and not auction_state.is_open %}
         <button type="button" class="btn btn-primary" onclick="startAuctionNow()">
             今すぐ公開する
@@ -88,7 +96,7 @@
             公開中のため、開始日時・販売方式・公開状態は固定しています。終了日時の延長、ページ名や説明文の変更、商品追加、参加ユーザー追加は可能です。
         </div>
         {% endif %}
-        <form method="POST" action="{{ url_for('admin_proxy_service_settings', auction_id=auction_id) }}">
+        <form method="POST" action="{{ url_for('admin_proxy_service_settings', auction_id=auction_id) }}" id="proxy-settings-form">
             <div class="form-group">
                 <label>オークション名（管理用）</label>
                 <input type="text" name="auction_name" value="{{ settings.auction_name or 'オークション' }}" class="form-control" required>
@@ -103,8 +111,8 @@
                     {% endif %}
                 </div>
                 <div class="toggle-buttons">
-                    <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false)" {% if is_open_edit_locked %}disabled{% endif %}>非公開</button>
-                    <button type="button" class="toggle-btn on {% if settings.is_public %}active{% endif %}" onclick="setPublic(true)" {% if is_open_edit_locked %}disabled{% endif %}>公開</button>
+                    <button type="button" class="toggle-btn off {% if not settings.is_public %}active{% endif %}" onclick="setPublic(false, true)" {% if is_open_edit_locked %}disabled{% endif %}>非公開</button>
+                    <button type="button" class="toggle-btn on {% if settings.is_public %}active{% endif %}" onclick="setPublic(true, true)" {% if is_open_edit_locked %}disabled{% endif %}>公開</button>
                     <input type="hidden" name="is_public" id="is_public_input" value="{% if settings.is_public %}on{% endif %}">
                 </div>
             </div>
@@ -210,7 +218,12 @@
                 <div class="empty-message" id="user-filter-empty" style="display: none; padding: 1rem 0;">条件に一致するユーザーがいません。</div>
             </div>
             
-            <button type="submit" class="btn btn-primary">設定を保存</button>
+            <div class="settings-actions">
+                {% if not is_open_edit_locked %}
+                <button type="submit" name="submit_action" value="draft" class="btn btn-secondary" onclick="setPublic(false)">一時保存</button>
+                {% endif %}
+                <button type="submit" name="submit_action" value="save" class="btn btn-primary">設定を保存</button>
+            </div>
         </form>
     </div>
     
@@ -290,7 +303,7 @@
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
                 </div>
                 <div class="item-actions">
-                    <button class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
+                    <button type="button" class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
                         公開解除
                     </button>
                 </div>
@@ -557,7 +570,9 @@
     {% if not result_only_mode %}
     <!-- 商品を追加 -->
     <div class="add-items-card">
-        <h2>商品を追加（開花商品管理） <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
+        <div class="add-items-header">
+            <h2>商品を追加（開花商品管理） <span class="item-count" id="available-count">{{ available_items|length }}件選択可能</span></h2>
+        </div>
         
         <!-- 検索・フィルター -->
         <div class="filter-section">
@@ -638,7 +653,7 @@
                     <div class="item-owner">登録者: {{ item.owner_name }}</div>
                 </div>
                 <div class="item-actions">
-                    <button class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
                         掲載する
                     </button>
                 </div>
@@ -709,6 +724,13 @@
 .btn-outline-danger:hover {
     background: var(--danger);
     color: white;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 /* 検索・フィルターセクション */
@@ -848,6 +870,27 @@
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
+}
+
+.page-draft-button {
+    min-width: 110px;
+    background: #dbeafe;
+    border: 1px solid #93c5fd;
+    color: #1d4ed8;
+    box-shadow: none;
+}
+
+.page-draft-button:hover {
+    background: #bfdbfe;
+    border-color: #60a5fa;
+    color: #1e40af;
+}
+
+.page-draft-button:focus,
+.page-draft-button:focus-visible,
+.page-draft-button:active {
+    outline: none;
+    box-shadow: none;
 }
 
 .auction-overview-card {
@@ -1691,14 +1734,33 @@ details[open] .client-document-toggle {
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
-.add-items-card h2 {
-    font-size: 1.1rem;
-    margin: 0 0 1rem 0;
+.add-items-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid #e2e8f0;
+}
+
+.add-items-card h2 {
+    font-size: 1.1rem;
+    margin: 0;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .add-items-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .add-items-header .btn {
+        width: 100%;
+    }
 }
 
 /* 一括操作バー */
@@ -2410,8 +2472,53 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+let visibilitySavePromise = Promise.resolve();
+let visibilitySaveRequestId = 0;
+
+function getCurrentPublicSelection() {
+    const input = document.getElementById('is_public_input');
+    return input ? input.value === 'on' : false;
+}
+
+function setVisibilitySaving(isSaving) {
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        if (!btn.hasAttribute('disabled')) {
+            btn.classList.toggle('is-saving', isSaving);
+        }
+    });
+}
+
+function saveProxyVisibility(isPublic) {
+    const requestId = ++visibilitySaveRequestId;
+    setVisibilitySaving(true);
+
+    return fetch(buildPreviewUrl('/admin/proxy-service/{{ auction_id }}/visibility'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ is_public: !!isPublic })
+    })
+    .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || '公開状態の保存に失敗しました');
+        }
+        return data;
+    })
+    .catch(error => {
+        alert(error.message || '公開状態の保存に失敗しました');
+        throw error;
+    })
+    .finally(() => {
+        if (requestId === visibilitySaveRequestId) {
+            setVisibilitySaving(false);
+        }
+    });
+}
+
 // 公開/非公開ボタン切り替え
-function setPublic(isPublic) {
+function setPublic(isPublic, persist = false) {
     const input = document.getElementById('is_public_input');
     const buttons = document.querySelectorAll('.toggle-btn');
     
@@ -2428,6 +2535,38 @@ function setPublic(isPublic) {
     } else {
         document.querySelector('.toggle-btn.off').classList.add('active');
     }
+
+    if (persist) {
+        visibilitySavePromise = saveProxyVisibility(isPublic).catch(() => {});
+        return visibilitySavePromise;
+    }
+
+    return Promise.resolve();
+}
+
+function openPublicPreview(event, href) {
+    event.preventDefault();
+
+    const publicUrl = new URL(href, window.location.origin);
+    const targetUrl = buildPreviewUrl(`${publicUrl.pathname}${publicUrl.search}${publicUrl.hash}`);
+    const previewWindow = window.open('about:blank', '_blank');
+    const isPublic = getCurrentPublicSelection();
+
+    visibilitySavePromise = saveProxyVisibility(isPublic)
+        .then(() => {
+            if (previewWindow && !previewWindow.closed) {
+                previewWindow.location.href = targetUrl;
+            } else {
+                window.open(targetUrl, '_blank');
+            }
+        })
+        .catch(() => {
+            if (previewWindow && !previewWindow.closed) {
+                previewWindow.close();
+            }
+        });
+
+    return false;
 }
 
 // 公開中商品のフィルタリング
@@ -2531,7 +2670,7 @@ function clearAvailableFilters() {
 
 // 削除・落札確定
 function deleteAuction() {
-    if (!confirm('このオークションを削除しますか？\n\n掲載中の商品は未掲載状態に戻ります。')) {
+    if (!confirm('このページを削除しますか？\n\n掲載中の商品は商品追加欄に戻ります。')) {
         return;
     }
     
