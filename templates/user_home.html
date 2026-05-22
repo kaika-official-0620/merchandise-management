@@ -91,6 +91,47 @@
     box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
 }
 
+.user-home-profile-alert {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem 1.1rem;
+    border: 1px solid #fed7aa;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+    box-shadow: 0 8px 22px rgba(234, 88, 12, 0.08);
+}
+
+.user-home-profile-alert h2 {
+    margin: 0 0 0.25rem;
+    color: #7c2d12;
+    font-size: 1rem;
+}
+
+.user-home-profile-alert p {
+    margin: 0;
+    color: #9a3412;
+    line-height: 1.7;
+    font-size: 0.9rem;
+}
+
+.user-home-profile-alert__link {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.55rem 0.95rem;
+    border-radius: 999px;
+    background: #ea580c;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.86rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .user-home-section {
     padding: 1.2rem;
 }
@@ -495,6 +536,10 @@
         display: grid;
     }
 
+    .user-home-profile-alert {
+        display: grid;
+    }
+
     .user-home-announcement-tools {
         justify-items: start;
     }
@@ -581,6 +626,16 @@
         <script type="application/json" id="userHomeAnnouncementsData">{{ announcement_payloads|tojson }}</script>
     </section>
 
+    {% if profile_missing_fields %}
+    <section class="user-home-profile-alert">
+        <div>
+            <h2>基本情報の設定を行ってください</h2>
+            <p>未登録の項目があります: {{ profile_missing_fields|join('、') }}。発送や書類作成で必要になるため、先に登録をお願いします。</p>
+        </div>
+        <a href="{{ url_for('profile') }}" class="user-home-profile-alert__link">設定を開く</a>
+    </section>
+    {% endif %}
+
     <section class="user-home-card user-home-section">
         <div class="user-home-section__header">
             <div class="user-home-section__copy">
@@ -600,7 +655,7 @@
             <button type="button" class="user-home-menu-chip" data-menu-toggle="inventory">商品一覧</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期保存商品</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="requests">販売代行申請</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類管理</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類履歴</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="estimate">見積り依頼書</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="approval">買取承諾書</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="analytics">管理分析</button>
@@ -628,7 +683,7 @@
                 <p>業者販売、同時出品、オークション申請を確認します。</p>
             </a>
             <a href="{{ url_for('documents') }}" class="user-home-shortcut" data-menu-id="documents">
-                <h3>書類管理</h3>
+                <h3>書類履歴</h3>
                 <p>各種書類の作成、確認、履歴を開きます。</p>
             </a>
             <a href="{{ url_for('user_mitsumori_list') }}" class="user-home-shortcut" data-menu-id="estimate">

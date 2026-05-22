@@ -629,6 +629,43 @@
     text-decoration: underline;
 }
 
+.analytics-billing-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+}
+
+.analytics-billing-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.analytics-billing-label {
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.analytics-billing-value {
+    margin-top: 0.35rem;
+    color: #0f172a;
+    font-size: 1.25rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.analytics-billing-note {
+    margin-top: 0.3rem;
+    color: #64748b;
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
 @media (max-width: 768px) {
     .period-filter-top {
         flex-direction: column;
@@ -651,8 +688,32 @@
     .month-input {
         width: 100%;
     }
+
+    .analytics-billing-panel {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
+
+{% if analytics.billing_metrics %}
+<div class="analytics-billing-panel">
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">現在の月額プラン</div>
+        <div class="analytics-billing-value">{{ analytics.billing_metrics.current_plan_label }}</div>
+        <div class="analytics-billing-note">登録商品数 {{ analytics.billing_metrics.item_count }}件 / 月額 ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</div>
+    </div>
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">開花へ支払う手数料</div>
+        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</div>
+        <div class="analytics-billing-note">{{ analytics.billing_metrics.period_label }} の送料・販売手数料合計</div>
+    </div>
+    <div class="analytics-billing-card">
+        <div class="analytics-billing-label">月額＋期間内手数料</div>
+        <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</div>
+        <div class="analytics-billing-note">精算書・計算書で確認する支払い目安です。</div>
+    </div>
+</div>
+{% endif %}
 
 {% if analytics.show_admin_overview %}
 <div class="period-filter-card">

@@ -5137,6 +5137,8 @@ class User(UserMixin):
         inventory_summary_period_default='all',
         requested_monthly_plan='',
         plan_change_effective_month='',
+        shipping_addresses='[]',
+        preferred_shipping_address_index=0,
     ):
         self.id = id
         self.username = username
@@ -5151,6 +5153,11 @@ class User(UserMixin):
         self.inventory_summary_period_default = inventory_summary_period_default or 'all'
         self.requested_monthly_plan = requested_monthly_plan or ''
         self.plan_change_effective_month = plan_change_effective_month or ''
+        self.shipping_addresses = shipping_addresses or '[]'
+        try:
+            self.preferred_shipping_address_index = int(preferred_shipping_address_index or 0)
+        except (TypeError, ValueError):
+            self.preferred_shipping_address_index = 0
         # admin_permissionsはJSON文字列またはリスト
         if admin_permissions:
             if isinstance(admin_permissions, str):
@@ -5321,6 +5328,8 @@ def build_user_from_record(user):
         get_optional_user_field('inventory_summary_period_default', 'all'),
         get_optional_user_field('requested_monthly_plan'),
         get_optional_user_field('plan_change_effective_month'),
+        get_optional_user_field('shipping_addresses', '[]'),
+        get_optional_user_field('preferred_shipping_address_index', 0),
     )
 
 
@@ -5338,6 +5347,8 @@ def ensure_user_profile_columns():
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_monthly_plan VARCHAR(50)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_change_effective_month VARCHAR(20)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_change_requested_at TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS shipping_addresses TEXT DEFAULT '[]'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_shipping_address_index INTEGER DEFAULT 0",
             ):
                 cur.execute(ddl)
         else:
@@ -5351,6 +5362,8 @@ def ensure_user_profile_columns():
                 'requested_monthly_plan': "ALTER TABLE users ADD COLUMN requested_monthly_plan TEXT",
                 'plan_change_effective_month': "ALTER TABLE users ADD COLUMN plan_change_effective_month TEXT",
                 'plan_change_requested_at': "ALTER TABLE users ADD COLUMN plan_change_requested_at TEXT",
+                'shipping_addresses': "ALTER TABLE users ADD COLUMN shipping_addresses TEXT DEFAULT '[]'",
+                'preferred_shipping_address_index': "ALTER TABLE users ADD COLUMN preferred_shipping_address_index INTEGER DEFAULT 0",
             }
             for column_name, ddl in sqlite_columns.items():
                 if column_name not in existing_columns:
@@ -6259,12 +6272,113 @@ def get_monthly_plan_label(plan_key):
     return ''
 
 
+def get_current_monthly_plan_for_item_count(item_count):
+    """登録数から現在適用される月額プランを返す"""
+    try:
+        count = int(item_count or 0)
+    except (TypeError, ValueError):
+        count = 0
+    plan_options = get_monthly_plan_options()
+    if count <= 20:
+        return plan_options[0]
+    if count <= 50:
+        return plan_options[1]
+    if count <= 100:
+        return plan_options[2]
+    if count <= 300:
+        return plan_options[3]
+    return plan_options[4]
+
+
 def resolve_plan_effective_month(requested_monthly_plan):
     if not requested_monthly_plan:
         return ''
     today_for_plan = get_jst_now().date()
     effective_base = today_for_plan if today_for_plan.day <= 10 else (today_for_plan.replace(day=1) + timedelta(days=32))
     return effective_base.strftime('%Y-%m')
+
+
+def parse_shipping_addresses(value, default_postal_code='', default_address=''):
+    """ユーザー発送先JSONを画面用のリストへ正規化する"""
+    addresses = []
+    if value:
+        try:
+            loaded = json.loads(value) if isinstance(value, str) else value
+            if isinstance(loaded, list):
+                addresses = loaded
+        except Exception:
+            addresses = []
+
+    normalized = []
+    for index, row in enumerate(addresses):
+        if not isinstance(row, dict):
+            continue
+        label = (row.get('label') or '').strip() or f'発送先{index + 1}'
+        postal_code = (row.get('postal_code') or '').strip()
+        address = (row.get('address') or '').strip()
+        if not postal_code and not address:
+            continue
+        normalized.append({
+            'label': label,
+            'postal_code': postal_code,
+            'address': address,
+        })
+
+    if not normalized and (default_postal_code or default_address):
+        normalized.append({
+            'label': '住所と同じ',
+            'postal_code': default_postal_code or '',
+            'address': default_address or '',
+        })
+    return normalized
+
+
+def build_shipping_addresses_from_form(form, postal_code='', address=''):
+    """プロフィールフォームから発送先リストを生成する"""
+    labels = form.getlist('shipping_address_label[]')
+    postal_codes = form.getlist('shipping_postal_code[]')
+    addresses = form.getlist('shipping_address[]')
+    use_primary_address = form.get('shipping_same_as_address') == '1'
+
+    shipping_addresses = []
+    if use_primary_address and (postal_code or address):
+        shipping_addresses.append({
+            'label': '住所と同じ',
+            'postal_code': postal_code or '',
+            'address': address or '',
+        })
+
+    max_len = max(len(labels), len(postal_codes), len(addresses))
+    for index in range(max_len):
+        label = (labels[index] if index < len(labels) else '').strip()
+        shipping_postal_code = (postal_codes[index] if index < len(postal_codes) else '').strip()
+        shipping_address = (addresses[index] if index < len(addresses) else '').strip()
+        if not shipping_postal_code and not shipping_address:
+            continue
+        shipping_addresses.append({
+            'label': label or f'発送先{len(shipping_addresses) + 1}',
+            'postal_code': shipping_postal_code,
+            'address': shipping_address,
+        })
+
+    return shipping_addresses
+
+
+def get_profile_missing_fields(user):
+    """ホームで基本情報未登録を促すための不足項目"""
+    checks = [
+        ('お名前', (getattr(user, 'display_name', '') or '').strip()),
+        ('メールアドレス', (getattr(user, 'email', '') or '').strip()),
+        ('電話番号', (getattr(user, 'phone', '') or '').strip()),
+        ('郵便番号', (getattr(user, 'postal_code', '') or '').strip()),
+        ('住所', (getattr(user, 'address', '') or '').strip()),
+    ]
+    username = (getattr(user, 'username', '') or '').strip()
+    missing = []
+    for label, value in checks:
+        if not value or (label == 'お名前' and username and value == username):
+            missing.append(label)
+    return missing
 
 
 def fetch_announcement_recipient_users():
@@ -7042,6 +7156,14 @@ def profile():
         phone = (request.form.get('phone') or '').strip()
         postal_code = (request.form.get('postal_code') or '').strip()
         address = (request.form.get('address') or '').strip()
+        shipping_addresses = build_shipping_addresses_from_form(request.form, postal_code, address)
+        shipping_addresses_json = json.dumps(shipping_addresses, ensure_ascii=False)
+        try:
+            preferred_shipping_address_index = int(request.form.get('preferred_shipping_address_index') or 0)
+        except (TypeError, ValueError):
+            preferred_shipping_address_index = 0
+        if preferred_shipping_address_index < 0 or preferred_shipping_address_index >= max(len(shipping_addresses), 1):
+            preferred_shipping_address_index = 0
         requested_monthly_plan = normalize_monthly_plan_key(request.form.get('requested_monthly_plan'))
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
@@ -7079,12 +7201,15 @@ def profile():
                     phone = %s,
                     postal_code = %s,
                     address = %s,
+                    shipping_addresses = %s,
+                    preferred_shipping_address_index = %s,
                     requested_monthly_plan = %s,
                     plan_change_effective_month = %s,
                     plan_change_requested_at = CASE WHEN %s <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = %s
             """, (
                 display_name, email, phone, postal_code, address,
+                shipping_addresses_json, preferred_shipping_address_index,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
         else:
@@ -7095,12 +7220,15 @@ def profile():
                     phone = ?,
                     postal_code = ?,
                     address = ?,
+                    shipping_addresses = ?,
+                    preferred_shipping_address_index = ?,
                     requested_monthly_plan = ?,
                     plan_change_effective_month = ?,
                     plan_change_requested_at = CASE WHEN ? <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = ?
             """, (
                 display_name, email, phone, postal_code, address,
+                shipping_addresses_json, preferred_shipping_address_index,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
         
@@ -7120,6 +7248,7 @@ def profile():
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
                    u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.shipping_addresses, u.preferred_shipping_address_index,
                    u.inventory_summary_period_default, u.requested_monthly_plan,
                    u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
@@ -7136,6 +7265,7 @@ def profile():
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
                    u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.shipping_addresses, u.preferred_shipping_address_index,
                    u.inventory_summary_period_default, u.requested_monthly_plan,
                    u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
@@ -7149,7 +7279,17 @@ def profile():
         user_info = dict(user_info) if user_info else {}
 
     profile_user = dict(user_info or {})
+    profile_user['shipping_addresses_list'] = parse_shipping_addresses(
+        profile_user.get('shipping_addresses'),
+        profile_user.get('postal_code') or '',
+        profile_user.get('address') or '',
+    )
+    try:
+        profile_user['preferred_shipping_address_index'] = int(profile_user.get('preferred_shipping_address_index') or 0)
+    except (TypeError, ValueError):
+        profile_user['preferred_shipping_address_index'] = 0
     proxy_service_history = []
+    proxy_service_monthly_usage = []
     buyer_names = [name for name in {current_user.display_name, current_user.username} if name]
     patterns = []
     for buyer_name in buyer_names:
@@ -7171,6 +7311,18 @@ def profile():
                 LIMIT 20
             """, patterns)
             proxy_service_history = [dict(row) for row in cur.fetchall()]
+            cur.execute(f"""
+                SELECT TO_CHAR(sale_date, 'YYYY-MM') as month,
+                       COUNT(*) as purchase_count,
+                       COALESCE(SUM(sale_price), 0) as total_amount
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND ({conditions})
+                GROUP BY TO_CHAR(sale_date, 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 24
+            """, patterns)
+            proxy_service_monthly_usage = [dict(row) for row in cur.fetchall()]
         else:
             conditions = ' OR '.join(['sales_destination LIKE ?'] * len(patterns))
             cur.execute(f"""
@@ -7182,6 +7334,18 @@ def profile():
                 LIMIT 20
             """, patterns)
             proxy_service_history = [dict(row) for row in cur.fetchall()]
+            cur.execute(f"""
+                SELECT strftime('%Y-%m', sale_date) as month,
+                       COUNT(*) as purchase_count,
+                       COALESCE(SUM(sale_price), 0) as total_amount
+                FROM merchandise
+                WHERE sale_date IS NOT NULL
+                  AND ({conditions})
+                GROUP BY strftime('%Y-%m', sale_date)
+                ORDER BY month DESC
+                LIMIT 24
+            """, patterns)
+            proxy_service_monthly_usage = [dict(row) for row in cur.fetchall()]
     
     cur.close()
     conn.close()
@@ -7204,6 +7368,12 @@ def profile():
     
     fee_settings = get_fee_settings()
     plan_options = get_monthly_plan_options()
+    current_plan = get_current_monthly_plan_for_item_count(item_count)
+    billing_info.update({
+        'current_plan_key': current_plan.get('key'),
+        'current_plan_label': current_plan.get('label'),
+        'current_plan_fee': current_plan.get('fee') or monthly_fee,
+    })
     return render_template(
         'profile.html',
         billing_info=billing_info,
@@ -7211,6 +7381,7 @@ def profile():
         profile_user=profile_user,
         plan_options=plan_options,
         proxy_service_history=proxy_service_history,
+        proxy_service_monthly_usage=proxy_service_monthly_usage,
     )
 
 # ===================
@@ -7258,6 +7429,7 @@ def user_home():
     summary = {
         'inventory_count': int(summary_row.get('inventory_count') or 0)
     }
+    profile_missing_fields = get_profile_missing_fields(current_user)
     announcement_payloads = [
         serialize_announcement_payload(announcement)
         for announcement in announcements
@@ -7268,7 +7440,8 @@ def user_home():
         announcements=announcements,
         announcement_payloads=announcement_payloads,
         proxy_service_info=proxy_service_info,
-        summary=summary
+        summary=summary,
+        profile_missing_fields=profile_missing_fields
     )
 
 @app.route('/')
@@ -11850,6 +12023,17 @@ def user_analytics():
     total_fee_value = safe_int((analytics_data.get('kpi') or {}).get('total_shipping')) + safe_int((analytics_data.get('kpi') or {}).get('total_commission'))
     stale_inventory_count = safe_int((analytics_data.get('inventory_health') or {}).get('stale_inventory_count'))
     unsold_inventory_count = safe_int((analytics_data.get('kpi') or {}).get('unsold_count'))
+    analytics_item_count = safe_int((analytics_data.get('summary') or {}).get('total_items'))
+    analytics_current_plan = get_current_monthly_plan_for_item_count(analytics_item_count)
+    analytics_monthly_fee = safe_int(analytics_current_plan.get('fee'))
+    analytics_data['billing_metrics'] = {
+        'current_plan_label': analytics_current_plan.get('label') or '未設定',
+        'monthly_fee': analytics_monthly_fee,
+        'kaika_fee_total': total_fee_value,
+        'client_payment_total': analytics_monthly_fee + total_fee_value,
+        'item_count': analytics_item_count,
+        'period_label': analytics_data.get('period_label'),
+    }
     analytics_data['operational_metrics'] = {
         'fee_rate': calculate_report_percentage(total_fee_value, total_sales_value),
         'fee_total': total_fee_value,
