@@ -1,11 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}書類履歴 - 株式会社 開花{% endblock %}
+{% block title %}書類一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>書類履歴</h1>
-    <p class="page-subtitle">ご自身が開花へ送った依頼書と、開花側で確認完了後に届く書類をまとめて確認できます。</p>
+    <h1>書類一覧</h1>
+    <p class="page-subtitle">見積依頼書・買取承諾書の作成入口と、開花側で確認完了後に届く書類履歴をまとめて確認できます。</p>
+</div>
+
+<section class="document-create-panel">
+    <div class="document-create-header">
+        <div>
+            <h2>作成する書類</h2>
+            <p>必要な書類を選んで作成できます。作成した依頼書は下の書類履歴にも反映されます。</p>
+        </div>
+    </div>
+    <div class="document-create-grid">
+        <article class="document-create-card">
+            <span class="document-create-kicker">開花へ送る依頼</span>
+            <h3>見積依頼書</h3>
+            <p>商品内容を入力し、開花へ見積依頼を送る書類です。作成前にプレビュー確認できます。</p>
+            <div class="document-create-actions">
+                <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積依頼書を作成</a>
+                <a href="{{ url_for('user_mitsumori_list') }}" class="btn btn-secondary">作成履歴を見る</a>
+            </div>
+        </article>
+        <article class="document-create-card">
+            <span class="document-create-kicker">買取内容の承諾</span>
+            <h3>買取承諾書</h3>
+            <p>買取内容を確認して承諾するための書類です。見積依頼書と同じく入力後にプレビューできます。</p>
+            <div class="document-create-actions">
+                <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">買取承諾書を作成</a>
+                <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="btn btn-secondary">作成履歴を見る</a>
+            </div>
+        </article>
+        <article class="document-create-card document-history-card">
+            <span class="document-create-kicker">受信・送付済み</span>
+            <h3>書類履歴</h3>
+            <p>開花側から届いた買取明細書、精算書、計算書と、ご自身が作成した依頼書を確認できます。</p>
+            <div class="document-create-actions">
+                <a href="#document-history-tabs" class="btn btn-info">書類履歴へ移動</a>
+            </div>
+        </article>
+    </div>
+</section>
+
+<div class="section-heading" id="document-history-tabs">
+    <h2>書類履歴</h2>
+    <p>届いた書類と作成済みの依頼書を種類別に確認できます。</p>
 </div>
 
 <div class="doc-tabs">
@@ -297,6 +339,89 @@
     margin: 0;
     color: #64748b;
     line-height: 1.8;
+}
+
+.document-create-panel {
+    margin-bottom: 1.25rem;
+    padding: 1.15rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.document-create-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.document-create-header h2,
+.section-heading h2 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1.18rem;
+}
+
+.document-create-header p,
+.section-heading p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 0.92rem;
+}
+
+.document-create-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.document-create-card {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    padding: 1rem;
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    background: #ffffff;
+}
+
+.document-create-card h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.08rem;
+}
+
+.document-create-card p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.75;
+    font-size: 0.9rem;
+}
+
+.document-create-kicker {
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.document-create-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.2rem;
+}
+
+.document-history-card {
+    border-color: #c7d2fe;
+    background: #f8fafc;
+}
+
+.section-heading {
+    margin: 1.25rem 0 0.75rem;
 }
 
 .doc-tabs {
@@ -597,6 +722,10 @@
     }
 
     .doc-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .document-create-grid {
         grid-template-columns: 1fr;
     }
 

@@ -6,15 +6,18 @@
 
 <div class="sidebar-category">
     <button class="sidebar-category-toggle {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
-        書類
+        書類一覧
         <span class="category-arrow">▼</span>
     </button>
     <div class="sidebar-category-items {% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
         <div class="sidebar-subcategory">
-            <div class="subcategory-label">書類</div>
-            <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類履歴</a>
+            <div class="subcategory-label">作成する書類</div>
             <a href="{{ url_for('user_mitsumori_list') }}" class="{% if request.endpoint in ['user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit'] %}active{% endif %}">見積依頼書</a>
             <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="{% if request.endpoint in ['user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">買取承諾書</a>
+        </div>
+        <div class="sidebar-subcategory">
+            <div class="subcategory-label">書類履歴</div>
+            <a href="{{ url_for('documents') }}#document-history-tabs" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view'] %}active{% endif %}">書類履歴</a>
         </div>
     </div>
 </div>

@@ -655,9 +655,9 @@
             <button type="button" class="user-home-menu-chip" data-menu-toggle="inventory">商品一覧</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="long-term">長期保存商品</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="requests">販売代行申請</button>
-            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類履歴</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="estimate">見積り依頼書</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="approval">買取承諾書</button>
+            <button type="button" class="user-home-menu-chip" data-menu-toggle="documents">書類一覧</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="analytics">管理分析</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="reports">レポート</button>
             <button type="button" class="user-home-menu-chip" data-menu-toggle="inquiry-list">問い合わせ一覧</button>
@@ -682,10 +682,6 @@
                 <h3>販売代行申請</h3>
                 <p>業者販売、同時出品、オークション申請を確認します。</p>
             </a>
-            <a href="{{ url_for('documents') }}" class="user-home-shortcut" data-menu-id="documents">
-                <h3>書類履歴</h3>
-                <p>各種書類の作成、確認、履歴を開きます。</p>
-            </a>
             <a href="{{ url_for('user_mitsumori_list') }}" class="user-home-shortcut" data-menu-id="estimate">
                 <h3>見積り依頼書</h3>
                 <p>見積り依頼書の作成と履歴を確認します。</p>
@@ -693,6 +689,10 @@
             <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="user-home-shortcut" data-menu-id="approval">
                 <h3>買取承諾書</h3>
                 <p>買取承諾書の作成と履歴を確認します。</p>
+            </a>
+            <a href="{{ url_for('documents') }}" class="user-home-shortcut" data-menu-id="documents">
+                <h3>書類一覧</h3>
+                <p>見積依頼書・買取承諾書の作成入口と書類履歴を開きます。</p>
             </a>
             <a href="{{ url_for('user_analytics') }}" class="user-home-shortcut" data-menu-id="analytics">
                 <h3>管理分析</h3>
@@ -933,7 +933,7 @@
         if (!toggleButton || !picker || !grid || !emptyState) return;
 
         const storageKey = 'kaika:user-home:favorites:v2';
-        const defaultMenus = ['inventory', 'documents', 'reports', 'analytics'];
+        const defaultMenus = ['inventory', 'estimate', 'approval', 'documents'];
         const chips = Array.from(picker.querySelectorAll('[data-menu-toggle]'));
         const cards = Array.from(grid.querySelectorAll('[data-menu-id]'));
 
