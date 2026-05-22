@@ -666,6 +666,31 @@
     line-height: 1.6;
 }
 
+.analytics-billing-detail {
+    margin-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.65rem;
+    color: #475569;
+    font-size: 0.82rem;
+    line-height: 1.7;
+}
+
+.analytics-billing-detail summary {
+    cursor: pointer;
+    color: #1d4ed8;
+    font-weight: 800;
+    list-style: none;
+}
+
+.analytics-billing-detail summary::-webkit-details-marker {
+    display: none;
+}
+
+.analytics-billing-detail ul {
+    margin: 0.55rem 0 0;
+    padding-left: 1rem;
+}
+
 @media (max-width: 768px) {
     .period-filter-top {
         flex-direction: column;
@@ -701,16 +726,40 @@
         <div class="analytics-billing-label">現在の月額プラン</div>
         <div class="analytics-billing-value">{{ analytics.billing_metrics.current_plan_label }}</div>
         <div class="analytics-billing-note">登録商品数 {{ analytics.billing_metrics.item_count }}件 / 月額 ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>現在プラン: {{ analytics.billing_metrics.current_plan_label }}</li>
+                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
+                <li>登録商品数: {{ analytics.billing_metrics.item_count }}件</li>
+            </ul>
+        </details>
     </div>
     <div class="analytics-billing-card">
         <div class="analytics-billing-label">開花へ支払う手数料</div>
         <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</div>
         <div class="analytics-billing-note">{{ analytics.billing_metrics.period_label }} の送料・販売手数料合計</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>対象期間: {{ analytics.billing_metrics.period_label }}</li>
+                <li>送料・販売代行・各種手数料の合計: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
+                <li>下の月別売上集計表で月ごとの詳細を確認できます。</li>
+            </ul>
+        </details>
     </div>
     <div class="analytics-billing-card">
         <div class="analytics-billing-label">月額＋期間内手数料</div>
         <div class="analytics-billing-value">¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</div>
         <div class="analytics-billing-note">精算書・計算書で確認する支払い目安です。</div>
+        <details class="analytics-billing-detail">
+            <summary>内訳を見る</summary>
+            <ul>
+                <li>月額利用料: ¥{{ "{:,}".format(analytics.billing_metrics.monthly_fee or 0) }}</li>
+                <li>期間内手数料: ¥{{ "{:,}".format(analytics.billing_metrics.kaika_fee_total or 0) }}</li>
+                <li>合計: ¥{{ "{:,}".format(analytics.billing_metrics.client_payment_total or 0) }}</li>
+            </ul>
+        </details>
     </div>
 </div>
 {% endif %}

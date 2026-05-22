@@ -3,26 +3,27 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>問い合わせ管理 
+    <h1>問い合わせ管理
         {% if new_count > 0 %}
         <span class="new-badge">{{ new_count }}件の新着</span>
         {% endif %}
     </h1>
+    <p class="page-description">新着順に確認できます。新着の詳細を開くと、ステータスは自動で「対応中」に切り替わります。</p>
 </div>
 
 <div class="inquiry-admin-container">
     <!-- フィルター -->
     <div class="filter-section">
         <div class="filter-buttons">
-            <a href="{{ url_for('admin_inquiries') }}" 
-               class="filter-btn {% if not status_filter %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('admin_inquiries') }}"
+               class="filter-btn {% if not status_filter %}active{% endif %}">問い合わせ一覧</a>
             {% for key, value in statuses.items() %}
-            <a href="{{ url_for('admin_inquiries', status=key) }}" 
+            <a href="{{ url_for('admin_inquiries', status=key) }}"
                class="filter-btn {% if status_filter == key %}active{% endif %}">{{ value }}</a>
             {% endfor %}
         </div>
     </div>
-    
+
     <!-- 問い合わせ一覧 -->
     {% if inquiries %}
     <div class="inquiry-table-container">
@@ -40,7 +41,7 @@
             </thead>
             <tbody>
                 {% for inquiry in inquiries %}
-                <tr class="{% if inquiry.status == 'new' %}unread{% endif %}">
+                <tr class="inquiry-row status-row-{{ inquiry.status }} {% if inquiry.status == 'new' %}unread{% endif %}">
                     <td>
                         <span class="inquiry-status status-{{ inquiry.status }}">
                             {{ statuses.get(inquiry.status, inquiry.status) }}
@@ -78,6 +79,13 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    margin-bottom: 0.35rem;
+}
+
+.page-description {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
 }
 
 .new-badge {
@@ -94,7 +102,7 @@
 }
 
 .filter-section {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .filter-buttons {
@@ -128,21 +136,24 @@
 
 .inquiry-table-container {
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    overflow-x: auto;
 }
 
 .inquiry-table {
     width: 100%;
+    min-width: 900px;
     border-collapse: collapse;
 }
 
 .inquiry-table th,
 .inquiry-table td {
-    padding: 1rem;
+    padding: 0.72rem 0.85rem;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
 }
 
 .inquiry-table th {
@@ -153,7 +164,18 @@
 }
 
 .inquiry-table tr.unread {
-    background: #fefce8;
+    background: #fffaf0;
+    box-shadow: inset 4px 0 0 #f59e0b;
+}
+
+.inquiry-table tr.status-row-in_progress {
+    background: #f8fbff;
+}
+
+.inquiry-table tr.status-row-resolved,
+.inquiry-table tr.status-row-closed {
+    background: #f8fafc;
+    color: #64748b;
 }
 
 .inquiry-table tr:hover {
@@ -176,7 +198,7 @@
 .inquiry-link {
     color: #1e293b;
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 800;
 }
 
 .inquiry-link:hover {
@@ -189,12 +211,17 @@
 }
 
 .btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
     padding: 0.35rem 0.75rem;
     font-size: 0.8rem;
-    background: #f1f5f9;
-    color: #64748b;
-    border-radius: 6px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
     text-decoration: none;
+    font-weight: 800;
 }
 
 .btn-sm:hover {
@@ -218,7 +245,7 @@
     .inquiry-table-container {
         overflow-x: auto;
     }
-    
+
     .inquiry-table {
         min-width: 700px;
     }

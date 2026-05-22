@@ -13,65 +13,72 @@
 
 <div class="page-header">
     <h1>ホーム</h1>
-    <p class="page-description">優先対応の通知と、よく使う管理画面へすぐ移動できるダッシュボードです。</p>
+    <p class="page-description">優先対応の通知と、よく使う管理画面へのショートカットをまとめています。</p>
 </div>
 
 <section class="home-overview">
     <div class="home-overview__main">
-        <span class="home-overview__eyebrow">ホーム</span>
-        <h2>通知と重要メニューをまとめて確認</h2>
-        <p>ホームでは優先対応と主要な導線を見やすく整理し、日々の確認をすぐ始められるようにしています。</p>
+        <span class="home-overview__eyebrow">管理ホーム</span>
+        <h2>今日確認するBOXと主要画面をすぐ開けます</h2>
+        <p>優先対応カードは0件でもクリックできます。事務作業でよく使う画面は、下のショートカット設定から表示・非表示を切り替えられます。</p>
     </div>
     <div class="home-overview__status">
-        <span class="home-overview__status-label">優先対応件数</span>
+        <span class="home-overview__status-label">優先対応の合計</span>
         <strong class="home-overview__status-value">{{ total_priority_count }}件</strong>
-        <span class="home-overview__status-note">通知ボックスと長期保存商品の件数をまとめています。</span>
+        <span class="home-overview__status-note">発送・受取完了・販売代行・長期保存の確認対象です。</span>
     </div>
 </section>
 
 <section class="home-section">
     <div class="home-section__header">
         <div>
-            <span class="home-section__eyebrow">通知</span>
+            <span class="home-section__eyebrow">通知BOX</span>
             <h2>優先対応通知</h2>
         </div>
-        <p>未対応件数があるものをすぐ開けるように、通知ボックスと長期保存商品をまとめています。</p>
+        <p>件数が0件でも、各BOXの一覧画面へ移動できます。</p>
     </div>
     <div class="priority-grid">
         <a href="{{ url_for('admin_shipping_requests') }}" class="priority-card {% if shipping_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">発送BOX</span>
             <strong class="priority-card__count">{{ shipping_count }}件</strong>
-            <span class="priority-card__note">{% if shipping_count > 0 %}発送依頼の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if shipping_count > 0 %}発送依頼の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_completion_requests') }}" class="priority-card {% if completion_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">受取完了BOX</span>
             <strong class="priority-card__count">{{ completion_count }}件</strong>
-            <span class="priority-card__note">{% if completion_count > 0 %}受取完了報告の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if completion_count > 0 %}受取完了報告の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="priority-card {% if wholesale_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
-            <span class="priority-card__label">業者卸販売BOX</span>
+            <span class="priority-card__label">業者販売BOX</span>
             <strong class="priority-card__count">{{ wholesale_count }}件</strong>
-            <span class="priority-card__note">{% if wholesale_count > 0 %}卸販売申請の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if wholesale_count > 0 %}業者販売申請の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type='auction') }}" class="priority-card {% if auction_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">業者オークションBOX</span>
             <strong class="priority-card__count">{{ auction_count }}件</strong>
-            <span class="priority-card__note">{% if auction_count > 0 %}オークション申請の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if auction_count > 0 %}オークション申請の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous') }}" class="priority-card {% if simultaneous_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">同時出品BOX</span>
             <strong class="priority-card__count">{{ simultaneous_count }}件</strong>
-            <span class="priority-card__note">{% if simultaneous_count > 0 %}同時出品申請の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if simultaneous_count > 0 %}同時出品申請の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_disposal_requests') }}" class="priority-card {% if disposal_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">在庫処分申請</span>
             <strong class="priority-card__count">{{ disposal_count }}件</strong>
-            <span class="priority-card__note">{% if disposal_count > 0 %}在庫処分申請の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if disposal_count > 0 %}在庫処分申請の確認があります{% else %}現在の未対応はありません{% endif %}</span>
+            <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="priority-card {% if long_term_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
             <span class="priority-card__label">長期保存商品</span>
             <strong class="priority-card__count">{{ long_term_count }}件</strong>
-            <span class="priority-card__note">{% if long_term_count > 0 %}長期保存商品の確認があります{% else %}現在はありません{% endif %}</span>
+            <span class="priority-card__note">{% if long_term_count > 0 %}長期保存商品の確認があります{% else %}現在の対象はありません{% endif %}</span>
+            <span class="priority-card__open">一覧を開く</span>
         </a>
     </div>
 </section>
@@ -79,36 +86,65 @@
 <section class="home-section">
     <div class="home-section__header">
         <div>
-            <span class="home-section__eyebrow">重要メニュー</span>
-            <h2>よく使う管理画面へのショートカット</h2>
+            <span class="home-section__eyebrow">ショートカット</span>
+            <h2>よく使う管理画面</h2>
         </div>
-        <p>商品管理や書類管理など、日常的によく使う画面へホームからすぐ移動できます。</p>
+        <div class="admin-shortcut-tools">
+            <p>チェックした項目だけホームに表示されます。</p>
+            <button type="button" class="shortcut-settings-btn" id="adminShortcutToggle" aria-expanded="false">表示項目を変更</button>
+        </div>
     </div>
-    <div class="shortcut-grid">
-        <a href="{{ url_for('admin_items') }}" class="shortcut-card">
+
+    <div class="admin-shortcut-picker" id="adminShortcutPicker" hidden>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="items"> 開花商品一覧</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="user-products"> ユーザー商品一覧</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="long-term"> 長期保存商品</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="users"> クライアント一覧</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="documents"> 書類管理</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="document-history"> 書類履歴</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="proxy-service"> 代行仕入れサービス</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="inquiries"> 問い合わせ一覧</label>
+        <label class="admin-shortcut-chip"><input type="checkbox" value="analytics"> 開花管理分析</label>
+    </div>
+
+    <div class="shortcut-grid" id="adminShortcutGrid">
+        <a href="{{ url_for('admin_items') }}" class="shortcut-card" data-admin-shortcut-id="items">
             <h3>開花商品一覧</h3>
-            <p>開花管理の商品一覧を確認します。</p>
+            <p>開花管理の商品在庫、販売状況、仕入価格を確認します。</p>
         </a>
-        <a href="{{ url_for('admin_user_products') }}" class="shortcut-card">
+        <a href="{{ url_for('admin_user_products') }}" class="shortcut-card" data-admin-shortcut-id="user-products">
             <h3>ユーザー商品一覧</h3>
-            <p>クライアントの商品一覧を確認します。</p>
+            <p>クライアントごとの商品反映や販売状況を確認します。</p>
         </a>
-        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="shortcut-card">
+        <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="shortcut-card" data-admin-shortcut-id="long-term">
             <h3>長期保存商品</h3>
-            <p>90日以上経過した商品を確認します。</p>
+            <p>長期保存対象の商品を確認し、必要な対応を進めます。</p>
         </a>
-        <a href="{{ url_for('admin_users') }}" class="shortcut-card">
+        <a href="{{ url_for('admin_users') }}" class="shortcut-card" data-admin-shortcut-id="users">
             <h3>クライアント一覧</h3>
-            <p>クライアント情報と利用状況を確認します。</p>
+            <p>ユーザー情報、プラン、代行仕入れ残高などを確認します。</p>
         </a>
-        <a href="{{ url_for('admin_documents_dashboard') }}" class="shortcut-card">
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="shortcut-card" data-admin-shortcut-id="documents">
             <h3>書類管理</h3>
-            <p>書類の到着状況や送付対象を確認します。</p>
+            <p>受付中の書類、作成・送付が必要な書類を確認します。</p>
         </a>
-        <a href="{{ url_for('admin_documents_history') }}" class="shortcut-card">
+        <a href="{{ url_for('admin_documents_history') }}" class="shortcut-card" data-admin-shortcut-id="document-history">
             <h3>書類履歴</h3>
-            <p>過去の書類交付履歴を確認します。</p>
+            <p>送付済み・完了済みの書類履歴を確認します。</p>
         </a>
+        <a href="{{ url_for('admin_proxy_service') }}" class="shortcut-card" data-admin-shortcut-id="proxy-service">
+            <h3>代行仕入れサービス</h3>
+            <p>公開中・公開前・保存済みの仕入れサービスを管理します。</p>
+        </a>
+        <a href="{{ url_for('admin_inquiries') }}" class="shortcut-card" data-admin-shortcut-id="inquiries">
+            <h3>問い合わせ一覧</h3>
+            <p>クライアントからの問い合わせを確認し、対応状況を更新します。</p>
+        </a>
+        <a href="{{ url_for('admin_analytics_kaika') }}" class="shortcut-card" data-admin-shortcut-id="analytics">
+            <h3>開花管理分析</h3>
+            <p>売上、手数料、在庫状況などの管理分析を確認します。</p>
+        </a>
+        <div class="admin-shortcut-empty" id="adminShortcutEmpty" hidden>表示するショートカットが選択されていません。上の「表示項目を変更」から追加してください。</div>
     </div>
 </section>
 
@@ -122,16 +158,17 @@
 }
 
 .home-overview__main,
-.home-overview__status {
+.home-overview__status,
+.home-section {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 18px;
-    padding: 1.2rem 1.3rem;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
 }
 
 .home-overview__main {
     flex: 1 1 auto;
+    padding: 1.25rem;
     background: linear-gradient(135deg, #eff6ff, #ffffff);
     border-color: #bfdbfe;
 }
@@ -141,6 +178,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
+    padding: 1.25rem;
     background: linear-gradient(135deg, #fff7ed, #ffffff);
     border-color: #fdba74;
 }
@@ -149,55 +187,45 @@
 .home-section__eyebrow {
     display: inline-block;
     margin-bottom: 0.4rem;
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
     color: #2563eb;
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
 }
 
 .home-overview__main h2,
 .home-section__header h2 {
     margin: 0;
-    font-size: 1.24rem;
     color: #0f172a;
+    font-size: 1.24rem;
     line-height: 1.45;
 }
 
 .home-overview__main p,
-.home-section__header p {
+.home-section__header p,
+.admin-shortcut-tools p {
     margin: 0.45rem 0 0;
     color: #475569;
-    line-height: 1.82;
+    line-height: 1.8;
 }
 
-.home-overview__status-label {
-    font-size: 0.82rem;
-    color: #9a3412;
-    letter-spacing: 0.04em;
-}
-
-.home-overview__status-value {
-    display: block;
-    margin-top: 0.35rem;
-    font-size: 2rem;
-    color: #7c2d12;
-    line-height: 1.2;
-}
-
+.home-overview__status-label,
 .home-overview__status-note {
-    margin-top: 0.4rem;
     color: #9a3412;
     font-size: 0.82rem;
     line-height: 1.7;
 }
 
+.home-overview__status-value {
+    margin-top: 0.35rem;
+    color: #7c2d12;
+    font-size: 2rem;
+    line-height: 1.2;
+}
+
 .home-section {
     margin-bottom: 1.3rem;
     padding: 1.2rem;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .home-section__header {
@@ -208,47 +236,38 @@
     margin-bottom: 1rem;
 }
 
-.home-section__header p {
-    max-width: 36rem;
-    margin-top: 0;
-}
-
 .priority-grid,
 .shortcut-grid {
     display: grid;
     gap: 0.95rem;
 }
 
-.priority-card:hover,
-.shortcut-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-}
-
-.shortcut-card h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    color: #0f172a;
-    line-height: 1.45;
-}
-
-.shortcut-card p {
-    margin: 0.5rem 0 0;
-    color: #475569;
-    line-height: 1.78;
-}
-
 .priority-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.priority-card {
-    display: block;
+.shortcut-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.priority-card,
+.shortcut-card {
+    display: grid;
+    gap: 0.35rem;
     padding: 1rem;
-    border-radius: 16px;
-    text-decoration: none;
     border: 1px solid #e2e8f0;
+    border-radius: 16px;
     background: #ffffff;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.priority-card:hover,
+.shortcut-card:hover {
+    transform: translateY(-1px);
+    border-color: #93c5fd;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
 }
 
 .priority-card--active {
@@ -257,44 +276,119 @@
 }
 
 .priority-card--idle {
-    border-color: #e2e8f0;
     background: linear-gradient(135deg, #f8fafc, #ffffff);
 }
 
 .priority-card__label {
-    display: block;
     color: #334155;
-    font-size: 0.88rem;
+    font-size: 0.9rem;
+    font-weight: 800;
     line-height: 1.6;
 }
 
 .priority-card__count {
-    display: block;
-    margin-top: 0.35rem;
     color: #0f172a;
-    font-size: 1.5rem;
+    font-size: 1.55rem;
     line-height: 1.2;
 }
 
 .priority-card__note {
-    display: block;
-    margin-top: 0.45rem;
     color: #64748b;
     font-size: 0.82rem;
     line-height: 1.7;
 }
 
-.shortcut-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.priority-card__open {
+    justify-self: start;
+    margin-top: 0.35rem;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.76rem;
+    font-weight: 800;
 }
 
-.shortcut-card {
-    display: block;
-    padding: 1rem 1.05rem;
-    border-radius: 16px;
-    text-decoration: none;
-    border: 1px solid #e2e8f0;
+.shortcut-card h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.03rem;
+    line-height: 1.45;
+}
+
+.shortcut-card p {
+    margin: 0;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.75;
+}
+
+.admin-shortcut-tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    text-align: right;
+}
+
+.shortcut-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0.52rem 0.9rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
     background: #ffffff;
+    color: #0f172a;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.shortcut-settings-btn:hover {
+    border-color: #2563eb;
+    color: #1d4ed8;
+}
+
+.admin-shortcut-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem;
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: #f8fbff;
+}
+
+.admin-shortcut-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 36px;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.86rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.admin-shortcut-chip input {
+    accent-color: #2563eb;
+}
+
+.admin-shortcut-empty {
+    grid-column: 1 / -1;
+    padding: 1.5rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    color: #64748b;
+    text-align: center;
+    background: #f8fafc;
 }
 
 @media (max-width: 1100px) {
@@ -306,8 +400,11 @@
 
 @media (max-width: 860px) {
     .home-overview,
-    .home-section__header {
+    .home-section__header,
+    .admin-shortcut-tools {
         flex-direction: column;
+        align-items: stretch;
+        text-align: left;
     }
 
     .home-overview__status {
@@ -320,4 +417,73 @@
     }
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const storageKey = 'kaika:admin-home:shortcuts:v1';
+    const defaultShortcuts = ['items', 'user-products', 'documents', 'proxy-service', 'inquiries', 'analytics'];
+    const picker = document.getElementById('adminShortcutPicker');
+    const toggle = document.getElementById('adminShortcutToggle');
+    const cards = Array.from(document.querySelectorAll('[data-admin-shortcut-id]'));
+    const checkboxes = Array.from(document.querySelectorAll('.admin-shortcut-chip input[type="checkbox"]'));
+    const emptyState = document.getElementById('adminShortcutEmpty');
+
+    function loadSelected() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            return Array.isArray(parsed) && parsed.length ? parsed : defaultShortcuts;
+        } catch (error) {
+            return defaultShortcuts;
+        }
+    }
+
+    function saveSelected(selected) {
+        localStorage.setItem(storageKey, JSON.stringify(selected));
+    }
+
+    function render(selected) {
+        const selectedSet = new Set(selected);
+        let visibleCount = 0;
+
+        cards.forEach(function(card) {
+            const isVisible = selectedSet.has(card.dataset.adminShortcutId);
+            card.hidden = !isVisible;
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        checkboxes.forEach(function(checkbox) {
+            checkbox.checked = selectedSet.has(checkbox.value);
+        });
+
+        if (emptyState) {
+            emptyState.hidden = visibleCount > 0;
+        }
+    }
+
+    let selected = loadSelected();
+    render(selected);
+
+    if (toggle && picker) {
+        toggle.addEventListener('click', function() {
+            const nextHidden = !picker.hidden;
+            picker.hidden = nextHidden;
+            toggle.setAttribute('aria-expanded', String(!nextHidden));
+        });
+    }
+
+    checkboxes.forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            selected = checkboxes.filter(function(item) {
+                return item.checked;
+            }).map(function(item) {
+                return item.value;
+            });
+            saveSelected(selected);
+            render(selected);
+        });
+    });
+});
+</script>
 {% endblock %}

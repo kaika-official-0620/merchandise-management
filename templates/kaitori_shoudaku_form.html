@@ -6,7 +6,7 @@
 <div class="page-header">
     <h1 class="page-title">買取承諾書{% if mode == 'edit' %}編集{% else %}作成{% endif %}</h1>
     <div class="header-actions">
-        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">← 書類一覧へ戻る</a>
     </div>
 </div>
 
@@ -153,7 +153,8 @@
     </div>
 
     <div class="form-actions">
-        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="btn btn-secondary">キャンセル</a>
+        <button type="submit" name="status" value="draft" class="btn btn-secondary">下書き保存</button>
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">キャンセル</a>
     </div>
 </form>
 
@@ -208,7 +209,7 @@
         </div>
         <div class="document-preview-actions">
             <button type="button" class="btn btn-secondary" data-close-kaitori-preview>修正する</button>
-            <button type="button" class="btn btn-primary" id="submit-kaitori-preview-btn">{% if mode == 'edit' %}この内容で更新する{% else %}この内容で作成する{% endif %}</button>
+            <button type="button" class="btn btn-primary" id="submit-kaitori-preview-btn">{% if mode == 'edit' %}この内容で更新完了{% else %}この内容で作成完了{% endif %}</button>
         </div>
     </div>
 </div>
@@ -721,6 +722,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function submitFromPreview() {
+        form.querySelectorAll('input[data-preview-status]').forEach((input) => input.remove());
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = 'completed';
+        statusInput.dataset.previewStatus = 'true';
+        form.appendChild(statusInput);
         form.submit();
     }
     

@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}書類一覧 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>書類一覧</h1>
+    <p class="page-subtitle">作成する書類を選び、下書き保存中の書類を続きから編集できます。完了した書類は書類履歴へ移動します。</p>
+</div>
+
+<section class="document-create-panel">
+    <div class="document-create-header">
+        <div>
+            <h2>作成する書類</h2>
+            <p>見積依頼書と買取承諾書をここから作成できます。入力後はプレビューで確認してから作成完了できます。</p>
+        </div>
+    </div>
+    <div class="document-create-grid">
+        <article class="document-create-card">
+            <span class="document-create-kicker">開花へ送る依頼</span>
+            <h3>見積依頼書</h3>
+            <p>商品内容や金額を入力し、開花へ見積依頼を送るための書類です。</p>
+            <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積依頼書を作成</a>
+        </article>
+        <article class="document-create-card">
+            <span class="document-create-kicker">買取内容の承諾</span>
+            <h3>買取承諾書</h3>
+            <p>買取内容を確認し、承諾内容を残すための書類です。</p>
+            <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">買取承諾書を作成</a>
+        </article>
+    </div>
+</section>
+
+<section class="draft-documents-panel">
+    <div class="section-heading">
+        <h2>作成中の書類</h2>
+        <p>下書き保存した書類はここに残ります。作成完了すると書類履歴へ移動します。</p>
+    </div>
+
+    <div class="draft-document-columns">
+        <div class="draft-document-column">
+            <div class="draft-document-column__header">
+                <h3>見積依頼書</h3>
+                <span>{{ draft_mitsumori_list|length }}件</span>
+            </div>
+            {% if draft_mitsumori_list %}
+            <div class="draft-document-list">
+                {% for doc in draft_mitsumori_list %}
+                <article class="draft-document-row">
+                    <div>
+                        <strong>{{ doc.subject or '見積依頼書' }}</strong>
+                        <span>{{ doc.document_no }}</span>
+                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
+                    </div>
+                    <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-mini">作成中の見積依頼書はありません。</div>
+            {% endif %}
+        </div>
+
+        <div class="draft-document-column">
+            <div class="draft-document-column__header">
+                <h3>買取承諾書</h3>
+                <span>{{ draft_kaitori_list|length }}件</span>
+            </div>
+            {% if draft_kaitori_list %}
+            <div class="draft-document-list">
+                {% for doc in draft_kaitori_list %}
+                <article class="draft-document-row">
+                    <div>
+                        <strong>{{ doc.customer_name or '買取承諾書' }}</strong>
+                        <span>{{ doc.document_no }}</span>
+                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
+                    </div>
+                    <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-mini">作成中の買取承諾書はありません。</div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<div class="history-link-panel">
+    <a href="{{ url_for('documents') }}" class="btn btn-info">完了済みの書類履歴を見る</a>
+</div>
+
+<style>
+.page-subtitle {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.8;
+}
+
+.document-create-panel,
+.draft-documents-panel,
+.history-link-panel {
+    margin-bottom: 1.25rem;
+    padding: 1.15rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.document-create-header h2,
+.section-heading h2 {
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+    font-size: 1.18rem;
+}
+
+.document-create-header p,
+.section-heading p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 0.92rem;
+}
+
+.document-create-grid,
+.draft-document-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.document-create-card,
+.draft-document-column {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    padding: 1rem;
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.document-create-card h3,
+.draft-document-column__header h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.08rem;
+}
+
+.document-create-card p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.75;
+    font-size: 0.9rem;
+}
+
+.document-create-kicker {
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.draft-document-column__header,
+.draft-document-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.draft-document-column__header span {
+    color: #2563eb;
+    font-weight: 800;
+}
+
+.draft-document-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.draft-document-row {
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+.draft-document-row div {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+}
+
+.draft-document-row strong,
+.draft-document-row span,
+.draft-document-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.draft-document-row span,
+.draft-document-row small,
+.empty-mini {
+    color: #64748b;
+    font-size: 0.84rem;
+}
+
+.history-link-panel {
+    text-align: right;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-secondary { background: #64748b; color: #fff; }
+.btn-info { background: #06b6d4; color: #fff; }
+
+@media (max-width: 768px) {
+    .document-create-grid,
+    .draft-document-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .draft-document-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}

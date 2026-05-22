@@ -1,11 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}買取承諾書一覧 - 物販管理システム{% endblock %}
+{% block title %}作成中の買取承諾書 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">買取承諾書一覧</h1>
+    <div>
+        <h1 class="page-title">作成中の買取承諾書</h1>
+        <p class="page-subtitle">下書き保存中の買取承諾書だけを表示します。作成完了した書類は書類履歴へ移動します。</p>
+    </div>
     <div class="header-actions">
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
         <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">新規作成</a>
     </div>
 </div>
@@ -30,19 +34,10 @@
                 <td>{{ kaitori.customer_name }}</td>
                 <td>{{ kaitori.issue_date }}</td>
                 <td>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
-                <td>
-                    {% if kaitori.status == 'draft' %}
-                    <span class="badge badge-secondary">下書き</span>
-                    {% elif kaitori.status == 'sent' %}
-                    <span class="badge badge-success">送信済</span>
-                    {% else %}
-                    <span class="badge">{{ kaitori.status }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">詳細</a>
+                <td><span class="badge badge-secondary">下書き</span></td>
+                <td class="actions-cell">
                     <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-sm btn-edit">編集</a>
-                    <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-sm btn-export" target="_blank">PDF</a>
+                    <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">内容を見る</a>
                     <a href="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('削除してもよろしいですか？')">削除</a>
                 </td>
             </tr>
@@ -52,27 +47,44 @@
 </div>
 {% else %}
 <div class="empty-state">
-    <p>買取承諾書がありません</p>
-    <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">最初の買取承諾書を作成</a>
+    <p>作成中の買取承諾書はありません。</p>
+    <a href="{{ url_for('user_kaitori_shoudaku_add') }}" class="btn btn-primary">買取承諾書を作成</a>
 </div>
 {% endif %}
 
 <style>
-/* スマホ対応 - 横スクロール */
-@media (max-width: 768px) {
-    .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .data-table {
-        min-width: 650px;
-    }
-    
-    .data-table th,
-    .data-table td {
-        white-space: nowrap;
-    }
+.page-header,
+.header-actions,
+.actions-cell {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.7;
+}
+
+.actions-cell {
+    justify-content: flex-start;
+}
+
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+    min-width: 760px;
+}
+
+.data-table th,
+.data-table td {
+    white-space: nowrap;
 }
 </style>
 {% endblock %}

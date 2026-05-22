@@ -13,20 +13,25 @@
     {% if inquiries %}
     <div class="inquiry-list">
         {% for inquiry in inquiries %}
-        <div class="inquiry-card-wrapper">
+        <div class="inquiry-card-wrapper status-row-{{ inquiry.status }}">
             <a href="{{ url_for('inquiry_view', id=inquiry.id) }}" class="inquiry-card">
-                <div class="inquiry-header">
+                <div class="inquiry-status-cell">
                     <span class="inquiry-category">{{ categories.get(inquiry.category, inquiry.category) }}</span>
                     <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
                 </div>
-                <div class="inquiry-title">
-                    {{ inquiry.title }}
-                    {% if inquiry.image_path %}
-                    <span class="attachment-icon" title="画像添付あり">📷</span>
-                    {% endif %}
+                <div class="inquiry-main-cell">
+                    <div class="inquiry-title">
+                        {{ inquiry.title }}
+                        {% if inquiry.image_path %}
+                        <span class="attachment-icon" title="画像添付あり">画像あり</span>
+                        {% endif %}
+                    </div>
+                    <div class="inquiry-meta">
+                        <span class="inquiry-date">作成: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
+                    </div>
                 </div>
-                <div class="inquiry-meta">
-                    <span class="inquiry-date">作成: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
+                <div class="inquiry-open-cell">
+                    詳細を見る
                 </div>
             </a>
             <form action="{{ url_for('inquiry_delete', id=inquiry.id) }}" method="POST" class="inquiry-delete-form" onsubmit="return confirm('この問い合わせを削除しますか？');">
@@ -45,14 +50,14 @@
 
 <style>
 .inquiry-container {
-    max-width: 800px;
+    max-width: 1100px;
     margin: 0 auto;
 }
 
 .inquiry-list {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.7rem;
 }
 
 .inquiry-card-wrapper {
@@ -60,10 +65,20 @@
     display: flex;
     align-items: stretch;
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(15,23,42,0.06);
     border: 1px solid #e2e8f0;
     transition: all 0.2s;
+}
+
+.inquiry-card-wrapper.status-row-new {
+    border-color: #fbbf24;
+    box-shadow: inset 4px 0 0 #f59e0b, 0 8px 20px rgba(15,23,42,0.06);
+}
+
+.inquiry-card-wrapper.status-row-resolved,
+.inquiry-card-wrapper.status-row-closed {
+    background: #f8fafc;
 }
 
 .inquiry-card-wrapper:hover {
@@ -72,9 +87,12 @@
 }
 
 .inquiry-card {
-    display: block;
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr) 120px;
+    align-items: center;
+    gap: 1rem;
     flex: 1;
-    padding: 1.25rem;
+    padding: 0.9rem 1rem;
     text-decoration: none;
     color: inherit;
     border-radius: 12px 0 0 12px;
@@ -103,11 +121,15 @@
     opacity: 1;
 }
 
-.inquiry-header {
+.inquiry-status-cell {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    align-items: flex-start;
+    gap: 0.45rem;
+    flex-direction: column;
+}
+
+.inquiry-main-cell {
+    min-width: 0;
 }
 
 .inquiry-category {
@@ -146,13 +168,16 @@
 }
 
 .inquiry-title {
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 800;
     color: #1e293b;
-    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .unread-badge {
@@ -165,13 +190,30 @@
 }
 
 .attachment-icon {
-    font-size: 0.9rem;
-    opacity: 0.7;
+    flex: 0 0 auto;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 800;
 }
 
 .inquiry-meta {
     font-size: 0.85rem;
     color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+.inquiry-open-cell {
+    justify-self: end;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
 .empty-message {
@@ -186,6 +228,17 @@
     color: #94a3b8;
     margin-bottom: 1.5rem;
     font-size: 1.1rem;
+}
+
+@media (max-width: 760px) {
+    .inquiry-card {
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .inquiry-open-cell {
+        justify-self: start;
+    }
 }
 </style>
 {% endblock %}

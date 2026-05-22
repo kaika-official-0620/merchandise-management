@@ -18707,11 +18707,12 @@ def public_proxy_service_list():
     conn = get_db()
     now = get_jst_now()
     
-    # サービス利用対象ユーザーかチェック（ログイン時のみ）
+    # 一覧ページ自体は全ユーザーが確認できるようにし、参加可否は各オークション内で制御する
     sections = build_public_proxy_service_sections(
         conn,
         now=now,
         current_user_id=current_user.id if current_user.is_authenticated else None,
+        allow_all=current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()),
     )
     all_sections = None
     if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
@@ -18769,6 +18770,7 @@ def public_proxy_service(auction_id):
     conn = get_db()
     now = get_jst_now()
     current_user_id = current_user.id if current_user.is_authenticated else None
+    can_participate_current_auction = False
 
     if not current_user.is_authenticated:
         conn.close()
@@ -18786,36 +18788,10 @@ def public_proxy_service(auction_id):
 
         settings_dict = dict(settings)
 
-        if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
-            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
-            if not is_allowed_user:
-                cur.close()
-                conn.close()
-                return render_template('proxy_service_closed.html', reason='not_allowed')
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
         row = cur.fetchone()
-        if row and not current_user.is_admin() and not current_user.is_owner():
-            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
-        if row and not current_user.is_admin() and not current_user.is_owner():
-            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
-        if row and not current_user.is_admin() and not current_user.is_owner():
-            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
-        if row and not current_user.is_admin() and not current_user.is_owner():
-            if not is_proxy_service_user_allowed(conn, current_user.id, auction_id):
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
 
         if not row:
             cur.close()
@@ -18826,12 +18802,15 @@ def public_proxy_service(auction_id):
         if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
             settings_dict['sale_mode'] = 'auction'
 
-        if current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()):
-            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
-            if not is_allowed_user:
-                cur.close()
-                conn.close()
-                return render_template('proxy_service_closed.html', reason='not_allowed')
+    if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
+        settings_dict['sale_mode'] = 'auction'
+
+    if current_user.is_authenticated:
+        can_participate_current_auction = (
+            current_user.is_admin()
+            or current_user.is_owner()
+            or is_proxy_service_user_allowed(conn, current_user.id, auction_id)
+        )
 
     auction_state = get_proxy_service_auction_state(settings_dict, now=now)
     items, result_summary, winner_results = annotate_proxy_service_items(
@@ -18870,7 +18849,8 @@ def public_proxy_service(auction_id):
                           winner_results=winner_results,
                           live_status_snapshot=live_status_snapshot,
                           end_datetime=auction_state['end_datetime'],
-                          auction_id=auction_id)
+                          auction_id=auction_id,
+                          can_participate_current_auction=can_participate_current_auction)
 
 
 @app.route('/proxy-service/<int:auction_id>/status')
@@ -18895,13 +18875,6 @@ def public_proxy_service_status(auction_id):
             return jsonify({'success': False, 'error': '公開設定が見つかりません'}), 404
 
         settings_dict = dict(settings)
-        if current_user.is_authenticated:
-            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
-            is_allowed_user = bool(is_allowed_user)
-            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
@@ -18916,13 +18889,8 @@ def public_proxy_service_status(auction_id):
         if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
             settings_dict['sale_mode'] = 'auction'
 
-        if current_user.is_authenticated:
-            is_allowed_user = is_proxy_service_user_allowed(conn, current_user.id, auction_id)
-            is_allowed_user = bool(is_allowed_user)
-            if not is_allowed_user and not current_user.is_admin() and not current_user.is_owner():
-                cur.close()
-                conn.close()
-                return jsonify({'success': False, 'error': 'このサービスを利用する権限がありません'}), 403
+    if 'sale_mode' not in settings_dict or settings_dict.get('sale_mode') is None:
+        settings_dict['sale_mode'] = 'auction'
 
     auction_state = get_proxy_service_auction_state(settings_dict, now=now)
     items, _, _ = annotate_proxy_service_items(
@@ -24411,9 +24379,20 @@ def documents():
         
         # ユーザー見積依頼書
         cur.execute("""
-            SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC
+            SELECT * FROM user_mitsumori
+            WHERE user_id = %s
+              AND COALESCE(status, 'draft') <> 'draft'
+            ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_kaitori_shoudaku
+            WHERE user_id = %s
+              AND COALESCE(status, 'draft') <> 'draft'
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+        user_kaitori_shoudaku_list = [dict(row) for row in cur.fetchall()]
         
         # ユーザー計算書
         cur.execute("""
@@ -24440,9 +24419,20 @@ def documents():
         
         # ユーザー見積依頼書
         cur.execute("""
-            SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC
+            SELECT * FROM user_mitsumori
+            WHERE user_id = ?
+              AND COALESCE(status, 'draft') <> 'draft'
+            ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_kaitori_shoudaku
+            WHERE user_id = ?
+              AND COALESCE(status, 'draft') <> 'draft'
+            ORDER BY created_at DESC
+        """, (current_user.id,))
+        user_kaitori_shoudaku_list = [dict(row) for row in cur.fetchall()]
         
         # ユーザー計算書
         cur.execute("""
@@ -24465,8 +24455,61 @@ def documents():
     return render_template('documents.html',
                           invoices=invoices,
                           user_mitsumori_list=user_mitsumori_list,
+                          user_kaitori_shoudaku_list=user_kaitori_shoudaku_list,
                           user_keisan_list=user_keisan_list,
                           shikiriosho_list=shikiriosho_list)
+
+
+@app.route('/documents/list')
+@login_required
+def user_document_list():
+    """ユーザー側の書類作成入口と作成中書類一覧"""
+    conn = get_db()
+
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM user_mitsumori
+            WHERE user_id = %s
+              AND COALESCE(status, 'draft') = 'draft'
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_kaitori_shoudaku
+            WHERE user_id = %s
+              AND COALESCE(status, 'draft') = 'draft'
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_kaitori_list = [dict(row) for row in cur.fetchall()]
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM user_mitsumori
+            WHERE user_id = ?
+              AND COALESCE(status, 'draft') = 'draft'
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_kaitori_shoudaku
+            WHERE user_id = ?
+              AND COALESCE(status, 'draft') = 'draft'
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_kaitori_list = [dict(row) for row in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'document_list.html',
+        draft_mitsumori_list=draft_mitsumori_list,
+        draft_kaitori_list=draft_kaitori_list,
+    )
 
 @app.route('/service-document/create', methods=['POST'])
 @login_required
@@ -24555,7 +24598,7 @@ def service_document_view(id):
     
     if not doc:
         flash('書類が見つかりません', 'error')
-        return redirect(url_for('documents'))
+        return redirect(url_for('documents') + '#document-history-tabs')
     
     doc = dict(doc)
     if doc.get('service_data'):
@@ -25238,11 +25281,21 @@ def user_mitsumori_list():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM user_mitsumori WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+            cur.execute("""
+                SELECT * FROM user_mitsumori
+                WHERE user_id = %s
+                  AND COALESCE(status, 'draft') = 'draft'
+                ORDER BY updated_at DESC, created_at DESC
+            """, (current_user.id,))
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.execute("SELECT * FROM user_mitsumori WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+            cur.execute("""
+                SELECT * FROM user_mitsumori
+                WHERE user_id = ?
+                  AND COALESCE(status, 'draft') = 'draft'
+                ORDER BY updated_at DESC, created_at DESC
+            """, (current_user.id,))
         
         for row in cur.fetchall():
             item = dict(row)
@@ -25350,7 +25403,9 @@ def user_mitsumori_add():
         conn.close()
         
         flash('見積依頼書を作成しました', 'success')
-        return redirect(url_for('documents'))
+        if status == 'draft':
+            return redirect(url_for('user_document_list'))
+        return redirect(url_for('documents') + '#document-history-tabs')
     
     # GETリクエスト
     today = datetime.now().strftime('%Y-%m-%d')
@@ -32090,7 +32145,8 @@ def user_kaitori_shoudaku_list():
             cur.execute('''
                 SELECT * FROM user_kaitori_shoudaku 
                 WHERE user_id = %s 
-                ORDER BY created_at DESC
+                  AND COALESCE(status, 'draft') = 'draft'
+                ORDER BY updated_at DESC, created_at DESC
             ''', (current_user.id,))
             rows = cur.fetchall()
         else:
@@ -32099,7 +32155,8 @@ def user_kaitori_shoudaku_list():
             cur.execute('''
                 SELECT * FROM user_kaitori_shoudaku 
                 WHERE user_id = ? 
-                ORDER BY created_at DESC
+                  AND COALESCE(status, 'draft') = 'draft'
+                ORDER BY updated_at DESC, created_at DESC
             ''', (current_user.id,))
             rows = cur.fetchall()
         
@@ -32137,6 +32194,7 @@ def user_kaitori_shoudaku_add():
         issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
         payment_method = request.form.get('payment_method', '')
         notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
         
         # 明細データ取得
         product_names = request.form.getlist('product_name[]')
@@ -32162,20 +32220,20 @@ def user_kaitori_shoudaku_add():
                 cur.execute('''
                     INSERT INTO user_kaitori_shoudaku 
                     (document_no, user_id, customer_name, customer_address, customer_phone, 
-                    issue_date, subtotal, total_amount, payment_method, notes)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    issue_date, subtotal, total_amount, payment_method, notes, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
-                      issue_date, subtotal, total_amount, payment_method, notes))
+                      issue_date, subtotal, total_amount, payment_method, notes, status))
                 kaitori_id = cur.fetchone()['id']
             else:
                 cur.execute('''
                     INSERT INTO user_kaitori_shoudaku 
                     (document_no, user_id, customer_name, customer_address, customer_phone, 
-                    issue_date, subtotal, total_amount, payment_method, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    issue_date, subtotal, total_amount, payment_method, notes, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (document_no, current_user.id, customer_name, customer_address, customer_phone,
-                      issue_date, subtotal, total_amount, payment_method, notes))
+                      issue_date, subtotal, total_amount, payment_method, notes, status))
                 kaitori_id = cur.lastrowid
             
             # 明細追加
@@ -32214,7 +32272,9 @@ def user_kaitori_shoudaku_add():
         conn.close()
         
         flash('買取承諾書を作成しました', 'success')
-        return redirect(url_for('user_kaitori_shoudaku_list'))
+        if status == 'draft':
+            return redirect(url_for('user_document_list'))
+        return redirect(url_for('documents') + '#document-history-tabs')
     
     # GETリクエスト
     cur.close()
@@ -32285,6 +32345,12 @@ def user_kaitori_shoudaku_edit(id):
         conn.close()
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('user_kaitori_shoudaku_list'))
+
+    if (kaitori.get('status') or 'draft') != 'draft':
+        cur.close()
+        conn.close()
+        flash('完了済みの買取承諾書は編集できません', 'error')
+        return redirect(url_for('documents') + '#document-history-tabs')
     
     if request.method == 'POST':
         customer_name = request.form.get('customer_name', '')
@@ -32293,6 +32359,7 @@ def user_kaitori_shoudaku_edit(id):
         issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
         payment_method = request.form.get('payment_method', '')
         notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
         
         # 明細データ取得
         product_names = request.form.getlist('product_name[]')
@@ -32319,10 +32386,10 @@ def user_kaitori_shoudaku_edit(id):
                 cur.execute('''
                     UPDATE user_kaitori_shoudaku 
                     SET customer_name = %s, customer_address = %s, customer_phone = %s, 
-                    issue_date = %s, subtotal = %s, total_amount = %s, payment_method = %s, notes = %s,
+                    issue_date = %s, subtotal = %s, total_amount = %s, payment_method = %s, notes = %s, status = %s,
                     updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
-                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
+                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, status, id))
                 
                 # 明細削除して再作成
                 cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s', (id,))
@@ -32330,10 +32397,10 @@ def user_kaitori_shoudaku_edit(id):
                 cur.execute('''
                     UPDATE user_kaitori_shoudaku 
                     SET customer_name = ?, customer_address = ?, customer_phone = ?, 
-                    issue_date = ?, subtotal = ?, total_amount = ?, payment_method = ?, notes = ?,
+                    issue_date = ?, subtotal = ?, total_amount = ?, payment_method = ?, notes = ?, status = ?,
                     updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, id))
+                ''', (customer_name, customer_address, customer_phone, issue_date, subtotal, total_amount, payment_method, notes, status, id))
                 
                 cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ?', (id,))
             
@@ -32373,7 +32440,9 @@ def user_kaitori_shoudaku_edit(id):
         conn.close()
         
         flash('買取承諾書を更新しました', 'success')
-        return redirect(url_for('user_kaitori_shoudaku_view', id=id))
+        if status == 'draft':
+            return redirect(url_for('user_document_list'))
+        return redirect(url_for('documents') + '#document-history-tabs')
     
     # GETリクエスト - 明細取得
     if DATABASE_URL:
@@ -33255,6 +33324,20 @@ def admin_inquiry_view(id):
             return redirect(url_for('admin_inquiries'))
         
         inquiry = dict(inquiry)
+        if inquiry.get('status') == 'new':
+            if DATABASE_URL:
+                cur.execute(
+                    "UPDATE inquiries SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    ('in_progress', id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE inquiries SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    ('in_progress', id)
+                )
+            conn.commit()
+            inquiry['status'] = 'in_progress'
+            inquiry['updated_at'] = get_jst_now().strftime('%Y-%m-%d %H:%M:%S')
         # datetime を文字列に変換
         if inquiry.get('created_at') and hasattr(inquiry['created_at'], 'strftime'):
             inquiry['created_at'] = inquiry['created_at'].strftime('%Y-%m-%d %H:%M:%S')

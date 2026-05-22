@@ -643,6 +643,22 @@
             color: #64748b;
             margin-bottom: 1.5rem;
         }
+
+        .participation-notice {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            color: #92400e;
+            text-align: center;
+        }
+
+        .participation-notice strong {
+            display: block;
+            margin-bottom: 0.25rem;
+            color: #78350f;
+        }
         
         .btn-login {
             display: inline-block;
@@ -1008,6 +1024,12 @@
             <a href="{{ url_for('profile') }}" class="btn-payment">決済情報を確認</a>
         </div>
         {% elif not auction_state.is_ended %}
+        {% if not can_participate_current_auction %}
+        <div class="participation-notice">
+            <strong>この募集は閲覧のみです</strong>
+            オークションごとの参加権限が付与されると、購入・入札ができるようになります。
+        </div>
+        {% endif %}
         <div class="contact-info">
             {% if settings.sale_mode == 'fixed' %}
             <h2>購入方法</h2>
@@ -1079,7 +1101,7 @@
                     
                     {% if auction_state.is_open and item.is_sold %}
                     <button class="btn-purchase sold" disabled>売り切れ</button>
-                    {% elif auction_state.is_open and current_user.is_authenticated and current_user.can_participate_auction() %}
+                    {% elif auction_state.is_open and current_user.is_authenticated and current_user.can_participate_auction() and can_participate_current_auction %}
                     <button class="btn-purchase" onclick="submitPurchase({{ item.id }}, this)" id="purchase-btn-{{ item.id }}">
                         🛒 購入する
                     </button>
@@ -1087,6 +1109,10 @@
                     {% elif auction_state.is_open and current_user.is_authenticated and current_user.is_payment_overdue() %}
                     <div class="bid-disabled">
                         <span>⚠️ 購入不可</span>
+                    </div>
+                    {% elif auction_state.is_open and current_user.is_authenticated and not can_participate_current_auction %}
+                    <div class="bid-disabled">
+                        <span>閲覧のみ</span>
                     </div>
                     {% elif auction_state.is_ended %}
                     <div class="bid-disabled">
@@ -1122,7 +1148,7 @@
                     <div class="bid-disabled">受付終了</div>
                     {% endif %}
                     
-                    {% if auction_state.is_open and not item.is_sold and current_user.is_authenticated and current_user.can_participate_auction() %}
+                    {% if auction_state.is_open and not item.is_sold and current_user.is_authenticated and current_user.can_participate_auction() and can_participate_current_auction %}
                     <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})">
                         <div class="bid-row">
                             {% if item.highest_bid %}
@@ -1137,6 +1163,10 @@
                     {% elif auction_state.is_open and current_user.is_authenticated and current_user.is_payment_overdue() %}
                     <div class="bid-disabled">
                         <span>⚠️ 入札不可</span>
+                    </div>
+                    {% elif auction_state.is_open and current_user.is_authenticated and not can_participate_current_auction %}
+                    <div class="bid-disabled">
+                        <span>閲覧のみ</span>
                     </div>
                     {% endif %}
                     {% endif %}
