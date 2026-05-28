@@ -201,7 +201,7 @@
         </div>
         <div class="document-preview-actions">
             <button type="button" class="btn btn-secondary" data-close-seisan-preview>修正する</button>
-            <button type="button" class="btn btn-primary" id="submit-seisan-preview-btn">保存して送信する</button>
+            <button type="button" class="btn btn-primary" id="submit-seisan-preview-btn">送信待機にする</button>
         </div>
     </div>
 </div>
@@ -902,7 +902,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const statusInput = document.createElement('input');
         statusInput.type = 'hidden';
         statusInput.name = 'status';
-        statusInput.value = 'sent';
+        statusInput.value = 'completed';
         form.appendChild(statusInput);
         form.submit();
     }

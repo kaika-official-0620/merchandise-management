@@ -262,6 +262,16 @@
     line-height: 1.7;
 }
 
+.item-source-warning {
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #fed7aa;
+    border-radius: 10px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
 .note-box,
 .action-box {
     display: grid;
@@ -283,6 +293,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.65rem;
+}
+
+.action-buttons .btn-approve,
+.action-buttons .btn-primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
 }
 
 .rollback-box {
@@ -342,12 +359,14 @@
                     <div class="meta-row">
                         <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
                         <span class="meta-chip">申請ID {{ req.id }}</span>
+                        <span class="meta-chip">{{ req.client_identifier }}</span>
                         <span class="meta-chip">商品 {{ req.merchandise_items|length }} 点</span>
                         {% if req.service_type == 'wholesale' %}
                         <span class="meta-chip">査定待ち {{ req.pending_appraisal_count }} 点</span>
                         {% endif %}
                     </div>
                     <div class="muted-text">申請日: {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</div>
+                    <div class="muted-text">申請者情報: {{ req.client_contact_label }}</div>
                     {% if req.processed_at %}
                     <div class="muted-text">最終更新: {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') }}{% if req.processor_name %} / 処理者: {{ req.processor_name }}{% endif %}</div>
                     {% endif %}
@@ -360,7 +379,7 @@
                     {% set timeline_statuses = [
                         ('pending', '承認待ち'),
                         ('approved', '認証済み'),
-                        ('appraising', '査定中'),
+                        ('appraising', '出品準備中' if req.service_type == 'simultaneous' else '査定中'),
                         ('inspecting', '検品中'),
                         ('completed', '処理完了')
                     ] %}
@@ -415,6 +434,9 @@
                             {% endif %}
                             {% if item.item_status_label %}
                             <div class="item-status {% if item.is_cancelled %}cancelled{% endif %}">{{ item.item_status_label }}</div>
+                            {% endif %}
+                            {% if item.source_item_warning %}
+                            <div class="item-source-warning">{{ item.source_item_warning }}</div>
                             {% endif %}
                             <div class="item-actions">
                                 {% if item.detail_url %}
@@ -491,7 +513,7 @@
                         <button type="button" class="btn btn-approve" onclick="processRequest('{{ req.id }}', 'approve')">認証済みにする</button>
                         {% endif %}
                         {% if 'appraising' in req.available_actions %}
-                        <button type="button" class="btn btn-primary" onclick="processRequest('{{ req.id }}', 'appraising')">査定中にする</button>
+                        <button type="button" class="btn btn-primary" onclick="processRequest('{{ req.id }}', 'appraising')">{{ '出品準備中にする' if req.service_type == 'simultaneous' else '査定中にする' }}</button>
                         {% endif %}
                         {% if 'inspect' in req.available_actions %}
                         <button type="button" class="btn btn-primary" onclick="processRequest('{{ req.id }}', 'inspect')">検品中にする</button>
@@ -518,7 +540,7 @@
                         <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_approved')">認証済みへ戻す</button>
                         {% endif %}
                         {% if 'revert_appraising' in req.rollback_actions %}
-                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_appraising')">査定中へ戻す</button>
+                        <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_appraising')">{{ '出品準備中へ戻す' if req.service_type == 'simultaneous' else '査定中へ戻す' }}</button>
                         {% endif %}
                         {% if 'revert_inspecting' in req.rollback_actions %}
                         <button type="button" class="btn btn-secondary" onclick="processRequest('{{ req.id }}', 'revert_inspecting')">検品中へ戻す</button>
@@ -541,13 +563,13 @@ function processRequest(requestId, action) {
     const adminNote = noteEl ? noteEl.value : '';
     const actionLabels = {
         approve: '認証済み',
-        appraising: '査定中',
+        appraising: '{{ "出品準備中" if req.service_type == "simultaneous" else "査定中" }}',
         inspect: '検品中',
         complete: '処理完了',
         reject: '却下申請',
         revert_pending: '承認待ち',
         revert_approved: '認証済み',
-        revert_appraising: '査定中',
+        revert_appraising: '{{ "出品準備中" if req.service_type == "simultaneous" else "査定中" }}',
         revert_inspecting: '検品中'
     };
 

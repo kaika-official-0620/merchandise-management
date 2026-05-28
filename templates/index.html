@@ -628,6 +628,14 @@
         background: #f1f1f1;
     }
 
+    .data-table tbody tr.row-completion-needed {
+        background: #fff1f3;
+    }
+
+    .data-table tbody tr.row-completion-needed:hover {
+        background: #ffe4e9;
+    }
+
     /* サムネイル */
     .table-thumb {
         width: 68px;
@@ -1344,6 +1352,11 @@
     .item-card.card-sold {
         background: #f8f8f8;
         opacity: 0.8;
+    }
+
+    .item-card.card-completion-needed {
+        background: #fff1f3;
+        border-color: #fecdd3;
     }
 
     .card-header {
@@ -2266,7 +2279,7 @@
             </thead>
             <tbody>
                 {% for item in items %}
-                <tr class="{% if item.sale_date %}row-sold{% endif %}" data-id="{{ item.id }}"
+                <tr class="{% if item.sale_date %}row-sold{% elif item.can_send_completion_report %}row-completion-needed{% endif %}" data-id="{{ item.id }}"
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
@@ -2485,7 +2498,7 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="item-card {% if item.sale_date %}card-sold{% endif %}" data-id="{{ item.id }}"
+        <div class="item-card {% if item.sale_date %}card-sold{% elif item.can_send_completion_report %}card-completion-needed{% endif %}" data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
@@ -3808,7 +3821,7 @@
     // キーボードナビゲーション
     document.addEventListener('keydown', function (e) {
         const lightbox = document.getElementById('itemLightbox');
-        if (!lightbox.classList.contains('active')) return;
+        if (!lightbox || !lightbox.classList.contains('active')) return;
 
         if (e.key === 'Escape') closeItemLightbox();
         if (e.key === 'ArrowLeft') itemLightboxPrev();
@@ -3816,12 +3829,15 @@
     });
 
     // ライトボックス外クリックで閉じる（横スクロール形式ではスクロールコンテナ外をクリック）
-    document.getElementById('itemLightbox').addEventListener('click', function (e) {
-        // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
-        if (e.target === this || e.target.classList.contains('item-lightbox-close')) {
-            closeItemLightbox();
-        }
-    });
+    const itemLightboxElement = document.getElementById('itemLightbox');
+    if (itemLightboxElement) {
+        itemLightboxElement.addEventListener('click', function (e) {
+            // ライトボックス本体または閉じるボタンをクリックした場合のみ閉じる
+            if (e.target === this || e.target.classList.contains('item-lightbox-close')) {
+                closeItemLightbox();
+            }
+        });
+    }
 
     // カードタップで詳細ページに移動（画像エリア以外）
     document.querySelectorAll('.mobile-cards .item-card').forEach(function (card) {
@@ -3970,7 +3986,10 @@
 
     function updateSelectedCount() {
         const checked = document.querySelectorAll('.sales-agency-checkbox:checked').length;
-        document.getElementById('selectedCount').textContent = checked;
+        const selectedCount = document.getElementById('selectedCount');
+        if (selectedCount) {
+            selectedCount.textContent = checked;
+        }
     }
 
     // チェックボックス変更時にカウント更新
@@ -3981,9 +4000,12 @@
     });
 
     // モーダル外クリックで閉じる
-    document.getElementById('salesAgencyModal').addEventListener('click', function (e) {
-        if (e.target === this) closeSalesAgencyModal();
-    });
+    const salesAgencyModalElement = document.getElementById('salesAgencyModal');
+    if (salesAgencyModalElement) {
+        salesAgencyModalElement.addEventListener('click', function (e) {
+            if (e.target === this) closeSalesAgencyModal();
+        });
+    }
 </script>
 
 <!-- 販売代行サービスモーダル -->

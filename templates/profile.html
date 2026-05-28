@@ -136,8 +136,10 @@
             
             <div class="form-group">
                 <label for="display_name">お名前（本名） <span class="required">*</span></label>
+                {% set profile_display_name_value = profile_user.display_name or current_user.display_name %}
                 <input type="text" id="display_name" name="display_name" 
-                       value="{{ profile_user.display_name or current_user.display_name }}" required>
+                       value="{% if is_placeholder_user_display_name(profile_display_name_value, current_user.username, current_user.role) %}{% else %}{{ profile_display_name_value }}{% endif %}"
+                       placeholder="例: 山田 太郎" required>
             </div>
             
             <div class="form-group">

@@ -325,7 +325,7 @@
             </div>
             <div class="nav-user" id="navUser">
                 <div class="user-menu-trigger" onclick="toggleUserMenu(event)">
-                    <span class="user-name">{{ current_user.display_name }}</span>
+                    <span class="user-name">{{ format_user_display_name(current_user.display_name, current_user.username, role=current_user.role) }}</span>
                     {% if current_user.is_owner() %}
                     <span class="user-badge owner">オーナー</span>
                     {% elif current_user.is_admin() %}
@@ -946,9 +946,13 @@
         background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         color: white;
         border: none;
+        border-radius: 0 !important;
     }
-    .btn-calculator:hover {
+    .btn-calculator:hover,
+    .btn-calculator:focus,
+    .btn-calculator:active {
         background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        border-radius: 0 !important;
     }
     
     /* 利益計算モーダル */

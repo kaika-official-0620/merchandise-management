@@ -24,6 +24,11 @@
             今すぐ公開する
         </button>
         {% endif %}
+        {% if auction_state.is_open %}
+        <button type="button" class="btn btn-danger" onclick="endAuctionNow()">
+            オークションを終了する
+        </button>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -1010,6 +1015,17 @@
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 1.5rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.auction-overview-card,
+.overview-main,
+.overview-copy,
+.settings-card,
+.items-card,
+.results-card {
+    min-width: 0;
 }
 
 .results-card {
@@ -1830,7 +1846,7 @@ details[open] .client-document-toggle {
 /* 商品グリッド */
 .proxy-items-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
 }
 
@@ -2023,7 +2039,7 @@ details[open] .client-document-toggle {
 
 @media (max-width: 768px) {
     .proxy-items-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
     }
 
     .results-header {
@@ -2728,6 +2744,31 @@ function startAuctionNow() {
     })
     .catch(() => {
         alert('公開処理中にエラーが発生しました');
+    });
+}
+
+function endAuctionNow() {
+    if (!confirm('このオークションを今すぐ終了しますか？\n\n終了後はユーザー側で入札・購入できなくなり、終了結果の処理へ進みます。')) {
+        return;
+    }
+
+    fetch(buildPreviewUrl('/admin/proxy-service/{{ auction_id }}/end-now'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'オークションを終了しました');
+            location.reload();
+        } else {
+            alert(data.error || '終了処理に失敗しました');
+        }
+    })
+    .catch(() => {
+        alert('終了処理中にエラーが発生しました');
     });
 }
 

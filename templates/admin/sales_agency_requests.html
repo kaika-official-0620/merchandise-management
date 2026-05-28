@@ -261,6 +261,14 @@
     font-weight: 700;
 }
 
+.request-item-warning {
+    margin-top: 0.25rem;
+    color: #b45309;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
 .request-meta {
     display: flex;
     flex-wrap: wrap;
@@ -418,6 +426,13 @@
     flex-wrap: wrap;
 }
 
+.action-buttons .btn-approve,
+.action-buttons .btn-primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
 .request-feedback {
     width: 100%;
     display: none;
@@ -537,7 +552,7 @@
             <div class="stat-card-value">{{ stats.approved }}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-card-label">査定中</div>
+            <div class="stat-card-label">{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</div>
             <div class="stat-card-value">{{ stats.appraising }}</div>
         </div>
         <div class="stat-card">
@@ -558,7 +573,7 @@
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">査定中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting') }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed') }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
@@ -567,12 +582,14 @@
     {% if requests %}
     <div class="requests-list">
         {% for req in requests %}
-        <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}">
+        <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}" data-service-type="{{ req.service_type }}">
                 <div class="request-header">
                 <div class="request-info">
                     <span class="request-user">{{ req.client_name }}</span>
+                    <span class="mini-badge">{{ req.client_identifier }}</span>
                     <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
                     <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
+                    <span class="request-date">{{ req.client_contact_label }}</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; justify-content: flex-end;">
                     <span class="status-badge {{ req.status }}" id="status-badge-{{ req.id }}">{{ req.status_label }}</span>
@@ -596,6 +613,9 @@
                             {% endif %}
                             {% if item.appraisal_status_label %}
                             <div class="request-item-status">{{ item.appraisal_status_label }}</div>
+                            {% endif %}
+                            {% if item.source_item_warning %}
+                            <div class="request-item-warning">{{ item.source_item_warning }}</div>
                             {% endif %}
                         </div>
                     </div>
@@ -621,7 +641,7 @@
                     {% set timeline_statuses = [
                         ('pending', '承認待ち'),
                         ('approved', '認証済み'),
-                        ('appraising', '査定中'),
+                        ('appraising', '出品準備中' if req.service_type == 'simultaneous' else '査定中'),
                         ('inspecting', '検品中'),
                         ('completed', '処理完了')
                     ] %}
@@ -693,7 +713,7 @@
                             <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'approve')">認証済みにする</button>
                             {% endif %}
                             {% if 'appraising' in req.available_actions %}
-                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">査定中にする</button>
+                            <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'appraising')">{{ '出品準備中にする' if req.service_type == 'simultaneous' else '査定中にする' }}</button>
                             {% endif %}
                             {% if 'inspect' in req.available_actions %}
                             <button type="button" class="btn btn-primary" onclick="processRequest({{ req.id }}, 'inspect')">検品中にする</button>
@@ -727,6 +747,18 @@ const salesAgencyActionLabels = {
     complete: '処理完了',
     reject: '却下申請'
 };
+
+function getSalesAgencyRequestServiceType(requestId) {
+    const card = document.getElementById(`request-${requestId}`);
+    return card ? (card.dataset.serviceType || '') : '';
+}
+
+function getSalesAgencyActionLabel(action, serviceType) {
+    if ((action === 'appraising' || action === 'revert_appraising') && serviceType === 'simultaneous') {
+        return '出品準備中';
+    }
+    return salesAgencyActionLabels[action] || action;
+}
 
 const salesAgencyActionButtons = {
     approve: { label: '認証済みにする', className: 'btn btn-approve' },
@@ -773,9 +805,14 @@ function renderActionButtons(requestId, availableActions) {
     }
 
     actionButtonsEl.innerHTML = availableActions.map((action) => {
-        const button = salesAgencyActionButtons[action];
-        if (!button) {
+        const serviceType = getSalesAgencyRequestServiceType(requestId);
+        const sourceButton = salesAgencyActionButtons[action];
+        if (!sourceButton) {
             return '';
+        }
+        const button = Object.assign({}, sourceButton);
+        if (action === 'appraising' && serviceType === 'simultaneous') {
+            button.label = '出品準備中にする';
         }
         return `<button type="button" class="${button.className}" onclick="processRequest(${requestId}, '${action}')">${button.label}</button>`;
     }).join('');
@@ -816,7 +853,7 @@ function updateProgress(requestId, status) {
 function processRequest(requestId, action) {
     const noteEl = document.getElementById(`note-${requestId}`);
     const adminNote = noteEl ? noteEl.value : '';
-    const actionText = salesAgencyActionLabels[action] || action;
+    const actionText = getSalesAgencyActionLabel(action, getSalesAgencyRequestServiceType(requestId));
 
     if (!confirm(`この申請を「${actionText}」へ変更しますか？`)) {
         return;

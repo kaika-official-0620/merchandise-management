@@ -178,6 +178,14 @@
     font-size: 0.8rem;
 }
 
+.request-item-warning {
+    margin-top: 0.25rem;
+    color: #b45309;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
 .admin-note {
     border-radius: 12px;
     background: #f8fafc;
@@ -254,7 +262,7 @@
                 <div class="guide-item-number">2</div>
                 <div>
                     <strong>開花側で業者確認中</strong>
-                    管理画面で認証済み・査定中・検品中へ進むたびに、この画面にも反映されます。必要な連絡がある場合は備考欄に表示されます。
+                    管理画面で認証済み・出品準備中/査定中・検品中へ進むたびに、この画面にも反映されます。必要な連絡がある場合は備考欄に表示されます。
                 </div>
             </div>
             <div class="guide-item">
@@ -276,7 +284,7 @@
                 <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                 <span class="request-date">対象 {{ req.request_items|length }} 点</span>
             </div>
-            <span class="status-badge {{ req.status }}">{{ statuses.get(req.status, req.status) }}</span>
+            <span class="status-badge {{ req.status }}">{{ req.client_status_label or statuses.get(req.status, req.status) }}</span>
         </div>
         <div class="request-body">
             <div class="request-items">
@@ -291,6 +299,9 @@
                         <div class="request-item-name">{{ item.product_name }}</div>
                         {% if item.brand_name %}
                         <div class="request-item-brand">{{ item.brand_name }}</div>
+                        {% endif %}
+                        {% if item.source_item_warning %}
+                        <div class="request-item-warning">{{ item.source_item_warning }}</div>
                         {% endif %}
                     </div>
                 </div>

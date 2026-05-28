@@ -1005,7 +1005,7 @@
 
         {% if current_user.is_authenticated %}
         <div class="user-info-bar">
-            <span class="user-name">ログイン中: {{ current_user.display_name or current_user.username }}</span>
+            <span class="user-name">ログイン中: {{ format_user_display_name(current_user.display_name, current_user.username, role=current_user.role) }}</span>
             <span class="budget-info">
                 {% if current_user.proxy_service_budget > 0 %}
                 利用可能残高: <strong>¥{{ "{:,}".format(current_user.get_proxy_service_remaining_budget() or 0) }}</strong>

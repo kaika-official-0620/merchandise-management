@@ -19,6 +19,13 @@ from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 
+os.environ.setdefault('TZ', 'Asia/Tokyo')
+try:
+    time.tzset()
+except AttributeError:
+    # Windows does not expose tzset; use get_jst_now() for application logic.
+    pass
+
 # Stripe連携
 try:
     import stripe
@@ -1835,7 +1842,7 @@ def get_proxy_service_auction_state(settings, now=None):
     sale_mode = settings_dict.get('sale_mode') or 'auction'
 
     is_not_started = bool(start_dt and now < start_dt)
-    is_ended = bool(end_dt and now > end_dt)
+    is_ended = bool(end_dt and now >= end_dt)
     is_open = is_public and not is_not_started and not is_ended
 
     if not is_public:
@@ -4065,7 +4072,12 @@ if DATABASE_URL:
             CREATE TABLE IF NOT EXISTS sales_agency_request_items (
                 id SERIAL PRIMARY KEY,
                 request_id INTEGER REFERENCES sales_agency_requests(id) ON DELETE CASCADE,
-                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                snapshot_product_name TEXT,
+                snapshot_brand_name TEXT,
+                snapshot_model_number TEXT,
+                snapshot_kaika_product_code TEXT,
+                snapshot_photo_path TEXT
             )
         ''')
         
@@ -5093,7 +5105,12 @@ else:
             CREATE TABLE IF NOT EXISTS sales_agency_request_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 request_id INTEGER REFERENCES sales_agency_requests(id) ON DELETE CASCADE,
-                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE
+                merchandise_id INTEGER REFERENCES merchandise(id) ON DELETE CASCADE,
+                snapshot_product_name TEXT,
+                snapshot_brand_name TEXT,
+                snapshot_model_number TEXT,
+                snapshot_kaika_product_code TEXT,
+                snapshot_photo_path TEXT
             )
         ''')
         
@@ -5556,77 +5573,6 @@ def resolve_default_proxy_auction_id(item_id=None):
                 pass
         print(f"[WARN] resolve_default_proxy_auction_id failed: {e}")
         return None, '掲載先オークションの判定中にエラーが発生しました'
-
-def get_user_record_by_username(username):
-    if not current_user.can_manage_proxy_service():
-        return get_proxy_publish_denied_response(json_response=True)
-
-    conn = get_db()
-    ensure_proxy_service_keisan_columns(conn)
-    now = get_jst_now()
-    try:
-        if DATABASE_URL:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
-
-        settings = proxy_service_row_to_dict(cur.fetchone())
-        cur.close()
-
-        if not settings:
-            conn.close()
-            return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
-
-        result_items, _, _ = annotate_proxy_service_items(
-            fetch_proxy_service_items(conn, auction_id),
-            settings,
-            now=now,
-        )
-        result_items, _, _ = decorate_proxy_service_result_items(conn, auction_id, result_items)
-        prepare_items = [item for item in result_items if item.get('can_prepare_keisan')]
-
-        if not prepare_items:
-            conn.close()
-            return jsonify({'success': True, 'message': '書類を作成できる商品はありません', 'prepared_count': 0})
-
-        created_doc_count = 0
-        prepared_count = 0
-        for item in prepare_items:
-            keisan_result = prepare_proxy_service_keisan_for_item(conn, item, now=now)
-            if keisan_result.get('created_doc'):
-                created_doc_count += 1
-            if keisan_result.get('item_added'):
-                prepared_count += 1
-
-        conn.commit()
-        conn.close()
-        return jsonify({
-            'success': True,
-            'message': f'{prepared_count}件の購入商品を書類へ追加しました',
-            'prepared_count': prepared_count,
-            'created_keisan_count': created_doc_count,
-        })
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': f'書類作成中にエラーが発生しました: {str(e)}'}), 500
-
-    conn = get_db()
-    ensure_proxy_service_auction_user_table(conn)
-    if DATABASE_URL:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
-    return user
 
 def get_user_record_by_username(username):
     conn = get_db()
@@ -6154,7 +6100,7 @@ def parse_announcement_datetime_value(value):
 
 
 def announcement_is_currently_active(record, now=None):
-    now = now or datetime.now()
+    now = now or get_jst_now()
     if not bool(record.get('is_active')):
         return False
 
@@ -6364,6 +6310,52 @@ def build_shipping_addresses_from_form(form, postal_code='', address=''):
     return shipping_addresses
 
 
+USER_DISPLAY_NAME_FALLBACK = 'ユーザー'
+ADMIN_DISPLAY_NAME_FALLBACK = '管理者'
+PLACEHOLDER_USER_DISPLAY_NAMES = {
+    '',
+    'マイ',
+    'my',
+    'My',
+    'MY',
+    '??',
+    '???',
+    '未設定',
+    'お名前未設定',
+    USER_DISPLAY_NAME_FALLBACK,
+}
+
+
+def get_display_name_fallback_for_role(role=None):
+    return ADMIN_DISPLAY_NAME_FALLBACK if (role or '').strip() in {'admin', 'owner'} else USER_DISPLAY_NAME_FALLBACK
+
+
+def is_placeholder_user_display_name(display_name, username=None, role=None):
+    display_name_value = (display_name or '').strip()
+    username_value = (username or '').strip()
+    role_fallback = get_display_name_fallback_for_role(role)
+    return (
+        not display_name_value
+        or display_name_value in PLACEHOLDER_USER_DISPLAY_NAMES
+        or display_name_value == role_fallback
+        or (username_value and display_name_value == username_value)
+    )
+
+
+def format_user_display_name(display_name, username=None, fallback=None, role=None):
+    """ヘッダーなどに表示するユーザー名。未設定・仮名は役割別の初期名に統一する。"""
+    resolved_fallback = fallback or get_display_name_fallback_for_role(role)
+    display_name_value = (display_name or '').strip()
+    if is_placeholder_user_display_name(display_name_value, username=username, role=role):
+        return resolved_fallback
+    return display_name_value
+
+
+app.jinja_env.globals['format_user_display_name'] = format_user_display_name
+app.jinja_env.globals['is_placeholder_user_display_name'] = is_placeholder_user_display_name
+app.jinja_env.globals['get_display_name_fallback_for_role'] = get_display_name_fallback_for_role
+
+
 def get_profile_missing_fields(user):
     """ホームで基本情報未登録を促すための不足項目"""
     checks = [
@@ -6376,7 +6368,10 @@ def get_profile_missing_fields(user):
     username = (getattr(user, 'username', '') or '').strip()
     missing = []
     for label, value in checks:
-        if not value or (label == 'お名前' and username and value == username):
+        if (
+            not value
+            or (label == 'お名前' and is_placeholder_user_display_name(value, username=username))
+        ):
             missing.append(label)
     return missing
 
@@ -6589,7 +6584,7 @@ def mark_announcements_read_for_user(user_id, announcement_ids):
     if not cleaned_ids:
         return 0
 
-    read_at = datetime.now()
+    read_at = get_jst_now()
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -6689,7 +6684,7 @@ def upsert_announcement_user_status(user_id, announcement_ids, hide_banner=False
     if not cleaned_ids:
         return 0
 
-    now = datetime.now()
+    now = get_jst_now()
     conn = get_db()
     cur = None
     try:
@@ -6775,7 +6770,7 @@ def get_visible_announcement_ids_for_user(user):
 def get_active_announcements(user=None, limit=None, for_banner=False):
     """アクティブなお知らせを取得"""
     conn = get_db()
-    now = datetime.now()
+    now = get_jst_now()
     query_limit = max(int(limit or 0), 20) if limit else 100
     
     if DATABASE_URL:
@@ -6879,6 +6874,84 @@ def serialize_announcement_payload(announcement):
         'publish_at': serialize_announcement_datetime(announcement.get('publish_at')),
         'created_at': serialize_announcement_datetime(announcement.get('created_at')),
     }
+
+
+def create_targeted_system_announcement(user_id, title, content, announcement_type='info', created_by=None):
+    """LINE未連携でもユーザー画面へ残せる個別のお知らせを作成する。"""
+    try:
+        target_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+    if target_user_id <= 0:
+        return None
+
+    ensure_announcement_targeting_schema()
+    ensure_announcement_delivery_schema()
+
+    now_value = get_jst_now()
+    recipient_user_ids = serialize_announcement_recipient_ids([target_user_id])
+    conn = get_db()
+    cur = None
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO announcements (
+                    title, content, announcement_type, is_active, publish_at,
+                    created_by, recipient_scope, recipient_user_ids
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    title,
+                    content,
+                    announcement_type or 'info',
+                    True,
+                    now_value,
+                    created_by,
+                    'selected',
+                    recipient_user_ids,
+                ),
+            )
+            row = cur.fetchone()
+            announcement_id = row[0] if row else None
+        else:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO announcements (
+                    title, content, announcement_type, is_active, publish_at,
+                    created_by, recipient_scope, recipient_user_ids
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    title,
+                    content,
+                    announcement_type or 'info',
+                    1,
+                    now_value.strftime('%Y-%m-%d %H:%M:%S'),
+                    created_by,
+                    'selected',
+                    recipient_user_ids,
+                ),
+            )
+            announcement_id = cur.lastrowid
+        conn.commit()
+        return announcement_id
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"[WARN] create_targeted_system_announcement failed: {e}", flush=True)
+        return None
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
 
 # データベース初期化
 init_db()
@@ -7156,6 +7229,9 @@ def profile():
         phone = (request.form.get('phone') or '').strip()
         postal_code = (request.form.get('postal_code') or '').strip()
         address = (request.form.get('address') or '').strip()
+        if is_placeholder_user_display_name(display_name, username=current_user.username, role=current_user.role):
+            flash('お名前（本名）を入力してください。右上の「ユーザー」は未設定時の仮表示です。', 'error')
+            return redirect(url_for('profile'))
         shipping_addresses = build_shipping_addresses_from_form(request.form, postal_code, address)
         shipping_addresses_json = json.dumps(shipping_addresses, ensure_ascii=False)
         try:
@@ -7522,7 +7598,7 @@ def index():
             params = [current_user.id]
     
     # フィルター
-    today = datetime.now().date()
+    today = get_jst_now().date()
     if filter_type == 'today':
         if DATABASE_URL:
             query += " AND purchase_date = %s"
@@ -7655,7 +7731,7 @@ def index():
             """, (current_user.id,))
 
     stats_rows = [dict(row) for row in cur.fetchall()]
-    period_today = datetime.now().date()
+    period_today = get_jst_now().date()
     current_month_start = period_today.replace(day=1)
     previous_month_end = current_month_start - timedelta(days=1)
     previous_month_start = previous_month_end.replace(day=1)
@@ -7805,7 +7881,10 @@ def index():
         # 最終更新者名を追加
         updated_by_id = item_dict.get('updated_by')
         if updated_by_id:
-            item_dict['updated_by_name'] = all_users.get(updated_by_id, '不明')
+            if current_user.is_admin() or current_user.is_owner():
+                item_dict['updated_by_name'] = all_users.get(updated_by_id, '不明')
+            else:
+                item_dict['updated_by_name'] = '開花運営'
         else:
             item_dict['updated_by_name'] = '-'
         
@@ -8254,12 +8333,12 @@ def get_report_available_years(rows):
             if value:
                 year_values.add(value.year)
     if not year_values:
-        year_values.add(datetime.now().year)
+        year_values.add(get_jst_now().year)
     return sorted(year_values, reverse=True)
 
 
 def build_report_year_slices(rows):
-    today = datetime.now().date()
+    today = get_jst_now().date()
     time_slices = []
     for year_value in get_report_available_years(rows):
         period_end = today if year_value == today.year else date(year_value, 12, 31)
@@ -8273,7 +8352,7 @@ def build_report_year_slices(rows):
 
 
 def build_report_time_slices(year, month=0):
-    today = datetime.now().date()
+    today = get_jst_now().date()
 
     if month in (None, 0):
         month_limit = 12 if year < today.year else today.month
@@ -12946,7 +13025,11 @@ def view_item(id):
             if request_row:
                 request_dict = dict(request_row)
                 request_dict['service_name'] = get_sales_agency_service_name(request_dict.get('service_type'))
-                request_dict['status_label'] = get_sales_agency_status_label(request_dict.get('status'), viewer='client')
+                request_dict['status_label'] = get_sales_agency_status_label(
+                    request_dict.get('status'),
+                    viewer='client',
+                    service_type=request_dict.get('service_type'),
+                )
                 item_dict['pending_sales_agency'] = True
                 item_dict['sales_agency_request'] = request_dict
         except Exception as e:
@@ -13304,6 +13387,141 @@ def delete_customer(id):
 # ===================
 # 管理者機能
 # ===================
+
+ADMIN_HOME_DEFAULT_SHORTCUT_IDS = ['items', 'user-products', 'documents', 'proxy-service', 'inquiries', 'analytics']
+ADMIN_HOME_SHORTCUT_IDS = {
+    'items',
+    'user-products',
+    'long-term',
+    'users',
+    'documents',
+    'document-history',
+    'proxy-service',
+    'inquiries',
+    'analytics',
+}
+
+
+def ensure_admin_shortcut_preferences_schema():
+    conn = get_db()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS admin_shortcut_preferences (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    shortcut_ids TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        else:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS admin_shortcut_preferences (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    shortcut_ids TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        conn.commit()
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+def normalize_admin_shortcut_ids(raw_ids):
+    normalized = []
+    for shortcut_id in raw_ids or []:
+        value = str(shortcut_id or '').strip()
+        if value in ADMIN_HOME_SHORTCUT_IDS and value not in normalized:
+            normalized.append(value)
+    return normalized
+
+
+def get_admin_home_shortcut_ids(user_id):
+    ensure_admin_shortcut_preferences_schema()
+    conn = get_db()
+    cur = None
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT shortcut_ids FROM admin_shortcut_preferences WHERE user_id = %s", (user_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT shortcut_ids FROM admin_shortcut_preferences WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return list(ADMIN_HOME_DEFAULT_SHORTCUT_IDS)
+        raw_value = row['shortcut_ids'] if isinstance(row, dict) else row[0]
+        try:
+            loaded = json.loads(raw_value or '[]')
+        except Exception:
+            loaded = []
+        return normalize_admin_shortcut_ids(loaded)
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+def save_admin_home_shortcut_ids(user_id, shortcut_ids):
+    ensure_admin_shortcut_preferences_schema()
+    normalized = normalize_admin_shortcut_ids(shortcut_ids)
+    serialized = json.dumps(normalized, ensure_ascii=False)
+    now_value = get_jst_now()
+    conn = get_db()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute(
+                """
+                INSERT INTO admin_shortcut_preferences (user_id, shortcut_ids, updated_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id)
+                DO UPDATE SET shortcut_ids = EXCLUDED.shortcut_ids, updated_at = EXCLUDED.updated_at
+                """,
+                (user_id, serialized, now_value),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO admin_shortcut_preferences (user_id, shortcut_ids, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id)
+                DO UPDATE SET shortcut_ids = excluded.shortcut_ids, updated_at = excluded.updated_at
+                """,
+                (user_id, serialized, now_value.strftime('%Y-%m-%d %H:%M:%S')),
+            )
+        conn.commit()
+        return normalized
+    finally:
+        if cur:
+            cur.close()
+        conn.close()
+
+
+@app.route('/api/admin/home-shortcuts', methods=['GET', 'POST'])
+@login_required
+def api_admin_home_shortcuts():
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    if request.method == 'GET':
+        return jsonify({'success': True, 'shortcut_ids': get_admin_home_shortcut_ids(current_user.id)})
+    data = request.get_json(silent=True) or {}
+    shortcut_ids = data.get('shortcut_ids')
+    if not isinstance(shortcut_ids, list):
+        return jsonify({'success': False, 'error': '表示項目を選択してください'}), 400
+    saved_ids = save_admin_home_shortcut_ids(current_user.id, shortcut_ids)
+    return jsonify({'success': True, 'shortcut_ids': saved_ids})
+
 
 @app.route('/admin')
 @app.route('/admin/home')
@@ -13928,6 +14146,7 @@ def admin_dashboard():
         user_summary=user_summary,
         monthly_overview=monthly_overview,
         recent_sales=recent_sales,
+        admin_shortcuts=get_admin_home_shortcut_ids(current_user.id),
     )
 
 @app.route('/admin/users')
@@ -16587,6 +16806,82 @@ def admin_proxy_service_start(auction_id):
             pass
         return jsonify({'success': False, 'error': '公開処理に失敗しました'}), 500
 
+@app.route('/admin/proxy-service/<int:auction_id>/end-now', methods=['POST'])
+@login_required
+def admin_proxy_service_end_now(auction_id):
+    """公開中の代行仕入れオークションを予定終了時刻前に締め切る"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        return jsonify({'success': False, 'error': '権限がありません'}), 403
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response(json_response=True)
+
+    conn = get_db()
+    now = get_jst_now()
+    end_datetime = normalize_proxy_service_datetime_input(now)
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = proxy_service_row_to_dict(cur.fetchone())
+            if not settings:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state['is_ended']:
+                cur.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'すでに終了済みです'})
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = %s,
+                    end_datetime = %s,
+                    updated_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (True, end_datetime, current_user.id, auction_id))
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            settings_row = cur.fetchone()
+            if not settings_row:
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': 'オークションが見つかりません'}), 404
+
+            settings = dict(settings_row)
+            auction_state = get_proxy_service_auction_state(settings, now=now)
+            if auction_state['is_ended']:
+                cur.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'すでに終了済みです'})
+
+            cur.execute("""
+                UPDATE proxy_service_settings
+                SET is_public = ?,
+                    end_datetime = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (1, end_datetime, current_user.id, auction_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'message': 'オークションを終了しました。以後の入札・購入はできません。'})
+    except Exception as e:
+        conn.rollback()
+        print(f"Proxy service end-now error: {e}")
+        traceback.print_exc()
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'error': '終了処理に失敗しました'}), 500
+
 @app.route('/admin/proxy-service/<int:auction_id>/visibility', methods=['POST'])
 @login_required
 def admin_proxy_service_visibility(auction_id):
@@ -17420,7 +17715,7 @@ def admin_proxy_service_finalize(auction_id):
                 """,
                 (winning_bid, winner_user_id),
             )
-            keisan_result = prepare_proxy_service_keisan_for_item(
+            keisan_result = create_proxy_service_reflected_item(
                 conn,
                 {
                     **item,
@@ -17431,11 +17726,12 @@ def admin_proxy_service_finalize(auction_id):
                     'result_price': winning_bid,
                     'sale_mode': 'auction',
                 },
+                current_user.id,
                 now=now,
             )
-            if keisan_result.get('created_doc'):
+            if keisan_result.get('keisan_created'):
                 prepared_doc_count += 1
-            if keisan_result.get('item_added'):
+            if keisan_result.get('keisan_item_added'):
                 prepared_item_count += 1
             finalized_count += 1
 
@@ -17498,7 +17794,7 @@ def admin_proxy_service_finalize(auction_id):
                 """,
                 (winning_bid, winner_user_id),
             )
-            keisan_result = prepare_proxy_service_keisan_for_item(
+            keisan_result = create_proxy_service_reflected_item(
                 conn,
                 {
                     **item,
@@ -17509,11 +17805,12 @@ def admin_proxy_service_finalize(auction_id):
                     'result_price': winning_bid,
                     'sale_mode': 'auction',
                 },
+                current_user.id,
                 now=now,
             )
-            if keisan_result.get('created_doc'):
+            if keisan_result.get('keisan_created'):
                 prepared_doc_count += 1
-            if keisan_result.get('item_added'):
+            if keisan_result.get('keisan_item_added'):
                 prepared_item_count += 1
             finalized_count += 1
 
@@ -17787,15 +18084,15 @@ def admin_proxy_service_reflect_item(auction_id, item_id):
             conn.close()
             return jsonify({'success': False, 'error': 'この商品はまだ書類へ追加できません'}), 400
 
-        keisan_result = prepare_proxy_service_keisan_for_item(conn, target_item, now=now)
+        keisan_result = create_proxy_service_reflected_item(conn, target_item, current_user.id, now=now)
         conn.commit()
         conn.close()
         return jsonify({
             'success': True,
             'message': f'{target_item.get("product_name") or "商品"} を書類へ追加しました',
             'keisan_id': keisan_result.get('keisan_id'),
-            'keisan_created': keisan_result.get('created_doc', False),
-            'keisan_item_added': keisan_result.get('item_added', False),
+            'keisan_created': keisan_result.get('keisan_created', False),
+            'keisan_item_added': keisan_result.get('keisan_item_added', False),
         })
     except Exception as e:
         conn.rollback()
@@ -19009,7 +19306,7 @@ def proxy_service_bid():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
-        if end_dt and now > end_dt:
+        if end_dt and now >= end_dt:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
@@ -19118,7 +19415,7 @@ def proxy_service_bid():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションはまだ開始されていません'}), 400
-        if end_dt and now > end_dt:
+        if end_dt and now >= end_dt:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'オークションは終了しました'}), 400
@@ -19179,7 +19476,7 @@ def proxy_service_bid():
             return jsonify({'success': False, 'error': 'この商品はすでに終了しています'}), 400
     
     if item_sold and keisan_source_item:
-        prepare_proxy_service_keisan_for_item(conn, keisan_source_item, now=now)
+        create_proxy_service_reflected_item(conn, keisan_source_item, current_user.id, now=now)
 
     conn.commit()
     cur.close()
@@ -19290,7 +19587,7 @@ def proxy_service_purchase():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '販売はまだ開始されていません'}), 400
-        if end_dt and now > end_dt:
+        if end_dt and now >= end_dt:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
@@ -19331,13 +19628,9 @@ def proxy_service_purchase():
             WHERE id = %s
         """, (purchase_price, user_id))
 
-        upsert_proxy_service_keisan_document(
+        create_proxy_service_reflected_item(
             conn,
-            auction_id=auction_id,
-            auction_name=settings.get('auction_name') or '代行仕入れサービス',
-            winner_user_id=user_id,
-            winner_name=buyer_name,
-            source_item={
+            {
                 **dict(item),
                 'auction_id': auction_id,
                 'auction_name': settings.get('auction_name') or '代行仕入れサービス',
@@ -19347,9 +19640,8 @@ def proxy_service_purchase():
                 'winner_name': buyer_name,
                 'result_price': purchase_price,
             },
-            amount=purchase_price,
+            current_user.id,
             now=now,
-            status='draft',
         )
         conn.commit()
         cur.close()
@@ -19486,7 +19778,7 @@ def proxy_service_purchase():
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '公開はまだ開始されていません'}), 400
-        if end_dt and now > end_dt:
+        if end_dt and now >= end_dt:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': '公開は終了しました'}), 400
@@ -19527,13 +19819,9 @@ def proxy_service_purchase():
             WHERE id = ?
         """, (purchase_price, user_id))
 
-        upsert_proxy_service_keisan_document(
+        create_proxy_service_reflected_item(
             conn,
-            auction_id=auction_id,
-            auction_name=(dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
-            winner_user_id=user_id,
-            winner_name=buyer_name,
-            source_item={
+            {
                 **item_dict,
                 'auction_id': auction_id,
                 'auction_name': (dict(row).get('auction_name') if row else None) or '代行仕入れサービス',
@@ -19543,9 +19831,8 @@ def proxy_service_purchase():
                 'winner_name': buyer_name,
                 'result_price': purchase_price,
             },
-            amount=purchase_price,
+            current_user.id,
             now=now,
-            status='draft',
         )
         conn.commit()
         cur.close()
@@ -27284,7 +27571,7 @@ def admin_kaitori_pdf(id):
 @admin_required
 def admin_seisan_list():
     """精算書一覧"""
-    return render_template('admin/seisan_list.html', seisan_list=[])
+    return redirect(url_for('admin_shikiriosho_list'))
 
 @app.route('/admin/seisan/add', methods=['GET', 'POST'])
 @login_required
@@ -27292,6 +27579,102 @@ def admin_seisan_list():
 def admin_seisan_add():
     """精算書作成"""
     conn = get_db()
+    if request.method == 'POST':
+        recipient_id = request.form.get('recipient_id')
+        issue_date = request.form.get('issue_date') or get_jst_now().strftime('%Y-%m-%d')
+        notes = request.form.get('notes', '')
+        status = request.form.get('status', 'draft')
+        if status == 'sent':
+            status = 'completed'
+
+        item_names = request.form.getlist('item_name[]')
+        sale_prices = request.form.getlist('sale_price[]')
+        commissions = request.form.getlist('commission[]')
+        shippings = request.form.getlist('shipping[]')
+        destinations = request.form.getlist('sales_destination[]')
+        merchandise_ids = request.form.getlist('merchandise_id[]')
+
+        items = []
+        total_amount = 0
+        for index, name in enumerate(item_names):
+            item_name = (name or '').strip()
+            if not item_name:
+                continue
+            sale_price = int(float(sale_prices[index] or 0)) if index < len(sale_prices) else 0
+            commission = int(float(commissions[index] or 0)) if index < len(commissions) else 0
+            shipping = int(float(shippings[index] or 0)) if index < len(shippings) else 0
+            payment_amount = max(sale_price - commission - shipping, 0)
+            total_amount += payment_amount
+            items.append({
+                'item_no': len(items) + 1,
+                'product_name': item_name,
+                'product_code': destinations[index] if index < len(destinations) else '',
+                'merchandise_id': int(merchandise_ids[index]) if index < len(merchandise_ids) and merchandise_ids[index] else None,
+                'amount': payment_amount,
+            })
+
+        if not recipient_id:
+            conn.close()
+            flash('宛先ユーザーを選択してください', 'error')
+            return redirect(url_for('admin_seisan_add'))
+        if not items:
+            conn.close()
+            flash('精算書に入れる明細を1件以上追加してください', 'error')
+            return redirect(url_for('admin_seisan_add'))
+
+        document_no = f"SS-{get_jst_now().strftime('%Y%m%d%H%M%S')}"
+        tax_rate = 10
+        tax_amount = int(total_amount * tax_rate / (100 + tax_rate))
+        try:
+            if DATABASE_URL:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT display_name, username FROM users WHERE id = %s", (recipient_id,))
+                user_row = cur.fetchone()
+                recipient_name = (user_row.get('display_name') or user_row.get('username')) if user_row else ''
+                cur.execute("""
+                    INSERT INTO shikiriosho
+                    (document_no, sender_id, recipient_id, recipient_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (document_no, current_user.id, recipient_id, recipient_name, issue_date, total_amount, tax_amount, total_amount, tax_rate, notes, status))
+                seisan_id = cur.fetchone()['id']
+                for item in items:
+                    cur.execute("""
+                        INSERT INTO shikiriosho_items
+                        (shikiriosho_id, item_no, product_name, product_code, merchandise_id, quantity, unit_price, amount)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (seisan_id, item['item_no'], item['product_name'], item['product_code'], item['merchandise_id'], 1, item['amount'], item['amount']))
+            else:
+                cur = conn.cursor()
+                cur.execute("SELECT display_name, username FROM users WHERE id = ?", (recipient_id,))
+                user_row = cur.fetchone()
+                user_dict = dict(user_row) if user_row else {}
+                recipient_name = user_dict.get('display_name') or user_dict.get('username') or ''
+                cur.execute("""
+                    INSERT INTO shikiriosho
+                    (document_no, sender_id, recipient_id, recipient_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, notes, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (document_no, current_user.id, recipient_id, recipient_name, issue_date, total_amount, tax_amount, total_amount, tax_rate, notes, status))
+                seisan_id = cur.lastrowid
+                for item in items:
+                    cur.execute("""
+                        INSERT INTO shikiriosho_items
+                        (shikiriosho_id, item_no, product_name, product_code, merchandise_id, quantity, unit_price, amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (seisan_id, item['item_no'], item['product_name'], item['product_code'], item['merchandise_id'], 1, item['amount'], item['amount']))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('精算書を送信待機にしました' if status == 'completed' else '精算書を下書き保存しました', 'success')
+            return redirect(url_for('admin_shikiriosho_list'))
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            print(f"admin_seisan_add error: {e}", flush=True)
+            traceback.print_exc()
+            flash('精算書の保存に失敗しました。入力内容を確認してください。', 'error')
+            return redirect(url_for('admin_seisan_add'))
+
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT id, username, display_name FROM users ORDER BY display_name")
@@ -27303,9 +27686,8 @@ def admin_seisan_add():
     cur.close()
     conn.close()
     
-    from datetime import datetime
-    today = datetime.now().strftime('%Y-%m-%d')
-    document_no = f"SS-{datetime.now().strftime('%Y%m%d')}-001"
+    today = get_jst_now().strftime('%Y-%m-%d')
+    document_no = f"SS-{get_jst_now().strftime('%Y%m%d')}-001"
     
     return render_template('admin/seisan_form.html', 
         seisan=None, 
@@ -29557,6 +29939,7 @@ def submit_disposal_request():
     
     conn = get_db()
     cur = conn.cursor()
+    now = get_jst_now()
     
     try:
         for merchandise_id in merchandise_ids:
@@ -30270,22 +30653,24 @@ def process_disposal_request(request_id):
             if DATABASE_URL:
                 cur.execute("""
                     UPDATE merchandise 
-                    SET sale_date = CURRENT_DATE,
+                    SET sale_date = %s,
                         sale_type = %s
                     WHERE id = %s 
                       AND sale_date IS NULL
                 """, (
+                    now.date(),
                     'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
                     merchandise_id,
                 ))
             else:
                 cur.execute("""
                     UPDATE merchandise 
-                    SET sale_date = DATE('now'),
+                    SET sale_date = ?,
                         sale_type = ?
                     WHERE id = ? 
                       AND sale_date IS NULL
                 """, (
+                    now.strftime('%Y-%m-%d'),
                     'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
                     merchandise_id,
                 ))
@@ -30571,6 +30956,9 @@ def get_long_term_request_status_context(disposal_type, status, sale_date=None):
         '申請内容を確認して次の対応を進めてください'
     )
 
+    if resolved_status in {'auction_sold', 'shipping_sent', 'liquidation_completed', 'closed'}:
+        next_action_label = '対応完了済みです'
+
     return {
         'status_value': resolved_status,
         'status_label': status_label,
@@ -30599,9 +30987,6 @@ def get_long_term_request_action_context(disposal_type, status, sale_date=None):
         if sale_date:
             context['show_sale_entry'] = True
             context['sale_entry_label'] = '販売結果を確認'
-            context['finish_action'] = 'closed'
-            context['finish_action_label'] = '終了する'
-            context['finish_confirm_message'] = '販売結果を確認済みなら、この長期保存対応を終了して一覧から外しますか？'
             context['allow_reject'] = False
             return context
         if resolved_status == 'pending':
@@ -30621,11 +31006,12 @@ def get_long_term_request_action_context(disposal_type, status, sale_date=None):
             context['secondary_action'] = 'shipping_sent'
             context['secondary_action_label'] = '郵送済みにする'
             context['secondary_confirm_message'] = 'この申請を郵送済みに更新しますか？'
-        elif resolved_status == 'shipping_sent':
-            context['finish_action'] = 'closed'
-            context['finish_action_label'] = '終了する'
-            context['finish_confirm_message'] = '郵送対応の確認が取れたので、この長期保存対応を終了して一覧から外しますか？'
         else:
+            context['allow_reject'] = False
+        if resolved_status == 'shipping_sent':
+            context['finish_action'] = None
+            context['finish_action_label'] = None
+            context['finish_confirm_message'] = None
             context['allow_reject'] = False
         return context
 
@@ -30638,11 +31024,12 @@ def get_long_term_request_action_context(disposal_type, status, sale_date=None):
             context['secondary_action'] = 'liquidation_completed'
             context['secondary_action_label'] = '処分完了にする'
             context['secondary_confirm_message'] = 'この申請を処分完了に更新しますか？'
-        elif resolved_status == 'liquidation_completed':
-            context['finish_action'] = 'closed'
-            context['finish_action_label'] = '終了する'
-            context['finish_confirm_message'] = '処分対応の確認が取れたので、この長期保存対応を終了して一覧から外しますか？'
         else:
+            context['allow_reject'] = False
+        if resolved_status == 'liquidation_completed':
+            context['finish_action'] = None
+            context['finish_action_label'] = None
+            context['finish_confirm_message'] = None
             context['allow_reject'] = False
         return context
 
@@ -30924,6 +31311,7 @@ def get_long_term_request_map(conn, merchandise_ids):
                    shipping_name, shipping_phone, admin_note, created_at, processed_at
             FROM item_disposal_requests
             WHERE reason = 'long_term'
+              AND COALESCE(status, '') NOT IN ('rejected', 'closed')
               AND merchandise_id IN ({placeholders})
             ORDER BY merchandise_id ASC,
                      created_at DESC,
@@ -30939,6 +31327,7 @@ def get_long_term_request_map(conn, merchandise_ids):
                    shipping_name, shipping_phone, admin_note, created_at, processed_at
             FROM item_disposal_requests
             WHERE reason = 'long_term'
+              AND COALESCE(status, '') NOT IN ('rejected', 'closed')
               AND merchandise_id IN ({placeholders})
             ORDER BY merchandise_id ASC,
                      datetime(created_at) DESC,
@@ -33137,8 +33526,8 @@ def inquiry_reply(id):
             VALUES (%s, %s, %s, FALSE)
         ''', (id, current_user.id, content))
         
-        # 問い合わせの更新日時を更新
-        cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = %s', (id,))
+        # クライアントから再返信が入ったら、管理者側で新着として扱う
+        cur.execute("UPDATE inquiries SET status = 'new', updated_at = CURRENT_TIMESTAMP WHERE id = %s AND status != 'closed'", (id,))
     else:
         cur = conn.cursor()
         cur.execute('SELECT * FROM inquiries WHERE id = ? AND user_id = ?', (id, current_user.id))
@@ -33155,7 +33544,7 @@ def inquiry_reply(id):
             VALUES (?, ?, ?, 0)
         ''', (id, current_user.id, content))
         
-        cur.execute('UPDATE inquiries SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (id,))
+        cur.execute("UPDATE inquiries SET status = 'new', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'closed'", (id,))
     
     conn.commit()
     cur.close()
@@ -34997,7 +35386,7 @@ SALES_AGENCY_STATUS_CLIENT = {
     'approved': '認証済み',
     'appraising': '査定中',
     'inspecting': '検品中',
-    'completed': '査定済み',
+    'completed': '売却済み',
     'rejected': '却下申請'
 }
 
@@ -35136,9 +35525,13 @@ def sales_agency_format_datetime(value):
     return str(value)
 
 
-def get_sales_agency_status_label(status, viewer='admin'):
+def get_sales_agency_status_label(status, viewer='admin', service_type=None):
+    normalized_status = (status or '').strip()
+    normalized_service = (service_type or '').strip()
+    if normalized_service == 'simultaneous' and normalized_status == 'appraising':
+        return '出品準備中'
     status_map = SALES_AGENCY_STATUS_CLIENT if viewer == 'client' else SALES_AGENCY_STATUS
-    return status_map.get((status or '').strip(), status or '')
+    return status_map.get(normalized_status, status or '')
 
 
 def get_sales_agency_service_name(service_type):
@@ -35175,6 +35568,86 @@ def sales_agency_column_exists(cur, table_name, column_name):
         return False
 
 
+SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS = [
+    ('product_name', 'snapshot_product_name'),
+    ('brand_name', 'snapshot_brand_name'),
+    ('model_number', 'snapshot_model_number'),
+    ('kaika_product_code', 'snapshot_kaika_product_code'),
+    ('photo_path', 'snapshot_photo_path'),
+]
+
+
+def sales_agency_row_value(row, key, column_names=None):
+    if row is None:
+        return None
+    try:
+        if isinstance(row, dict):
+            return row.get(key)
+        if hasattr(row, 'keys') and key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    if column_names and key in column_names:
+        try:
+            return row[column_names.index(key)]
+        except Exception:
+            return None
+    return None
+
+
+def fetch_sales_agency_selected_merchandise_snapshots(cur, user_id, merchandise_ids):
+    if not merchandise_ids:
+        return {}
+    placeholder = sales_agency_placeholder()
+    id_placeholders = ','.join([placeholder] * len(merchandise_ids))
+    available_columns = [
+        source_column
+        for source_column, _snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS
+        if sales_agency_column_exists(cur, 'merchandise', source_column)
+    ]
+    select_columns = ['id'] + available_columns
+    cur.execute(
+        f"""
+        SELECT {', '.join(select_columns)}
+        FROM merchandise
+        WHERE user_id = {placeholder}
+          AND sale_date IS NULL
+          AND id IN ({id_placeholders})
+        """,
+        tuple([user_id] + merchandise_ids),
+    )
+    rows = cur.fetchall()
+    column_names = [desc[0] for desc in (cur.description or [])]
+    snapshots = {}
+    for row in rows:
+        merchandise_id = sales_agency_row_value(row, 'id', column_names)
+        if merchandise_id is None:
+            continue
+        snapshots[int(merchandise_id)] = {
+            column_name: sales_agency_row_value(row, column_name, column_names)
+            for column_name in select_columns
+        }
+    return snapshots
+
+
+def insert_sales_agency_request_item_with_snapshot(cur, request_id, merchandise_id, snapshot_row):
+    placeholder = sales_agency_placeholder()
+    insert_columns = ['request_id', 'merchandise_id']
+    insert_values = [request_id, merchandise_id]
+    for source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS:
+        if not sales_agency_column_exists(cur, 'sales_agency_request_items', snapshot_column):
+            continue
+        insert_columns.append(snapshot_column)
+        insert_values.append((snapshot_row or {}).get(source_column))
+    cur.execute(
+        f"""
+        INSERT INTO sales_agency_request_items ({', '.join(insert_columns)})
+        VALUES ({', '.join([placeholder] * len(insert_columns))})
+        """,
+        tuple(insert_values),
+    )
+
+
 def fetch_sales_agency_request_details(request_id, viewer='admin'):
     conn, cur = sales_agency_open_cursor()
     try:
@@ -35182,6 +35655,7 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         cur.execute(
             f'''
             SELECT sar.*, u.display_name AS user_name, u.username,
+                   u.email AS user_email, u.phone AS user_phone,
                    p.display_name AS processor_name
             FROM sales_agency_requests sar
             JOIN users u ON sar.user_id = u.id
@@ -35222,8 +35696,17 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         request_row['processed_at'] = sales_agency_format_datetime(request_row.get('processed_at'))
         request_row['service_name'] = get_sales_agency_service_name(request_row.get('service_type'))
         request_row['client_name'] = request_row.get('user_name') or request_row.get('username') or '未設定ユーザー'
-        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer=viewer)
-        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client')
+        request_row['client_identifier'] = f"ユーザーID {request_row.get('user_id') or '-'}"
+        contact_parts = []
+        if request_row.get('username'):
+            contact_parts.append(f"ログインID: {request_row.get('username')}")
+        if request_row.get('user_email'):
+            contact_parts.append(f"メール: {request_row.get('user_email')}")
+        if request_row.get('user_phone'):
+            contact_parts.append(f"電話: {request_row.get('user_phone')}")
+        request_row['client_contact_label'] = ' / '.join(contact_parts) if contact_parts else '連絡先未登録'
+        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer=viewer, service_type=request_row.get('service_type'))
+        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client', service_type=request_row.get('service_type'))
         request_row['pending_appraisal_count'] = waiting_count
         request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
         request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
@@ -35268,19 +35751,13 @@ def sales_agency_apply():
         return redirect(next_url)
     
     try:
+        _ensure_sales_agency_document_columns()
         conn = get_db()
         print(f"[DEBUG] sales_agency_apply: got DB connection, DATABASE_URL is set: {DATABASE_URL is not None}", flush=True)
         if DATABASE_URL:
             cur = conn.cursor()
-            placeholders = ','.join(['%s'] * len(merchandise_ids))
-            cur.execute(f"""
-                SELECT id
-                FROM merchandise
-                WHERE user_id = %s
-                  AND sale_date IS NULL
-                  AND id IN ({placeholders})
-            """, [current_user.id] + merchandise_ids)
-            valid_ids = {row[0] for row in cur.fetchall()}
+            merchandise_snapshots = fetch_sales_agency_selected_merchandise_snapshots(cur, current_user.id, merchandise_ids)
+            valid_ids = set(merchandise_snapshots.keys())
             if valid_ids != set(merchandise_ids):
                 cur.close()
                 conn.close()
@@ -35300,21 +35777,16 @@ def sales_agency_apply():
             # 商品を紐付け
             for m_id in merchandise_ids:
                 print(f"[DEBUG] sales_agency_apply: inserting item request_id={request_id}, merchandise_id={m_id}", flush=True)
-                cur.execute('''
-                    INSERT INTO sales_agency_request_items (request_id, merchandise_id)
-                    VALUES (%s, %s)
-                ''', (request_id, m_id))
+                insert_sales_agency_request_item_with_snapshot(
+                    cur,
+                    request_id,
+                    m_id,
+                    merchandise_snapshots.get(m_id),
+                )
         else:
             cur = conn.cursor()
-            placeholders = ','.join(['?'] * len(merchandise_ids))
-            cur.execute(f"""
-                SELECT id
-                FROM merchandise
-                WHERE user_id = ?
-                  AND sale_date IS NULL
-                  AND id IN ({placeholders})
-            """, [current_user.id] + merchandise_ids)
-            valid_ids = {row[0] for row in cur.fetchall()}
+            merchandise_snapshots = fetch_sales_agency_selected_merchandise_snapshots(cur, current_user.id, merchandise_ids)
+            valid_ids = set(merchandise_snapshots.keys())
             if valid_ids != set(merchandise_ids):
                 cur.close()
                 conn.close()
@@ -35327,10 +35799,12 @@ def sales_agency_apply():
             request_id = cur.lastrowid
             
             for m_id in merchandise_ids:
-                cur.execute('''
-                    INSERT INTO sales_agency_request_items (request_id, merchandise_id)
-                    VALUES (?, ?)
-                ''', (request_id, m_id))
+                insert_sales_agency_request_item_with_snapshot(
+                    cur,
+                    request_id,
+                    m_id,
+                    merchandise_snapshots.get(m_id),
+                )
         
         conn.commit()
         print(f"[DEBUG] sales_agency_apply: request_id={request_id} created successfully", flush=True)
@@ -35588,7 +36062,7 @@ def admin_sales_agency_process(id):
             return jsonify({'success': False, 'error': '現在の状態ではこの変更はできません'}), 400
 
         new_status = SALES_AGENCY_ACTION_TO_STATUS[action]
-        now = datetime.now()
+        now = get_jst_now()
         processed_value = now if DATABASE_URL else now.strftime('%Y-%m-%d %H:%M:%S')
 
         cur.execute(
@@ -35635,6 +36109,62 @@ def admin_sales_agency_process(id):
                     tuple(update_params + [id]),
                 )
 
+        merchandise_sale_date_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_date')
+        merchandise_sale_type_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_type')
+        if new_status == 'completed' and merchandise_sale_date_exists:
+            set_clauses = [f"sale_date = {placeholder}"]
+            update_params = [now.date()]
+            if merchandise_sale_type_exists:
+                set_clauses.append(f"sale_type = {placeholder}")
+                update_params.append(f"sales_agency_{req.get('service_type') or 'request'}")
+            if sales_agency_column_exists(cur, 'merchandise', 'is_listed'):
+                set_clauses.append(f"is_listed = {placeholder}")
+                update_params.append(False if DATABASE_URL else 0)
+            if sales_agency_column_exists(cur, 'merchandise', 'updated_at'):
+                set_clauses.append('updated_at = CURRENT_TIMESTAMP')
+            if sales_agency_column_exists(cur, 'merchandise', 'updated_by'):
+                set_clauses.append(f"updated_by = {placeholder}")
+                update_params.append(current_user.id)
+
+            cur.execute(
+                f'''
+                UPDATE merchandise
+                SET {', '.join(set_clauses)}
+                WHERE id IN (
+                    SELECT merchandise_id
+                    FROM sales_agency_request_items
+                    WHERE request_id = {placeholder}
+                )
+                ''',
+                tuple(update_params + [id]),
+            )
+        elif current_status == 'completed' and new_status != 'completed' and merchandise_sale_date_exists:
+            set_clauses = ["sale_date = NULL"]
+            update_params = []
+            if merchandise_sale_type_exists:
+                set_clauses.append("sale_type = NULL")
+            if sales_agency_column_exists(cur, 'merchandise', 'updated_at'):
+                set_clauses.append('updated_at = CURRENT_TIMESTAMP')
+            if sales_agency_column_exists(cur, 'merchandise', 'updated_by'):
+                set_clauses.append(f"updated_by = {placeholder}")
+                update_params.append(current_user.id)
+
+            sale_type_guard = ""
+            if merchandise_sale_type_exists:
+                sale_type_guard = " AND (sale_type IS NULL OR sale_type LIKE 'sales_agency_%')"
+            cur.execute(
+                f'''
+                UPDATE merchandise
+                SET {', '.join(set_clauses)}
+                WHERE id IN (
+                    SELECT merchandise_id
+                    FROM sales_agency_request_items
+                    WHERE request_id = {placeholder}
+                ){sale_type_guard}
+                ''',
+                tuple(update_params + [id]),
+            )
+
         cur.execute(f'SELECT * FROM users WHERE id = {placeholder}', (req['user_id'],))
         user = sales_agency_row_to_dict(cur.fetchone())
         conn.commit()
@@ -35644,7 +36174,7 @@ def admin_sales_agency_process(id):
         if user and user.get('line_user_id'):
             try:
                 service_name = get_sales_agency_service_name(req.get('service_type'))
-                status_text = get_sales_agency_status_label(new_status, viewer='client')
+                status_text = get_sales_agency_status_label(new_status, viewer='client', service_type=req.get('service_type'))
                 message = f"【販売代行申請状況】\n{service_name}の申請状況が「{status_text}」に更新されました。"
                 if admin_note:
                     message += f"\n\n備考: {admin_note}"
@@ -35652,17 +36182,40 @@ def admin_sales_agency_process(id):
             except Exception as notify_error:
                 print(f"Sales agency LINE notify error: {notify_error}", flush=True)
 
+        try:
+            service_name = get_sales_agency_service_name(req.get('service_type'))
+            status_text = get_sales_agency_status_label(new_status, viewer='client', service_type=req.get('service_type'))
+            notice_lines = [
+                f"{service_name}の申請状況が「{status_text}」に更新されました。",
+                f"申請ID: {id}",
+            ]
+            if admin_note:
+                notice_lines.append(f"開花からの連絡: {admin_note}")
+            create_targeted_system_announcement(
+                req.get('user_id'),
+                '販売代行申請の進行状況が更新されました',
+                '\n'.join(notice_lines),
+                announcement_type='info',
+                created_by=current_user.id,
+            )
+        except Exception as announcement_error:
+            print(f"Sales agency in-app notice error: {announcement_error}", flush=True)
+
         return jsonify(
             {
                 'success': True,
                 'status': new_status,
-                'status_label': get_sales_agency_status_label(new_status, viewer='admin'),
-                'client_status_label': get_sales_agency_status_label(new_status, viewer='client'),
+                'status_label': get_sales_agency_status_label(new_status, viewer='admin', service_type=req.get('service_type')),
+                'client_status_label': get_sales_agency_status_label(new_status, viewer='client', service_type=req.get('service_type')),
                 'available_actions': SALES_AGENCY_AVAILABLE_ACTIONS.get(new_status, []),
                 'rollback_actions': SALES_AGENCY_ROLLBACK_ACTIONS.get(new_status, []),
                 'processed_at': sales_agency_format_datetime(processed_value),
                 'admin_note': admin_note,
-                'action_label': SALES_AGENCY_ACTION_LABELS.get(action, action),
+                'action_label': (
+                    '出品準備中'
+                    if req.get('service_type') == 'simultaneous' and action in {'appraising', 'revert_appraising'}
+                    else SALES_AGENCY_ACTION_LABELS.get(action, action)
+                ),
             }
         )
     except Exception as e:
@@ -37847,7 +38400,7 @@ def admin_documents_dashboard_preview():
             "service_type": request_row.get("service_type") or "",
             "service_name": request_row.get("service_name") or "",
             "status": request_row.get("status") or "",
-            "status_label": get_sales_agency_status_label(request_row.get("status"), viewer="admin"),
+            "status_label": get_sales_agency_status_label(request_row.get("status"), viewer="admin", service_type=service_type),
             "detail_url": url_for("admin_sales_agency_request_detail", id=request_id),
             "document_flow_label": group_meta[stage_key]["flow_label"],
             "request_flow_label": group_meta[stage_key]["stage_title"],
@@ -38448,6 +39001,11 @@ def _ensure_sales_agency_document_columns():
         ("canceled_at", "ALTER TABLE sales_agency_request_items ADD COLUMN canceled_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN canceled_at TEXT"),
         ("canceled_by", "ALTER TABLE sales_agency_request_items ADD COLUMN canceled_by INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN canceled_by INTEGER"),
         ("cancel_reason", "ALTER TABLE sales_agency_request_items ADD COLUMN cancel_reason TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN cancel_reason TEXT"),
+        ("snapshot_product_name", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_product_name TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_product_name TEXT"),
+        ("snapshot_brand_name", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_brand_name TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_brand_name TEXT"),
+        ("snapshot_model_number", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_model_number TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_model_number TEXT"),
+        ("snapshot_kaika_product_code", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_kaika_product_code TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_kaika_product_code TEXT"),
+        ("snapshot_photo_path", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_photo_path TEXT", "ALTER TABLE sales_agency_request_items ADD COLUMN snapshot_photo_path TEXT"),
     ]
     conn, cur = _docs_open_cursor()
     try:
@@ -38529,6 +39087,7 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         cur.execute(
             f'''
             SELECT sar.*, u.display_name AS user_name, u.username,
+                   u.email AS user_email, u.phone AS user_phone,
                    p.display_name AS processor_name
             FROM sales_agency_requests sar
             JOIN users u ON sar.user_id = u.id
@@ -38546,6 +39105,10 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         canceled_at_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_at')
         canceled_by_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_by')
         cancel_reason_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'cancel_reason')
+        snapshot_column_exists = {
+            snapshot_column: sales_agency_column_exists(cur, 'sales_agency_request_items', snapshot_column)
+            for _source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS
+        }
 
         select_columns = [
             "sari.id AS request_item_id",
@@ -38556,6 +39119,12 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         select_columns.append("sari.canceled_at AS canceled_at" if canceled_at_exists else "NULL AS canceled_at")
         select_columns.append("sari.canceled_by AS canceled_by" if canceled_by_exists else "NULL AS canceled_by")
         select_columns.append("sari.cancel_reason AS cancel_reason" if cancel_reason_exists else "NULL AS cancel_reason")
+        for _source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS:
+            select_columns.append(
+                f"sari.{snapshot_column} AS {snapshot_column}"
+                if snapshot_column_exists.get(snapshot_column)
+                else f"NULL AS {snapshot_column}"
+            )
 
         cur.execute(
             f'''
@@ -38578,6 +39147,13 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
             actual_merchandise_id = item.get('id')
             merchandise_id = actual_merchandise_id or item.get('request_merchandise_id')
             item['id'] = merchandise_id
+            item['is_missing_source_item'] = actual_merchandise_id is None
+            has_snapshot_info = False
+            for source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS:
+                if not item.get(source_column) and item.get(snapshot_column):
+                    item[source_column] = item.get(snapshot_column)
+                if item.get(snapshot_column):
+                    has_snapshot_info = True
             if not item.get('product_name'):
                 fallback_parts = [
                     item.get('brand_name'),
@@ -38585,9 +39161,14 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
                     item.get('kaika_product_code'),
                 ]
                 fallback_name = " / ".join(str(part).strip() for part in fallback_parts if str(part or "").strip())
-                item['product_name'] = fallback_name or f"商品名未登録（商品ID {merchandise_id or item.get('request_merchandise_id') or '-'}）"
+                item['product_name'] = fallback_name or f"商品データ削除済み（元商品ID {merchandise_id or item.get('request_merchandise_id') or '-'}）"
             if not item.get('brand_name'):
                 item['brand_name'] = ''
+            if item['is_missing_source_item']:
+                if has_snapshot_info:
+                    item['source_item_warning'] = '元の商品データが削除または未同期です。申請時の控え情報で表示しています。'
+                else:
+                    item['source_item_warning'] = '元の商品データが削除または未同期です。控え情報がないため元商品IDで表示しています。'
             item['detail_url'] = url_for('view_item', id=actual_merchandise_id) if actual_merchandise_id else None
             item['request_item_id'] = item.get('request_item_id')
             item['is_cancelled'] = item_status == 'cancelled'
@@ -38609,8 +39190,17 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         request_row['processed_at'] = sales_agency_format_datetime(request_row.get('processed_at'))
         request_row['service_name'] = get_sales_agency_service_name(request_row.get('service_type'))
         request_row['client_name'] = request_row.get('user_name') or request_row.get('username') or '未設定ユーザー'
-        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer=viewer)
-        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client')
+        request_row['client_identifier'] = f"ユーザーID {request_row.get('user_id') or '-'}"
+        contact_parts = []
+        if request_row.get('username'):
+            contact_parts.append(f"ログインID: {request_row.get('username')}")
+        if request_row.get('user_email'):
+            contact_parts.append(f"メール: {request_row.get('user_email')}")
+        if request_row.get('user_phone'):
+            contact_parts.append(f"電話: {request_row.get('user_phone')}")
+        request_row['client_contact_label'] = ' / '.join(contact_parts) if contact_parts else '連絡先未登録'
+        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer=viewer, service_type=request_row.get('service_type'))
+        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client', service_type=request_row.get('service_type'))
         request_row['pending_appraisal_count'] = waiting_count
         request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
         request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])

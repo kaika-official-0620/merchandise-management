@@ -105,6 +105,8 @@
         <label class="admin-shortcut-chip"><input type="checkbox" value="proxy-service"> 代行仕入れサービス</label>
         <label class="admin-shortcut-chip"><input type="checkbox" value="inquiries"> 問い合わせ一覧</label>
         <label class="admin-shortcut-chip"><input type="checkbox" value="analytics"> 開花管理分析</label>
+        <button type="button" class="shortcut-apply-btn" id="adminShortcutApply">選択内容を反映</button>
+        <span class="shortcut-save-status" id="adminShortcutStatus" aria-live="polite"></span>
     </div>
 
     <div class="shortcut-grid" id="adminShortcutGrid">
@@ -381,6 +383,29 @@
     accent-color: #2563eb;
 }
 
+.shortcut-apply-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid #2563eb;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.shortcut-save-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    color: #166534;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
 .admin-shortcut-empty {
     grid-column: 1 / -1;
     padding: 1.5rem;
@@ -421,24 +446,55 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const storageKey = 'kaika:admin-home:shortcuts:v1';
-    const defaultShortcuts = ['items', 'user-products', 'documents', 'proxy-service', 'inquiries', 'analytics'];
+    const serverShortcuts = {{ admin_shortcuts|default(['items', 'user-products', 'documents', 'proxy-service', 'inquiries', 'analytics'], true)|tojson }};
+    const defaultShortcuts = Array.isArray(serverShortcuts) ? serverShortcuts : ['items', 'user-products', 'documents', 'proxy-service', 'inquiries', 'analytics'];
     const picker = document.getElementById('adminShortcutPicker');
     const toggle = document.getElementById('adminShortcutToggle');
+    const applyButton = document.getElementById('adminShortcutApply');
+    const saveStatus = document.getElementById('adminShortcutStatus');
     const cards = Array.from(document.querySelectorAll('[data-admin-shortcut-id]'));
     const checkboxes = Array.from(document.querySelectorAll('.admin-shortcut-chip input[type="checkbox"]'));
     const emptyState = document.getElementById('adminShortcutEmpty');
 
     function loadSelected() {
+        if (Array.isArray(serverShortcuts)) {
+            return serverShortcuts;
+        }
         try {
-            const parsed = JSON.parse(localStorage.getItem(storageKey) || '[]');
-            return Array.isArray(parsed) && parsed.length ? parsed : defaultShortcuts;
+            const stored = localStorage.getItem(storageKey);
+            if (stored === null) {
+                return defaultShortcuts;
+            }
+            const parsed = JSON.parse(stored);
+            return Array.isArray(parsed) ? parsed : defaultShortcuts;
         } catch (error) {
             return defaultShortcuts;
         }
     }
 
-    function saveSelected(selected) {
+    async function saveSelected(selected) {
         localStorage.setItem(storageKey, JSON.stringify(selected));
+        const response = await fetch('{{ url_for("api_admin_home_shortcuts") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ shortcut_ids: selected }),
+        });
+        const data = await response.json().catch(function() {
+            return {};
+        });
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || '表示項目を保存できませんでした');
+        }
+        localStorage.setItem(storageKey, JSON.stringify(data.shortcut_ids || selected));
+        if (saveStatus) {
+            saveStatus.textContent = '保存しました';
+            window.setTimeout(function() {
+                saveStatus.textContent = '';
+            }, 2200);
+        }
+        return data.shortcut_ids || selected;
     }
 
     function render(selected) {
@@ -473,17 +529,44 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function collectCheckedShortcuts() {
+        return checkboxes.filter(function(item) {
+            return item.checked;
+        }).map(function(item) {
+            return item.value;
+        });
+    }
+
     checkboxes.forEach(function(checkbox) {
         checkbox.addEventListener('change', function() {
-            selected = checkboxes.filter(function(item) {
-                return item.checked;
-            }).map(function(item) {
-                return item.value;
-            });
-            saveSelected(selected);
+            selected = collectCheckedShortcuts();
             render(selected);
         });
     });
+
+    if (applyButton) {
+        applyButton.addEventListener('click', async function() {
+            selected = collectCheckedShortcuts();
+            applyButton.disabled = true;
+            if (saveStatus) {
+                saveStatus.textContent = '保存中...';
+            }
+            try {
+                selected = await saveSelected(selected);
+                render(selected);
+                if (picker && toggle) {
+                    picker.hidden = true;
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            } catch (error) {
+                if (saveStatus) {
+                    saveStatus.textContent = error.message || '保存できませんでした';
+                }
+            } finally {
+                applyButton.disabled = false;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
