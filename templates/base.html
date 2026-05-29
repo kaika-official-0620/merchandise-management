@@ -1342,6 +1342,10 @@
         cursor: ew-resize;
     }
 
+    [data-detail-url] {
+        cursor: pointer;
+    }
+
     img.image-fallback {
         object-fit: contain !important;
         background: #f8fafc;
@@ -1358,6 +1362,21 @@
         // アラート自動非表示
         document.querySelectorAll('.alert').forEach(alert => {
             setTimeout(() => alert.remove(), 5000);
+        });
+
+        document.addEventListener('click', function(event) {
+            const interactive = event.target.closest('a, button, input, select, textarea, label, summary, details, [data-no-card-link]');
+            if (interactive) {
+                return;
+            }
+            const card = event.target.closest('[data-detail-url]');
+            if (!card) {
+                return;
+            }
+            const url = card.getAttribute('data-detail-url');
+            if (url) {
+                window.location.href = url;
+            }
         });
 
         (function setupHistoryBackBar() {

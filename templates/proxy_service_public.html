@@ -1096,7 +1096,7 @@
                     {% if settings.sale_mode == 'fixed' %}
                     <div class="fixed-price">
                         <div class="price-label">販売価格</div>
-                        <div class="price-amount">¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                        <div class="price-amount">¥{{ "{:,}".format(item.default_listing_price or item.listing_price or item.purchase_price or 0) }}</div>
                     </div>
                     
                     {% if auction_state.is_open and item.is_sold %}
@@ -1120,7 +1120,7 @@
                     </div>
                     {% endif %}
                     {% else %}
-                    <div class="start-price">開始価格: ¥{{ "{:,}".format(item.listing_price or 0) }}</div>
+                    <div class="start-price">開始価格: ¥{{ "{:,}".format(item.default_listing_price or item.listing_price or item.purchase_price or 0) }}</div>
                     {% if item.has_proxy_auction_max_price %}
                     <div class="buyout-price">最高価格: ¥{{ "{:,}".format(item.proxy_auction_max_price) }} <span>到達で売り切れ</span></div>
                     {% endif %}

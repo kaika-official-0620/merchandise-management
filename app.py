@@ -3102,6 +3102,12 @@ if DATABASE_URL:
             password=url.password,
             sslmode='require'
         )
+        try:
+            tz_cur = conn.cursor()
+            tz_cur.execute("SET TIME ZONE 'Asia/Tokyo'")
+            tz_cur.close()
+        except Exception as tz_error:
+            print(f"[WARN] Failed to set DB timezone to JST: {tz_error}", flush=True)
         return conn
     
     def init_db():
@@ -5493,9 +5499,11 @@ def get_effective_proxy_price(item):
     if isinstance(item, dict):
         wholesale_price = item.get('wholesale_price')
         listing_price = item.get('listing_price')
+        purchase_price = item.get('purchase_price')
     else:
         wholesale_price = getattr(item, 'wholesale_price', 0)
         listing_price = getattr(item, 'listing_price', 0)
+        purchase_price = getattr(item, 'purchase_price', 0)
 
     try:
         wholesale_price = int(wholesale_price or 0)
@@ -5507,7 +5515,12 @@ def get_effective_proxy_price(item):
     except (TypeError, ValueError):
         listing_price = 0
 
-    return wholesale_price if wholesale_price > 0 else listing_price
+    try:
+        purchase_price = int(purchase_price or 0)
+    except (TypeError, ValueError):
+        purchase_price = 0
+
+    return listing_price if listing_price > 0 else (wholesale_price if wholesale_price > 0 else purchase_price)
 
 
 def resolve_default_proxy_auction_id(item_id=None):
@@ -7846,7 +7859,7 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status IN ('pending', 'approved')
+                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
                   AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         else:
@@ -7855,11 +7868,17 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status IN ('pending', 'approved')
+                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
                   AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         for req in cur3.fetchall():
             req_dict = dict(req)
+            req_dict['service_name'] = get_sales_agency_service_name(req_dict.get('service_type'))
+            req_dict['status_label'] = get_sales_agency_status_label(
+                req_dict.get('status'),
+                viewer='client',
+                service_type=req_dict.get('service_type'),
+            )
             sales_agency_items[req_dict['merchandise_id']] = req_dict
         cur3.close()
         conn3.close()
@@ -13003,7 +13022,7 @@ def view_item(id):
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = %s
                       AND sar.user_id = %s
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting')
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
@@ -13015,7 +13034,7 @@ def view_item(id):
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = ?
                       AND sar.user_id = ?
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting')
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
@@ -14397,10 +14416,10 @@ def admin_add_user():
     plan_options = get_monthly_plan_options()
     summary_period_options = get_inventory_summary_period_options()
     if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
+        username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password')
-        display_name = request.form.get('display_name')
+        display_name = (request.form.get('display_name') or '').strip()
         phone = (request.form.get('phone') or '').strip()
         postal_code = (request.form.get('postal_code') or '').strip()
         address = (request.form.get('address') or '').strip()
@@ -14428,6 +14447,41 @@ def admin_add_user():
         
         conn = get_db()
         try:
+            if DATABASE_URL:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute(
+                    """
+                    SELECT id, username, email
+                    FROM users
+                    WHERE LOWER(username) = LOWER(%s) OR LOWER(email) = LOWER(%s)
+                    LIMIT 1
+                    """,
+                    (username, email),
+                )
+            else:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT id, username, email
+                    FROM users
+                    WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+                    LIMIT 1
+                    """,
+                    (username, email),
+                )
+            duplicate_user = cur.fetchone()
+            cur.close()
+            if duplicate_user:
+                duplicate_email = duplicate_user.get('email') if isinstance(duplicate_user, dict) else duplicate_user['email']
+                duplicate_username = duplicate_user.get('username') if isinstance(duplicate_user, dict) else duplicate_user['username']
+                if (duplicate_email or '').lower() == email:
+                    flash('すでにこのメールアドレスは使用されています。別のメールアドレスを入力してください。', 'error')
+                elif (duplicate_username or '').lower() == username.lower():
+                    flash('すでにこのログインIDは使用されています。別のログインIDを入力してください。', 'error')
+                else:
+                    flash('ログインIDまたはメールアドレスが既に使用されています。入力内容を確認してください。', 'error')
+                return render_template('admin/user_form.html', user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS, plan_options=plan_options, summary_period_options=summary_period_options)
+
             if DATABASE_URL:
                 cur = conn.cursor()
                 cur.execute('''
@@ -14458,7 +14512,13 @@ def admin_add_user():
             flash('ユーザーを作成しました', 'success')
             return redirect(url_for('admin_users'))
         except Exception as e:
-            flash('ユーザー名またはメールアドレスが既に使用されています', 'error')
+            conn.rollback()
+            error_text = str(e).lower()
+            if 'unique' in error_text or 'duplicate' in error_text:
+                flash('ログインIDまたはメールアドレスが既に使用されています。入力内容を確認してください。', 'error')
+            else:
+                print(f"[ERROR] admin_add_user failed: {e}", flush=True)
+                flash('クライアント追加中にエラーが発生しました。入力内容を確認してもう一度お試しください。', 'error')
         finally:
             conn.close()
     
@@ -17222,7 +17282,7 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         # 管理画面に表示できる商品は、管理者・オーナーとも掲載操作を許可する
-        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price FROM merchandise WHERE id = %s", (item_id,))
+        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price, purchase_price FROM merchandise WHERE id = %s", (item_id,))
         item = cur.fetchone()
         
         if not item:
@@ -17245,7 +17305,7 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
                 UPDATE merchandise
                 SET show_in_proxy_service = TRUE,
                     auction_id = %s,
-                    wholesale_price = %s,
+                    listing_price = %s,
                     updated_by = %s,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
@@ -17253,7 +17313,7 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
             new_value = True
     else:
         cur = conn.cursor()
-        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price FROM merchandise WHERE id = ?", (item_id,))
+        cur.execute("SELECT show_in_proxy_service, auction_id, listing_price, wholesale_price, purchase_price FROM merchandise WHERE id = ?", (item_id,))
         item = cur.fetchone()
         
         if not item:
@@ -17273,13 +17333,14 @@ def admin_proxy_service_toggle_item(auction_id, item_id):
             item_dict = {
                 'listing_price': item[2] if len(item) > 2 else 0,
                 'wholesale_price': item[3] if len(item) > 3 else 0,
+                'purchase_price': item[4] if len(item) > 4 else 0,
             }
             selected_price = proxy_price or get_effective_proxy_price(item_dict)
             cur.execute("""
                 UPDATE merchandise
                 SET show_in_proxy_service = 1,
                     auction_id = ?,
-                    wholesale_price = ?,
+                    listing_price = ?,
                     updated_by = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
@@ -17357,7 +17418,7 @@ def admin_proxy_service_bulk_toggle(auction_id):
                         UPDATE merchandise
                         SET show_in_proxy_service = TRUE,
                             auction_id = %s,
-                            wholesale_price = COALESCE(%s, wholesale_price, listing_price),
+                            listing_price = COALESCE(%s, NULLIF(listing_price, 0), NULLIF(wholesale_price, 0), purchase_price),
                             updated_by = %s,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s
@@ -17388,7 +17449,7 @@ def admin_proxy_service_bulk_toggle(auction_id):
                         UPDATE merchandise
                         SET show_in_proxy_service = 1,
                             auction_id = ?,
-                            wholesale_price = COALESCE(?, wholesale_price, listing_price),
+                            listing_price = COALESCE(?, NULLIF(listing_price, 0), NULLIF(wholesale_price, 0), purchase_price),
                             updated_by = ?,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
@@ -19543,7 +19604,7 @@ def proxy_service_purchase():
         
         # まず商品を取得してauction_idを確認
         cur.execute("""
-            SELECT id, listing_price, product_name, sale_date, auction_id,
+            SELECT id, listing_price, purchase_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
                    expected_commission, model_number, additional_photos, notes
             FROM merchandise 
@@ -19592,7 +19653,11 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': '販売は終了しました'}), 400
         
-        purchase_price = item['listing_price'] or 0
+        purchase_price = normalize_proxy_service_price_value(item.get('listing_price')) or normalize_proxy_service_price_value(item.get('purchase_price'))
+        if purchase_price <= 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '販売価格が未設定のため購入できません。管理画面で販売価格を設定してください。'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -19718,7 +19783,7 @@ def proxy_service_purchase():
         
         # まず商品を取得してauction_idを確認
         cur.execute("""
-            SELECT id, listing_price, product_name, sale_date, auction_id,
+            SELECT id, listing_price, purchase_price, product_name, sale_date, auction_id,
                    photo_path, brand_name, item_condition, expected_shipping,
                    expected_commission, model_number, additional_photos, notes
             FROM merchandise 
@@ -19731,7 +19796,7 @@ def proxy_service_purchase():
             return jsonify({'success': False, 'error': '商品が見つかりません'}), 404
         
         # 既に購入済みかチェック
-        if item[3]:  # sale_date
+        if item[4]:  # sale_date
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は既に購入済みです'}), 400
@@ -19739,17 +19804,18 @@ def proxy_service_purchase():
         item_dict = {
             'id': item[0],
             'listing_price': item[1],
-            'product_name': item[2],
-            'sale_date': item[3],
-            'auction_id': item[4],
-            'photo_path': item[5],
-            'brand_name': item[6],
-            'item_condition': item[7],
-            'expected_shipping': item[8],
-            'expected_commission': item[9],
-            'model_number': item[10],
-            'additional_photos': item[11],
-            'notes': item[12],
+            'purchase_price': item[2],
+            'product_name': item[3],
+            'sale_date': item[4],
+            'auction_id': item[5],
+            'photo_path': item[6],
+            'brand_name': item[7],
+            'item_condition': item[8],
+            'expected_shipping': item[9],
+            'expected_commission': item[10],
+            'model_number': item[11],
+            'additional_photos': item[12],
+            'notes': item[13],
         }
         
         # 商品のauction_idに基づいて設定を取得
@@ -19783,7 +19849,11 @@ def proxy_service_purchase():
             conn.close()
             return jsonify({'success': False, 'error': '公開は終了しました'}), 400
         
-        purchase_price = item_dict.get('listing_price') or 0
+        purchase_price = normalize_proxy_service_price_value(item_dict.get('listing_price')) or normalize_proxy_service_price_value(item_dict.get('purchase_price'))
+        if purchase_price <= 0:
+            cur.close()
+            conn.close()
+            return jsonify({'success': False, 'error': '販売価格が未設定のため購入できません。管理画面で販売価格を設定してください。'}), 400
         
         # 利用可能金額チェック
         if not current_user.can_purchase_proxy_item(purchase_price):
@@ -30552,6 +30622,7 @@ def process_disposal_request(request_id):
     """商品処分申請を処理"""
     action = request.form.get('action')
     admin_note = request.form.get('admin_note', '')
+    now = get_jst_now()
     redirect_target = get_internal_redirect_target(
         request.referrer,
         url_for('admin_disposal_requests'),

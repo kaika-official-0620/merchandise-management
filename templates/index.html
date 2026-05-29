@@ -2288,7 +2288,8 @@
                     data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-sale-date="{{ item.sale_date or '' }}"
                     data-status-priority="{{ item.status_priority or 50 }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}'
@@ -2366,8 +2367,8 @@
                         <span class="status-badge listed">発送されました</span>
                         {% elif item.approved_shipping_request %}
                         <span class="status-badge listed">発送準備中</span>
-                        {% elif item.appraisal_status == 'waiting' %}
-                        <span class="status-badge pending-sale">査定待ち</span>
+                        {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                        <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else ('検品中' if item.appraisal_status == 'inspecting' else '査定待ち') }}</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -2399,11 +2400,9 @@
                         {% if not item.sale_date %}
                         {% if item.pending_sales_agency %}
                         {# 販売代行申請中の場合はステータスバッジ #}
-                        {% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}
-                        <span class="badge badge-agency">代行中</span>
-                        {% else %}
-                        <span class="badge badge-waiting">承認待ち</span>
-                        {% endif %}
+                        <span class="badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}badge-agency{% else %}badge-waiting{% endif %}">
+                            {{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}
+                        </span>
                         {% elif item.pending_completion_request %}
                         <div class="sale-request-action-stack">
                             <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
@@ -2507,8 +2506,9 @@
             data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
             data-sale-date="{{ item.sale_date or '' }}"
             data-status-priority="{{ item.status_priority or 50 }}"
-            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
-            data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}true{% else %}false{% endif %}">
+            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}true{% else %}false{% endif %}"
+            data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
                 <div class="card-photo">
                     {% if item.all_photos and item.all_photos|length > 1 %}
@@ -2550,8 +2550,8 @@
                     <span class="status-badge listed">発送されました</span>
                     {% elif item.approved_shipping_request %}
                     <span class="status-badge listed">発送準備中</span>
-                    {% elif item.appraisal_status == 'waiting' %}
-                    <span class="status-badge pending-sale">査定待ち</span>
+                    {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                    <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else ('検品中' if item.appraisal_status == 'inspecting' else '査定待ち') }}</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -2625,11 +2625,9 @@
                 {% if not item.sale_date %}
                 {% if item.pending_sales_agency %}
                 {# 販売代行申請中の場合はステータスバッジ #}
-                {% if item.sales_agency_request and item.sales_agency_request.status == 'approved' %}
-                <span class="badge badge-agency">代行中</span>
-                {% else %}
-                <span class="badge badge-waiting">承認待ち</span>
-                {% endif %}
+                <span class="badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}badge-agency{% else %}badge-waiting{% endif %}">
+                    {{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}
+                </span>
                 {% elif item.pending_completion_request %}
                 <div class="sale-request-action-stack">
                     <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>

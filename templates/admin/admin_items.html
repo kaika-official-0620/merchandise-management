@@ -1288,7 +1288,8 @@
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">
+                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
@@ -1399,7 +1400,7 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}">
+        <div class="admin-item-card {% if item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
             <div
                 class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
                 <div class="admin-card-photo">

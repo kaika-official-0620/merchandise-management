@@ -626,7 +626,7 @@
         </thead>
         <tbody>
             {% for item in items %}
-            <tr class="{% if item.sale_date %}row-sold{% endif %}">
+            <tr class="{% if item.sale_date %}row-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                 <td>{{ item.id }}</td>
                 <td>
                     {% if item.photo_path %}
@@ -699,7 +699,7 @@
 <!-- スマホ用カード表示 -->
 <div class="mobile-cards">
     {% for item in items %}
-    <div class="item-card {% if item.sale_date %}card-sold{% endif %}">
+    <div class="item-card {% if item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
         <div class="card-header">
             <div class="card-photo">
                 {% if item.photo_path %}
