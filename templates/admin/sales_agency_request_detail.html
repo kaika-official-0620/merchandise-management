@@ -411,10 +411,11 @@
                 </div>
                 {% endif %}
 
-                {% if req.admin_note %}
+                {% set clean_admin_note = req.admin_note|clean_display('') %}
+                {% if clean_admin_note %}
                 <div>
                     <div class="section-title" style="margin-bottom: 0.45rem;">管理メモ</div>
-                    <div class="muted-text" style="white-space: pre-wrap; line-height: 1.8;">{{ req.admin_note }}</div>
+                    <div class="muted-text" style="white-space: pre-wrap; line-height: 1.8;">{{ clean_admin_note }}</div>
                 </div>
                 {% endif %}
 
@@ -424,13 +425,13 @@
                         {% for item in req.merchandise_items %}
                         <div class="item-card">
                             {% if item.photo_path %}
-                            <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}" class="item-thumb">
+                            <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}" class="item-thumb">
                             {% else %}
                             <div class="item-thumb"></div>
                             {% endif %}
-                            <div class="item-name">{{ item.product_name }}</div>
+                            <div class="item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
                             {% if item.brand_name %}
-                            <div class="item-brand">{{ item.brand_name }}</div>
+                            <div class="item-brand">{{ item.brand_name|clean_display('ブランド未登録') }}</div>
                             {% endif %}
                             {% if item.item_status_label %}
                             <div class="item-status {% if item.is_cancelled %}cancelled{% endif %}">{{ item.item_status_label }}</div>
@@ -448,7 +449,7 @@
                                 <div class="cancel-note">
                                     <strong>この商品はキャンセル済みです。</strong>
                                     {% if item.cancel_reason %}
-                                    <div>理由: {{ item.cancel_reason }}</div>
+                                    <div>理由: {{ item.cancel_reason|clean_display('理由未登録') }}</div>
                                     {% endif %}
                                 </div>
                                 {% elif item.request_item_id %}
@@ -472,7 +473,7 @@
             <div class="detail-card-body">
                 <div class="note-box">
                     <label for="admin-note-input" class="muted-text">備考やクライアントへの連絡内容</label>
-                    <textarea id="admin-note-input" placeholder="必要に応じてメモを入力してください">{{ req.admin_note or '' }}</textarea>
+                    <textarea id="admin-note-input" placeholder="必要に応じてメモを入力してください">{{ clean_admin_note }}</textarea>
                 </div>
 
                     {% if req.request_can_create_vendor_estimate or req.request_can_register_vendor_kaitori or req.request_can_create_client_invoice or req.request_can_create_shikiriosho or req.vendor_mitsumori_id or req.vendor_kaitori_shoudaku_id or req.client_invoice_id or req.shikiriosho_url %}

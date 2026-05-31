@@ -209,7 +209,7 @@
                                class="user-checkbox" onchange="updateSelectedUserCount()"
                                {% if user.is_selected %}checked{% endif %}>
                         <span class="checkbox-name">
-                            {{ user.display_name or user.username }}
+                            {{ (user.display_name or user.username)|clean_display('ユーザー名未登録') }}
                             {% if user.username %}
                             <small class="checkbox-meta">会員番号: {{ user.username }}</small>
                             {% endif %}
@@ -246,7 +246,7 @@
                     <select id="published-owner-filter" class="filter-select" onchange="filterPublishedItems()">
                         <option value="">全ての登録者</option>
                         {% for user in users %}
-                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        <option value="{{ user.display_name or user.username }}">{{ (user.display_name or user.username)|clean_display('ユーザー名未登録') }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -265,9 +265,9 @@
         <div class="proxy-items-grid" id="published-items-grid">
             {% for item in items %}
             <div class="proxy-item-card published-item" 
-                 data-name="{{ (item.product_name or '')|lower }}"
-                 data-brand="{{ (item.brand_name or '')|lower }}"
-                 data-owner="{{ item.owner_name }}"
+                 data-name="{{ (item.product_name|clean_display(''))|lower }}"
+                 data-brand="{{ (item.brand_name|clean_display(''))|lower }}"
+                 data-owner="{{ item.owner_name|clean_display('') }}"
                  data-has-bid="{{ 'yes' if item.highest_bid else 'no' }}">
                 <div class="item-photo">
                     {% if item.photo_path %}
@@ -277,8 +277,8 @@
                     {% endif %}
                 </div>
                 <div class="item-info">
-                    <div class="item-name">{{ item.product_name or '-' }}</div>
-                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
+                    <div class="item-brand">{{ item.brand_name|clean_display('-') }}</div>
                     <div class="item-start-price">
                         <span class="js-sale-mode-price-label" data-fixed-label="販売価格" data-auction-label="開始価格">{{ item.price_label or ('販売価格' if settings.sale_mode == 'fixed' else '開始価格') }}</span>:
                         <span id="listing-price-display-{{ item.id }}">¥{{ "{:,}".format(item.listing_price or item.default_listing_price or 0) }}</span>
@@ -305,7 +305,7 @@
                             <button type="button" class="btn btn-sm btn-secondary" onclick="saveItemPricing({{ item.id }}, this)">保存</button>
                         </div>
                     </div>
-                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                    <div class="item-owner">登録者: {{ item.owner_name|clean_display('登録者未登録') }}</div>
                 </div>
                 <div class="item-actions">
                     <button type="button" class="btn btn-sm btn-danger" onclick="toggleProxyItem({{ item.id }}, this)">
@@ -366,7 +366,7 @@
                     <div class="client-document-summary-main">
                         <div class="client-document-head">
                             <div>
-                                <h3>{{ group.winner_name }}</h3>
+                                <h3>{{ group.winner_name|clean_display('クライアント名未登録') }}</h3>
                             </div>
                             <div class="client-document-badges">
                                 {% if group.can_prepare_document %}
@@ -402,8 +402,8 @@
                                 {% endif %}
                             </div>
                             <div class="client-document-item-copy">
-                                <strong>{{ item.product_name or '-' }}</strong>
-                                <span>{{ item.brand_name or '-' }}</span>
+                                <strong>{{ item.product_name|clean_display('商品名未登録') }}</strong>
+                                <span>{{ item.brand_name|clean_display('-') }}</span>
                                 <span>{{ item.ended_method_label or item.status_label }}</span>
                                 <span>落札金額 ¥{{ "{:,}".format(item.result_price or 0) }}</span>
                             </div>
@@ -471,9 +471,9 @@
                                     {% endif %}
                                 </div>
                                 <div class="results-product-info">
-                                    <strong>{{ item.product_name or '-' }}</strong>
-                                    <span>{{ item.brand_name or '-' }}</span>
-                                    <span>登録者: {{ item.owner_name }}</span>
+                                    <strong>{{ item.product_name|clean_display('商品名未登録') }}</strong>
+                                    <span>{{ item.brand_name|clean_display('-') }}</span>
+                                    <span>登録者: {{ item.owner_name|clean_display('登録者未登録') }}</span>
                                     {% if item.has_proxy_auction_max_price %}
                                     <span>最高価格: ¥{{ "{:,}".format(item.proxy_auction_max_price) }}</span>
                                     {% endif %}
@@ -493,7 +493,7 @@
                         <td>
                             {% if item.winner_name %}
                             <div class="result-person-cell">
-                                <strong>{{ item.winner_name }}</strong>
+                                <strong>{{ item.winner_name|clean_display('購入者未登録') }}</strong>
                                 {% if item.winner_user_id %}
                                 <a href="{{ url_for('admin_user_products', owner_id=item.winner_user_id) }}">ユーザー商品一覧へ</a>
                                 {% endif %}
@@ -515,7 +515,7 @@
                             <div class="result-reflection-cell">
                                 <span class="result-status-badge {{ item.reflection_status_class }}">{{ item.reflection_status_label }}</span>
                                 {% if item.is_reflected_to_client %}
-                                <span>{{ item.reflected_user_name or '-' }}</span>
+                                <span>{{ item.reflected_user_name|clean_display('-') }}</span>
                                 <span>{{ item.reflected_at_display }}</span>
                                 {% elif item.can_prepare_keisan %}
                                 <span>計算書送付時にユーザー商品へ反映されます</span>
@@ -589,7 +589,7 @@
                     <select id="available-owner-filter" class="filter-select" onchange="filterAvailableItems()">
                         <option value="">全ての登録者</option>
                         {% for user in users %}
-                        <option value="{{ user.display_name or user.username }}">{{ user.display_name or user.username }}</option>
+                        <option value="{{ user.display_name or user.username }}">{{ (user.display_name or user.username)|clean_display('ユーザー名未登録') }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -623,9 +623,9 @@
             {% for item in available_items %}
             <div class="proxy-item-card available available-item" id="available-{{ item.id }}"
                  data-id="{{ item.id }}"
-                 data-name="{{ (item.product_name or '')|lower }}"
-                 data-brand="{{ (item.brand_name or '')|lower }}"
-                 data-owner="{{ item.owner_name }}"
+                 data-name="{{ (item.product_name|clean_display(''))|lower }}"
+                 data-brand="{{ (item.brand_name|clean_display(''))|lower }}"
+                 data-owner="{{ item.owner_name|clean_display('') }}"
                  data-price="{{ item.default_listing_price or item.purchase_price or item.listing_price or 0 }}">
                 <div class="item-checkbox">
                     <input type="checkbox" class="available-item-checkbox" data-id="{{ item.id }}" onchange="updateAvailableSelection()">
@@ -638,8 +638,8 @@
                     {% endif %}
                 </div>
                 <div class="item-info">
-                    <div class="item-name">{{ item.product_name or '-' }}</div>
-                    <div class="item-brand">{{ item.brand_name or '-' }}</div>
+                    <div class="item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
+                    <div class="item-brand">{{ item.brand_name|clean_display('-') }}</div>
                     <div class="item-price">
                         <span class="js-sale-mode-price-label" data-fixed-label="販売価格" data-auction-label="開始価格">{{ '販売価格' if settings.sale_mode == 'fixed' else '開始価格' }}</span>:
                         <span id="available-listing-price-display-{{ item.id }}">¥{{ "{:,}".format(item.default_listing_price or item.purchase_price or item.listing_price or 0) }}</span>
@@ -655,7 +655,7 @@
                             <input type="number" min="{{ item.default_listing_price or item.minimum_listing_price or 0 }}" step="1" id="available-max-price-{{ item.id }}" value="{{ item.proxy_auction_max_price or '' }}" placeholder="最高価格">
                         </div>
                     </div>
-                    <div class="item-owner">登録者: {{ item.owner_name }}</div>
+                    <div class="item-owner">登録者: {{ item.owner_name|clean_display('登録者未登録') }}</div>
                 </div>
                 <div class="item-actions">
                     <button type="button" class="btn btn-sm btn-primary" onclick="addProxyItem({{ item.id }}, this)">
@@ -690,8 +690,8 @@
                 <tbody>
                     {% for bid in bids %}
                     <tr>
-                        <td>{{ bid.product_name }}</td>
-                        <td>{{ bid.bidder_name }}</td>
+                        <td>{{ bid.product_name|clean_display('商品名未登録') }}</td>
+                        <td>{{ bid.bidder_name|clean_display('入札者未登録') }}</td>
                         <td class="bid-amount">¥{{ "{:,}".format(bid.bid_amount) }}</td>
                         <td class="bid-time">{% if bid.created_at %}{% if bid.created_at is string %}{{ bid.created_at[5:16].replace('-', '/').replace('T', ' ').replace(' ', ' ') }}{% else %}{{ bid.created_at.strftime('%m/%d %H:%M') }}{% endif %}{% else %}-{% endif %}</td>
                     </tr>

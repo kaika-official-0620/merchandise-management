@@ -79,8 +79,8 @@
             </div>
             <div class="card-body">
                 <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
-                <div class="info-row"><span>宛先</span><strong>{{ doc.company_name or '株式会社 開花' }}</strong></div>
-                <div class="info-row"><span>件名</span><strong>{{ doc.subject or '見積依頼書' }}</strong></div>
+                <div class="info-row"><span>宛先</span><strong>{{ doc.company_name|clean_display('株式会社 開花') }}</strong></div>
+                <div class="info-row"><span>件名</span><strong>{{ doc.subject|clean_display('見積依頼書') }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">
@@ -119,8 +119,8 @@
             </div>
             <div class="card-body">
                 <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
-                <div class="info-row"><span>顧客名</span><strong>{{ doc.customer_name or '-' }}</strong></div>
-                <div class="info-row"><span>支払方法</span><strong>{{ doc.payment_method or '-' }}</strong></div>
+                <div class="info-row"><span>顧客名</span><strong>{{ doc.customer_name|clean_display('-') }}</strong></div>
+                <div class="info-row"><span>支払方法</span><strong>{{ doc.payment_method|clean_display('-') }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">
@@ -153,7 +153,7 @@
             </div>
             <div class="card-body">
                 <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
-                <div class="info-row"><span>送付元</span><strong>{{ doc.sender_display_name or '株式会社 開花' }}</strong></div>
+                <div class="info-row"><span>送付元</span><strong>{{ doc.sender_display_name|clean_display('株式会社 開花') }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">
@@ -191,8 +191,8 @@
             </div>
             <div class="card-body">
                 <div class="info-row"><span>発行日</span><strong>{{ doc.issue_date or '-' }}</strong></div>
-                <div class="info-row"><span>宛先</span><strong>{{ doc.recipient_name or '-' }}</strong></div>
-                <div class="info-row"><span>件名</span><strong>{{ doc.subject or '-' }}</strong></div>
+                <div class="info-row"><span>宛先</span><strong>{{ doc.recipient_name|clean_display('-') }}</strong></div>
+                <div class="info-row"><span>件名</span><strong>{{ doc.subject|clean_display('計算書') }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">

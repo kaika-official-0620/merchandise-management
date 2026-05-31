@@ -28,11 +28,11 @@
             {% for kaitori in kaitori_list %}
             <tr>
                 <td>{{ kaitori.document_no }}</td>
-                <td>{{ kaitori.company_name }}</td>
-                <td>{{ kaitori.contact_name or '-' }}</td>
+                <td>{{ kaitori.company_name|clean_display('会社名未登録') }}</td>
+                <td>{{ kaitori.contact_name|clean_display('担当者未登録') }}</td>
                 <td>{{ kaitori.issue_date }}</td>
                 <td>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
-                <td>{{ kaitori.admin_name or '-' }}</td>
+                <td>{{ kaitori.admin_name|clean_display('作成者未登録') }}</td>
                 <td>
                     <a href="{{ url_for('admin_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">詳細</a>
                     <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-sm btn-export" target="_blank">PDF</a>

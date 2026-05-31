@@ -158,7 +158,7 @@ def is_garbled_display_text(value):
     text = str(value or '').strip()
     if not text:
         return False
-    if '�' in text or '????' in text:
+    if '�' in text or '??' in text:
         return True
     mojibake_markers = ('繧', '縺', '譁', '譖', '邱', '荳', '髢', '蜃', '鬘', '竊', '蛯', '險', '雋')
     return sum(1 for marker in mojibake_markers if marker in text) >= 2
@@ -172,6 +172,11 @@ def clean_display_text(value, fallback='-'):
     if clean_lines:
         return '\n'.join(clean_lines)
     return fallback
+
+
+@app.template_filter('clean_display')
+def clean_display_filter(value, fallback='-'):
+    return clean_display_text(value, fallback=fallback)
 
 
 def append_proxy_service_origin_note(existing_notes, original_item_id, mode='auction'):
@@ -2856,7 +2861,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 # テンプレートにnow関数を追加
 @app.context_processor
 def inject_now():
-    return {'now': datetime.now}
+    return {'now': get_jst_now}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -7176,7 +7181,7 @@ def login():
                                 overdue_since = None
                     
                     if overdue_since:
-                        overdue_days = (datetime.now() - overdue_since).days
+                        overdue_days = (get_jst_now() - overdue_since).days
                         if overdue_days >= 90:  # 3ヶ月 = 約90日
                             cur.close()
                             conn.close()
@@ -7186,10 +7191,10 @@ def login():
             # ログイン日時更新
             if DATABASE_URL:
                 cur.execute("UPDATE users SET last_login = %s WHERE id = %s", 
-                           (datetime.now(), user['id']))
+                           (get_jst_now(), user['id']))
             else:
                 cur.execute("UPDATE users SET last_login = ? WHERE id = ?", 
-                           (datetime.now(), user['id']))
+                           (get_jst_now(), user['id']))
             conn.commit()
             
             user_obj = User(user['id'], user['username'], user['email'], 
@@ -7951,7 +7956,7 @@ def index():
                         except:
                             created_at = None
                 if created_at:
-                    item_dict['can_delete'] = datetime.now() - created_at <= timedelta(days=1)
+                    item_dict['can_delete'] = get_jst_now() - created_at <= timedelta(days=1)
                 else:
                     item_dict['can_delete'] = True
             else:
@@ -8510,7 +8515,7 @@ def fetch_report_merchandise_rows(target_user_id=None, scope='user', include_all
 
 
 def build_report_overview(rows):
-    today = datetime.now().date()
+    today = get_jst_now().date()
     current_year = today.year
     current_inventory = [
         row for row in rows
@@ -8601,7 +8606,7 @@ def build_inventory_turnover_metrics(rows, period_start, period_end, cost_key='r
 
 
 def build_tax_summary_report(rows, year):
-    today = datetime.now().date()
+    today = get_jst_now().date()
     year_start = date(year, 1, 1)
     current_year = today.year
     snapshot_date = date(year, 12, 31) if year < current_year else today
@@ -8840,7 +8845,7 @@ def build_purchase_ledger_report(rows, year, month):
 
 
 def build_inventory_snapshot_report(rows, year, month=0):
-    today = datetime.now().date()
+    today = get_jst_now().date()
     if month in (None, 0):
         snapshot_date = date(year, 12, 31) if year < today.year else today
     else:
@@ -9225,7 +9230,7 @@ def build_report_v2_payload(report_type, year, month=0, client_id=None):
         if aggregation == 'yearly':
             month = 0
         elif month in (None, 0):
-            month = datetime.now().month
+            month = get_jst_now().month
     elif 'month' not in card_filters:
         month = 0
 
@@ -9267,7 +9272,7 @@ def build_report_v2_payload(report_type, year, month=0, client_id=None):
 
     payload['report_target_name'] = report_context.get('selected_client_name') or (current_user.display_name or current_user.username)
     payload['report_period_label'] = get_report_period_label_for_aggregation(rows, year, month, aggregation)
-    payload['report_generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+    payload['report_generated_at'] = get_jst_now().strftime('%Y-%m-%d %H:%M')
     return payload
 
 
@@ -9553,7 +9558,7 @@ def collect_report_row_month_values(rows):
 
 
 def build_analytics_month_slices(rows, start_month='', end_month=''):
-    today = datetime.now().date()
+    today = get_jst_now().date()
     available_months = collect_report_row_month_values(rows)
     start_value = parse_month_filter_value(start_month)
     end_value = parse_month_filter_value(end_month)
@@ -9752,7 +9757,7 @@ def build_analytics_dashboard_payload(rows, start_month='', end_month=''):
         period_start = month_slices[0]['start']
         period_end = month_slices[-1]['end']
     else:
-        today = datetime.now().date()
+        today = get_jst_now().date()
         period_start = date(today.year, today.month, 1)
         period_end = today
 
@@ -10299,8 +10304,8 @@ def reports():
     from datetime import datetime
     ensure_line_multi_account_schema()
 
-    current_year = datetime.now().year
-    current_month = datetime.now().month
+    current_year = get_jst_now().year
+    current_month = get_jst_now().month
     report_context = resolve_report_target_context(request.args.get('client_id', ''))
 
     if report_context.get('target_user_id'):
@@ -10354,7 +10359,7 @@ def client_analytics_reports():
 @app.route('/api/report-v2/<report_type>')
 @login_required
 def api_report_v2(report_type):
-    year = request.args.get('year', datetime.now().year, type=int)
+    year = request.args.get('year', get_jst_now().year, type=int)
     month = request.args.get('month', 0, type=int)
     client_id = request.args.get('client_id', '')
 
@@ -10371,7 +10376,7 @@ def api_report_v2(report_type):
 @app.route('/api/report-v2/<report_type>/download')
 @login_required
 def api_report_v2_download(report_type):
-    year = request.args.get('year', datetime.now().year, type=int)
+    year = request.args.get('year', get_jst_now().year, type=int)
     month = request.args.get('month', 0, type=int)
     client_id = request.args.get('client_id', '')
     format_type = (request.args.get('format', 'csv') or 'csv').strip().lower()
@@ -10576,8 +10581,8 @@ def api_report(report_type):
     from datetime import datetime
     import json
     
-    year = request.args.get('year', datetime.now().year, type=int)
-    month = request.args.get('month', datetime.now().month, type=int)
+    year = request.args.get('year', get_jst_now().year, type=int)
+    month = request.args.get('month', get_jst_now().month, type=int)
     
     # 管理者の場合は全データを表示
     is_admin_user = current_user.is_admin()
@@ -11098,8 +11103,8 @@ def api_report_download(report_type):
     import csv
     import io
     
-    year = request.args.get('year', datetime.now().year, type=int)
-    month = request.args.get('month', datetime.now().month, type=int)
+    year = request.args.get('year', get_jst_now().year, type=int)
+    month = request.args.get('month', get_jst_now().month, type=int)
     format_type = request.args.get('format', 'csv')
     
     # 管理者の場合は全データを表示
@@ -11142,7 +11147,7 @@ def api_report_download(report_type):
             () if is_admin_user else (current_user.id,))
 
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
+            filename = f"inventory_{get_jst_now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
@@ -11282,7 +11287,7 @@ def api_report_download(report_type):
             () if is_admin_user else (current_user.id,))
 
             items = [dict(row) for row in cur.fetchall()]
-            filename = f"inventory_{datetime.now().strftime('%Y%m%d')}.csv"
+            filename = f"inventory_{get_jst_now().strftime('%Y%m%d')}.csv"
             headers = ['仕入日', '商品名', 'ブランド', '状態', '仕入額', '出品価格', 'ステータス']
             
         elif report_type == 'expenses':
@@ -12253,8 +12258,8 @@ def user_analytics():
         inline_report_target_user_id = selected_client_id_int
         inline_report_client_id = selected_client_id_int
 
-    current_report_year = datetime.now().year
-    current_report_month = datetime.now().month
+    current_report_year = get_jst_now().year
+    current_report_month = get_jst_now().month
     inline_report_years = [current_report_year]
     if inline_report_target_user_id:
         inline_report_rows = fetch_report_merchandise_rows(
@@ -12312,7 +12317,7 @@ def add_item():
         elif 'photo' in request.files:
             file = request.files['photo']
             if file and file.filename and allowed_file(file.filename):
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 photo_path = f'uploads/{filename}'
         
@@ -12336,7 +12341,7 @@ def add_item():
             for i, file in enumerate(files[:19]):  # 最大19枚まで（合計20枚）
                 print(f"[DEBUG] ファイル{i}: filename={file.filename}, content_length={file.content_length if hasattr(file, 'content_length') else 'N/A'}")
                 if file and file.filename and allowed_file(file.filename):
-                    filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{i+2}_' + secure_filename(file.filename)
+                    filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + f'_{i+2}_' + secure_filename(file.filename)
                     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                     additional_photos.append(f'uploads/{filename}')
                     print(f"[DEBUG] 追加画像保存: {filename}")
@@ -12350,7 +12355,7 @@ def add_item():
         if 'id_document' in request.files:
             file = request.files['id_document']
             if file and file.filename:
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                filename = get_jst_now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 id_document_path = f'uploads/{filename}'
         
@@ -12359,7 +12364,7 @@ def add_item():
         if 'consent_form' in request.files:
             file = request.files['consent_form']
             if file and file.filename:
-                filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                filename = get_jst_now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 consent_form_path = f'uploads/{filename}'
         
@@ -12540,7 +12545,7 @@ def edit_item(id):
                 if 'photo' in request.files:
                     file = request.files['photo']
                     if file and file.filename and allowed_file(file.filename):
-                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                        filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
                         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                         photo_path = f'uploads/{filename}'
                 
@@ -12551,7 +12556,7 @@ def edit_item(id):
                         if len(additional_photos) >= 19:  # 最大19枚まで
                             break
                         if file and file.filename and allowed_file(file.filename):
-                            filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                            filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
                             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                             additional_photos.append(f'uploads/{filename}')
                 
@@ -12570,7 +12575,7 @@ def edit_item(id):
                 if 'id_document' in request.files:
                     file = request.files['id_document']
                     if file and file.filename:
-                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
+                        filename = get_jst_now().strftime('%Y%m%d_%H%M%S_id_') + secure_filename(file.filename)
                         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                         id_document_path = f'uploads/{filename}'
                 
@@ -12579,7 +12584,7 @@ def edit_item(id):
                 if 'consent_form' in request.files:
                     file = request.files['consent_form']
                     if file and file.filename:
-                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
+                        filename = get_jst_now().strftime('%Y%m%d_%H%M%S_consent_') + secure_filename(file.filename)
                         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                         consent_form_path = f'uploads/{filename}'
                 
@@ -12618,7 +12623,7 @@ def edit_item(id):
                 if 'photo' in request.files:
                     file = request.files['photo']
                     if file and file.filename and allowed_file(file.filename):
-                        filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
+                        filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + secure_filename(file.filename)
                         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                         photo_path = f'uploads/{filename}'
                 
@@ -12629,7 +12634,7 @@ def edit_item(id):
                         if len(additional_photos) >= 19:  # 最大19枚まで
                             break
                         if file and file.filename and allowed_file(file.filename):
-                            filename = datetime.now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
+                            filename = get_jst_now().strftime('%Y%m%d_%H%M%S_') + f'_{len(additional_photos)+2}_' + secure_filename(file.filename)
                             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                             additional_photos.append(f'uploads/{filename}')
                 
@@ -13129,7 +13134,7 @@ def delete_item(id):
                         created_at = None
             
             # 1日以上経過しているかチェック
-            if created_at and datetime.now() - created_at > timedelta(days=1):
+            if created_at and get_jst_now() - created_at > timedelta(days=1):
                 cur.close()
                 conn.close()
                 flash('登録から1日以上経過した商品は削除できません。オーナーに連絡してください。', 'error')
@@ -13260,7 +13265,7 @@ def export_csv():
         io.BytesIO(output.getvalue().encode('utf-8-sig')),
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f'merchandise_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        download_name=f'merchandise_{get_jst_now().strftime("%Y%m%d_%H%M%S")}.csv'
     )
 
 # ===================
@@ -13582,7 +13587,7 @@ def admin_dashboard():
         return 'kaika' if is_kaika_inventory_item(item_dict) else 'user'
 
     def build_summary(label, description, items_subset, list_url, analytics_url):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_start = today.replace(day=1)
         summary = {
             'label': label,
@@ -13636,7 +13641,7 @@ def admin_dashboard():
     fee_settings = get_fee_settings()
 
     def build_service_fee_summary(items_subset):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_start = today.replace(day=1)
         fee_summary = {
             'total_fee_revenue': 0,
@@ -13661,7 +13666,7 @@ def admin_dashboard():
         return fee_summary
 
     def build_monthly_subscription_summary(users_subset, items_subset):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_key = today.strftime('%Y-%m')
         monthly_item_counts = {}
 
@@ -13687,7 +13692,7 @@ def admin_dashboard():
         return summary
 
     def build_kaika_sale_type_breakdown(items_subset):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_start = today.replace(day=1)
         labels = {
             'normal': '自社通常販売',
@@ -13740,7 +13745,7 @@ def admin_dashboard():
         return breakdown
 
     def build_user_service_revenue_breakdown(items_subset):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_start = today.replace(day=1)
         labels = {
             'photo_packing': '撮影梱包発送手数料',
@@ -14822,7 +14827,7 @@ def admin_user_items(id):
                         except:
                             created_at = None
                 if created_at:
-                    diff = datetime.now() - created_at
+                    diff = get_jst_now() - created_at
                     can_delete = diff.days < 1
             item_dict['can_delete'] = can_delete
 
@@ -15692,7 +15697,7 @@ def admin_analytics_kaika_sales():
         return breakdown
 
     def build_monthly_subscription_summary(users_subset, items_subset):
-        today = datetime.now().date()
+        today = get_jst_now().date()
         current_month_key = today.strftime('%Y-%m')
         monthly_item_counts = {}
 
@@ -21207,7 +21212,7 @@ def export_backup():
     """全データをJSON形式でエクスポート"""
     conn = get_db()
     backup_data = {
-        'exported_at': datetime.now().isoformat(),
+        'exported_at': get_jst_now().isoformat(),
         'version': '3.2',
         'users': [],
         'merchandise': [],
@@ -21312,7 +21317,7 @@ def export_backup():
         output,
         mimetype='application/json',
         as_attachment=True,
-        download_name=f'merchandise_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        download_name=f'merchandise_backup_{get_jst_now().strftime("%Y%m%d_%H%M%S")}.json'
     )
 
 @app.route('/admin/backup/export_with_images')
@@ -21322,7 +21327,7 @@ def export_backup_with_images():
     """全データと画像をZIP形式でエクスポート"""
     conn = get_db()
     backup_data = {
-        'exported_at': datetime.now().isoformat(),
+        'exported_at': get_jst_now().isoformat(),
         'version': '3.2',
         'includes_images': True,
         'users': [],
@@ -21481,7 +21486,7 @@ def export_backup_with_images():
         zip_buffer,
         mimetype='application/zip',
         as_attachment=True,
-        download_name=f'merchandise_full_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        download_name=f'merchandise_full_backup_{get_jst_now().strftime("%Y%m%d_%H%M%S")}.zip'
     )
 
 @app.route('/admin/backup/export_user')
@@ -21490,7 +21495,7 @@ def export_user_backup():
     """自分のデータのみをJSON形式でエクスポート"""
     conn = get_db()
     backup_data = {
-        'exported_at': datetime.now().isoformat(),
+        'exported_at': get_jst_now().isoformat(),
         'version': '3.0',
         'user_id': current_user.id,
         'username': current_user.username,
@@ -21605,7 +21610,7 @@ def export_user_backup():
         output,
         mimetype='application/json',
         as_attachment=True,
-        download_name=f'my_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        download_name=f'my_backup_{get_jst_now().strftime("%Y%m%d_%H%M%S")}.json'
     )
 
 @app.route('/backup/export_with_images')
@@ -21614,7 +21619,7 @@ def export_user_backup_with_images():
     """自分のデータと画像をZIP形式でエクスポート"""
     conn = get_db()
     backup_data = {
-        'exported_at': datetime.now().isoformat(),
+        'exported_at': get_jst_now().isoformat(),
         'version': '3.0',
         'includes_images': True,
         'user_id': current_user.id,
@@ -21784,7 +21789,7 @@ def export_user_backup_with_images():
         zip_buffer,
         mimetype='application/zip',
         as_attachment=True,
-        download_name=f'my_full_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        download_name=f'my_full_backup_{get_jst_now().strftime("%Y%m%d_%H%M%S")}.zip'
     )
 
 @app.route('/admin/backup/import', methods=['POST'])
@@ -23028,7 +23033,7 @@ def admin_items():
                         except:
                             created_at = None
                 if created_at:
-                    diff = datetime.now() - created_at
+                    diff = get_jst_now() - created_at
                     can_delete = diff.days < 1
             item['can_delete'] = can_delete
     
@@ -23333,7 +23338,7 @@ def admin_user_products():
                         except:
                             created_at = None
                 if created_at:
-                    diff = datetime.now() - created_at
+                    diff = get_jst_now() - created_at
                     can_delete = diff.days < 1
             item['can_delete'] = can_delete
 
@@ -23747,7 +23752,7 @@ def admin_delete_item(id):
                         created_at = None
             
             if created_at:
-                now = datetime.now()
+                now = get_jst_now()
                 diff = now - created_at
                 if diff.days >= 1:
                     cur.close()
@@ -23896,7 +23901,7 @@ def notify_announcement_recipients(title, content, recipient_scope='all', recipi
 
 
 def mark_announcement_line_notified(announcement_id, notified_at=None):
-    notified_at = notified_at or datetime.now()
+    notified_at = notified_at or get_jst_now()
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -23954,7 +23959,7 @@ def send_announcement_line_notification_by_id(announcement_id):
 
 
 def process_pending_announcement_line_notifications():
-    now = datetime.now()
+    now = get_jst_now()
     conn = get_db()
     try:
         if DATABASE_URL:
@@ -24254,7 +24259,7 @@ def admin_toggle_announcement(id):
 
 def generate_document_no():
     """精算書番号を生成"""
-    now = datetime.now()
+    now = get_jst_now()
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -24417,7 +24422,7 @@ def admin_shikiriosho_add():
     return render_template('admin/shikiriosho_form.html', 
                           users=users, 
                           document_no=generate_document_no(),
-                          today=datetime.now().strftime('%Y-%m-%d'))
+                          today=get_jst_now().strftime('%Y-%m-%d'))
 
 @app.route('/admin/shikiriosho/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -24545,7 +24550,7 @@ def admin_shikiriosho_edit(id):
                           shikiriosho=shikiriosho, 
                           items=items,
                           users=users,
-                          today=datetime.now().strftime('%Y-%m-%d'))
+                          today=get_jst_now().strftime('%Y-%m-%d'))
 
 @app.route('/admin/shikiriosho/delete/<int:id>')
 @login_required
@@ -24908,7 +24913,7 @@ def create_service_document():
         })
     
     # 書類番号生成
-    doc_no = f"SD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{current_user.id}"
+    doc_no = f"SD-{get_jst_now().strftime('%Y%m%d%H%M%S')}-{current_user.id}"
     
     conn = get_db()
     if DATABASE_URL:
@@ -25197,7 +25202,7 @@ def inject_unread_shikiriosho():
 
 def generate_invoice_no():
     """買取明細書番号を生成"""
-    now = datetime.now()
+    now = get_jst_now()
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -25398,7 +25403,7 @@ def user_invoice_add():
     
     return render_template('invoice_form.html', 
                           invoice_no=generate_invoice_no(),
-                          today=datetime.now().strftime('%Y-%m-%d'))
+                          today=get_jst_now().strftime('%Y-%m-%d'))
 
 @app.route('/invoices/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -25541,7 +25546,7 @@ def user_invoice_edit(id):
     return render_template('invoice_form.html', 
                           invoice=invoice, 
                           items=items,
-                          today=datetime.now().strftime('%Y-%m-%d'))
+                          today=get_jst_now().strftime('%Y-%m-%d'))
 
 @app.route('/invoices/view/<int:id>')
 @login_required
@@ -25713,7 +25718,7 @@ def user_mitsumori_add():
                     'amount': amount
                 })
         
-        now = datetime.now()
+        now = get_jst_now()
         
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -25765,8 +25770,8 @@ def user_mitsumori_add():
         return redirect(url_for('documents') + '#document-history-tabs')
     
     # GETリクエスト
-    today = datetime.now().strftime('%Y-%m-%d')
-    now = datetime.now()
+    today = get_jst_now().strftime('%Y-%m-%d')
+    now = get_jst_now()
     my_merchandise = []
     
     try:
@@ -26131,7 +26136,7 @@ def user_keisan_add():
                     'amount': amount
                 })
         
-        now = datetime.now()
+        now = get_jst_now()
         
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -26181,8 +26186,8 @@ def user_keisan_add():
         return redirect(url_for('documents'))
     
     # GETリクエスト
-    today = datetime.now().strftime('%Y-%m-%d')
-    now = datetime.now()
+    today = get_jst_now().strftime('%Y-%m-%d')
+    now = get_jst_now()
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -26511,7 +26516,7 @@ def admin_invoice_view(id):
 def admin_invoice_approve(id):
     """買取明細書承認（管理者用）- 承認時に精算書を自動作成"""
     
-    now = datetime.now()
+    now = get_jst_now()
     today = now.strftime('%Y-%m-%d')
     
     conn = get_db()
@@ -26840,7 +26845,7 @@ def api_google_drive_download():
         
         # ファイル名を安全な形式に変換
         safe_filename = secure_filename(file_name)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
         final_filename = f'{timestamp}_{safe_filename}'
         
         # uploadsフォルダに保存
@@ -27450,9 +27455,9 @@ def admin_kaitori_add():
             
             # 書類番号を生成
             if DATABASE_URL:
-                cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE invoice_no LIKE %s", (f"KT-{datetime.now().strftime('%Y%m%d')}%",))
+                cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE invoice_no LIKE %s", (f"KT-{get_jst_now().strftime('%Y%m%d')}%",))
             else:
-                cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE invoice_no LIKE ?", (f"KT-{datetime.now().strftime('%Y%m%d')}%",))
+                cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE invoice_no LIKE ?", (f"KT-{get_jst_now().strftime('%Y%m%d')}%",))
             
             if DATABASE_URL:
                 count_result = cur.fetchone()
@@ -27460,7 +27465,7 @@ def admin_kaitori_add():
             else:
                 count = cur.fetchone()[0]
             
-            document_no = f"KT-{datetime.now().strftime('%Y%m%d')}-{count + 1:03d}"
+            document_no = f"KT-{get_jst_now().strftime('%Y%m%d')}-{count + 1:03d}"
             
             # invoicesテーブルに保存
             if DATABASE_URL:
@@ -27469,14 +27474,14 @@ def admin_kaitori_add():
                         status, notes, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
-                """, (document_no, issue_date, seller_id, total_amount, status, notes, datetime.now()))
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now()))
                 invoice_id = cur.fetchone()['id']
             else:
                 cur.execute("""
                     INSERT INTO invoices (invoice_no, issue_date, sender_id, total_amount, 
                         status, notes, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (document_no, issue_date, seller_id, total_amount, status, notes, datetime.now()))
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now()))
                 invoice_id = cur.lastrowid
             
             # 商品明細を保存
@@ -27514,8 +27519,8 @@ def admin_kaitori_add():
     cur.close()
     conn.close()
     
-    today = datetime.now().strftime('%Y-%m-%d')
-    document_no = f"KT-{datetime.now().strftime('%Y%m%d')}-001"
+    today = get_jst_now().strftime('%Y-%m-%d')
+    document_no = f"KT-{get_jst_now().strftime('%Y%m%d')}-001"
     
     return render_template('admin/kaitori_form.html', 
         kaitori=None, 
@@ -27862,8 +27867,8 @@ def admin_mitsumori_list():
 def admin_mitsumori_add():
     """見積依頼書作成"""
     from datetime import datetime
-    today = datetime.now().strftime('%Y-%m-%d')
-    document_no = f"MT-{datetime.now().strftime('%Y%m%d')}-001"
+    today = get_jst_now().strftime('%Y-%m-%d')
+    document_no = f"MT-{get_jst_now().strftime('%Y%m%d')}-001"
     
     return render_template('admin/mitsumori_form.html', 
         mitsumori=None, 
@@ -28055,7 +28060,7 @@ def generate_weekly_report():
     from datetime import datetime, timedelta
     
     # 今週の月曜日と日曜日を計算
-    today = datetime.now()
+    today = get_jst_now()
     monday = today - timedelta(days=today.weekday())
     sunday = monday + timedelta(days=6)
     
@@ -28117,7 +28122,7 @@ def generate_monthly_report():
     import calendar
     
     # 先月の期間を計算
-    today = datetime.now()
+    today = get_jst_now()
     if today.month == 1:
         last_month = 12
         last_year = today.year - 1
@@ -28186,7 +28191,7 @@ def generate_monthly_fee_report():
     """月謝利用料金のお知らせを生成"""
     from datetime import datetime
     
-    today = datetime.now()
+    today = get_jst_now()
     
     conn = get_db()
     if DATABASE_URL:
@@ -29569,7 +29574,7 @@ def run_scheduled_line_messages():
     """定期送信メッセージを実行"""
     from datetime import datetime
     ensure_line_multi_account_schema()
-    now = datetime.now()
+    now = get_jst_now()
     current_time = now.strftime('%H:%M')
     current_day = now.day
     current_weekday = now.weekday()  # 0=月曜
@@ -29652,12 +29657,12 @@ def run_scheduled_line_messages():
 
 def check_and_transfer_overdue_items():
     """3ヶ月以上未払いのユーザーの商品を管理者に自動移動"""
-    print(f"[{datetime.now()}] Running overdue items check...")
+    print(f"[{get_jst_now()}] Running overdue items check...")
     
     conn = get_db()
     
     # 90日（約3ヶ月）以上未払いのユーザーを取得
-    three_months_ago = datetime.now() - timedelta(days=90)
+    three_months_ago = get_jst_now() - timedelta(days=90)
     
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
@@ -29718,7 +29723,7 @@ def check_and_transfer_overdue_items():
         
         if item_count > 0:
             # 商品を管理者に移動
-            transfer_note = f'[自動移管 {datetime.now().strftime("%Y/%m/%d")}] {display_name}様から未払い3ヶ月超過により移管'
+            transfer_note = f'[自動移管 {get_jst_now().strftime("%Y/%m/%d")}] {display_name}様から未払い3ヶ月超過により移管'
             
             if DATABASE_URL:
                 cur.execute("""
@@ -29757,17 +29762,17 @@ def check_and_transfer_overdue_items():
     cur.close()
     conn.close()
     
-    print(f"[{datetime.now()}] Overdue items check completed. Transferred {transferred_count} items from {len(overdue_users)} users.")
+    print(f"[{get_jst_now()}] Overdue items check completed. Transferred {transferred_count} items from {len(overdue_users)} users.")
 
 
 def check_and_transfer_long_term_items():
     """仕入れ日から5ヶ月以上経過した長期在庫商品を管理者に自動移動"""
-    print(f"[{datetime.now()}] Running long-term items check...")
+    print(f"[{get_jst_now()}] Running long-term items check...")
     
     conn = get_db()
     
     # 150日（約5ヶ月）以上経過
-    five_months_ago = datetime.now() - timedelta(days=150)
+    five_months_ago = get_jst_now() - timedelta(days=150)
     five_months_ago_str = five_months_ago.strftime('%Y-%m-%d')
     
     if DATABASE_URL:
@@ -29812,7 +29817,7 @@ def check_and_transfer_long_term_items():
         long_term_items = [dict(zip(columns, row)) for row in cur.fetchall()]
     
     if not long_term_items:
-        print(f"[{datetime.now()}] No long-term items to transfer.")
+        print(f"[{get_jst_now()}] No long-term items to transfer.")
         cur.close()
         conn.close()
         return
@@ -29884,7 +29889,7 @@ def check_and_transfer_long_term_items():
     cur.close()
     conn.close()
     
-    print(f"[{datetime.now()}] Long-term items check completed. Transferred {transferred_count} items from {len(users_items)} users.")
+    print(f"[{get_jst_now()}] Long-term items check completed. Transferred {transferred_count} items from {len(users_items)} users.")
 
 
 # ===================
@@ -29971,7 +29976,7 @@ def disposal_options():
                     overdue_since = None
         
         if overdue_since:
-            overdue_days = (datetime.now() - overdue_since).days
+            overdue_days = (get_jst_now() - overdue_since).days
             overdue_months = overdue_days // 30
     
     return render_template('disposal_options.html',
@@ -30137,8 +30142,8 @@ def long_term_items():
     # デバッグ情報を取得
     debug_info = {}
     try:
-        three_months_ago = datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)
-        debug_info['today'] = datetime.now().strftime('%Y-%m-%d')
+        three_months_ago = get_jst_now() - timedelta(days=LONG_TERM_STORAGE_DAYS)
+        debug_info['today'] = get_jst_now().strftime('%Y-%m-%d')
         debug_info['cutoff_date'] = three_months_ago.strftime('%Y-%m-%d')
         debug_info['items_count'] = len(items)
         debug_info['items_no_request_count'] = sum(1 for item in items if not item.get('disposal_request_id'))
@@ -30837,7 +30842,7 @@ def admin_stripe_dashboard():
                         overdue_since = None
             
             if overdue_since:
-                days_overdue = (datetime.now() - overdue_since).days
+                days_overdue = (get_jst_now() - overdue_since).days
                 user['overdue_days'] = days_overdue
                 user['overdue_months'] = days_overdue // 30
             else:
@@ -31141,7 +31146,7 @@ def fetch_long_term_candidate_items(conn, user_id=None, user_ids=None):
     if user_id is None and not user_ids:
         return []
 
-    cutoff_date = (datetime.now() - timedelta(days=LONG_TERM_STORAGE_DAYS)).strftime('%Y-%m-%d')
+    cutoff_date = (get_jst_now() - timedelta(days=LONG_TERM_STORAGE_DAYS)).strftime('%Y-%m-%d')
 
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
@@ -31278,7 +31283,7 @@ def calculate_days_in_storage(record):
     storage_started_date = get_storage_started_date(record)
     if not storage_started_date:
         return None
-    return max((datetime.now().date() - storage_started_date).days, 0)
+    return max((get_jst_now().date() - storage_started_date).days, 0)
 
 def format_storage_started_date(record):
     storage_started_date = get_storage_started_date(record)
@@ -31803,7 +31808,7 @@ def admin_stripe_change_plan(user_id):
             metadata={
                 'previous_fee': str(current_fee),
                 'new_fee': str(new_monthly_fee),
-                'changed_at': datetime.now().isoformat()
+                'changed_at': get_jst_now().isoformat()
             }
         )
         
@@ -31910,7 +31915,7 @@ def admin_stripe_success():
                 subscription = stripe.Subscription.retrieve(subscription_id)
                 current_period_end = datetime.fromtimestamp(subscription.current_period_end)
                 
-                now = datetime.now()
+                now = get_jst_now()
                 if DATABASE_URL:
                     cur.execute("""
                         UPDATE users 
@@ -31982,7 +31987,7 @@ def stripe_webhook():
         cur = conn.cursor()
         
         current_period_end = datetime.fromtimestamp(subscription['current_period_end'])
-        now = datetime.now()
+        now = get_jst_now()
         
         if DATABASE_URL:
             cur.execute("""
@@ -32020,7 +32025,7 @@ def stripe_webhook():
             try:
                 subscription = stripe.Subscription.retrieve(subscription_id)
                 current_period_end = datetime.fromtimestamp(subscription['current_period_end'])
-                now = datetime.now()
+                now = get_jst_now()
                 
                 if DATABASE_URL:
                     cur.execute("""
@@ -32292,7 +32297,7 @@ def admin_stripe_batch_update():
                             metadata={
                                 'previous_fee': str(current_fee),
                                 'new_fee': str(new_monthly_fee),
-                                'updated_at': datetime.now().isoformat(),
+                                'updated_at': get_jst_now().isoformat(),
                                 'batch_update': 'true'
                             }
                         )
@@ -32358,7 +32363,7 @@ def api_stripe_batch_update():
         'updated': 0,
         'unchanged': 0,
         'errors': 0,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': get_jst_now().isoformat()
     }
     
     try:
@@ -32445,10 +32450,10 @@ def api_stripe_batch_update():
 def run_monthly_batch_update():
     """月末バッチ処理（スケジューラーから呼び出し）"""
     if not STRIPE_ENABLED or not STRIPE_SECRET_KEY:
-        print(f"[{datetime.now()}] Monthly batch skipped: Stripe not configured")
+        print(f"[{get_jst_now()}] Monthly batch skipped: Stripe not configured")
         return
     
-    print(f"[{datetime.now()}] Starting monthly batch update...")
+    print(f"[{get_jst_now()}] Starting monthly batch update...")
     
     with app.app_context():
         conn = get_db()
@@ -32523,12 +32528,12 @@ def run_monthly_batch_update():
             cur.close()
             conn.close()
             
-            print(f"[{datetime.now()}] Monthly batch completed: "
+            print(f"[{get_jst_now()}] Monthly batch completed: "
                   f"{results['processed']} processed, {results['updated']} updated, "
                   f"{results['unchanged']} unchanged, {results['errors']} errors")
             
         except Exception as e:
-            print(f"[{datetime.now()}] Monthly batch failed: {e}")
+            print(f"[{get_jst_now()}] Monthly batch failed: {e}")
 
 # スケジューラー初期化
 scheduler = None
@@ -32585,9 +32590,9 @@ def init_scheduler():
     )
     
     scheduler.start()
-    print(f"[{datetime.now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
-    print(f"[{datetime.now()}] Scheduler started: LINE scheduled messages will be checked every minute")
-    print(f"[{datetime.now()}] Scheduler started: Overdue items check will run daily at 03:00 JST")
+    print(f"[{get_jst_now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
+    print(f"[{get_jst_now()}] Scheduler started: LINE scheduled messages will be checked every minute")
+    print(f"[{get_jst_now()}] Scheduler started: Overdue items check will run daily at 03:00 JST")
 
 # =============================================
 # 買取承諾書（ユーザー向け）
@@ -32646,12 +32651,12 @@ def user_kaitori_shoudaku_add():
     
     if request.method == 'POST':
         # 書類番号生成
-        document_no = f"KS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        document_no = f"KS-{get_jst_now().strftime('%Y%m%d%H%M%S')}"
         
         customer_name = request.form.get('customer_name', '')
         customer_address = request.form.get('customer_address', '')
         customer_phone = request.form.get('customer_phone', '')
-        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        issue_date = request.form.get('issue_date', get_jst_now().strftime('%Y-%m-%d'))
         payment_method = request.form.get('payment_method', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -32740,7 +32745,7 @@ def user_kaitori_shoudaku_add():
     cur.close()
     conn.close()
     
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = get_jst_now().strftime('%Y-%m-%d')
     return render_template('kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add', today=today)
 
 @app.route('/kaitori-shoudaku/<int:id>')
@@ -32816,7 +32821,7 @@ def user_kaitori_shoudaku_edit(id):
         customer_name = request.form.get('customer_name', '')
         customer_address = request.form.get('customer_address', '')
         customer_phone = request.form.get('customer_phone', '')
-        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        issue_date = request.form.get('issue_date', get_jst_now().strftime('%Y-%m-%d'))
         payment_method = request.form.get('payment_method', '')
         notes = request.form.get('notes', '')
         status = request.form.get('status', 'draft')
@@ -33033,13 +33038,13 @@ def admin_kaitori_shoudaku_add():
         cur = conn.cursor()
     
     if request.method == 'POST':
-        document_no = f"KSH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        document_no = f"KSH-{get_jst_now().strftime('%Y%m%d%H%M%S')}"
         
         company_name = request.form.get('company_name', '')
         company_address = request.form.get('company_address', '')
         company_phone = request.form.get('company_phone', '')
         contact_name = request.form.get('contact_name', '')
-        issue_date = request.form.get('issue_date', datetime.now().strftime('%Y-%m-%d'))
+        issue_date = request.form.get('issue_date', get_jst_now().strftime('%Y-%m-%d'))
         payment_method = request.form.get('payment_method', '')
         bank_info = request.form.get('bank_info', '')
         notes = request.form.get('notes', '')
@@ -33127,7 +33132,7 @@ def admin_kaitori_shoudaku_add():
     cur.close()
     conn.close()
     
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = get_jst_now().strftime('%Y-%m-%d')
     return render_template('admin/kaitori_shoudaku_form.html', kaitori=None, items=[], mode='add', today=today)
 
 @app.route('/admin/kaitori-shoudaku/<int:id>')
@@ -34049,7 +34054,7 @@ def save_sale_request_images(qr_image, qr_image2, existing_request=None):
     qr_image_path = existing_request.get('qr_image_path') if existing_request else None
     if qr_image and qr_image.filename:
         filename = secure_filename(qr_image.filename)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S_')
         filename = timestamp + filename
         qr_image.save(os.path.join(upload_folder, filename))
         qr_image_path = 'uploads/qr/' + filename
@@ -34057,7 +34062,7 @@ def save_sale_request_images(qr_image, qr_image2, existing_request=None):
     qr_image_path2 = existing_request.get('qr_image_path2') if existing_request else None
     if qr_image2 and qr_image2.filename:
         filename2 = secure_filename(qr_image2.filename)
-        timestamp2 = datetime.now().strftime('%Y%m%d_%H%M%S_')
+        timestamp2 = get_jst_now().strftime('%Y%m%d_%H%M%S_')
         filename2 = timestamp2 + '2_' + filename2
         qr_image2.save(os.path.join(upload_folder, filename2))
         qr_image_path2 = 'uploads/qr/' + filename2
@@ -34857,7 +34862,7 @@ def approve_sale_request(request_id):
                         sale_price = %s, shipping_cost = %s, commission = %s
                     WHERE id = %s
                 ''', (
-                    datetime.now(),
+                    get_jst_now(),
                     current_user.id,
                     admin_note,
                     approved_sale_price,
@@ -34874,8 +34879,8 @@ def approve_sale_request(request_id):
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
-                    datetime.now().date(),
-                    datetime.now(),
+                    get_jst_now().date(),
+                    get_jst_now(),
                     current_user.id,
                     merchandise_id,
                 ))
@@ -34887,7 +34892,7 @@ def approve_sale_request(request_id):
                         shipment_status = 'approved_waiting_shipment'
                     WHERE id = %s
                 ''', (
-                    datetime.now(),
+                    get_jst_now(),
                     current_user.id,
                     admin_note,
                     approved_sale_price,
@@ -34899,7 +34904,7 @@ def approve_sale_request(request_id):
                     UPDATE merchandise 
                     SET updated_at = %s, updated_by = %s
                     WHERE id = %s
-                ''', (datetime.now(), current_user.id, merchandise_id))
+                ''', (get_jst_now(), current_user.id, merchandise_id))
         else:
             cur = conn.cursor()
             cur.row_factory = sqlite3.Row
@@ -34959,7 +34964,7 @@ def approve_sale_request(request_id):
                         sale_price = ?, shipping_cost = ?, commission = ?
                     WHERE id = ?
                 ''', (
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
                     current_user.id,
                     admin_note,
                     approved_sale_price,
@@ -34976,8 +34981,8 @@ def approve_sale_request(request_id):
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
-                    datetime.now().strftime('%Y-%m-%d'),
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    get_jst_now().strftime('%Y-%m-%d'),
+                    get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
                     current_user.id,
                     merchandise_id,
                 ))
@@ -34989,7 +34994,7 @@ def approve_sale_request(request_id):
                         shipment_status = 'approved_waiting_shipment'
                     WHERE id = ?
                 ''', (
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
                     current_user.id,
                     admin_note,
                     approved_sale_price,
@@ -35001,7 +35006,7 @@ def approve_sale_request(request_id):
                     UPDATE merchandise 
                     SET updated_at = ?, updated_by = ?
                     WHERE id = ?
-                ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
+                ''', (get_jst_now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, merchandise_id))
         
         record_sale_request_event(
             conn,
@@ -35061,7 +35066,7 @@ def reject_sale_request(request_id):
             SET status = 'rejected', processed_at = %s, processed_by = %s, admin_note = %s,
                 shipment_status = %s
             WHERE id = %s
-        ''', (datetime.now(), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
+        ''', (get_jst_now(), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
     else:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -35085,7 +35090,7 @@ def reject_sale_request(request_id):
             SET status = 'rejected', processed_at = ?, processed_by = ?, admin_note = ?,
                 shipment_status = ?
             WHERE id = ?
-        ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
+        ''', (get_jst_now().strftime('%Y-%m-%d %H:%M:%S'), current_user.id, admin_note, 'rejected' if request_type == 'shipping_request' else None, request_id))
     
     record_sale_request_event(
         conn,
@@ -35153,7 +35158,7 @@ def admin_sale_request_shipment(request_id):
             'id': sale_request.get('merchandise_id'),
             'product_name': sale_request.get('product_name'),
         }
-        now = datetime.now()
+        now = get_jst_now()
 
         if action == 'revert':
             if DATABASE_URL:
@@ -37789,7 +37794,7 @@ def shutdown_scheduler():
     global scheduler
     if scheduler is not None and scheduler.running:
         scheduler.shutdown(wait=False)
-        print(f"[{datetime.now()}] Scheduler stopped")
+        print(f"[{get_jst_now()}] Scheduler stopped")
 
 @app.route('/item/<int:id>/download_all')
 @login_required
@@ -38051,13 +38056,13 @@ def _admin_vendor_response_upload(file_storage):
         raise ValueError("アップロード先が設定されていません")
     vendor_dir = os.path.join(upload_root, "vendor_responses")
     os.makedirs(vendor_dir, exist_ok=True)
-    stored_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S_')}{original_name}"
+    stored_name = f"{get_jst_now().strftime('%Y%m%d_%H%M%S_')}{original_name}"
     file_storage.save(os.path.join(vendor_dir, stored_name))
     return f"uploads/vendor_responses/{stored_name}", original_name
 
 
 def _generate_prefixed_document_no(prefix, table_name, column_name):
-    now = datetime.now()
+    now = get_jst_now()
     like_value = f"{prefix}-{now.strftime('%Y%m%d')}-%"
     conn, cur = _docs_open_cursor()
     try:
@@ -38632,12 +38637,12 @@ def admin_mitsumori_add_from_documents():
     return render_template(
         "admin/mitsumori_form.html",
         mitsumori=None,
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=get_jst_now().strftime("%Y-%m-%d"),
         document_no=_generate_prefixed_document_no("MT", "user_mitsumori", "document_no"),
         items=items,
         source_request=source_request,
         target_user_id=source_request.get("user_id"),
-        default_valid_until=(datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
+        default_valid_until=(get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d"),
         company_name_default="",
         department_default="",
         contact_person_default="",
@@ -38660,12 +38665,12 @@ def admin_kaitori_shoudaku_add_from_documents():
         return redirect(url_for("admin_documents_dashboard", group="vendor_incoming"))
 
     if request.method == "POST":
-        document_no = f"KSH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        document_no = f"KSH-{get_jst_now().strftime('%Y%m%d%H%M%S')}"
         company_name = request.form.get("company_name", "")
         company_address = request.form.get("company_address", "")
         company_phone = request.form.get("company_phone", "")
         contact_name = request.form.get("contact_name", "")
-        issue_date = request.form.get("issue_date", datetime.now().strftime("%Y-%m-%d"))
+        issue_date = request.form.get("issue_date", get_jst_now().strftime("%Y-%m-%d"))
         payment_method = request.form.get("payment_method", "")
         bank_info = request.form.get("bank_info", "")
         notes = request.form.get("notes", "")
@@ -38743,7 +38748,7 @@ def admin_kaitori_shoudaku_add_from_documents():
         kaitori=None,
         items=items,
         mode="add",
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=get_jst_now().strftime("%Y-%m-%d"),
         source_request=source_request,
     )
 
@@ -38802,7 +38807,7 @@ def admin_kaitori_add_from_documents():
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (invoice_no, issue_date, seller_id, total_amount, status, notes, datetime.now(), "client_outgoing", request_id, source_vendor_kaitori_id),
+                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id),
                 )
                 invoice_id = _docs_row_to_dict(cur.fetchone())["id"]
             else:
@@ -38812,7 +38817,7 @@ def admin_kaitori_add_from_documents():
                     (invoice_no, issue_date, sender_id, total_amount, status, notes, created_at, document_scope, sales_agency_request_id, source_admin_kaitori_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (invoice_no, issue_date, seller_id, total_amount, status, notes, datetime.now(), "client_outgoing", request_id, source_vendor_kaitori_id),
+                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id),
                 )
                 invoice_id = cur.lastrowid
             for item in items_data:
@@ -38844,7 +38849,7 @@ def admin_kaitori_add_from_documents():
         "admin/kaitori_form.html",
         kaitori=None,
         users=users,
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=get_jst_now().strftime("%Y-%m-%d"),
         document_no=_generate_prefixed_document_no("KT", "invoices", "invoice_no"),
         items=items,
         source_request=source_request,
@@ -38954,7 +38959,7 @@ def admin_shikiriosho_add_from_documents():
         shikiriosho=None,
         users=users,
         document_no=_generate_prefixed_document_no("SK", "shikiriosho", "document_no"),
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=get_jst_now().strftime("%Y-%m-%d"),
         items=items,
         source_request=source_request,
         recipient_id_default=source_request.get("user_id"),
@@ -39051,7 +39056,7 @@ def admin_auction_keisan_add_from_documents():
     items = _build_prefill_items_from_request(source_request) if source_request else []
     return render_template(
         "admin/auction_keisan_form.html",
-        today=datetime.now().strftime("%Y-%m-%d"),
+        today=get_jst_now().strftime("%Y-%m-%d"),
         document_no=_generate_prefixed_document_no("AK", "user_keisan", "document_no"),
         items=items,
         source_request=source_request,
@@ -39415,7 +39420,7 @@ def admin_sales_agency_request_item_cancel(request_id, item_id):
             flash('この商品はすでにキャンセルされています', 'info')
             return redirect(url_for('admin_sales_agency_request_detail', id=request_id))
 
-        now_value = datetime.now() if DATABASE_URL else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now_value = get_jst_now() if DATABASE_URL else get_jst_now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute(
             f"""
             UPDATE sales_agency_request_items

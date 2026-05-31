@@ -291,14 +291,14 @@
                 {% for item in req.request_items %}
                 <div class="request-item">
                     {% if item.photo_path %}
-                    <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name }}" onerror="this.style.display='none'">
+                    <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name|clean_display('商品名未登録') }}" onerror="this.style.display='none'">
                     {% else %}
                     <div class="placeholder"></div>
                     {% endif %}
                     <div>
-                        <div class="request-item-name">{{ item.product_name }}</div>
+                        <div class="request-item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
                         {% if item.brand_name %}
-                        <div class="request-item-brand">{{ item.brand_name }}</div>
+                        <div class="request-item-brand">{{ item.brand_name|clean_display('ブランド未登録') }}</div>
                         {% endif %}
                         {% if item.source_item_warning %}
                         <div class="request-item-warning">{{ item.source_item_warning }}</div>
@@ -314,10 +314,11 @@
             </div>
             {% endif %}
 
-            {% if req.admin_note %}
+            {% set clean_admin_note = req.admin_note|clean_display('') %}
+            {% if clean_admin_note %}
             <div class="admin-note">
                 <label>管理側からの連絡</label>
-                <p>{{ req.admin_note }}</p>
+                <p>{{ clean_admin_note }}</p>
             </div>
             {% endif %}
         </div>

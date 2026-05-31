@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ item.product_name }} - 株式会社 開花{% endblock %}
+{% block title %}{{ item.product_name|clean_display('商品名未登録') }} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <style>
@@ -615,7 +615,7 @@
                 <div class="main-photo-scroll-container" id="mainPhotoScrollContainer">
                     {% for photo in item.all_photos %}
                     <div class="main-photo-slide" onclick="openLightbox({{ loop.index0 }})">
-                        <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+                        <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
                     </div>
                     {% endfor %}
                 </div>
@@ -646,7 +646,7 @@
     
     <div class="view-details">
         <div class="product-title-wrapper">
-        <h2>{{ item.product_name }}</h2>
+        <h2>{{ item.product_name|clean_display('商品名未登録') }}</h2>
             <button class="copy-btn" onclick="copyToClipboard('{{ item.product_name }}', this)">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                 コピー
@@ -665,7 +665,7 @@
                 <dt>ブランド</dt>
                 <dd>
                     <span class="copy-value-wrapper">
-                        {{ item.brand_name or '-' }}
+                        {{ item.brand_name|clean_display('-') }}
                         {% if item.brand_name %}
                         <button class="copy-btn" onclick="copyToClipboard('{{ item.brand_name }}', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -705,10 +705,10 @@
                     {% else %}-{% endif %}
                 </dd>
                 <dt>仕入先</dt>
-                <dd>{{ item.store_name or '-' }}</dd>
+                <dd>{{ item.store_name|clean_display('-') }}</dd>
                 {% if item.store_name == '個人' %}
                 <dt>仕入先詳細</dt>
-                <dd>{{ item.supplier_detail or '-' }}</dd>
+                <dd>{{ item.supplier_detail|clean_display('-') }}</dd>
                 <dt>身分証</dt>
                 <dd>
                     {% if item.id_document_path %}
@@ -725,9 +725,9 @@
                 <dt>仕入額</dt>
                 <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
                 <dt>支払方法</dt>
-                <dd>{{ item.payment_method or '-' }}</dd>
+                <dd>{{ item.payment_method|clean_display('-') }}</dd>
                 <dt>メモ</dt>
-                <dd style="white-space: pre-wrap;">{{ item.notes or '-' }}</dd>
+                <dd style="white-space: pre-wrap;">{{ item.notes|clean_display('-') }}</dd>
             </dl>
         </div>
 
@@ -855,7 +855,7 @@
                 <dt>送料</dt>
                 <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
                     <dt>販売先</dt>
-                <dd>{{ item.sales_destination or '-' }}</dd>
+                <dd>{{ item.sales_destination|clean_display('-') }}</dd>
                 <dt>手数料</dt>
                 <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
                 <dt>発送状態</dt>
@@ -890,7 +890,7 @@
         <div class="lightbox-scroll-container" id="lightboxScrollContainer">
             {% for photo in item.all_photos %}
             <div class="lightbox-slide">
-                <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name }}">
+                <img src="{{ url_for('static', filename=photo) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
             </div>
             {% endfor %}
         </div>

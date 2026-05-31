@@ -32,9 +32,9 @@
             {% for doc in mitsumori_list %}
             <tr>
                 <td class="doc-no">{{ doc.document_no }}</td>
-                <td class="user-name">{{ doc.user_name or doc.username or '-' }}</td>
-                <td>{{ doc.company_name or '-' }}</td>
-                <td>{{ doc.subject or '-' }}</td>
+                <td class="user-name">{{ (doc.user_name or doc.username)|clean_display('作成者未登録') }}</td>
+                <td>{{ doc.company_name|clean_display('会社名未登録') }}</td>
+                <td>{{ doc.subject|clean_display('件名未登録') }}</td>
                 <td>{{ doc.issue_date }}</td>
                 <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
                 <td>

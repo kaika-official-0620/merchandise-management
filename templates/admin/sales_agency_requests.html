@@ -585,8 +585,8 @@
         <div class="request-card service-{{ req.service_type }}" id="request-{{ req.id }}" data-service-type="{{ req.service_type }}">
                 <div class="request-header">
                 <div class="request-info">
-                    <span class="request-user">{{ req.client_name }}</span>
-                    <span class="mini-badge">{{ req.client_identifier }}</span>
+                    <span class="request-user">{{ req.client_name|clean_display('クライアント名未登録') }}</span>
+                    <span class="mini-badge">{{ req.client_identifier|clean_display('識別情報未登録') }}</span>
                     <span class="service-badge {{ req.service_type }}">{{ req.service_name }}</span>
                     <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                     <span class="request-date">{{ req.client_contact_label }}</span>
@@ -602,14 +602,14 @@
                     {% for item in req.merchandise_items %}
                     <div class="request-item">
                         {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
                         {% else %}
                         <div class="placeholder"></div>
                         {% endif %}
                         <div>
-                            <div class="request-item-name">{{ item.product_name }}</div>
+                            <div class="request-item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
                             {% if item.brand_name %}
-                            <div class="request-item-brand">{{ item.brand_name }}</div>
+                            <div class="request-item-brand">{{ item.brand_name|clean_display('ブランド未登録') }}</div>
                             {% endif %}
                             {% if item.appraisal_status_label %}
                             <div class="request-item-status">{{ item.appraisal_status_label }}</div>
@@ -665,9 +665,10 @@
                     </div>
                 </div>
 
-                <div class="request-note" id="note-display-{{ req.id }}" {% if not req.admin_note %}style="display: none;"{% endif %}>
+                {% set clean_admin_note = req.admin_note|clean_display('') %}
+                <div class="request-note" id="note-display-{{ req.id }}" {% if not clean_admin_note %}style="display: none;"{% endif %}>
                     <div class="request-note-label">備考</div>
-                    <p id="note-display-text-{{ req.id }}">{{ req.admin_note }}</p>
+                    <p id="note-display-text-{{ req.id }}">{{ clean_admin_note }}</p>
                 </div>
 
                 <div class="processed-info" id="processed-info-{{ req.id }}" {% if req.status == 'pending' and not req.processed_at %}style="display: none;"{% endif %}>
@@ -705,7 +706,7 @@
                         <div class="request-actions-subtitle">受け取った申請を確認しながら、そのままクライアントへ現在の状況を共有できます。</div>
                     </div>
                     <div class="admin-note-input">
-                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください">{{ req.admin_note or '' }}</textarea>
+                        <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください">{{ clean_admin_note }}</textarea>
                     </div>
                     <div class="action-buttons" id="action-buttons-{{ req.id }}">
                         {% if req.available_actions %}
