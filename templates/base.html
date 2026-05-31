@@ -1364,20 +1364,45 @@
             setTimeout(() => alert.remove(), 5000);
         });
 
-        document.addEventListener('click', function(event) {
-            const interactive = event.target.closest('a, button, input, select, textarea, label, summary, details, [data-no-card-link]');
-            if (interactive) {
-                return;
-            }
-            const card = event.target.closest('[data-detail-url]');
-            if (!card) {
-                return;
-            }
-            const url = card.getAttribute('data-detail-url');
-            if (url) {
+        (function setupDetailCardNavigation() {
+            const interactiveSelector = [
+                'a',
+                'button',
+                'input',
+                'select',
+                'textarea',
+                'label',
+                'summary',
+                'details',
+                '[role="button"]',
+                '[data-no-card-link]'
+            ].join(',');
+
+            document.addEventListener('click', function(event) {
+                if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                const target = event.target instanceof Element ? event.target : null;
+                if (!target || target.closest(interactiveSelector)) {
+                    return;
+                }
+
+                const card = target.closest('[data-detail-url]');
+                if (!card) {
+                    return;
+                }
+
+                const url = card.getAttribute('data-detail-url');
+                if (!url) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
                 window.location.href = url;
-            }
-        });
+            }, true);
+        })();
 
         (function setupHistoryBackBar() {
             const historyBackBar = document.getElementById('historyBackBar');
