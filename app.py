@@ -3107,12 +3107,16 @@ if DATABASE_URL:
             password=url.password,
             sslmode='require'
         )
+        original_autocommit = conn.autocommit
         try:
+            conn.autocommit = True
             tz_cur = conn.cursor()
             tz_cur.execute("SET TIME ZONE 'Asia/Tokyo'")
             tz_cur.close()
         except Exception as tz_error:
             print(f"[WARN] Failed to set DB timezone to JST: {tz_error}", flush=True)
+        finally:
+            conn.autocommit = original_autocommit
         return conn
     
     def init_db():
