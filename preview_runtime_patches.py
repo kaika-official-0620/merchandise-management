@@ -26,17 +26,19 @@ SALES_AGENCY_SERVICE_TYPES = {
 }
 
 SALES_AGENCY_STATUS = {
-    "pending": "認証中",
+    "pending": "承認待ち",
     "approved": "認証済み",
     "appraising": "査定中",
+    "inspecting": "検品中",
     "completed": "処理完了",
     "rejected": "却下申請",
 }
 
 SALES_AGENCY_STATUS_CLIENT = {
-    "pending": "認証中",
+    "pending": "認証待ち",
     "approved": "認証済み",
     "appraising": "査定中",
+    "inspecting": "検品中",
     "completed": "売却済み",
     "rejected": "却下申請",
 }
@@ -198,8 +200,11 @@ def apply(module: Any) -> None:
             return value.strftime("%Y-%m-%d")
         return str(value)[:10]
 
-    def get_sales_agency_status_label(status, viewer="admin"):
+    def get_sales_agency_status_label(status, viewer="admin", service_type=None):
         status_key = (status or "").strip()
+        service_key = (service_type or "").strip()
+        if service_key == "simultaneous" and status_key == "appraising":
+            return "出品準備中"
         status_map = SALES_AGENCY_STATUS_CLIENT if viewer == "client" else SALES_AGENCY_STATUS
         return status_map.get(status_key, status_key)
 

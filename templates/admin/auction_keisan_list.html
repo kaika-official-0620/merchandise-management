@@ -305,12 +305,12 @@
                         </td>
                         <td>
                             {% set clean_auction_name = (doc.auction_name_display or '')|replace('【プレビュー確認用】', '')|trim %}
-                            <strong>{{ clean_auction_name or doc.auction_name_display }}</strong>
+                            <strong>{{ (clean_auction_name or doc.auction_name_display)|clean_display('オークション名未登録') }}</strong>
                             <span class="subtext">終了 {{ doc.end_display }}</span>
                         </td>
                         <td class="item-summary">
                             {% set clean_item_summary = (doc.item_summary or '')|replace('【プレビュー確認用】', '')|trim %}
-                            {{ clean_item_summary or doc.item_summary }}
+                            {{ (clean_item_summary or doc.item_summary)|clean_display('商品名未登録') }}
                             <span class="subtext">{{ doc.item_count }}件</span>
                         </td>
                         <td class="amount">¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
