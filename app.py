@@ -5738,6 +5738,25 @@ def derive_appraisal_status(item_status):
     return 'none'
 
 
+def resolve_sale_date_for_status(item_status, sale_date_value=None):
+    if (item_status or '').strip() != 'sold':
+        return None
+    return sale_date_value or get_jst_now().strftime('%Y-%m-%d')
+
+
+def merchandise_is_sold(item):
+    if not item:
+        return False
+    if item.get('sale_date'):
+        return True
+    if (item.get('item_status') or '').strip() == 'sold':
+        return True
+    request_info = item.get('sales_agency_request') or {}
+    if (request_info.get('status') or '').strip() in {'sold', 'completed'}:
+        return True
+    return False
+
+
 def calculate_kaika_marketplace_fee(sale_type, sale_price, commission_rate=None, manual_commission=None):
     normalized_type = normalize_kaika_sale_type(sale_type)
     sale_price_value = max(int(sale_price or 0), 0)
@@ -5966,6 +5985,8 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
     sale_price = int(item.get('sale_price') or 0)
     shipping_cost = int(item.get('shipping_cost') or 0)
     commission = int(item.get('commission') or 0)
+    is_sold = merchandise_is_sold(item)
+    item['is_sold'] = is_sold
     user_fee_breakdown = build_user_fee_components(item, fee_settings) if scope == 'user' else None
 
     if scope == 'user':
@@ -6031,7 +6052,7 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
         fee_breakdown_details.append("追加手数料はありません。")
     item['fee_breakdown_details'] = fee_breakdown_details
 
-    if item.get('sale_date'):
+    if is_sold:
         item['profit'] = calculate_profit(sale_price, display_purchase_price, shipping_cost, commission)
         item['profit_rate'] = calculate_profit_rate(item['profit'], display_purchase_price)
 
@@ -12382,6 +12403,7 @@ def add_item():
             request.form.get('commission_rate'),
             request.form.get('commission')
         )
+        sale_date_value = resolve_sale_date_for_status(item_status, request.form.get('sale_date') or None)
         
         # 卸価格：フォームで手動入力があれば使用、なければ仕入額と卸手数料から自動計算
         purchase_price = int(float(request.form.get('purchase_price') or 0))
@@ -12424,7 +12446,7 @@ def add_item():
                 parse_money_value(request.form.get('expected_commission'), 0),
                 item_status in ['listed', 'sold'],  # is_listed: 出品中または売却済みならTrue
                 request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                request.form.get('sale_date') or None if item_status == 'sold' else None,
+                sale_date_value,
                 sale_type_value,
                 sale_price_value,
                 parse_money_value(request.form.get('shipping_cost'), 0),
@@ -12466,7 +12488,7 @@ def add_item():
                 int(request.form.get('expected_commission') or 0),
                 1 if item_status in ['listed', 'sold'] else 0,  # is_listed: 出品中または売却済みなら1
                 request.form.get('listing_date') or None if item_status in ['listed', 'sold'] else None,
-                request.form.get('sale_date') or None if item_status == 'sold' else None,
+                sale_date_value,
                 sale_type_value,
                 sale_price_value,
                 parse_money_value(request.form.get('shipping_cost'), 0),
@@ -12683,6 +12705,7 @@ def edit_item(id):
             expected_commission_value = int(request.form.get('expected_commission') or 0) if can_edit_basic_fields else int(item_dict.get('expected_commission') or 0)
             listing_date_value = (request.form.get('listing_date') or None) if can_edit_basic_fields else (item_dict.get('listing_date') or None)
             sale_date_value = (request.form.get('sale_date') or None) if can_edit_basic_fields else (item_dict.get('sale_date') or None)
+            sale_date_value = resolve_sale_date_for_status(item_status, sale_date_value)
             raw_sale_type_value = (request.form.get('sale_type') or 'normal') if can_edit_basic_fields else (item_dict.get('sale_type') or 'normal')
             sale_type_value = normalize_kaika_sale_type(raw_sale_type_value) if (can_edit_basic_fields and is_kaika_scope) else raw_sale_type_value
             sale_price_value = parse_money_value(request.form.get('sale_price'), 0) if can_edit_basic_fields else parse_money_value(item_dict.get('sale_price'), 0)
@@ -12946,6 +12969,11 @@ def edit_item(id):
             item_dict['additional_photos_list'] = []
     else:
         item_dict['additional_photos_list'] = []
+    apply_inventory_display_metrics(
+        item_dict,
+        scope='admin' if is_kaika_inventory_item(item_dict) else 'user',
+        fee_settings=get_fee_settings()
+    )
     
     # リファラーから戻り先URLを判定
     referrer = request.referrer or ''
@@ -13063,7 +13091,13 @@ def view_item(id):
         except Exception as e:
             print(f"Error fetching item sales agency status: {e}", flush=True)
     
-    if item_dict.get('sale_date'):
+    apply_inventory_display_metrics(
+        item_dict,
+        scope='admin' if current_user.is_admin() or current_user.is_owner() else 'user',
+        fee_settings=get_fee_settings()
+    )
+
+    if item_dict.get('is_sold'):
         item_dict['profit'] = calculate_profit(
             item_dict.get('sale_price', 0) or 0,
             item_dict.get('purchase_price', 0) or 0,
@@ -14760,13 +14794,19 @@ def admin_user_items(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM users WHERE id = %s", (id,))
         user = cur.fetchone()
-        cur.execute("SELECT * FROM merchandise WHERE user_id = %s ORDER BY id DESC", (id,))
+        cur.execute(
+            "SELECT * FROM merchandise WHERE user_id = %s AND (proxy_parent_item_id IS NULL OR proxy_parent_item_id = 0) ORDER BY id DESC",
+            (id,),
+        )
         items = cur.fetchall()
     else:
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE id = ?", (id,))
         user = cur.fetchone()
-        cur.execute("SELECT * FROM merchandise WHERE user_id = ? ORDER BY id DESC", (id,))
+        cur.execute(
+            "SELECT * FROM merchandise WHERE user_id = ? AND (proxy_parent_item_id IS NULL OR proxy_parent_item_id = 0) ORDER BY id DESC",
+            (id,),
+        )
         items = cur.fetchall()
     
     cur.close()
@@ -23123,7 +23163,7 @@ def admin_user_products():
                     items_raw = []
             elif normal_user_ids:
                 placeholders = ','.join(['%s'] * len(normal_user_ids))
-                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) AND (proxy_parent_item_id IS NULL OR proxy_parent_item_id = 0)"
                 item_params = list(normal_user_ids)
                 if selected_owner_id:
                     item_query += " AND user_id = %s"
@@ -23224,7 +23264,7 @@ def admin_user_products():
                     items_raw = []
             elif normal_user_ids:
                 placeholders = ','.join(['?'] * len(normal_user_ids))
-                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders})"
+                item_query = f"SELECT * FROM merchandise WHERE user_id IN ({placeholders}) AND (proxy_parent_item_id IS NULL OR proxy_parent_item_id = 0)"
                 item_params = list(normal_user_ids)
                 if selected_owner_id:
                     item_query += " AND user_id = ?"
@@ -23301,9 +23341,11 @@ def admin_user_products():
     
     # 利益計算と利益率の追加、最終更新者名の追加
     all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
+    fee_settings = get_fee_settings()
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
+        apply_inventory_display_metrics(item, scope='user', fee_settings=fee_settings)
         if item.get('sale_date'):
             sale_price = item.get('sale_price', 0) or 0
             purchase_price = item.get('purchase_price', 0) or 0
@@ -23500,7 +23542,7 @@ def admin_add_item():
         item_status = request.form.get('item_status', 'unlisted')
         is_listed = item_status in ['listed', 'sold']
         appraisal_status = derive_appraisal_status(item_status)
-        sale_date = request.form.get('sale_date') if item_status == 'sold' else None
+        sale_date = resolve_sale_date_for_status(item_status, request.form.get('sale_date') or None)
         sale_type_value = request.form.get('sale_type') or ('normal' if form_mode == 'admin' else 'photo_packing,normal')
         sale_price_value = parse_money_value(request.form.get('sale_price'), 0)
         if form_mode == 'admin':
@@ -35732,10 +35774,15 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
     conn, cur = sales_agency_open_cursor()
     try:
         placeholder = sales_agency_placeholder()
+        user_phone_select = (
+            "u.phone AS user_phone"
+            if sales_agency_column_exists(cur, 'users', 'phone')
+            else "NULL AS user_phone"
+        )
         cur.execute(
             f'''
             SELECT sar.*, u.display_name AS user_name, u.username,
-                   u.email AS user_email, u.phone AS user_phone,
+                   u.email AS user_email, {user_phone_select},
                    p.display_name AS processor_name
             FROM sales_agency_requests sar
             JOIN users u ON sar.user_id = u.id
@@ -39164,10 +39211,15 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
     conn, cur = sales_agency_open_cursor()
     try:
         placeholder = sales_agency_placeholder()
+        user_phone_select = (
+            "u.phone AS user_phone"
+            if sales_agency_column_exists(cur, 'users', 'phone')
+            else "NULL AS user_phone"
+        )
         cur.execute(
             f'''
             SELECT sar.*, u.display_name AS user_name, u.username,
-                   u.email AS user_email, u.phone AS user_phone,
+                   u.email AS user_email, {user_phone_select},
                    p.display_name AS processor_name
             FROM sales_agency_requests sar
             JOIN users u ON sar.user_id = u.id

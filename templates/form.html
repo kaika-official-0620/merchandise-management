@@ -221,6 +221,55 @@
     text-align: center;
 }
 
+.local-photo-preview,
+.local-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.local-preview-item {
+    position: relative;
+    width: 120px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.local-preview-item img {
+    width: 100%;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.local-preview-item .preview-name {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remove-local-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    cursor: pointer;
+    line-height: 1;
+    font-weight: 700;
+}
+
 .form-help {
     display: block;
     color: #64748b;
@@ -557,6 +606,7 @@ input:disabled, select:disabled, textarea:disabled {
                 <label for="photo">メイン写真（1枚目）</label>
                 <div class="photo-upload-options">
                 <input type="file" id="photo" name="photo" accept="image/*" {% if basic_readonly %}disabled{% endif %}>
+                <div id="local-photo-preview" class="local-photo-preview"></div>
                     <button type="button" id="google-drive-photo-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
@@ -587,6 +637,7 @@ input:disabled, select:disabled, textarea:disabled {
                 <label for="additional_photos">追加写真（最大19枚）</label>
                 <div class="photo-upload-options">
                 <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple {% if basic_readonly %}disabled{% endif %}>
+                <div id="local-additional-preview" class="local-additional-preview"></div>
                     <button type="button" id="google-drive-additional-btn" class="btn-google-drive" {% if basic_readonly %}disabled{% endif %}>
                         <svg viewBox="0 0 87.3 78" width="18" height="16" style="margin-right: 6px;">
                             <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5l5.4 9.35z" fill="#0066DA"/>
@@ -628,7 +679,7 @@ input:disabled, select:disabled, textarea:disabled {
             <div class="form-group">
                 <label for="item_status">ステータス</label>
                 <select id="item_status" name="item_status" onchange="updateStatusFields()" {% if basic_readonly %}disabled{% endif %}>
-                    {% set current_status = 'sold' if item and item.sale_date else ('appraisal_pending' if item and item.appraisal_status == 'waiting' else ('listed' if item and item.is_listed else 'unlisted')) %}
+                    {% set current_status = 'sold' if item and (item.is_sold or item.sale_date) else ('appraisal_pending' if item and item.appraisal_status == 'waiting' else ('listed' if item and item.is_listed else 'unlisted')) %}
                     <option value="unlisted" {% if current_status == 'unlisted' %}selected{% endif %}>未出品</option>
                     <option value="appraisal_pending" {% if current_status == 'appraisal_pending' %}selected{% endif %}>査定待ち</option>
                     <option value="listed" {% if current_status == 'listed' %}selected{% endif %}>出品中</option>
@@ -2014,6 +2065,73 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // フォーム送信時のローディング処理と画像リサイズ
+    const photoInputForPreview = document.getElementById('photo');
+    const photoPreview = document.getElementById('local-photo-preview');
+    const additionalInputForPreview = document.getElementById('additional_photos');
+    const additionalPreview = document.getElementById('local-additional-preview');
+    let selectedAdditionalFiles = [];
+    let additionalSelectionTouched = false;
+
+    function buildPreviewItem(file, onRemove) {
+        const item = document.createElement('div');
+        item.className = 'local-preview-item';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.alt = file.name;
+        img.onload = () => URL.revokeObjectURL(img.src);
+        const name = document.createElement('span');
+        name.className = 'preview-name';
+        name.textContent = file.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove-local-photo';
+        remove.textContent = 'x';
+        remove.addEventListener('click', onRemove);
+        item.append(img, name, remove);
+        return item;
+    }
+
+    function syncAdditionalFileInput() {
+        if (!additionalInputForPreview || typeof DataTransfer === 'undefined') return;
+        const transfer = new DataTransfer();
+        selectedAdditionalFiles.forEach((file) => transfer.items.add(file));
+        additionalInputForPreview.files = transfer.files;
+    }
+
+    function renderAdditionalPreview() {
+        if (!additionalPreview) return;
+        additionalPreview.innerHTML = '';
+        selectedAdditionalFiles.forEach((file, index) => {
+            additionalPreview.appendChild(buildPreviewItem(file, () => {
+                selectedAdditionalFiles.splice(index, 1);
+                additionalSelectionTouched = true;
+                syncAdditionalFileInput();
+                renderAdditionalPreview();
+            }));
+        });
+    }
+
+    if (photoInputForPreview && photoPreview) {
+        photoInputForPreview.addEventListener('change', () => {
+            photoPreview.innerHTML = '';
+            const file = photoInputForPreview.files && photoInputForPreview.files[0];
+            if (!file) return;
+            photoPreview.appendChild(buildPreviewItem(file, () => {
+                photoInputForPreview.value = '';
+                photoPreview.innerHTML = '';
+            }));
+        });
+    }
+
+    if (additionalInputForPreview) {
+        additionalInputForPreview.addEventListener('change', () => {
+            selectedAdditionalFiles = Array.from(additionalInputForPreview.files || []).slice(0, 19);
+            additionalSelectionTouched = true;
+            syncAdditionalFileInput();
+            renderAdditionalPreview();
+        });
+    }
+
     const form = document.getElementById('item-form');
     const submitBtn = document.getElementById('submit-btn');
     const btnText = submitBtn.querySelector('.btn-text');
@@ -2047,10 +2165,13 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 追加写真をリサイズ
             const additionalInput = document.getElementById('additional_photos');
-            if (additionalInput.files.length > 0) {
+            const additionalFilesToSend = additionalSelectionTouched
+                ? selectedAdditionalFiles
+                : Array.from((additionalInput && additionalInput.files) || []);
+            if (additionalSelectionTouched || additionalFilesToSend.length > 0) {
                 formData.delete('additional_photos');
-                for (let i = 0; i < additionalInput.files.length; i++) {
-                    const resizedPhoto = await resizeImage(additionalInput.files[i]);
+                for (let i = 0; i < additionalFilesToSend.length; i++) {
+                    const resizedPhoto = await resizeImage(additionalFilesToSend[i]);
                     formData.append('additional_photos', resizedPhoto);
                 }
             }

@@ -579,7 +579,7 @@
 {% if not current_user.is_admin() %}
 <section class="sales-agency-detail-panel">
     <h3>販売代行申請</h3>
-    {% if item.sale_date %}
+    {% if item.is_sold or item.sale_date %}
     <p>売却済みの商品は販売代行を申請できません。</p>
     {% elif item.pending_sales_agency and item.sales_agency_request %}
     <p class="sales-agency-status-note">
@@ -792,7 +792,7 @@
             <dl class="detail-list">
                 <dt>ステータス</dt>
                 <dd>
-                    {% if item.sale_date %}
+                    {% if item.is_sold or item.sale_date %}
                     <span class="badge badge-sold">売却済み</span>
                     {% elif item.appraisal_status == 'waiting' %}
                     <span class="badge badge-pending">査定待ち</span>
@@ -820,7 +820,7 @@
                 <dd>¥{{ "{:,}".format(item.expected_shipping or 0) }}</dd>
                 <dt>想定手数料</dt>
                 <dd>¥{{ "{:,}".format(item.expected_commission or 0) }}</dd>
-                {% if not item.sale_date and item.expected_profit is defined %}
+                {% if not (item.is_sold or item.sale_date) and item.expected_profit is defined %}
                 <dt>想定利益</dt>
                 <dd class="{% if item.expected_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
                     ¥{{ "{:,}".format(item.expected_profit) }}
@@ -829,7 +829,7 @@
             </dl>
         </div>
         
-        {% if item.sale_date %}
+        {% if item.is_sold or item.sale_date %}
         <div class="detail-section">
             <h3>売却情報</h3>
             <dl class="detail-list">

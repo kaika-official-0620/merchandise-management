@@ -54,6 +54,7 @@ def apply(module: Any) -> None:
     RealDictCursor = getattr(module, "RealDictCursor", None)
     login_required = module.login_required
     get_db = module.get_db
+    get_jst_now = getattr(module, "get_jst_now", datetime.now)
     fetch_sales_agency_request_source = getattr(module, "fetch_sales_agency_request_source", None)
     generate_admin_mitsumori_document_no = getattr(
         module,
@@ -367,6 +368,11 @@ def apply(module: Any) -> None:
         if status in {"listed", "sold"}:
             return "completed"
         return "none"
+
+    def resolve_sale_date_for_status(item_status, sale_date_value=None):
+        if (item_status or "").strip() != "sold":
+            return None
+        return sale_date_value or get_jst_now().strftime("%Y-%m-%d")
 
     def fallback_item_redirect(item_dict):
         fallback = url_for("admin_items")
@@ -2201,6 +2207,10 @@ def apply(module: Any) -> None:
                 item_status = (request.form.get("item_status") or "unlisted").strip()
                 appraisal_status = derive_appraisal_status(item_status)
                 is_listed_db_value = db_boolean_param(item_status in {"listed", "sold"})
+                sale_date_value = resolve_sale_date_for_status(
+                    item_status,
+                    form_value("sale_date", item_dict.get("sale_date")) or None,
+                )
 
                 is_kaika_scope = False
                 if callable(is_kaika_inventory_item):
@@ -2260,7 +2270,7 @@ def apply(module: Any) -> None:
                     ("expected_commission", money_value("expected_commission", item_dict.get("expected_commission"))),
                     ("is_listed", is_listed_db_value),
                     ("listing_date", (form_value("listing_date", item_dict.get("listing_date")) or None) if item_status in {"listed", "sold"} else None),
-                    ("sale_date", (form_value("sale_date", item_dict.get("sale_date")) or None) if item_status == "sold" else None),
+                    ("sale_date", sale_date_value),
                     ("sale_type", sale_type_value),
                     ("sale_price", sale_price_value),
                     ("shipping_cost", money_value("shipping_cost", item_dict.get("shipping_cost"))),
@@ -2357,6 +2367,7 @@ def apply(module: Any) -> None:
                 item_status = (request.form.get("item_status") or "unlisted").strip()
                 appraisal_status = derive_appraisal_status(item_status)
                 is_listed_db_value = db_boolean_param(item_status in {"listed", "sold"})
+                sale_date_value = resolve_sale_date_for_status(item_status, request.form.get("sale_date") or None)
                 default_sale_type = "normal" if mode == "admin" else "photo_packing,normal"
                 sale_type_value = request.form.get("sale_type") or default_sale_type
                 if mode == "admin" and callable(normalize_kaika_sale_type):
@@ -2456,7 +2467,7 @@ def apply(module: Any) -> None:
                     money_value("expected_commission"),
                     is_listed_db_value,
                     (request.form.get("listing_date") or None) if item_status in {"listed", "sold"} else None,
-                    (request.form.get("sale_date") or None) if item_status == "sold" else None,
+                    sale_date_value,
                     sale_type_value,
                     sale_price_value,
                     money_value("shipping_cost"),

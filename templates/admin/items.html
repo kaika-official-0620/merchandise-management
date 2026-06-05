@@ -56,7 +56,7 @@
             </thead>
             <tbody>
                 {% for item in admin_items %}
-                <tr class="{% if item.sale_date %}row-sold{% endif %}">
+                <tr class="{% if item.is_sold or item.sale_date %}row-sold{% endif %}">
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form-admin" class="item-checkbox-admin">
                     </td>
@@ -84,7 +84,7 @@
                     <td>{{ item.purchase_date or '-' }}</td>
                     <td>¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
                     <td>
-                        {% if item.sale_date %}
+                        {% if item.is_sold or item.sale_date %}
                         <span class="badge badge-sold">売却済</span>
                         {% elif item.is_listed %}
                         <span class="badge badge-listed">出品中</span>
@@ -145,7 +145,7 @@
             </thead>
             <tbody>
                 {% for item in user_items %}
-                <tr class="{% if item.sale_date %}row-sold{% endif %}">
+                <tr class="{% if item.is_sold or item.sale_date %}row-sold{% endif %}">
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-transfer-form-user" class="item-checkbox-user">
                     </td>
@@ -169,7 +169,7 @@
                     <td>{{ item.purchase_date or '-' }}</td>
                     <td>¥{{ "{:,}".format(item.purchase_price or 0) }}</td>
                     <td>
-                        {% if item.sale_date %}
+                        {% if item.is_sold or item.sale_date %}
                         <span class="badge badge-sold">売却済</span>
                         {% elif item.is_listed %}
                         <span class="badge badge-listed">出品中</span>

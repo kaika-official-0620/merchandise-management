@@ -2279,16 +2279,16 @@
             </thead>
             <tbody>
                 {% for item in items %}
-                <tr class="{% if item.sale_date %}row-sold{% elif item.can_send_completion_report %}row-completion-needed{% endif %}" data-id="{{ item.id }}"
+                <tr class="{% if item.is_sold or item.sale_date %}row-sold{% elif item.can_send_completion_report %}row-completion-needed{% endif %}" data-id="{{ item.id }}"
                     data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
                     data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
                     data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
                     data-purchase-price="{{ item.wholesale_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
-                    data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+                    data-profit="{{ item.profit if (item.is_sold or item.sale_date) else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-sale-date="{{ item.sale_date or '' }}"
                     data-status-priority="{{ item.status_priority or 50 }}"
-                    data-status="{% if item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
                     data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
@@ -2324,7 +2324,7 @@
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount fee-col">
-                        {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                        {% if item.is_sold or item.sale_date or item.display_fee_total or item.kaika_fee %}
                         <details class="fee-breakdown">
                             <summary>¥{{ "{:,}".format(item.display_fee_total or 0) }}</summary>
                             <div class="fee-breakdown-body">
@@ -2338,18 +2338,18 @@
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount shipping-col">
-                        {% if item.sale_date or item.display_shipping_cost %}
+                        {% if item.is_sold or item.sale_date or item.display_shipping_cost %}
                         ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td class="amount">
-                        {% if item.sale_date %}
+                        {% if item.is_sold or item.sale_date %}
                         ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td
-                        class="amount {% if item.sale_date %}{% if item.profit > 0 %}positive{% else %}negative{% endif %}{% elif item.expected_profit %}{% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}{% endif %}">
-                        {% if item.sale_date %}
+                        class="amount {% if item.is_sold or item.sale_date %}{% if item.profit > 0 %}positive{% else %}negative{% endif %}{% elif item.expected_profit %}{% if item.expected_profit > 0 %}positive{% else %}negative{% endif %}{% endif %}">
+                        {% if item.is_sold or item.sale_date %}
                         ¥{{ "{:,}".format(item.profit) }}
                         <small>({{ item.profit_rate }}%)</small>
                         {% elif item.expected_profit is defined %}
@@ -2357,7 +2357,7 @@
                         {% else %}-{% endif %}
                     </td>
                     <td>
-                        {% if item.sale_date %}
+                        {% if item.is_sold or item.sale_date %}
                         <span class="status-badge sold">売却済</span>
                         {% elif item.pending_completion_request %}
                         <span class="status-badge pending-sale">完了報告確認中</span>
@@ -2382,7 +2382,7 @@
                         <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-detail">詳細</a>
                         {% if current_user.is_admin() %}
                         <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
-                        {% if is_shared_view and not item.sale_date and current_user.can_manage_proxy_service() %}
+                        {% if is_shared_view and not (item.is_sold or item.sale_date) and current_user.can_manage_proxy_service() %}
                         <button type="button" class="btn btn-sm btn-proxy {% if item.show_in_proxy_service %}active{% endif %}"
                             onclick="event.preventDefault(); event.stopPropagation(); toggleProxyService({{ item.id }}, this)" title="代行サービスに掲載">
                             {% if item.show_in_proxy_service %}掲載中{% else %}代行{% endif %}
@@ -2397,7 +2397,7 @@
                         {% endif %}
                         {% else %}
                         {# ユーザー向け #}
-                        {% if not item.sale_date %}
+                        {% if not (item.is_sold or item.sale_date) %}
                         {% if item.pending_sales_agency %}
                         {# 販売代行申請中の場合はステータスバッジ #}
                         <span class="badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}badge-agency{% else %}badge-waiting{% endif %}">
@@ -2497,16 +2497,16 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="item-card {% if item.sale_date %}card-sold{% elif item.can_send_completion_report %}card-completion-needed{% endif %}" data-id="{{ item.id }}"
+        <div class="item-card {% if item.is_sold or item.sale_date %}card-sold{% elif item.can_send_completion_report %}card-completion-needed{% endif %}" data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-store="{{ item.store_name or '' }}" data-date="{{ item.purchase_date or '' }}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-listing-price="{{ item.listing_price or 0 }}"
             data-commission-total="{{ item.display_fee_total or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
-            data-profit="{{ item.profit if item.sale_date else (item.expected_profit if item.expected_profit is defined else 0) }}"
+            data-profit="{{ item.profit if (item.is_sold or item.sale_date) else (item.expected_profit if item.expected_profit is defined else 0) }}"
             data-sale-date="{{ item.sale_date or '' }}"
             data-status-priority="{{ item.status_priority or 50 }}"
-            data-status="{% if item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}true{% else %}false{% endif %}"
             data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
@@ -2540,7 +2540,7 @@
                     </div>
                 </div>
                 <div class="card-status">
-                    {% if item.sale_date %}
+                    {% if item.is_sold or item.sale_date %}
                     <span class="status-badge sold">売却済</span>
                     {% elif item.pending_completion_request %}
                     <span class="status-badge pending-sale">完了報告確認中</span>
@@ -2572,13 +2572,13 @@
                     </div>
                     <div class="price-item">
                         <span class="price-label">売上</span>
-                        <span class="price-value">{% if item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
+                        <span class="price-value">{% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.sale_price or 0) }}{%
                             else %}-{% endif %}</span>
                     </div>
                     <div class="price-item">
                         <span class="price-label">手数料</span>
                         <span class="price-value">
-                            {% if item.sale_date or item.display_fee_total or item.kaika_fee %}
+                            {% if item.is_sold or item.sale_date or item.display_fee_total or item.kaika_fee %}
                             ¥{{ "{:,}".format(item.display_fee_total or 0) }}
                             {% else %}-{% endif %}
                         </span>
@@ -2586,12 +2586,12 @@
                     <div class="price-item">
                         <span class="price-label">送料</span>
                         <span class="price-value">
-                            {% if item.sale_date or item.display_shipping_cost %}
+                            {% if item.is_sold or item.sale_date or item.display_shipping_cost %}
                             ¥{{ "{:,}".format(item.display_shipping_cost or 0) }}
                             {% else %}-{% endif %}
                         </span>
                     </div>
-                    {% if item.sale_date %}
+                    {% if item.is_sold or item.sale_date %}
                     <div class="price-item profit">
                         <span class="price-label">利益</span>
                         <span class="price-value {% if item.profit > 0 %}positive{% else %}negative{% endif %}">
@@ -2622,7 +2622,7 @@
                 {% endif %}
                 {% else %}
                 {# ユーザー向け #}
-                {% if not item.sale_date %}
+                {% if not (item.is_sold or item.sale_date) %}
                 {% if item.pending_sales_agency %}
                 {# 販売代行申請中の場合はステータスバッジ #}
                 <span class="badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}badge-agency{% else %}badge-waiting{% endif %}">

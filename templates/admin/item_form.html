@@ -112,6 +112,55 @@
     text-align: center;
 }
 
+.local-photo-preview,
+.local-additional-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.local-preview-item {
+    position: relative;
+    width: 120px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.local-preview-item img {
+    width: 100%;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.local-preview-item .preview-name {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remove-local-photo {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    cursor: pointer;
+    line-height: 1;
+    font-weight: 700;
+}
+
 .form-help {
     display: block;
     color: #64748b;
@@ -323,11 +372,13 @@
             <div class="form-group">
                 <label for="photo">メイン写真（1枚目）</label>
                 <input type="file" id="photo" name="photo" accept="image/*">
+                <div id="local-photo-preview" class="local-photo-preview"></div>
             </div>
             
             <div class="form-group">
                 <label for="additional_photos">追加写真（最大19枚）</label>
                 <input type="file" id="additional_photos" name="additional_photos" accept="image/*" multiple>
+                <div id="local-additional-preview" class="local-additional-preview"></div>
                 <small class="form-help">複数選択可能です（Ctrl/Cmdを押しながらクリック）</small>
             </div>
         </div>
@@ -1629,6 +1680,73 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    const photoInputForPreview = document.getElementById('photo');
+    const photoPreview = document.getElementById('local-photo-preview');
+    const additionalInputForPreview = document.getElementById('additional_photos');
+    const additionalPreview = document.getElementById('local-additional-preview');
+    let selectedAdditionalFiles = [];
+    let additionalSelectionTouched = false;
+
+    function buildPreviewItem(file, onRemove) {
+        const item = document.createElement('div');
+        item.className = 'local-preview-item';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.alt = file.name;
+        img.onload = () => URL.revokeObjectURL(img.src);
+        const name = document.createElement('span');
+        name.className = 'preview-name';
+        name.textContent = file.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove-local-photo';
+        remove.textContent = 'x';
+        remove.addEventListener('click', onRemove);
+        item.append(img, name, remove);
+        return item;
+    }
+
+    function syncAdditionalFileInput() {
+        if (!additionalInputForPreview || typeof DataTransfer === 'undefined') return;
+        const transfer = new DataTransfer();
+        selectedAdditionalFiles.forEach((file) => transfer.items.add(file));
+        additionalInputForPreview.files = transfer.files;
+    }
+
+    function renderAdditionalPreview() {
+        if (!additionalPreview) return;
+        additionalPreview.innerHTML = '';
+        selectedAdditionalFiles.forEach((file, index) => {
+            additionalPreview.appendChild(buildPreviewItem(file, () => {
+                selectedAdditionalFiles.splice(index, 1);
+                additionalSelectionTouched = true;
+                syncAdditionalFileInput();
+                renderAdditionalPreview();
+            }));
+        });
+    }
+
+    if (photoInputForPreview && photoPreview) {
+        photoInputForPreview.addEventListener('change', () => {
+            photoPreview.innerHTML = '';
+            const file = photoInputForPreview.files && photoInputForPreview.files[0];
+            if (!file) return;
+            photoPreview.appendChild(buildPreviewItem(file, () => {
+                photoInputForPreview.value = '';
+                photoPreview.innerHTML = '';
+            }));
+        });
+    }
+
+    if (additionalInputForPreview) {
+        additionalInputForPreview.addEventListener('change', () => {
+            selectedAdditionalFiles = Array.from(additionalInputForPreview.files || []).slice(0, 19);
+            additionalSelectionTouched = true;
+            syncAdditionalFileInput();
+            renderAdditionalPreview();
+        });
+    }
+
     const form = document.getElementById('item-form');
     const submitBtn = document.getElementById('submit-btn');
     const btnText = submitBtn.querySelector('.btn-text');
@@ -1655,10 +1773,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const additionalInput = document.getElementById('additional_photos');
-            if (additionalInput.files.length > 0) {
+            const additionalFilesToSend = additionalSelectionTouched
+                ? selectedAdditionalFiles
+                : Array.from((additionalInput && additionalInput.files) || []);
+            if (additionalSelectionTouched || additionalFilesToSend.length > 0) {
                 formData.delete('additional_photos');
-                for (let i = 0; i < additionalInput.files.length; i++) {
-                    const resizedPhoto = await resizeImage(additionalInput.files[i]);
+                for (let i = 0; i < additionalFilesToSend.length; i++) {
+                    const resizedPhoto = await resizeImage(additionalFilesToSend[i]);
                     formData.append('additional_photos', resizedPhoto);
                 }
             }
