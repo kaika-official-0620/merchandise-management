@@ -144,6 +144,8 @@ h1, h2, h3, h4, h5, h6 {
     border: none;
     cursor: pointer;
     padding: 4px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .hamburger-menu span {
@@ -219,6 +221,8 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-secondary);
     cursor: pointer;
     line-height: 1;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar-close:hover {
@@ -242,6 +246,8 @@ h1, h2, h3, h4, h5, h6 {
     transition: all 0.2s;
     border-left: 3px solid transparent;
     min-width: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar-nav a:hover {
@@ -329,6 +335,8 @@ h1, h2, h3, h4, h5, h6 {
     text-align: left;
     transition: all 0.2s;
     min-width: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .sidebar-category-toggle:hover {

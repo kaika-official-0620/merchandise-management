@@ -319,7 +319,7 @@
     {% if current_user.is_authenticated %}
     <nav class="navbar">
         <div class="nav-container">
-            <button class="hamburger-menu" onclick="toggleSidebar()">
+            <button type="button" class="hamburger-menu" onclick="toggleSidebar()">
                 <span></span>
                 <span></span>
                 <span></span>
@@ -364,7 +364,7 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <span>メニュー</span>
-            <button class="sidebar-close" onclick="toggleSidebar()">×</button>
+            <button type="button" class="sidebar-close" onclick="toggleSidebar()">×</button>
         </div>
         <div class="sidebar-nav">
             {% if current_user.is_admin() %}
@@ -1438,10 +1438,24 @@
         })();
 
         // サイドバートグル
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
-            document.querySelector('.sidebar-overlay').classList.toggle('open');
-            document.body.classList.toggle('sidebar-open');
+        function setSidebarOpen(isOpen) {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            if (!sidebar || !overlay) {
+                return;
+            }
+            sidebar.classList.toggle('open', isOpen);
+            overlay.classList.toggle('open', isOpen);
+            document.body.classList.toggle('sidebar-open', isOpen);
+        }
+
+        function toggleSidebar(forceOpen) {
+            const sidebar = document.getElementById('sidebar');
+            if (!sidebar) {
+                return;
+            }
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !sidebar.classList.contains('open');
+            setSidebarOpen(shouldOpen);
         }
         
         // カテゴリトグル
@@ -1461,6 +1475,35 @@
                     toggle.classList.add('open');
                 }
             });
+
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) {
+                sidebar.addEventListener('click', function(event) {
+                    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+                    if (!link || event.defaultPrevented) {
+                        return;
+                    }
+
+                    const href = link.getAttribute('href') || '';
+                    if (!href || href.startsWith('#') || href.startsWith('javascript:') || link.target === '_blank' || link.hasAttribute('download')) {
+                        return;
+                    }
+
+                    const targetUrl = link.href;
+                    setSidebarOpen(false);
+
+                    window.setTimeout(function() {
+                        if (document.hidden) {
+                            return;
+                        }
+                        const currentUrl = window.location.href.split('#')[0];
+                        const nextUrl = targetUrl.split('#')[0];
+                        if (currentUrl !== nextUrl || window.location.hash !== new URL(targetUrl).hash) {
+                            window.location.assign(targetUrl);
+                        }
+                    }, 80);
+                });
+            }
         });
         
         // ユーザーメニュートグル（スマホ対応）

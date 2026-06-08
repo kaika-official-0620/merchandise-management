@@ -347,6 +347,8 @@
 
 .form-control {
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 0.68rem 0.78rem;
     border: 1px solid #d1d5db;
     border-radius: 10px;
@@ -372,6 +374,7 @@
 .product-select-box {
     flex: 1 1 360px;
     min-width: 240px;
+    max-width: 100%;
 }
 
 .product-select-meta {
@@ -382,6 +385,7 @@
 }
 
 .table-responsive {
+    max-width: 100%;
     overflow-x: auto;
     border: 1px solid #e2e8f0;
     border-radius: 14px;
@@ -534,6 +538,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     width: min(1040px, calc(100vw - 32px));
+    max-width: 100%;
     max-height: calc(100vh - 32px);
     margin: 16px auto;
     overflow: hidden;
@@ -585,6 +590,8 @@
 
 .preview-sheet {
     width: min(820px, calc(100% - 32px));
+    max-width: 100%;
+    box-sizing: border-box;
     margin: 1rem auto;
     padding: 32px;
     overflow: auto;
@@ -727,6 +734,21 @@
 }
 
 @media (max-width: 760px) {
+    .mitsumori-form-page,
+    .mitsumori-form,
+    .form-section,
+    .table-responsive,
+    .document-preview-dialog,
+    .preview-sheet {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .mitsumori-form-page {
+        padding: 0;
+    }
+
     .page-header,
     .form-actions,
     .product-selector,
@@ -745,9 +767,168 @@
         width: 100%;
     }
 
+    .form-section {
+        padding: 1rem;
+        overflow: hidden;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .product-selector {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .product-selector label,
+    .product-select-box {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .table-responsive {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .items-table,
+    .items-table thead,
+    .items-table tbody,
+    .items-table tfoot,
+    .items-table tr,
+    .items-table th,
+    .items-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .items-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .items-table thead {
+        display: none;
+    }
+
+    .items-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .items-table .item-row {
+        padding: 0.8rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .items-table .item-row td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.42rem 0;
+        border-bottom: 0;
+        text-align: left;
+    }
+
+    .items-table .item-row td::before {
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+    }
+
+    .items-table .item-row td:nth-child(1)::before {
+        content: "No.";
+    }
+
+    .items-table .item-row td:nth-child(2) {
+        grid-template-columns: 1fr;
+    }
+
+    .items-table .item-row td:nth-child(2)::before {
+        content: "商品名・内容";
+    }
+
+    .items-table .item-row td:nth-child(3)::before {
+        content: "数量";
+    }
+
+    .items-table .item-row td:nth-child(4)::before {
+        content: "単価";
+    }
+
+    .items-table .item-row td:nth-child(5)::before {
+        content: "金額";
+    }
+
+    .items-table .item-row td:nth-child(6)::before {
+        content: "操作";
+    }
+
+    .items-table .item-row .row-amount,
+    .items-table .item-row .item-no {
+        text-align: left;
+    }
+
+    .items-table tfoot {
+        margin-top: 0.75rem;
+    }
+
+    .items-table tfoot tr {
+        display: grid;
+        gap: 0.45rem;
+        padding: 0.85rem;
+        border-radius: 14px;
+        background: #eff6ff;
+    }
+
+    .items-table tfoot td {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+    }
+
+    .items-table tfoot td:empty {
+        display: none;
+    }
+
+    .items-table tfoot .text-right,
+    #total-amount {
+        text-align: left;
+    }
+
+    #total-amount {
+        font-size: 1.1rem;
+    }
+
+    .document-preview-dialog {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .document-preview-toolbar,
+    .document-preview-actions {
+        padding: 0.85rem;
+    }
+
     .preview-sheet {
         width: calc(100% - 16px);
-        padding: 18px;
+        max-width: 420px;
+        padding: 14px 12px;
+        overflow-x: hidden;
+        font-size: 0.68rem;
     }
 
     .preview-header,
@@ -763,6 +944,73 @@
 
     .preview-summary-table {
         width: 100%;
+    }
+
+    .preview-sheet-title {
+        margin-bottom: 0.8rem;
+        font-size: 1.05rem;
+        letter-spacing: 0.18em;
+    }
+
+    .preview-recipient {
+        font-size: 0.84rem;
+    }
+
+    .preview-meta {
+        min-width: 0;
+        line-height: 1.55;
+    }
+
+    .preview-message {
+        margin: 0.75rem 0;
+    }
+
+    .preview-amount-box,
+    .preview-sender-box {
+        padding: 0.65rem;
+    }
+
+    .preview-amount-box strong {
+        font-size: 1rem;
+    }
+
+    .preview-items-table,
+    .preview-summary-table {
+        table-layout: fixed;
+        font-size: 0.6rem;
+    }
+
+    .preview-items-table th,
+    .preview-items-table td,
+    .preview-summary-table th,
+    .preview-summary-table td {
+        padding: 0.32rem 0.24rem;
+        word-break: break-word;
+    }
+
+    .preview-items-table th:nth-child(1),
+    .preview-items-table td:nth-child(1) {
+        width: 12%;
+    }
+
+    .preview-items-table th:nth-child(2),
+    .preview-items-table td:nth-child(2) {
+        width: 40%;
+    }
+
+    .preview-items-table th:nth-child(3),
+    .preview-items-table td:nth-child(3) {
+        width: 12%;
+    }
+
+    .preview-items-table th:nth-child(4),
+    .preview-items-table td:nth-child(4) {
+        width: 18%;
+    }
+
+    .preview-items-table th:nth-child(5),
+    .preview-items-table td:nth-child(5) {
+        width: 18%;
     }
 }
 </style>

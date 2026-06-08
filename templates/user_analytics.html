@@ -476,11 +476,15 @@
     margin-bottom: 1.5rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     border: 1px solid #e2e8f0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .period-filter-form {
     display: grid;
     gap: 1rem;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .period-filter-top {
@@ -507,12 +511,14 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    min-width: 0;
 }
 
 .period-preset-list {
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
+    max-width: 100%;
 }
 
 .period-preset-btn {
@@ -544,6 +550,8 @@
     align-items: flex-end;
     gap: 0.8rem;
     flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .period-range-field {
@@ -551,9 +559,13 @@
     gap: 0.35rem;
     font-size: 0.84rem;
     color: #475569;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .month-input {
+    width: 100%;
+    max-width: 100%;
     padding: 0.5rem 0.75rem;
     border: 1px solid #d1d5db;
     border-radius: 6px;
@@ -567,6 +579,7 @@
 .period-range-fields .btn {
     min-height: 42px;
     min-width: 132px;
+    max-width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -583,21 +596,25 @@
 
 .filter-badge {
     display: inline-block;
+    max-width: 100%;
     background: #eff6ff;
     color: #1d4ed8;
     padding: 0.35rem 0.75rem;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 500;
+    white-space: normal;
 }
 
 .client-filter-select {
     min-width: 240px;
+    max-width: 100%;
     padding: 0.5rem 0.75rem;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 0.9rem;
     background: white;
+    box-sizing: border-box;
 }
 
 .client-summary-table {
@@ -692,9 +709,15 @@
 }
 
 @media (max-width: 768px) {
+    .period-filter-card {
+        padding: 0.9rem;
+        overflow: hidden;
+    }
+
     .period-filter-top {
         flex-direction: column;
         align-items: flex-start;
+        min-width: 0;
     }
 
     .period-filter-meta {
@@ -702,19 +725,45 @@
         justify-content: flex-start;
     }
 
+    .period-preset-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    .period-preset-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 0.55rem 0.5rem;
+        white-space: normal;
+    }
+
     .period-range-fields {
         width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 0.65rem;
     }
 
     .period-range-field {
         width: 100%;
     }
 
-    .month-input {
+    .month-input,
+    .client-filter-select,
+    .period-range-fields .btn {
         width: 100%;
+        min-width: 0;
     }
 
     .analytics-billing-panel {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 420px) {
+    .period-preset-list {
         grid-template-columns: 1fr;
     }
 }
