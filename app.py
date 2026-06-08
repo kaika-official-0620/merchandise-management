@@ -2014,6 +2014,7 @@ def fetch_proxy_service_items(conn, auction_id):
             FROM merchandise m
             LEFT JOIN users u ON m.user_id = u.id
             WHERE m.auction_id = %s
+              AND (m.user_id IS NULL OR COALESCE(u.role, '') NOT IN ('user'))
             ORDER BY CASE WHEN m.sale_date IS NULL THEN 0 ELSE 1 END, m.id DESC
         """, (auction_id,))
         items = [dict(row) for row in cur.fetchall()]
@@ -2042,6 +2043,7 @@ def fetch_proxy_service_items(conn, auction_id):
             FROM merchandise m
             LEFT JOIN users u ON m.user_id = u.id
             WHERE m.auction_id = ?
+              AND (m.user_id IS NULL OR COALESCE(u.role, '') NOT IN ('user'))
             ORDER BY CASE WHEN m.sale_date IS NULL THEN 0 ELSE 1 END, m.id DESC
         """, (auction_id,))
         items = [dict(row) for row in cur.fetchall()]
@@ -2760,6 +2762,10 @@ def build_public_proxy_service_sections(conn, now=None, current_user_id=None, al
         auction_dict['user_bid_count'] = count_proxy_service_user_bids(conn, auction['id'], current_user_id) if current_user_id else 0
         auction_dict['is_user_participant'] = bool(auction_dict['user_bid_count'] or auction_dict['user_result_count'])
         auction_dict['has_visible_history'] = has_visible_history
+        auction_dict['result_summary'] = summary
+        auction_dict['preview_items'] = annotated_items[:3]
+        auction_dict['preview_count'] = len(auction_dict['preview_items'])
+        auction_dict['remaining_preview_count'] = max(0, len(annotated_items) - auction_dict['preview_count'])
 
         if display_state['status'] == 'open':
             current_auctions.append(auction_dict)
@@ -19157,6 +19163,7 @@ def public_proxy_service_history():
         conn,
         now=now,
         current_user_id=current_user.id if current_user.is_authenticated else None,
+        allow_all=current_user.is_authenticated and not (current_user.is_admin() or current_user.is_owner()),
     )
     all_sections = None
     if not current_user.is_authenticated or not (current_user.is_admin() or current_user.is_owner()):
@@ -35566,6 +35573,42 @@ SALES_AGENCY_APPRAISAL_LABELS = {
     'completed': '査定済み'
 }
 
+SALES_AGENCY_SERVICE_SALE_TYPES = {
+    'wholesale': 'wholesale',
+    'simultaneous': 'multi_listing',
+    'auction': 'auction',
+}
+
+
+def parse_positive_price(value):
+    try:
+        normalized = int(str(value).replace(',', '').strip())
+    except (TypeError, ValueError):
+        return None
+    return normalized if normalized > 0 else None
+
+
+def build_sales_agency_sale_type(service_type):
+    service_sale_type = SALES_AGENCY_SERVICE_SALE_TYPES.get((service_type or '').strip())
+    sale_types = ['photo_packing']
+    if service_sale_type and service_sale_type not in sale_types:
+        sale_types.append(service_sale_type)
+    return ','.join(sale_types)
+
+
+def calculate_sales_agency_commission(service_type, sale_price, settings=None):
+    settings = settings if settings is not None else get_fee_settings()
+    return sum(
+        calculate_tier_service_fee(sale_type, sale_price, settings)
+        for sale_type in build_sales_agency_sale_type(service_type).split(',')
+        if sale_type
+    )
+
+
+def get_sales_agency_sale_destination(service_type):
+    return get_sales_agency_service_name(service_type) or 'sales_agency'
+
+
 def get_pending_sales_agency_count(service_type=None):
     """管理者向け：未処理の販売代行申請件数を取得"""
     try:
@@ -36191,6 +36234,7 @@ def admin_sales_agency_process(id):
         new_status = SALES_AGENCY_ACTION_TO_STATUS[action]
         now = get_jst_now()
         processed_value = now if DATABASE_URL else now.strftime('%Y-%m-%d %H:%M:%S')
+        sales_agency_fee_settings = get_fee_settings() if new_status == 'completed' else None
 
         cur.execute(
             f'''
@@ -36236,35 +36280,106 @@ def admin_sales_agency_process(id):
                     tuple(update_params + [id]),
                 )
 
+        processed_items = []
         merchandise_sale_date_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_date')
         merchandise_sale_type_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_type')
+        merchandise_sale_price_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_price')
+        merchandise_commission_exists = sales_agency_column_exists(cur, 'merchandise', 'commission')
+        merchandise_sales_destination_exists = sales_agency_column_exists(cur, 'merchandise', 'sales_destination')
         if new_status == 'completed' and merchandise_sale_date_exists:
-            set_clauses = [f"sale_date = {placeholder}"]
-            update_params = [now.date()]
-            if merchandise_sale_type_exists:
-                set_clauses.append(f"sale_type = {placeholder}")
-                update_params.append(f"sales_agency_{req.get('service_type') or 'request'}")
-            if sales_agency_column_exists(cur, 'merchandise', 'is_listed'):
-                set_clauses.append(f"is_listed = {placeholder}")
-                update_params.append(False if DATABASE_URL else 0)
-            if sales_agency_column_exists(cur, 'merchandise', 'updated_at'):
-                set_clauses.append('updated_at = CURRENT_TIMESTAMP')
-            if sales_agency_column_exists(cur, 'merchandise', 'updated_by'):
-                set_clauses.append(f"updated_by = {placeholder}")
-                update_params.append(current_user.id)
-
             cur.execute(
                 f'''
-                UPDATE merchandise
-                SET {', '.join(set_clauses)}
-                WHERE id IN (
-                    SELECT merchandise_id
-                    FROM sales_agency_request_items
-                    WHERE request_id = {placeholder}
-                )
+                SELECT m.id, m.product_name, m.sale_date
+                FROM sales_agency_request_items sari
+                JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id = {placeholder}
+                ORDER BY m.id
                 ''',
-                tuple(update_params + [id]),
+                (id,),
             )
+            request_items = sales_agency_rows_to_dicts(cur.fetchall())
+            if not request_items:
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return jsonify({'success': False, 'error': '対象商品が見つかりません'}), 400
+
+            sale_prices = data.get('sale_prices') or {}
+            sale_type_value = build_sales_agency_sale_type(req.get('service_type'))
+            sale_destination = get_sales_agency_sale_destination(req.get('service_type'))
+            sale_date_value = now.date() if DATABASE_URL else now.strftime('%Y-%m-%d')
+
+            for item in request_items:
+                item_id = item.get('id')
+                raw_price = None
+                if isinstance(sale_prices, dict):
+                    raw_price = sale_prices.get(str(item_id))
+                    if raw_price is None:
+                        raw_price = sale_prices.get(item_id)
+                if raw_price is None and len(request_items) == 1:
+                    raw_price = data.get('sale_price')
+
+                sale_price = parse_positive_price(raw_price)
+                if sale_price is None:
+                    conn.rollback()
+                    cur.close()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': f"{item.get('product_name') or '商品'}の売値を1円以上で入力してください"
+                    }), 400
+
+                if item.get('sale_date'):
+                    conn.rollback()
+                    cur.close()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': f"{item.get('product_name') or '商品'}はすでに売却済みです"
+                    }), 400
+
+                processed_items.append({
+                    'id': item_id,
+                    'sale_price': sale_price,
+                    'commission': calculate_sales_agency_commission(
+                        req.get('service_type'),
+                        sale_price,
+                        sales_agency_fee_settings,
+                    ),
+                })
+
+            for item in processed_items:
+                set_clauses = [f"sale_date = {placeholder}"]
+                update_params = [sale_date_value]
+                if merchandise_sale_price_exists:
+                    set_clauses.append(f"sale_price = {placeholder}")
+                    update_params.append(item['sale_price'])
+                if merchandise_sale_type_exists:
+                    set_clauses.append(f"sale_type = {placeholder}")
+                    update_params.append(sale_type_value)
+                if merchandise_commission_exists:
+                    set_clauses.append(f"commission = {placeholder}")
+                    update_params.append(item['commission'])
+                if merchandise_sales_destination_exists:
+                    set_clauses.append(f"sales_destination = {placeholder}")
+                    update_params.append(sale_destination)
+                if sales_agency_column_exists(cur, 'merchandise', 'is_listed'):
+                    set_clauses.append(f"is_listed = {placeholder}")
+                    update_params.append(False if DATABASE_URL else 0)
+                if sales_agency_column_exists(cur, 'merchandise', 'updated_at'):
+                    set_clauses.append('updated_at = CURRENT_TIMESTAMP')
+                if sales_agency_column_exists(cur, 'merchandise', 'updated_by'):
+                    set_clauses.append(f"updated_by = {placeholder}")
+                    update_params.append(current_user.id)
+
+                cur.execute(
+                    f'''
+                    UPDATE merchandise
+                    SET {', '.join(set_clauses)}
+                    WHERE id = {placeholder}
+                    ''',
+                    tuple(update_params + [item['id']]),
+                )
         elif current_status == 'completed' and new_status != 'completed' and merchandise_sale_date_exists:
             set_clauses = ["sale_date = NULL"]
             update_params = []
@@ -36278,7 +36393,8 @@ def admin_sales_agency_process(id):
 
             sale_type_guard = ""
             if merchandise_sale_type_exists:
-                sale_type_guard = " AND (sale_type IS NULL OR sale_type LIKE 'sales_agency_%')"
+                sale_type_guard = f" AND (sale_type IS NULL OR sale_type LIKE {placeholder} OR sale_type = {placeholder})"
+                update_params.extend(['sales_agency_%', build_sales_agency_sale_type(req.get('service_type'))])
             cur.execute(
                 f'''
                 UPDATE merchandise
@@ -36338,6 +36454,7 @@ def admin_sales_agency_process(id):
                 'rollback_actions': SALES_AGENCY_ROLLBACK_ACTIONS.get(new_status, []),
                 'processed_at': sales_agency_format_datetime(processed_value),
                 'admin_note': admin_note,
+                'processed_items': len(processed_items),
                 'action_label': (
                     '出品準備中'
                     if req.get('service_type') == 'simultaneous' and action in {'appraising', 'revert_appraising'}
