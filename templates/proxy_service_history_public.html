@@ -13,6 +13,14 @@
     {%- endif -%}
 {%- endmacro %}
 
+{% macro money(value, empty='-') -%}
+    {%- if value -%}
+        ¥{{ "{:,}".format(value|int) }}
+    {%- else -%}
+        {{ empty }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% block content %}
 <div class="page-header">
     <h1>代行仕入れサービス履歴</h1>
@@ -63,6 +71,36 @@
                 </div>
                 {% endif %}
             </dl>
+            {% if auction.preview_items %}
+            <div class="result-preview-list">
+                {% for item in auction.preview_items %}
+                <div class="result-preview-item">
+                    <div class="result-preview-thumb">
+                        {% if item.photo_path %}
+                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name or '商品画像' }}">
+                        {% else %}
+                        <span>No Image</span>
+                        {% endif %}
+                    </div>
+                    <div class="result-preview-info">
+                        <strong>{{ item.product_name or '商品名なし' }}</strong>
+                        <span class="result-status {{ item.status_class }}">{{ item.status_label }}</span>
+                        <small>
+                            {% if item.winner_name %}
+                                {{ item.winner_name }} / {{ money(item.result_price) }}
+                            {% else %}
+                                {{ '未購入' if auction.sale_mode == 'fixed' else '未入札' }}
+                            {% endif %}
+                            {% if item.is_reflected_to_client %} / 反映済み{% endif %}
+                        </small>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if auction.remaining_preview_count > 0 %}
+                <div class="preview-more">ほか {{ auction.remaining_preview_count }}件</div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
         <div class="history-card-foot">結果ページを開く</div>
     </a>
@@ -218,6 +256,94 @@
     color: #0f172a;
     line-height: 1.5;
     word-break: break-word;
+}
+
+.result-preview-list {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.95rem;
+}
+
+.result-preview-item {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+    min-width: 0;
+    padding: 0.55rem;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.result-preview-thumb {
+    width: 58px;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #e2e8f0;
+    color: #64748b;
+    display: grid;
+    place-items: center;
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+
+.result-preview-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.result-preview-info {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+}
+
+.result-preview-info strong,
+.result-preview-info small {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.result-preview-info strong {
+    color: #0f172a;
+    font-size: 0.88rem;
+    line-height: 1.35;
+}
+
+.result-preview-info small {
+    color: #64748b;
+}
+
+.result-status {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.result-status.won {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.result-status.muted,
+.result-status.closed {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.preview-more {
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 700;
 }
 
 .empty-card {

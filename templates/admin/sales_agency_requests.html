@@ -419,6 +419,77 @@
     font-size: 0.92rem;
 }
 
+.sale-price-panel {
+    width: 100%;
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.85rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+}
+
+.sale-price-panel-title {
+    color: #1e3a8a;
+    font-size: 0.88rem;
+    font-weight: 800;
+}
+
+.sale-price-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.65rem;
+}
+
+.sale-price-row {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #dbeafe;
+}
+
+.sale-price-item-name {
+    color: #0f172a;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.sale-price-control {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.sale-price-control span {
+    color: #475569;
+    font-weight: 800;
+}
+
+.sale-price-input {
+    width: 100%;
+    min-width: 0;
+    padding: 0.58rem 0.65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.sale-price-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.sale-price-input.input-error {
+    border-color: #dc2626;
+    background: #fef2f2;
+}
+
 .action-buttons,
 .request-doc-links {
     display: flex;
@@ -708,6 +779,31 @@
                     <div class="admin-note-input">
                         <textarea id="note-{{ req.id }}" placeholder="備考や連絡事項があれば入力してください">{{ clean_admin_note }}</textarea>
                     </div>
+                    {% if 'complete' in req.available_actions %}
+                    <div class="sale-price-panel" id="sale-price-panel-{{ req.id }}">
+                        <div class="sale-price-panel-title">処理完了時の売値</div>
+                        <div class="sale-price-grid">
+                            {% for item in req.merchandise_items %}
+                            <label class="sale-price-row" for="sale-price-{{ req.id }}-{{ item.id }}">
+                                <span class="sale-price-item-name">{{ item.product_name|clean_display('商品名未登録') }}</span>
+                                <span class="sale-price-control">
+                                    <span>¥</span>
+                                    <input type="number"
+                                           id="sale-price-{{ req.id }}-{{ item.id }}"
+                                           class="sale-price-input"
+                                           name="sale_price_{{ item.id }}"
+                                           data-item-id="{{ item.id }}"
+                                           min="1"
+                                           step="1"
+                                           inputmode="numeric"
+                                           value="{% if item.sale_price|int > 0 %}{{ item.sale_price|int }}{% endif %}"
+                                           placeholder="売値">
+                                </span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="action-buttons" id="action-buttons-{{ req.id }}">
                         {% if req.available_actions %}
                             {% if 'approve' in req.available_actions %}
@@ -819,6 +915,31 @@ function renderActionButtons(requestId, availableActions) {
     }).join('');
 }
 
+function collectCompletionSalePrices(requestId) {
+    const requestCard = document.getElementById(`request-${requestId}`);
+    const priceInputs = requestCard ? requestCard.querySelectorAll('.sale-price-input') : [];
+    const salePrices = {};
+    let hasError = false;
+
+    priceInputs.forEach((input) => {
+        input.classList.remove('input-error');
+        const price = Number(String(input.value || '').replace(/,/g, ''));
+        if (!Number.isFinite(price) || price <= 0) {
+            input.classList.add('input-error');
+            hasError = true;
+            return;
+        }
+        salePrices[input.dataset.itemId] = Math.floor(price);
+    });
+
+    if (hasError || !Object.keys(salePrices).length) {
+        setFeedback(requestId, '処理完了にする前に、各商品の売値を1円以上で入力してください。', 'error');
+        return null;
+    }
+
+    return salePrices;
+}
+
 function updateProgress(requestId, status) {
     const progressEl = document.getElementById(`progress-${requestId}`);
     if (!progressEl) {
@@ -855,22 +976,31 @@ function processRequest(requestId, action) {
     const noteEl = document.getElementById(`note-${requestId}`);
     const adminNote = noteEl ? noteEl.value : '';
     const actionText = getSalesAgencyActionLabel(action, getSalesAgencyRequestServiceType(requestId));
+    const salePrices = action === 'complete' ? collectCompletionSalePrices(requestId) : null;
+
+    if (action === 'complete' && salePrices === null) {
+        return;
+    }
 
     if (!confirm(`この申請を「${actionText}」へ変更しますか？`)) {
         return;
     }
 
     setFeedback(requestId, '状態を更新しています…', 'success');
+    const payload = {
+        action: action,
+        admin_note: adminNote
+    };
+    if (salePrices) {
+        payload.sale_prices = salePrices;
+    }
 
     fetch(`/admin/sales-agency-requests/${requestId}/process`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-            action: action,
-            admin_note: adminNote
-        })
+        body: JSON.stringify(payload)
     })
     .then(response => response.json())
     .then(data => {
@@ -904,6 +1034,10 @@ function processRequest(requestId, action) {
 
             updateProgress(requestId, data.status);
             renderActionButtons(requestId, data.available_actions || []);
+            const salePricePanel = document.getElementById(`sale-price-panel-${requestId}`);
+            if (salePricePanel && data.status === 'completed') {
+                salePricePanel.style.display = 'none';
+            }
             setFeedback(requestId, `「${data.client_status_label || actionText}」へ更新しました。クライアント側にも反映されます。`, 'success');
             return;
         }
