@@ -155,6 +155,34 @@ def apply(module: Any) -> None:
             cur = conn.cursor()
         return conn, cur
 
+    def find_existing_user_by_login(cur, username, email):
+        placeholder = "%s" if DATABASE_URL else "?"
+        cur.execute(
+            f"""
+            SELECT id, username, email
+            FROM users
+            WHERE LOWER(username) = LOWER({placeholder})
+               OR LOWER(email) = LOWER({placeholder})
+            LIMIT 1
+            """,
+            (username, email),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def sync_users_id_sequence(cur):
+        if not DATABASE_URL:
+            return
+        cur.execute(
+            """
+            SELECT setval(
+                pg_get_serial_sequence('users', 'id'),
+                COALESCE((SELECT MAX(id) FROM users), 0) + 1,
+                false
+            )
+            """
+        )
+
     def get_table_columns(cur, table_name):
         if DATABASE_URL:
             cur.execute(
@@ -850,6 +878,11 @@ def apply(module: Any) -> None:
             conn, cur = open_cursor()
             try:
                 placeholder = "%s" if DATABASE_URL else "?"
+                duplicate_user = find_existing_user_by_login(cur, username, email)
+                if duplicate_user:
+                    flash("ユーザー名またはメールアドレスがすでに使用されています。", "error")
+                    return render_template("admin/client_form.html", **client_form_context(None))
+                sync_users_id_sequence(cur)
                 cur.execute(
                     f"""
                     INSERT INTO users
@@ -1067,6 +1100,11 @@ def apply(module: Any) -> None:
             conn, cur = open_cursor()
             try:
                 placeholder = "%s" if DATABASE_URL else "?"
+                duplicate_user = find_existing_user_by_login(cur, username, email)
+                if duplicate_user:
+                    flash("ユーザー名またはメールアドレスがすでに使用されています。", "error")
+                    return render_template("admin/operator_form.html", user=None, permission_options=User.ADMIN_PERMISSION_OPTIONS)
+                sync_users_id_sequence(cur)
                 cur.execute(
                     f"""
                     INSERT INTO users
