@@ -136,6 +136,19 @@
 .documents-page {
     display: grid;
     gap: 1.25rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.documents-page,
+.documents-page * {
+    box-sizing: border-box;
+}
+
+.documents-page > * {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .section-card {
@@ -144,6 +157,8 @@
     border-radius: 18px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     padding: 1.25rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .page-header,
@@ -154,6 +169,15 @@
     align-items: flex-start;
     gap: 1rem;
     flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.page-header > div,
+.stage-header > div,
+.stage-topbar > div {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .page-header h1,
@@ -183,17 +207,22 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .document-type-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.85rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .document-type-card {
     display: block;
     min-height: 100%;
+    min-width: 0;
     text-decoration: none;
     color: inherit;
     border: 1px solid #e2e8f0;
@@ -242,6 +271,8 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .operation-queue-grid {
@@ -249,11 +280,14 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.85rem;
     margin-top: 1rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .operation-queue-card {
     display: grid;
     gap: 0.55rem;
+    min-width: 0;
     text-decoration: none;
     color: inherit;
     border: 1px solid #bfdbfe;
@@ -288,6 +322,7 @@
     display: grid;
     gap: 0.75rem;
     min-height: 100%;
+    min-width: 0;
     text-decoration: none;
     color: inherit;
     border: 1px solid #dbeafe;
@@ -353,6 +388,7 @@
 
 .overview-card {
     display: block;
+    min-width: 0;
     text-decoration: none;
     color: inherit;
     border: 1px solid #dbeafe;
@@ -427,10 +463,13 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.85rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .service-filter-card {
     display: block;
+    min-width: 0;
     text-decoration: none;
     color: inherit;
     border-radius: 16px;
@@ -467,6 +506,8 @@
     margin-top: 0.35rem;
     margin-left: auto;
     padding-top: 0.2rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .mini-toggle {
@@ -523,12 +564,19 @@
 }
 
 .table-scroll {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-table {
     width: 100%;
     min-width: 1120px;
+    max-width: 100%;
     border-collapse: collapse;
 }
 
@@ -626,6 +674,12 @@
     display: flex;
     gap: 0.45rem;
     flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.inline-actions .btn {
+    white-space: normal;
 }
 
 .related-documents {
@@ -699,6 +753,36 @@
 }
 
 @media (max-width: 720px) {
+    .documents-page {
+        gap: 1rem;
+        overflow-x: hidden;
+    }
+
+    .section-card {
+        border-radius: 14px;
+        padding: 1rem;
+    }
+
+    .page-header,
+    .stage-header,
+    .stage-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-header .inline-actions,
+    .stage-header-actions {
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .page-header .inline-actions .btn,
+    .stage-header-actions .btn {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+    }
+
     .archive-flow-grid,
     .operation-queue-grid,
     .overview-grid,

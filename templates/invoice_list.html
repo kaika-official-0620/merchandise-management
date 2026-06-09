@@ -41,10 +41,14 @@
         </div>
         <div class="card-actions">
             <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">詳細</a>
-            {% if current_user.is_admin() and inv.status == 'draft' %}
+            {% if inv.status == 'draft' %}
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
-                <a href="{{ url_for('user_invoice_delete', id=inv.id) }}" class="btn btn-danger" onclick="return confirm('この買取明細書を削除しますか？')">削除</a>
+            {% endif %}
+            {% if inv.status in ['draft', 'in_progress'] %}
+                <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
             {% else %}
                 <a href="{{ url_for('invoice_download', id=inv.id) }}" class="btn btn-secondary btn-sm">CSV</a>
             {% endif %}
@@ -191,6 +195,11 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
 }
 
 .card-actions .btn {

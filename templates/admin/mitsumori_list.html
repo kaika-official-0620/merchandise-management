@@ -53,6 +53,11 @@
                 <td class="actions">
                     <a href="{{ url_for('admin_mitsumori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('admin_mitsumori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
+                    {% if doc.status in ['draft', 'in_progress'] %}
+                    <form action="{{ url_for('admin_mitsumori_delete', id=doc.id) }}" method="POST" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                        <button type="submit" class="btn btn-sm btn-danger">削除</button>
+                    </form>
+                    {% endif %}
                     {% if doc.status == 'sent' %}
                     <form action="{{ url_for('admin_mitsumori_approve', id=doc.id) }}" method="POST" style="display:inline;">
                         <button type="submit" class="btn btn-sm btn-approve">承認</button>
@@ -76,6 +81,11 @@
 .admin-nav-buttons {
     display: flex;
     gap: 10px;
+}
+
+.inline-delete-form {
+    display: inline-flex;
+    margin: 0;
 }
 
 .info-box {
@@ -124,6 +134,7 @@
 .btn-info { background: #17a2b8; color: white; }
 .btn-pdf { background: #dc3545; color: white; }
 .btn-primary { background: #3b82f6; color: white; }
+.btn-danger { background: #dc2626; color: white; }
 
 .actions { white-space: nowrap; }
 

@@ -52,7 +52,12 @@
                         <span>{{ doc.document_no }}</span>
                         <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
                     </div>
-                    <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                    <div class="draft-document-actions">
+                        <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                        <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                            <button type="submit" class="btn btn-danger">削除</button>
+                        </form>
+                    </div>
                 </article>
                 {% endfor %}
             </div>
@@ -171,6 +176,17 @@
     align-items: center;
 }
 
+.draft-document-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.draft-document-actions form {
+    margin: 0;
+}
+
 .draft-document-column__header span {
     color: #2563eb;
     font-weight: 800;
@@ -230,6 +246,7 @@
 .btn-primary { background: #2563eb; color: #fff; }
 .btn-secondary { background: #64748b; color: #fff; }
 .btn-info { background: #06b6d4; color: #fff; }
+.btn-danger { background: #dc2626; color: #fff; }
 
 @media (max-width: 768px) {
     .document-create-grid,
@@ -240,6 +257,11 @@
     .draft-document-row {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .draft-document-actions,
+    .draft-document-actions .btn {
+        width: 100%;
     }
 }
 </style>

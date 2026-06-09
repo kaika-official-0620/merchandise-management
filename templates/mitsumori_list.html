@@ -56,7 +56,11 @@
                 <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細を見る</a>
                 {% if status == 'draft' %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
-                <a href="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="btn btn-danger" onclick="return confirm('この見積り依頼書を削除しますか？')">削除</a>
+                {% endif %}
+                {% if status in ['draft', 'in_progress'] %}
+                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積り依頼書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
                 {% endif %}
                 <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
             </div>
@@ -87,6 +91,11 @@
     justify-content: space-between;
     gap: 0.8rem;
     flex-wrap: wrap;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
 }
 
 .page-header h1 {

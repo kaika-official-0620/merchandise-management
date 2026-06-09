@@ -45,7 +45,16 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">内容を見る</a>
+                {% if status == 'draft' %}
+                <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
+                <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
+                {% endif %}
                 <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                {% if status in ['draft', 'in_progress'] %}
+                <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% endfor %}
@@ -85,7 +94,15 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if status == 'draft' %}
+                <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
                 <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                {% if status in ['draft', 'in_progress'] %}
+                <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% endfor %}
@@ -436,6 +453,19 @@
     background: #ffffff;
     color: #475569;
     border-color: #cbd5e1;
+}
+
+.btn-success {
+    background: #16a34a;
+}
+
+.btn-danger {
+    background: #dc2626;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
 }
 
 .empty-state {

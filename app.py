@@ -15,6 +15,7 @@ import tempfile
 import time
 import calendar
 import traceback
+import re
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -6293,6 +6294,18 @@ def resolve_plan_effective_month(requested_monthly_plan):
     return effective_base.strftime('%Y-%m')
 
 
+EMAIL_PATTERN = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def is_valid_email_format(email):
+    email = (email or '').strip()
+    return bool(email and len(email) <= 120 and EMAIL_PATTERN.match(email))
+
+
+def is_deletable_document_status(status):
+    return (status or '').strip() in {'draft', 'in_progress'}
+
+
 def parse_shipping_addresses(value, default_postal_code='', default_address=''):
     """ユーザー発送先JSONを画面用のリストへ正規化する"""
     addresses = []
@@ -7281,6 +7294,12 @@ def profile():
         if is_placeholder_user_display_name(display_name, username=current_user.username, role=current_user.role):
             flash('お名前（本名）を入力してください。右上の「ユーザー」は未設定時の仮表示です。', 'error')
             return redirect(url_for('profile'))
+        if not email:
+            flash('メールアドレスを入力してください。', 'error')
+            return redirect(url_for('profile'))
+        if not is_valid_email_format(email):
+            flash('正しいメールアドレスを入力してください。', 'error')
+            return redirect(url_for('profile'))
         shipping_addresses = build_shipping_addresses_from_form(request.form, postal_code, address)
         shipping_addresses_json = json.dumps(shipping_addresses, ensure_ascii=False)
         try:
@@ -7303,6 +7322,21 @@ def profile():
             cur.execute("SELECT * FROM users WHERE id = ?", (current_user.id,))
         
         user = cur.fetchone()
+        if not user:
+            cur.close()
+            conn.close()
+            flash('ユーザー情報が見つかりません。', 'error')
+            return redirect(url_for('profile'))
+
+        if DATABASE_URL:
+            cur.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(%s) AND id != %s LIMIT 1", (email, current_user.id))
+        else:
+            cur.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ? LIMIT 1", (email, current_user.id))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('このメールアドレスはすでに登録されています。', 'error')
+            return redirect(url_for('profile'))
         
         # パスワード変更
         if current_password and new_password:
@@ -24796,7 +24830,7 @@ def documents():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = %s
-              AND COALESCE(status, 'draft') <> 'draft'
+              AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -24836,7 +24870,7 @@ def documents():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = ?
-              AND COALESCE(status, 'draft') <> 'draft'
+              AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -24886,7 +24920,7 @@ def user_document_list():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = %s
-              AND COALESCE(status, 'draft') = 'draft'
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -24904,7 +24938,7 @@ def user_document_list():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = ?
-              AND COALESCE(status, 'draft') = 'draft'
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -25632,7 +25666,7 @@ def user_invoice_view(id):
     
     return render_template('invoice_view.html', invoice=invoice, items=items)
 
-@app.route('/invoices/delete/<int:id>')
+@app.route('/invoices/delete/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_invoice_delete(id):
     """買取明細書削除（ユーザー用）"""
@@ -25641,7 +25675,7 @@ def user_invoice_delete(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT status FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
         invoice = cur.fetchone()
-        if invoice and invoice['status'] == 'draft':
+        if invoice and is_deletable_document_status(invoice['status']):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
             cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
             conn.commit()
@@ -25652,7 +25686,7 @@ def user_invoice_delete(id):
         cur = conn.cursor()
         cur.execute("SELECT status FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
         invoice = cur.fetchone()
-        if invoice and invoice['status'] == 'draft':
+        if invoice and is_deletable_document_status(invoice['status']):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
             cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
             conn.commit()
@@ -25699,7 +25733,7 @@ def user_mitsumori_list():
             cur.execute("""
                 SELECT * FROM user_mitsumori
                 WHERE user_id = %s
-                  AND COALESCE(status, 'draft') = 'draft'
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY updated_at DESC, created_at DESC
             """, (current_user.id,))
         else:
@@ -25708,7 +25742,7 @@ def user_mitsumori_list():
             cur.execute("""
                 SELECT * FROM user_mitsumori
                 WHERE user_id = ?
-                  AND COALESCE(status, 'draft') = 'draft'
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY updated_at DESC, created_at DESC
             """, (current_user.id,))
         
@@ -26085,7 +26119,7 @@ def user_mitsumori_pdf(id):
     html_content = render_template('pdf/mitsumori_pdf.html', mitsumori=mitsumori, items=items)
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
-@app.route('/mitsumori/delete/<int:id>')
+@app.route('/mitsumori/delete/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_mitsumori_delete(id):
     """見積依頼書削除（ユーザー用）"""
@@ -26095,7 +26129,7 @@ def user_mitsumori_delete(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT status FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
         mitsumori = cur.fetchone()
-        if mitsumori and mitsumori['status'] == 'draft':
+        if mitsumori and is_deletable_document_status(mitsumori['status']):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
             cur.execute("DELETE FROM user_mitsumori WHERE id = %s", (id,))
             conn.commit()
@@ -26106,7 +26140,7 @@ def user_mitsumori_delete(id):
         cur = conn.cursor()
         cur.execute("SELECT status FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
         mitsumori = cur.fetchone()
-        if mitsumori and mitsumori['status'] == 'draft':
+        if mitsumori and is_deletable_document_status(mitsumori['status']):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
             cur.execute("DELETE FROM user_mitsumori WHERE id = ?", (id,))
             conn.commit()
@@ -27642,12 +27676,50 @@ def admin_kaitori_edit(id):
     flash('この機能は準備中です', 'info')
     return redirect(url_for('admin_kaitori_list'))
 
-@app.route('/admin/kaitori/<int:id>/delete')
+@app.route('/admin/kaitori/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def admin_kaitori_delete(id):
     """買取明細書削除"""
-    flash('この機能は準備中です', 'info')
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT status FROM invoices WHERE id = %s", (id,))
+            invoice = cur.fetchone()
+            if invoice and is_deletable_document_status(invoice['status']):
+                cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
+                cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
+                conn.commit()
+                flash('買取明細書を削除しました', 'success')
+            elif invoice:
+                flash('送信済みの買取明細書は削除できません', 'error')
+            else:
+                flash('買取明細書が見つかりません', 'error')
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT status FROM invoices WHERE id = ?", (id,))
+            invoice = cur.fetchone()
+            if invoice and is_deletable_document_status(invoice['status']):
+                cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
+                cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
+                conn.commit()
+                flash('買取明細書を削除しました', 'success')
+            elif invoice:
+                flash('送信済みの買取明細書は削除できません', 'error')
+            else:
+                flash('買取明細書が見つかりません', 'error')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'削除エラー: {str(e)}', 'error')
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
     return redirect(url_for('admin_kaitori_list'))
 
 @app.route('/admin/kaitori/<int:id>/pdf')
@@ -27998,27 +28070,50 @@ def admin_mitsumori_edit(id):
     flash('この機能は準備中です', 'info')
     return redirect(url_for('admin_mitsumori_list'))
 
-@app.route('/admin/mitsumori/<int:id>/delete')
+@app.route('/admin/mitsumori/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def admin_mitsumori_delete(id):
     """見積依頼書削除"""
+    conn = None
+    cur = None
     try:
         conn = get_db()
         if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s', (id,))
-            cur.execute('DELETE FROM user_mitsumori WHERE id = %s', (id,))
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT status FROM user_mitsumori WHERE id = %s", (id,))
+            mitsumori = cur.fetchone()
+            if mitsumori and is_deletable_document_status(mitsumori['status']):
+                cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s', (id,))
+                cur.execute('DELETE FROM user_mitsumori WHERE id = %s', (id,))
+                conn.commit()
+                flash('見積依頼書を削除しました', 'success')
+            elif mitsumori:
+                flash('送信済みの見積依頼書は削除できません', 'error')
+            else:
+                flash('見積依頼書が見つかりません', 'error')
         else:
             cur = conn.cursor()
-            cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?', (id,))
-            cur.execute('DELETE FROM user_mitsumori WHERE id = ?', (id,))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('見積依頼書を削除しました', 'success')
+            cur.execute("SELECT status FROM user_mitsumori WHERE id = ?", (id,))
+            mitsumori = cur.fetchone()
+            if mitsumori and is_deletable_document_status(mitsumori['status']):
+                cur.execute('DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?', (id,))
+                cur.execute('DELETE FROM user_mitsumori WHERE id = ?', (id,))
+                conn.commit()
+                flash('見積依頼書を削除しました', 'success')
+            elif mitsumori:
+                flash('送信済みの見積依頼書は削除できません', 'error')
+            else:
+                flash('見積依頼書が見つかりません', 'error')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'削除エラー: {str(e)}', 'error')
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
     return redirect(url_for('admin_mitsumori_list'))
 
 @app.route('/admin/mitsumori/<int:id>/approve', methods=['POST'])
@@ -30839,7 +30934,9 @@ def process_disposal_request(request_id):
 @admin_required
 def admin_stripe_dashboard():
     """Stripe決済管理ダッシュボード"""
+    ensure_user_profile_columns()
     conn = get_db()
+    plan_label_map = {option['key']: option['label'] for option in get_monthly_plan_options()}
     
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
@@ -30848,7 +30945,8 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
-                   u.overdue_since,
+                   u.overdue_since, u.requested_monthly_plan,
+                   u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN DATE_TRUNC('month', m.created_at) = DATE_TRUNC('month', CURRENT_DATE) THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
@@ -30865,7 +30963,8 @@ def admin_stripe_dashboard():
             SELECT u.id, u.username, u.display_name, u.email, u.role,
                    u.stripe_customer_id, u.stripe_subscription_id, 
                    u.subscription_status, u.last_payment_date, u.next_payment_date,
-                   u.overdue_since,
+                   u.overdue_since, u.requested_monthly_plan,
+                   u.plan_change_effective_month, u.plan_change_requested_at,
                    COUNT(CASE WHEN strftime('%%Y-%%m', m.created_at) = strftime('%%Y-%%m', 'now') THEN m.id END) as item_count,
                    COUNT(m.id) as total_item_count
             FROM users u
@@ -30880,6 +30979,7 @@ def admin_stripe_dashboard():
     for user in users:
         item_count = user.get('item_count', 0) or 0
         user['monthly_fee'] = get_monthly_fee(item_count)
+        user['requested_plan_label'] = plan_label_map.get(user.get('requested_monthly_plan'), '')
         
         # 未払い期間を計算
         if user.get('overdue_since'):

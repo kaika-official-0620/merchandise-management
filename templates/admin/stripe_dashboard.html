@@ -102,6 +102,7 @@
                     <th>当月登録</th>
                     <th>総数</th>
                     <th>月額利用料</th>
+                    <th>申請プラン</th>
                     <th>サブスク状況</th>
                     <th>未払い期間</th>
                     <th>最終支払日</th>
@@ -130,6 +131,19 @@
                         <span class="fee-badge fee-{{ 'low' if user.monthly_fee <= 2500 else ('mid' if user.monthly_fee <= 5000 else ('high' if user.monthly_fee <= 10000 else 'max')) }}">
                             ¥{{ "{:,}".format(user.monthly_fee) }}
                         </span>
+                    </td>
+                    <td>
+                        {% if user.requested_plan_label %}
+                        <span class="status-badge status-pending">{{ user.requested_plan_label }}</span>
+                        <div class="text-muted">
+                            反映予定: {{ user.plan_change_effective_month or '-' }}
+                        </div>
+                        {% if user.plan_change_requested_at %}
+                        <div class="text-muted">{{ user.plan_change_requested_at }}</div>
+                        {% endif %}
+                        {% else %}
+                        -
+                        {% endif %}
                     </td>
                     <td>
                         {% if not user.stripe_subscription_id %}
@@ -191,7 +205,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="10" class="text-center text-muted">ユーザーがいません</td>
+                    <td colspan="11" class="text-center text-muted">ユーザーがいません</td>
                 </tr>
                 {% endfor %}
             </tbody>

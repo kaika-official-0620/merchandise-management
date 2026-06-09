@@ -960,8 +960,7 @@ def apply(module: Any) -> None:
     def is_admin_generated_invoice(row: dict | None) -> bool:
         if not row:
             return False
-        scope = (row.get("document_scope") or "").strip()
-        return scope == "client_outgoing" or bool(row.get("source_admin_kaitori_id")) or bool(row.get("sales_agency_request_id"))
+        return bool(row.get("source_admin_kaitori_id")) or bool(row.get("sales_agency_request_id"))
 
     def is_user_visible_invoice(row: dict | None) -> bool:
         if not row:
@@ -1622,7 +1621,7 @@ def apply(module: Any) -> None:
                 SELECT * FROM invoices
                 WHERE sender_id = {mark()}
                   AND COALESCE(document_scope, 'client_outgoing') = 'client_outgoing'
-                  AND COALESCE(status, 'draft') <> 'draft'
+                  AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),
@@ -1634,6 +1633,7 @@ def apply(module: Any) -> None:
                 SELECT * FROM user_mitsumori
                 WHERE user_id = {mark()}
                   AND COALESCE(document_scope, 'client_incoming') = 'client_incoming'
+                  AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),
@@ -1681,7 +1681,6 @@ def apply(module: Any) -> None:
                 SELECT * FROM invoices
                 WHERE sender_id = {mark()}
                   AND COALESCE(document_scope, 'client_outgoing') = 'client_outgoing'
-                  AND COALESCE(status, 'draft') <> 'draft'
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),
@@ -1707,6 +1706,7 @@ def apply(module: Any) -> None:
                 SELECT * FROM user_mitsumori
                 WHERE user_id = {mark()}
                   AND COALESCE(document_scope, 'client_incoming') = 'client_incoming'
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),

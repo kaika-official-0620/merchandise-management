@@ -69,7 +69,11 @@
                     {% if doc.status == 'draft' %}
                         <a href="{{ url_for('admin_kaitori_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
                     {% endif %}
-                    <a href="{{ url_for('admin_kaitori_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この買取明細書を削除しますか？')">削除</a>
+                    {% if doc.status in ['draft', 'in_progress'] %}
+                    <form method="POST" action="{{ url_for('admin_kaitori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                        <button type="submit" class="btn btn-sm btn-danger">削除</button>
+                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}
@@ -85,6 +89,11 @@
 .admin-nav-buttons {
     display: flex;
     gap: 10px;
+}
+
+.inline-delete-form {
+    display: inline-flex;
+    margin: 0;
 }
 
 .doc-no {
@@ -125,6 +134,7 @@
 
 .btn-info { background: #17a2b8; color: white; }
 .btn-pdf { background: #dc3545; color: white; }
+.btn-danger { background: #dc2626; color: white; }
 
 .actions {
     white-space: nowrap;
