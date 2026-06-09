@@ -7401,7 +7401,6 @@ def profile():
     # ユーザーの当月商品登録数と月額利用料を取得
     conn = get_db()
     if DATABASE_URL:
-        from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
