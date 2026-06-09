@@ -30954,7 +30954,6 @@ def admin_stripe_dashboard():
     plan_label_map = {option['key']: option['label'] for option in get_monthly_plan_options()}
     
     if DATABASE_URL:
-        from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
             SELECT u.id, u.username, u.display_name, u.email, u.role,
