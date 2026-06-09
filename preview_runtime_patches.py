@@ -173,14 +173,22 @@ def apply(module: Any) -> None:
     def sync_users_id_sequence(cur):
         if not DATABASE_URL:
             return
+        cur.execute("SELECT pg_get_serial_sequence('users', 'id') AS seq_name")
+        row = cur.fetchone()
+        seq_name = None
+        if row:
+            seq_name = row.get("seq_name") if isinstance(row, dict) else row[0]
+        if not seq_name:
+            return
         cur.execute(
             """
             SELECT setval(
-                pg_get_serial_sequence('users', 'id'),
+                %s::regclass,
                 COALESCE((SELECT MAX(id) FROM users), 0) + 1,
                 false
             )
-            """
+            """,
+            (seq_name,),
         )
 
     def get_table_columns(cur, table_name):
@@ -916,8 +924,9 @@ def apply(module: Any) -> None:
                 conn.commit()
                 flash("クライアントを追加しました。", "success")
                 return redirect(url_for("admin_users"))
-            except Exception:
+            except Exception as exc:
                 conn.rollback()
+                print(f"[ERROR] admin_add_client_view failed: {exc}", flush=True)
                 flash("ユーザー名またはメールアドレスがすでに使用されています。", "error")
             finally:
                 cur.close()
@@ -1123,8 +1132,9 @@ def apply(module: Any) -> None:
                 conn.commit()
                 flash("運営アカウントを追加しました。", "success")
                 return redirect(url_for("admin_operator_users"))
-            except Exception:
+            except Exception as exc:
                 conn.rollback()
+                print(f"[ERROR] admin_operator_add_user_view failed: {exc}", flush=True)
                 flash("ユーザー名またはメールアドレスがすでに使用されています。", "error")
             finally:
                 cur.close()
