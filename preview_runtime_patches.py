@@ -869,7 +869,7 @@ def apply(module: Any) -> None:
             plan_effective_month = resolve_plan_effective_month(requested_monthly_plan)
             plan_change_requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if requested_monthly_plan else None
             proxy_service_budget = request.form.get("proxy_service_budget", "0").strip()
-            tuition_exempt = 1 if request.form.get("tuition_exempt") == "1" else 0
+            tuition_exempt = db_boolean_param(request.form.get("tuition_exempt") == "1")
 
             if not username or not email or not password:
                 flash("ユーザー名、メール、パスワードは必須です。", "error")
@@ -958,7 +958,7 @@ def apply(module: Any) -> None:
             plan_change_requested_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if requested_monthly_plan else None
             new_password = request.form.get("new_password") or ""
             proxy_service_budget = request.form.get("proxy_service_budget", "0").strip()
-            tuition_exempt = 1 if request.form.get("tuition_exempt") == "1" else 0
+            tuition_exempt = db_boolean_param(request.form.get("tuition_exempt") == "1")
             try:
                 budget_value = int(proxy_service_budget or 0)
             except ValueError:
