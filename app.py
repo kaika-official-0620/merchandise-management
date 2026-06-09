@@ -14491,6 +14491,20 @@ def delete_user(id):
     flash('ユーザーを削除しました', 'info')
     return redirect(url_for('admin_users'))
 
+def sync_users_id_sequence(cur):
+    """Keep PostgreSQL's users.id sequence ahead of imported/restored rows."""
+    if not DATABASE_URL:
+        return
+    cur.execute(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('users', 'id'),
+            COALESCE((SELECT MAX(id) FROM users), 0) + 1,
+            false
+        )
+        """
+    )
+
 @app.route('/admin/users/add', methods=['GET', 'POST'])
 @login_required
 @permission_required('users')
@@ -14567,6 +14581,7 @@ def admin_add_user():
 
             if DATABASE_URL:
                 cur = conn.cursor()
+                sync_users_id_sequence(cur)
                 cur.execute('''
                     INSERT INTO users (
                         username, email, password_hash, role, display_name, phone, postal_code, address,
