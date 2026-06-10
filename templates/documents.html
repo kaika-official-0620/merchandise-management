@@ -49,7 +49,7 @@
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
                 {% endif %}
-                <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if status in ['draft', 'in_progress'] %}
                 <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
                     <button type="submit" class="btn btn-danger">削除</button>
@@ -97,7 +97,7 @@
                 {% if status == 'draft' %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
-                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if status in ['draft', 'in_progress'] %}
                 <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
                     <button type="submit" class="btn btn-danger">削除</button>
@@ -142,7 +142,7 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
-                <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
             </div>
         </article>
         {% endfor %}
@@ -175,7 +175,7 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_shikiriosho_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
-                <a href="{{ url_for('shikiriosho_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                <a href="{{ url_for('shikiriosho_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
             </div>
         </article>
         {% endfor %}
@@ -214,7 +214,7 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
-                <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF確認</a>
+                <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
             </div>
         </article>
         {% endfor %}

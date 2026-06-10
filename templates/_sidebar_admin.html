@@ -6,7 +6,6 @@
 {% set wholesale_sales_agency_count = get_pending_sales_agency_count_by_service('wholesale') if get_pending_sales_agency_count_by_service is defined else 0 %}
 {% set auction_sales_agency_count = get_pending_sales_agency_count_by_service('auction') if get_pending_sales_agency_count_by_service is defined else 0 %}
 {% set simultaneous_sales_agency_count = get_pending_sales_agency_count_by_service('simultaneous') if get_pending_sales_agency_count_by_service is defined else 0 %}
-{% set long_term_item_count = get_long_term_item_count() if get_long_term_item_count is defined else 0 %}
 {% set pending_proxy_service_history_count = get_pending_proxy_service_history_count() if get_pending_proxy_service_history_count is defined else 0 %}
 {% set admin_notification_count = pending_sale_request_count + pending_disposal_count %}
 {% set analytics_from_report_nav = request.endpoint == 'user_analytics' and request.args.get('from_client_reports') == '1' %}

@@ -1,0 +1,121 @@
+<style>
+    .pdf-screen-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        display: flex;
+        justify-content: center;
+        padding: 10px 12px;
+        background: rgba(248, 250, 252, 0.96);
+        border-bottom: 1px solid #dbe3ef;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+        font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+    }
+
+    .pdf-screen-toolbar-inner {
+        width: min(210mm, 100%);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .pdf-screen-toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .pdf-screen-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #fff;
+        color: #1f2937;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1;
+        text-decoration: none;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .pdf-screen-btn-primary {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: #fff;
+    }
+
+    .pdf-screen-note {
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: right;
+    }
+
+    @media (max-width: 640px) {
+        .pdf-screen-toolbar {
+            padding: 8px;
+        }
+
+        .pdf-screen-toolbar-inner {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .pdf-screen-toolbar-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .pdf-screen-btn {
+            min-width: 0;
+            min-height: 32px;
+            padding: 0 8px;
+            font-size: 12px;
+        }
+
+        .pdf-screen-note {
+            text-align: center;
+            font-size: 11px;
+        }
+    }
+
+    @media print {
+        .pdf-screen-toolbar {
+            display: none !important;
+        }
+    }
+</style>
+<div class="pdf-screen-toolbar no-print">
+    <div class="pdf-screen-toolbar-inner">
+        <div class="pdf-screen-toolbar-actions">
+            <button type="button" class="pdf-screen-btn" onclick="goBackFromPdf()">戻る</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">保存 / 印刷</button>
+        </div>
+        <div class="pdf-screen-note">ブラウザの印刷画面でPDF保存できます。</div>
+    </div>
+</div>
+<script>
+    function goBackFromPdf() {
+        try {
+            if (document.referrer) {
+                const referrer = new URL(document.referrer);
+                if (referrer.origin === window.location.origin && referrer.href !== window.location.href) {
+                    window.history.back();
+                    return;
+                }
+            }
+        } catch (error) {
+            // Fall through to the default list page.
+        }
+        window.location.href = "{{ url_for('admin_documents_dashboard') if current_user.is_admin() else url_for('documents') }}";
+    }
+</script>

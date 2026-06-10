@@ -19,7 +19,7 @@
             {% if kaitori.vendor_response_file_path %}
             <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" class="doc-btn doc-btn-secondary" target="_blank" rel="noopener">添付を開く</a>
             {% endif %}
-            <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF出力</a>
+            <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF</a>
         </div>
     </div>
 

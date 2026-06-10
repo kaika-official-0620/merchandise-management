@@ -6413,7 +6413,15 @@ def format_user_display_name(display_name, username=None, fallback=None, role=No
     return display_name_value
 
 
+def format_header_display_name(display_name, username=None, role=None):
+    display_name_value = (display_name or '').strip()
+    if is_placeholder_user_display_name(display_name_value, username=username, role=role):
+        return 'MY'
+    return display_name_value
+
+
 app.jinja_env.globals['format_user_display_name'] = format_user_display_name
+app.jinja_env.globals['format_header_display_name'] = format_header_display_name
 app.jinja_env.globals['is_placeholder_user_display_name'] = is_placeholder_user_display_name
 app.jinja_env.globals['get_display_name_fallback_for_role'] = get_display_name_fallback_for_role
 
@@ -33088,7 +33096,7 @@ def user_kaitori_shoudaku_edit(id):
     
     return render_template('kaitori_shoudaku_form.html', kaitori=kaitori, items=items, mode='edit')
 
-@app.route('/kaitori-shoudaku/<int:id>/delete')
+@app.route('/kaitori-shoudaku/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 def user_kaitori_shoudaku_delete(id):
     """買取承諾書削除（ユーザー用）"""
@@ -33099,15 +33107,28 @@ def user_kaitori_shoudaku_delete(id):
         cur = conn.cursor()
     
     if DATABASE_URL:
-        cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        cur.execute('SELECT status FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        kaitori = cur.fetchone()
     else:
-        cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
-    
-    conn.commit()
+        cur.execute('SELECT status FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+        row = cur.fetchone()
+        kaitori = dict(row) if row else None
+
+    status = ((kaitori or {}).get('status') or 'draft').strip()
+    if kaitori and is_deletable_document_status(status):
+        if DATABASE_URL:
+            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s', (id,))
+            cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+        else:
+            cur.execute('DELETE FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ?', (id,))
+            cur.execute('DELETE FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+        conn.commit()
+        flash('買取承諾書を削除しました', 'success')
+    else:
+        flash('送信済みの買取承諾書は削除できません', 'error')
     cur.close()
     conn.close()
-    
-    flash('買取承諾書を削除しました', 'success')
+
     return redirect(url_for('user_kaitori_shoudaku_list'))
 
 @app.route('/kaitori-shoudaku/<int:id>/pdf')

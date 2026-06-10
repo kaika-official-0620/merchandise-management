@@ -316,7 +316,11 @@
     <meta name="application-name" content="開花在庫管理">
 </head>
 <body>
+    <div class="app-loading-screen" id="appLoadingScreen" aria-label="読み込み中">
+        <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
+    </div>
     {% if current_user.is_authenticated %}
+    {% set nav_display_name = format_header_display_name(current_user.display_name, current_user.username, role=current_user.role) %}
     <nav class="navbar">
         <div class="nav-container">
             <button type="button" class="hamburger-menu" onclick="toggleSidebar()">
@@ -328,11 +332,11 @@
                 <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
             </div>
             <div class="nav-right">
-                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm"> 計算式</button>
+                <button onclick="openProfitCalculator()" class="btn btn-calculator btn-sm" aria-label="計算式" title="計算式">計算式</button>
             </div>
             <div class="nav-user" id="navUser">
-                <div class="user-menu-trigger" onclick="toggleUserMenu(event)">
-                    <span class="user-name">{{ format_user_display_name(current_user.display_name, current_user.username, role=current_user.role) }}</span>
+                <div class="user-menu-trigger" onclick="toggleUserMenu(event)" title="{{ nav_display_name }}">
+                    <span class="user-name">{{ nav_display_name }}</span>
                     {% if current_user.is_owner() %}
                     <span class="user-badge owner">オーナー</span>
                     {% elif current_user.is_admin() %}
@@ -1366,6 +1370,27 @@
     </style>
     
     <script>
+        (function setupLoadingScreen() {
+            const loadingScreen = document.getElementById('appLoadingScreen');
+            if (!loadingScreen) return;
+
+            function hideLoadingScreen() {
+                loadingScreen.classList.add('is-hidden');
+                window.setTimeout(function () {
+                    if (loadingScreen && loadingScreen.parentNode) {
+                        loadingScreen.parentNode.removeChild(loadingScreen);
+                    }
+                }, 360);
+            }
+
+            if (document.readyState === 'complete') {
+                hideLoadingScreen();
+            } else {
+                window.addEventListener('load', hideLoadingScreen, { once: true });
+                window.setTimeout(hideLoadingScreen, 4200);
+            }
+        })();
+
         // アラート自動非表示
         document.querySelectorAll('.alert').forEach(alert => {
             setTimeout(() => alert.remove(), 5000);
@@ -1754,6 +1779,7 @@
 
         (function setupEdgeHoverTableScroll() {
             if (window.innerWidth <= 768) return;
+            if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;
 
             const scrollContainerSelector = [
                 '.js-edge-hover-scroll',

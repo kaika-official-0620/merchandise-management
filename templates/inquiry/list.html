@@ -20,18 +20,18 @@
                     <span class="inquiry-status status-{{ inquiry.status }}">{{ statuses.get(inquiry.status, inquiry.status) }}</span>
                 </div>
                 <div class="inquiry-main-cell">
-                    <div class="inquiry-title">
-                        {{ inquiry.title }}
-                        {% if inquiry.image_path %}
-                        <span class="attachment-icon" title="画像添付あり">画像あり</span>
-                        {% endif %}
-                    </div>
-                    <div class="inquiry-meta">
+                    <div class="inquiry-title-row">
+                        <div class="inquiry-title">
+                            {{ inquiry.title }}
+                            {% if inquiry.image_path %}
+                            <span class="attachment-icon" title="画像添付あり">画像あり</span>
+                            {% endif %}
+                        </div>
                         <span class="inquiry-date">作成: {{ inquiry.created_at[:16].replace('-', '/').replace('T', ' ') if inquiry.created_at else '-' }}</span>
                     </div>
                 </div>
                 <div class="inquiry-open-cell">
-                    詳細を見る
+                    詳細
                 </div>
             </a>
             <form action="{{ url_for('inquiry_delete', id=inquiry.id) }}" method="POST" class="inquiry-delete-form" onsubmit="return confirm('この問い合わせを削除しますか？');">
@@ -57,7 +57,7 @@
 .inquiry-list {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.5rem;
 }
 
 .inquiry-card-wrapper {
@@ -65,15 +65,15 @@
     display: flex;
     align-items: stretch;
     background: white;
-    border-radius: 14px;
-    box-shadow: 0 8px 20px rgba(15,23,42,0.06);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.05);
     border: 1px solid #e2e8f0;
     transition: all 0.2s;
 }
 
 .inquiry-card-wrapper.status-row-new {
     border-color: #fbbf24;
-    box-shadow: inset 4px 0 0 #f59e0b, 0 8px 20px rgba(15,23,42,0.06);
+    box-shadow: inset 3px 0 0 #f59e0b, 0 4px 12px rgba(15,23,42,0.05);
 }
 
 .inquiry-card-wrapper.status-row-resolved,
@@ -88,29 +88,29 @@
 
 .inquiry-card {
     display: grid;
-    grid-template-columns: 180px minmax(0, 1fr) 120px;
+    grid-template-columns: 126px minmax(0, 1fr) 58px;
     align-items: center;
-    gap: 1rem;
+    gap: 0.65rem;
     flex: 1;
-    padding: 0.9rem 1rem;
+    padding: 0.58rem 0.7rem;
     text-decoration: none;
     color: inherit;
-    border-radius: 12px 0 0 12px;
+    border-radius: 10px 0 0 10px;
 }
 
 .inquiry-delete-form {
     display: flex;
     align-items: center;
-    padding: 0 0.75rem;
+    padding: 0 0.45rem;
     border-left: 1px solid #e2e8f0;
 }
 
 .btn-delete-inquiry {
     background: none;
     border: none;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     cursor: pointer;
-    padding: 0.5rem;
+    padding: 0.35rem;
     border-radius: 6px;
     transition: all 0.2s;
     opacity: 0.5;
@@ -123,9 +123,9 @@
 
 .inquiry-status-cell {
     display: flex;
-    align-items: flex-start;
-    gap: 0.45rem;
-    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
 }
 
 .inquiry-main-cell {
@@ -133,16 +133,18 @@
 }
 
 .inquiry-category {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    padding: 0.14rem 0.36rem;
     background: #f1f5f9;
     border-radius: 4px;
     color: #64748b;
 }
 
 .inquiry-status {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    padding: 0.14rem 0.36rem;
     border-radius: 4px;
     font-weight: 500;
 }
@@ -167,8 +169,17 @@
     color: #64748b;
 }
 
+.inquiry-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
 .inquiry-title {
-    font-size: 1rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.95rem;
     font-weight: 800;
     color: #1e293b;
     display: flex;
@@ -191,27 +202,28 @@
 
 .attachment-icon {
     flex: 0 0 auto;
-    padding: 0.15rem 0.45rem;
+    padding: 0.1rem 0.35rem;
     border-radius: 999px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     font-weight: 800;
 }
 
-.inquiry-meta {
-    font-size: 0.85rem;
+.inquiry-date {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
     color: #94a3b8;
-    margin-top: 0.25rem;
+    white-space: nowrap;
 }
 
 .inquiry-open-cell {
     justify-self: end;
-    padding: 0.35rem 0.65rem;
+    padding: 0.22rem 0.48rem;
     border-radius: 999px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 800;
     white-space: nowrap;
 }
@@ -231,13 +243,38 @@
 }
 
 @media (max-width: 760px) {
+    .inquiry-card-wrapper {
+        border-radius: 8px;
+    }
+
     .inquiry-card {
-        grid-template-columns: 1fr;
-        gap: 0.65rem;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.45rem 0.5rem;
+        padding: 0.55rem 0.6rem;
+    }
+
+    .inquiry-status-cell {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    .inquiry-title-row {
+        align-items: flex-start;
+        gap: 0.35rem;
+        flex-direction: column;
+    }
+
+    .inquiry-date {
+        font-size: 0.68rem;
     }
 
     .inquiry-open-cell {
-        justify-self: start;
+        justify-self: end;
+        align-self: center;
+    }
+
+    .inquiry-delete-form {
+        padding: 0 0.35rem;
     }
 }
 </style>

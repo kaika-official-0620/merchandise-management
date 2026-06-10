@@ -102,6 +102,8 @@
 <style>
 .announcement-list-page {
     display: grid;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .table-card {
@@ -109,10 +111,16 @@
     border: 1px solid #e2e8f0;
     border-radius: 16px;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    max-width: 100%;
+    min-width: 0;
 }
 
 .table-scroll {
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .admin-table {

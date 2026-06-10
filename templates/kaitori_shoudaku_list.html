@@ -29,6 +29,7 @@
         </thead>
         <tbody>
             {% for kaitori in kaitori_list %}
+            {% set status = kaitori.status or 'draft' %}
             <tr>
                 <td>{{ kaitori.document_no }}</td>
                 <td>{{ kaitori.customer_name }}</td>
@@ -38,7 +39,9 @@
                 <td class="actions-cell">
                     <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-sm btn-edit">編集</a>
                     <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">内容を見る</a>
+                    {% if status in ['draft', 'in_progress'] %}
                     <a href="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('削除してもよろしいですか？')">削除</a>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

@@ -1658,7 +1658,7 @@
                     {% endif %}
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
-                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="" loading="lazy" decoding="async"
                             data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
                         {% if item.all_photos|length > 1 %}
                         <span class="photo-count-badge">{{ item.all_photos|length }}</span>
@@ -1816,12 +1816,12 @@
                     {% if item.all_photos and item.all_photos|length > 1 %}
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
                         {% for photo in item.all_photos %}
-                        <img src="{{ url_for('static', filename=photo) }}" alt=""
+                        <img src="{{ url_for('static', filename=photo) }}" alt="" loading="lazy" decoding="async"
                             onclick="openLightboxFromParent(this, {{ loop.index0 }})">
                         {% endfor %}
                     </div>
                     {% elif item.all_photos and item.all_photos|length == 1 %}
-                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="" loading="lazy" decoding="async"
                         data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
                     {% else %}
                     <div class="no-photo">-</div>
@@ -1979,6 +1979,8 @@
 </div>
 
 <script>
+    const isMobileListMode = () => window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
     // フィルターパネル開閉
     function toggleFilterPanel() {
         const panel = document.getElementById('filterPanel');
@@ -2143,29 +2145,32 @@
             return show;
         }
 
-        const rows = document.querySelectorAll('#itemsTable tbody tr');
-        rows.forEach(row => {
-            if (!row.dataset.id) return;
-            const show = matchesElement(row);
-
-            row.style.display = show ? '' : 'none';
-            if (show) visibleCount++;
-        });
-
         let visibleMobileCount = 0;
-        const cards = document.querySelectorAll('#mobileCards .user-item-card');
-        cards.forEach(card => {
-            if (!card.dataset.id) return;
-            const show = matchesElement(card);
-            card.style.display = show ? '' : 'none';
-            if (show) visibleMobileCount++;
-        });
+        if (isMobileListMode()) {
+            const cards = document.querySelectorAll('#mobileCards .user-item-card');
+            cards.forEach(card => {
+                if (!card.dataset.id) return;
+                const show = matchesElement(card);
+                card.style.display = show ? '' : 'none';
+                if (show) visibleMobileCount++;
+            });
+            visibleCount = visibleMobileCount;
+        } else {
+            const rows = document.querySelectorAll('#itemsTable tbody tr');
+            rows.forEach(row => {
+                if (!row.dataset.id) return;
+                const show = matchesElement(row);
+
+                row.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+        }
 
         const countEl = document.getElementById('filtered-count');
         if (countEl) countEl.textContent = visibleCount + '件表示';
 
         const totalCountEl = document.querySelector('.total-count');
-        if (totalCountEl && visibleMobileCount > 0) totalCountEl.textContent = visibleMobileCount;
+        if (totalCountEl && isMobileListMode()) totalCountEl.textContent = visibleMobileCount;
     }
 
     function openTransferModal(itemId, itemName) {
@@ -2290,8 +2295,11 @@
     }
 
     function sortTable(column, ascending) {
-        sortElements('#itemsTable tbody', 'tr', column, ascending);
-        sortElements('#mobileCards', '.user-item-card', column, ascending);
+        if (isMobileListMode()) {
+            sortElements('#mobileCards', '.user-item-card', column, ascending);
+        } else {
+            sortElements('#itemsTable tbody', 'tr', column, ascending);
+        }
     }
 
     function applySortSelection() {
@@ -2316,8 +2324,6 @@
         sortDirection[column] = ascending;
         sortTable(column, ascending);
     }
-
-    document.addEventListener('DOMContentLoaded', applySortSelection);
 
     // ========== ライトボックス機能 ==========
     let currentPhotos = [];

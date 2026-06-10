@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類履歴へ戻る</a>
-    <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF出力</a>
+    <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
     {% if keisan.status == 'draft' and not keisan.is_admin_created %}
     <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
     {% endif %}
