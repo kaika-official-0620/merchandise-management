@@ -1066,6 +1066,16 @@ def apply(module: Any) -> None:
         conn, cur = open_cursor()
         try:
             placeholder = "%s" if DATABASE_URL else "?"
+            cur.execute(
+                f"""
+                DELETE FROM user_kaitori_shoudaku_items
+                WHERE kaitori_shoudaku_id IN (
+                    SELECT id FROM user_kaitori_shoudaku WHERE user_id = {placeholder}
+                )
+                """,
+                (id,),
+            )
+            cur.execute(f"DELETE FROM user_kaitori_shoudaku WHERE user_id = {placeholder}", (id,))
             cur.execute(f"DELETE FROM merchandise WHERE user_id = {placeholder}", (id,))
             cur.execute(f"DELETE FROM customers WHERE user_id = {placeholder}", (id,))
             cur.execute(f"DELETE FROM users WHERE id = {placeholder}", (id,))
