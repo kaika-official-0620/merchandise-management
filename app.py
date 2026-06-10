@@ -14484,11 +14484,25 @@ def delete_user(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM user_kaitori_shoudaku_items
+            WHERE kaitori_shoudaku_id IN (
+                SELECT id FROM user_kaitori_shoudaku WHERE user_id = %s
+            )
+        """, (id,))
+        cur.execute("DELETE FROM user_kaitori_shoudaku WHERE user_id = %s", (id,))
         cur.execute("DELETE FROM merchandise WHERE user_id = %s", (id,))
         cur.execute("DELETE FROM customers WHERE user_id = %s", (id,))
         cur.execute("DELETE FROM users WHERE id = %s", (id,))
     else:
         cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM user_kaitori_shoudaku_items
+            WHERE kaitori_shoudaku_id IN (
+                SELECT id FROM user_kaitori_shoudaku WHERE user_id = ?
+            )
+        """, (id,))
+        cur.execute("DELETE FROM user_kaitori_shoudaku WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM merchandise WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM customers WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM users WHERE id = ?", (id,))
@@ -18626,7 +18640,7 @@ def admin_proxy_service_document_history():
     try:
         sync_proxy_service_keisan_documents(conn)
         conn.commit()
-        document_type_cards = build_admin_document_type_cards_v2(fetch_admin_document_history_rows_with_vendor_statements_v2())
+        document_type_cards = build_admin_document_type_cards_counted_v2()
 
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -35867,6 +35881,60 @@ def sales_agency_column_exists(cur, table_name, column_name):
         return False
 
 
+_ADMIN_DOCUMENTS_INDEXES_READY = False
+
+
+def ensure_admin_documents_performance_indexes():
+    """Create lightweight indexes used by the admin documents dashboard."""
+    global _ADMIN_DOCUMENTS_INDEXES_READY
+    if _ADMIN_DOCUMENTS_INDEXES_READY:
+        return
+
+    conn, cur = sales_agency_open_cursor()
+    try:
+        statements = [
+            "CREATE INDEX IF NOT EXISTS idx_sales_agency_requests_admin_documents ON sales_agency_requests (status, created_at DESC, id DESC)",
+        ]
+
+        if sales_agency_column_exists(cur, 'sales_agency_request_items', 'item_status'):
+            statements.append(
+                "CREATE INDEX IF NOT EXISTS idx_sales_agency_request_items_request_status ON sales_agency_request_items (request_id, item_status)"
+            )
+        else:
+            statements.append(
+                "CREATE INDEX IF NOT EXISTS idx_sales_agency_request_items_request ON sales_agency_request_items (request_id)"
+            )
+
+        if sales_agency_column_exists(cur, 'shikiriosho', 'sales_agency_request_id'):
+            statements.append(
+                "CREATE INDEX IF NOT EXISTS idx_shikiriosho_sales_request ON shikiriosho (sales_agency_request_id, id)"
+            )
+
+        if sales_agency_column_exists(cur, 'user_keisan', 'sales_agency_request_id'):
+            if sales_agency_column_exists(cur, 'user_keisan', 'is_admin_created'):
+                statements.append(
+                    "CREATE INDEX IF NOT EXISTS idx_user_keisan_sales_request_admin ON user_keisan (sales_agency_request_id, is_admin_created, id)"
+                )
+            else:
+                statements.append(
+                    "CREATE INDEX IF NOT EXISTS idx_user_keisan_sales_request ON user_keisan (sales_agency_request_id, id)"
+                )
+
+        for statement in statements:
+            cur.execute(statement)
+        conn.commit()
+        _ADMIN_DOCUMENTS_INDEXES_READY = True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        app.logger.warning("Failed to ensure admin documents performance indexes", exc_info=True)
+    finally:
+        cur.close()
+        conn.close()
+
+
 SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS = [
     ('product_name', 'snapshot_product_name'),
     ('brand_name', 'snapshot_brand_name'),
@@ -37048,6 +37116,72 @@ def build_admin_document_type_cards_v2(rows):
                 ),
             }
         )
+    return cards
+
+
+def build_admin_document_type_cards_counted_v2():
+    """Build dashboard document cards with COUNT queries instead of loading every row."""
+    count_map = {}
+    conn, cur = document_open_cursor()
+
+    def scalar_count(sql, params=()):
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        if row is None:
+            return 0
+        if isinstance(row, dict):
+            value = row.get('count')
+        elif hasattr(row, 'keys'):
+            value = row['count']
+        else:
+            value = row[0]
+        return int(value or 0)
+
+    try:
+        count_map[('user_mitsumori', 'client_incoming')] = scalar_count(
+            """
+            SELECT COUNT(*) AS count
+            FROM user_mitsumori
+            WHERE COALESCE(document_no, '') NOT LIKE 'MT-%'
+            """
+        )
+        count_map[('user_mitsumori', 'vendor_outgoing')] = scalar_count(
+            """
+            SELECT COUNT(*) AS count
+            FROM user_mitsumori
+            WHERE COALESCE(document_no, '') LIKE 'MT-%'
+            """
+        )
+        count_map[('user_kaitori_shoudaku', 'client_incoming')] = scalar_count(
+            "SELECT COUNT(*) AS count FROM user_kaitori_shoudaku"
+        )
+        count_map[('admin_kaitori_shoudaku', 'vendor_incoming')] = scalar_count(
+            "SELECT COUNT(*) AS count FROM admin_kaitori_shoudaku"
+        )
+        count_map[('invoice', 'client_outgoing')] = scalar_count(
+            "SELECT COUNT(*) AS count FROM invoices WHERE COALESCE(invoice_no, '') LIKE 'KT-%'"
+        )
+        count_map[('shikiriosho', 'client_outgoing')] = scalar_count(
+            "SELECT COUNT(*) AS count FROM shikiriosho"
+        )
+        if _docs_column_exists(cur, 'user_keisan', 'is_admin_created'):
+            admin_created_condition = (
+                "COALESCE(is_admin_created, FALSE) = TRUE"
+                if DATABASE_URL
+                else "COALESCE(is_admin_created, 0) = 1"
+            )
+        else:
+            admin_created_condition = "1 = 1"
+        count_map[('user_keisan', 'client_outgoing')] = scalar_count(
+            f"SELECT COUNT(*) AS count FROM user_keisan WHERE {admin_created_condition}"
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+    cards = build_admin_document_type_cards_v2([])
+    for card in cards:
+        card['count'] = count_map.get((card.get('doc_type'), card.get('direction')), 0)
     return cards
 
 
@@ -39828,6 +39962,206 @@ def _build_dashboard_related_documents(request_row):
     return related_documents, vendor_statement_doc, linked_docs
 
 
+def _build_dashboard_related_documents_fast(request_row):
+    request_id = request_row.get("id")
+    related_documents = []
+
+    vendor_estimate_id = request_row.get("vendor_mitsumori_id")
+    if vendor_estimate_id:
+        related_documents.append(
+            {
+                "document_type": "讌ｭ閠・髄縺台ｾ晞ｼ譖ｸ",
+                "document_no": f"ID:{vendor_estimate_id}",
+                "issue_date": "",
+                "status": "completed",
+                "status_label": "菴懈・貂医∩",
+                "detail_url": url_for("admin_mitsumori_view", id=vendor_estimate_id),
+                "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
+            }
+        )
+
+    vendor_statement_id = request_row.get("vendor_kaitori_shoudaku_id")
+    vendor_statement_doc = None
+    if vendor_statement_id:
+        vendor_statement_doc = {
+            "id": vendor_statement_id,
+            "status": "completed",
+            "issue_date": "",
+            "created_at": "",
+        }
+        related_documents.append(
+            {
+                "document_type": "讌ｭ閠・ｲｷ蜿匁・邏ｰ譖ｸ",
+                "document_no": f"ID:{vendor_statement_id}",
+                "issue_date": "",
+                "status": "completed",
+                "status_label": "逋ｻ骭ｲ貂医∩",
+                "detail_url": url_for("admin_kaitori_shoudaku_view", id=vendor_statement_id),
+                "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
+            }
+        )
+
+    client_invoice_id = request_row.get("client_invoice_id")
+    if client_invoice_id:
+        related_documents.append(
+            {
+                "document_type": "繧ｯ繝ｩ繧､繧｢繝ｳ繝亥髄縺題ｲｷ蜿匁・邏ｰ譖ｸ",
+                "document_no": f"ID:{client_invoice_id}",
+                "issue_date": "",
+                "status": "completed",
+                "status_label": "菴懈・貂医∩",
+                "detail_url": url_for("admin_kaitori_view", id=client_invoice_id),
+                "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
+            }
+        )
+
+    linked_docs = {
+        "shikiriosho_id": request_row.get("shikiriosho_id"),
+        "auction_keisan_id": request_row.get("auction_keisan_id"),
+    }
+    if linked_docs.get("shikiriosho_id"):
+        related_documents.append(
+            {
+                "document_type": "邊ｾ邂玲嶌",
+                "document_no": f"ID:{linked_docs['shikiriosho_id']}",
+                "issue_date": "",
+                "status": "completed",
+                "status_label": "菴懈・貂医∩",
+                "detail_url": url_for("admin_shikiriosho_view", id=linked_docs["shikiriosho_id"]),
+                "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
+            }
+        )
+    if linked_docs.get("auction_keisan_id"):
+        related_documents.append(
+            {
+                "document_type": "繧ｪ繝ｼ繧ｯ繧ｷ繝ｧ繝ｳ險育ｮ玲嶌",
+                "document_no": f"ID:{linked_docs['auction_keisan_id']}",
+                "issue_date": "",
+                "status": "completed",
+                "status_label": "菴懈・貂医∩",
+                "detail_url": url_for("admin_auction_keisan_view", id=linked_docs["auction_keisan_id"]),
+                "request_url": url_for("admin_sales_agency_request_detail", id=request_id),
+            }
+        )
+
+    return related_documents, vendor_statement_doc, linked_docs
+
+
+def _fetch_admin_documents_request_summaries(limit=200):
+    safe_limit = max(1, min(int(limit or 200), 500))
+    conn, cur = sales_agency_open_cursor()
+    try:
+        item_status_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'item_status')
+        created_mitsumori_exists = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_mitsumori_id')
+        created_invoice_exists = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_invoice_id')
+        shikiriosho_request_exists = sales_agency_column_exists(cur, 'shikiriosho', 'sales_agency_request_id')
+        keisan_request_exists = sales_agency_column_exists(cur, 'user_keisan', 'sales_agency_request_id')
+        keisan_admin_created_exists = sales_agency_column_exists(cur, 'user_keisan', 'is_admin_created')
+
+        created_mitsumori_expr = "sar.created_mitsumori_id" if created_mitsumori_exists else "NULL"
+        created_invoice_expr = "sar.created_invoice_id" if created_invoice_exists else "NULL"
+        if item_status_exists:
+            active_count_expr = """
+                (
+                    SELECT COUNT(*)
+                    FROM sales_agency_request_items sari
+                    WHERE sari.request_id = sar.id
+                      AND COALESCE(sari.item_status, 'active') NOT IN ('cancelled', 'canceled')
+                )
+            """
+            canceled_count_expr = """
+                (
+                    SELECT COUNT(*)
+                    FROM sales_agency_request_items sari
+                    WHERE sari.request_id = sar.id
+                      AND COALESCE(sari.item_status, 'active') IN ('cancelled', 'canceled')
+                )
+            """
+        else:
+            active_count_expr = """
+                (
+                    SELECT COUNT(*)
+                    FROM sales_agency_request_items sari
+                    WHERE sari.request_id = sar.id
+                )
+            """
+            canceled_count_expr = "0"
+
+        if shikiriosho_request_exists:
+            shikiriosho_expr = """
+                (
+                    SELECT s.id
+                    FROM shikiriosho s
+                    WHERE s.sales_agency_request_id = sar.id
+                    ORDER BY s.id DESC
+                    LIMIT 1
+                )
+            """
+        else:
+            shikiriosho_expr = "NULL"
+
+        if keisan_request_exists:
+            if keisan_admin_created_exists:
+                keisan_admin_condition = (
+                    "COALESCE(k.is_admin_created, FALSE) = TRUE"
+                    if DATABASE_URL
+                    else "COALESCE(k.is_admin_created, 0) = 1"
+                )
+            else:
+                keisan_admin_condition = "1 = 1"
+            auction_keisan_expr = f"""
+                (
+                    SELECT k.id
+                    FROM user_keisan k
+                    WHERE k.sales_agency_request_id = sar.id
+                      AND {keisan_admin_condition}
+                    ORDER BY k.id DESC
+                    LIMIT 1
+                )
+            """
+        else:
+            auction_keisan_expr = "NULL"
+
+        cur.execute(
+            f"""
+            SELECT sar.id,
+                   sar.user_id,
+                   sar.service_type,
+                   sar.status,
+                   sar.created_at,
+                   COALESCE(sar.vendor_mitsumori_id, {created_mitsumori_expr}) AS vendor_mitsumori_id,
+                   sar.vendor_kaitori_shoudaku_id,
+                   COALESCE(sar.client_invoice_id, {created_invoice_expr}) AS client_invoice_id,
+                   u.display_name AS user_name,
+                   u.username,
+                   {active_count_expr} AS active_item_count,
+                   {canceled_count_expr} AS canceled_item_count,
+                   {shikiriosho_expr} AS shikiriosho_id,
+                   {auction_keisan_expr} AS auction_keisan_id
+            FROM sales_agency_requests sar
+            JOIN users u ON sar.user_id = u.id
+            WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'rejected')
+            ORDER BY sar.created_at DESC, sar.id DESC
+            LIMIT {safe_limit}
+            """
+        )
+        rows = sales_agency_rows_to_dicts(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+    for row in rows:
+        active_item_count = int(row.get("active_item_count") or 0)
+        canceled_item_count = int(row.get("canceled_item_count") or 0)
+        row["created_at"] = sales_agency_format_datetime(row.get("created_at"))
+        row["service_name"] = get_sales_agency_service_name(row.get("service_type"))
+        row["client_name"] = row.get("user_name") or row.get("username") or "譛ｪ險ｭ螳壹Θ繝ｼ繧ｶ繝ｼ"
+        row["active_item_count"] = active_item_count
+        row["canceled_item_count"] = canceled_item_count
+        row["item_summary"] = f"蟇ｾ雎｡蝠・刀 {active_item_count}轤ｹ" if active_item_count else "-"
+    return rows
+
+
 def _matches_documents_group(request_row, group_key):
     service_type = request_row.get("service_type")
     active_item_count = int(request_row.get("active_item_count") or 0)
@@ -39873,6 +40207,7 @@ def _build_service_breakdown_rows(filtered_rows, selected_group, selected_servic
 @admin_required
 def admin_documents_dashboard_preview():
     _ensure_sales_agency_document_columns()
+    ensure_admin_documents_performance_indexes()
     selected_group = (request.args.get("group") or "all").strip() or "all"
     selected_service_type = (request.args.get("service_type") or "all").strip() or "all"
     selected_month = (request.args.get("month") or "all").strip() or "all"
@@ -39959,29 +40294,10 @@ def admin_documents_dashboard_preview():
         },
     }
 
-    conn, cur = _docs_open_cursor()
-    try:
-        cur.execute(
-            """
-            SELECT id
-            FROM sales_agency_requests
-            WHERE status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'rejected')
-            ORDER BY created_at DESC
-            LIMIT 200
-            """
-        )
-        request_ids = [(_docs_row_to_dict(row) or {}).get("id") for row in cur.fetchall()]
-    finally:
-        cur.close()
-        conn.close()
-
     base_rows = []
-    for request_id in [value for value in request_ids if value]:
-        request_row, _request_items = fetch_sales_agency_request_details(request_id, viewer='admin')
-        if not request_row:
-            continue
-
-        related_documents, vendor_statement_doc, linked_docs = _build_dashboard_related_documents(request_row)
+    for request_row in _fetch_admin_documents_request_summaries(limit=200):
+        request_id = request_row.get("id")
+        related_documents, vendor_statement_doc, linked_docs = _build_dashboard_related_documents_fast(request_row)
         active_item_count = int(request_row.get("active_item_count") or 0)
         canceled_item_count = int(request_row.get("canceled_item_count") or 0)
         service_type = request_row.get("service_type") or ""
@@ -40002,7 +40318,7 @@ def admin_documents_dashboard_preview():
             "client_name": request_row.get("client_name"),
             "service_type": service_type,
             "service_name": request_row.get("service_name") or "",
-            "item_summary": item_summary,
+            "item_summary": request_row.get("item_summary") or item_summary,
             "status": request_row.get("status") or "",
             "status_label": get_sales_agency_status_label(request_row.get("status"), viewer="admin"),
             "detail_url": url_for("admin_sales_agency_request_detail", id=request_id),
@@ -40134,7 +40450,7 @@ def admin_documents_dashboard_preview():
         "すべてのサービス",
     )
     try:
-        document_type_cards = build_admin_document_type_cards_v2(fetch_admin_document_history_rows_with_vendor_statements_v2())
+        document_type_cards = build_admin_document_type_cards_counted_v2()
     except Exception:
         app.logger.exception("Failed to build admin document type cards")
         document_type_cards = build_admin_document_type_cards_v2([])
