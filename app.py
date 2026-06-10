@@ -34125,61 +34125,99 @@ def admin_inquiry_status(id):
     
     return jsonify({'success': True, 'status': new_status, 'status_label': INQUIRY_STATUS[new_status]})
 
+# 管理者サイドバーの通知数は1リクエスト内で使い回す
+def get_admin_sidebar_counts():
+    defaults = {
+        'unread_inquiry_count': 0,
+        'pending_disposal_count': 0,
+        'sale_requests_by_type': {},
+        'pending_sale_request_count': 0,
+        'sales_agency_by_service': {},
+        'pending_sales_agency_count': 0,
+    }
+    if not has_request_context() or not current_user.is_authenticated or not current_user.is_admin():
+        return defaults.copy()
+    if hasattr(g, 'admin_sidebar_counts'):
+        return g.admin_sidebar_counts
+
+    counts = {
+        'unread_inquiry_count': 0,
+        'pending_disposal_count': 0,
+        'sale_requests_by_type': {},
+        'pending_sale_request_count': 0,
+        'sales_agency_by_service': {},
+        'pending_sales_agency_count': 0,
+    }
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM inquiries i
+            JOIN users u ON i.user_id = u.id
+            WHERE i.status = 'new'
+        """)
+        row = cur.fetchone()
+        counts['unread_inquiry_count'] = int(row[0] if row else 0)
+
+        cur.execute("SELECT COUNT(*) FROM item_disposal_requests WHERE status = 'pending'")
+        row = cur.fetchone()
+        counts['pending_disposal_count'] = int(row[0] if row else 0)
+
+        cur.execute("""
+            SELECT request_type, COUNT(*)
+            FROM sale_requests
+            WHERE status = 'pending'
+            GROUP BY request_type
+        """)
+        sale_counts = {}
+        for request_type, count in cur.fetchall():
+            sale_counts[normalize_sale_request_type(request_type)] = int(count or 0)
+        counts['sale_requests_by_type'] = sale_counts
+        counts['pending_sale_request_count'] = sum(sale_counts.values())
+
+        cur.execute("""
+            SELECT service_type, COUNT(*)
+            FROM sales_agency_requests
+            WHERE status = 'pending'
+            GROUP BY service_type
+        """)
+        agency_counts = {}
+        for service_type, count in cur.fetchall():
+            agency_counts[(service_type or '').strip()] = int(count or 0)
+        counts['sales_agency_by_service'] = agency_counts
+        counts['pending_sales_agency_count'] = sum(agency_counts.values())
+    except Exception as e:
+        print(f"get_admin_sidebar_counts error: {e}", flush=True)
+    finally:
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    g.admin_sidebar_counts = counts
+    return counts
+
+
 # 未読問い合わせ件数を取得するヘルパー関数
 def get_unread_inquiry_count():
     """管理者向け：新着問い合わせ件数を取得"""
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return 0
-    
-    try:
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor()
-            # 一覧と同じ条件でカウント（存在するユーザーの問い合わせのみ、クローズを除外）
-            cur.execute("""
-                SELECT COUNT(*) as count FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                WHERE i.status = 'new'
-            """)
-            count = cur.fetchone()[0]
-        else:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT COUNT(*) FROM inquiries i
-                JOIN users u ON i.user_id = u.id
-                WHERE i.status = 'new'
-            """)
-            count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return count
-    except Exception as e:
-        # テーブルが存在しない場合など
-        return 0
+    return int(get_admin_sidebar_counts().get('unread_inquiry_count') or 0)
 
 
 # 未処理商品処分申請件数を取得するヘルパー関数
 def get_pending_disposal_count():
     """管理者向け：未処理の商品処分申請件数を取得"""
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return 0
-    
-    try:
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM item_disposal_requests WHERE status = 'pending'")
-            count = cur.fetchone()[0]
-        else:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM item_disposal_requests WHERE status = 'pending'")
-            count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return count
-    except Exception as e:
-        # テーブルが存在しない場合など
-        return 0
+    return int(get_admin_sidebar_counts().get('pending_disposal_count') or 0)
 
 
 # テンプレートで使えるようにコンテキストプロセッサに追加
@@ -34192,13 +34230,112 @@ def get_pending_proxy_service_history_count():
     if hasattr(g, 'pending_proxy_service_history_count'):
         return g.pending_proxy_service_history_count
 
+    conn = None
+    cur = None
     try:
+        now_value = get_jst_now()
         conn = get_db()
-        datasets = build_proxy_service_history_datasets(conn, now=get_jst_now())
-        conn.close()
-        count = int((datasets.get('summary') or {}).get('pending_auction_count') or 0)
-    except Exception:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute("""
+                SELECT COUNT(DISTINCT ps.id)
+                FROM proxy_service_settings ps
+                WHERE COALESCE(ps.is_public, TRUE) = TRUE
+                  AND ps.end_datetime IS NOT NULL
+                  AND ps.end_datetime <= %s
+                  AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM user_keisan k
+                        WHERE k.proxy_service_auction_id = ps.id
+                          AND COALESCE(k.is_admin_created, FALSE) = TRUE
+                          AND COALESCE(k.status, 'draft') <> 'submitted'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM merchandise m
+                        LEFT JOIN users u ON u.id = m.user_id
+                        WHERE m.auction_id = ps.id
+                          AND (m.user_id IS NULL OR COALESCE(u.role, '') NOT IN ('user'))
+                          AND NOT EXISTS (
+                              SELECT 1 FROM merchandise child
+                              WHERE child.proxy_parent_item_id = m.id
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM user_keisan_items ki
+                              JOIN user_keisan k2 ON k2.id = ki.keisan_id
+                              WHERE k2.proxy_service_auction_id = ps.id
+                                AND COALESCE(k2.status, 'draft') = 'submitted'
+                                AND (ki.proxy_source_item_id = m.id OR ki.merchandise_id = m.id)
+                          )
+                          AND (
+                              (COALESCE(ps.sale_mode, 'auction') = 'fixed' AND m.sale_date IS NOT NULL)
+                              OR (COALESCE(ps.sale_mode, 'auction') <> 'fixed' AND EXISTS (
+                                  SELECT 1 FROM proxy_service_bids b WHERE b.merchandise_id = m.id
+                              ))
+                          )
+                    )
+                  )
+            """, (now_value,))
+        else:
+            cur.execute("""
+                SELECT COUNT(DISTINCT ps.id)
+                FROM proxy_service_settings ps
+                WHERE COALESCE(ps.is_public, 1) = 1
+                  AND ps.end_datetime IS NOT NULL
+                  AND ps.end_datetime <= ?
+                  AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM user_keisan k
+                        WHERE k.proxy_service_auction_id = ps.id
+                          AND COALESCE(k.is_admin_created, 0) = 1
+                          AND COALESCE(k.status, 'draft') <> 'submitted'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM merchandise m
+                        LEFT JOIN users u ON u.id = m.user_id
+                        WHERE m.auction_id = ps.id
+                          AND (m.user_id IS NULL OR COALESCE(u.role, '') NOT IN ('user'))
+                          AND NOT EXISTS (
+                              SELECT 1 FROM merchandise child
+                              WHERE child.proxy_parent_item_id = m.id
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM user_keisan_items ki
+                              JOIN user_keisan k2 ON k2.id = ki.keisan_id
+                              WHERE k2.proxy_service_auction_id = ps.id
+                                AND COALESCE(k2.status, 'draft') = 'submitted'
+                                AND (ki.proxy_source_item_id = m.id OR ki.merchandise_id = m.id)
+                          )
+                          AND (
+                              (COALESCE(ps.sale_mode, 'auction') = 'fixed' AND m.sale_date IS NOT NULL)
+                              OR (COALESCE(ps.sale_mode, 'auction') <> 'fixed' AND EXISTS (
+                                  SELECT 1 FROM proxy_service_bids b WHERE b.merchandise_id = m.id
+                              ))
+                          )
+                    )
+                  )
+            """, (now_value.strftime('%Y-%m-%d %H:%M:%S'),))
+        row = cur.fetchone()
+        count = int(row[0] if row else 0)
+    except Exception as e:
+        print(f"get_pending_proxy_service_history_count error: {e}", flush=True)
         count = 0
+    finally:
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     g.pending_proxy_service_history_count = count
     return count
@@ -34309,42 +34446,12 @@ def has_approved_shipping_request(cur, item_id):
 
 # 未処理の売却申請件数を取得
 def get_pending_sale_request_count():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        if DATABASE_URL:
-            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
-        else:
-            cur.execute("SELECT COUNT(*) FROM sale_requests WHERE status = 'pending'")
-        count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return count
-    except Exception as e:
-        return 0
+    return int(get_admin_sidebar_counts().get('pending_sale_request_count') or 0)
 
 
 def get_pending_sale_request_count_by_type(request_type):
     request_type = normalize_sale_request_type(request_type)
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        if DATABASE_URL:
-            cur.execute(
-                "SELECT COUNT(*) FROM sale_requests WHERE status = 'pending' AND request_type = %s",
-                (request_type,)
-            )
-        else:
-            cur.execute(
-                "SELECT COUNT(*) FROM sale_requests WHERE status = 'pending' AND request_type = ?",
-                (request_type,)
-            )
-        count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return count
-    except Exception:
-        return 0
+    return int((get_admin_sidebar_counts().get('sale_requests_by_type') or {}).get(request_type) or 0)
 
 
 def get_sale_request_status_counts(requests_list):
@@ -35759,36 +35866,10 @@ def get_sales_agency_sale_destination(service_type):
 
 def get_pending_sales_agency_count(service_type=None):
     """管理者向け：未処理の販売代行申請件数を取得"""
-    try:
-        if not current_user.is_authenticated or not current_user.is_admin():
-            return 0
-        
-        conn = get_db()
-        if DATABASE_URL:
-            cur = conn.cursor()
-            if service_type:
-                cur.execute(
-                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending' AND service_type = %s",
-                    (service_type,)
-                )
-            else:
-                cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
-        else:
-            cur = conn.cursor()
-            if service_type:
-                cur.execute(
-                    "SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending' AND service_type = ?",
-                    (service_type,)
-                )
-            else:
-                cur.execute("SELECT COUNT(*) FROM sales_agency_requests WHERE status = 'pending'")
-        count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-        return count
-    except Exception as e:
-        print(f"get_pending_sales_agency_count error: {e}")
-        return 0
+    counts = get_admin_sidebar_counts()
+    if service_type:
+        return int((counts.get('sales_agency_by_service') or {}).get((service_type or '').strip()) or 0)
+    return int(counts.get('pending_sales_agency_count') or 0)
 
 def get_pending_sales_agency_count_by_service(service_type):
     return get_pending_sales_agency_count(service_type=service_type)

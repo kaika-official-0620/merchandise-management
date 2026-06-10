@@ -316,6 +316,38 @@
     <meta name="application-name" content="開花在庫管理">
 </head>
 <body>
+    <script>
+        (function setupInitialLoadingState() {
+            const isAuthenticated = {{ current_user.is_authenticated|tojson }};
+            const storagePrefix = 'kaika:loadingShown:';
+            const loadingKey = {{ ('kaika:loadingShown:' ~ current_user.get_id())|tojson if current_user.is_authenticated else 'null' }};
+
+            window.KAIKA_LOADING_KEY = loadingKey;
+            window.KAIKA_LOADING_STARTED_AT = Date.now();
+            window.KAIKA_LOADING_SHOULD_SHOW = false;
+
+            try {
+                if (isAuthenticated && loadingKey) {
+                    if (sessionStorage.getItem(loadingKey) !== '1') {
+                        window.KAIKA_LOADING_SHOULD_SHOW = true;
+                        document.documentElement.classList.add('show-app-loading');
+                    }
+                    return;
+                }
+
+                Object.keys(sessionStorage).forEach(function (key) {
+                    if (key.indexOf(storagePrefix) === 0) {
+                        sessionStorage.removeItem(key);
+                    }
+                });
+            } catch (error) {
+                if (isAuthenticated) {
+                    window.KAIKA_LOADING_SHOULD_SHOW = true;
+                    document.documentElement.classList.add('show-app-loading');
+                }
+            }
+        })();
+    </script>
     <div class="app-loading-screen" id="appLoadingScreen" aria-label="読み込み中">
         <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
     </div>
@@ -1373,8 +1405,18 @@
         (function setupLoadingScreen() {
             const loadingScreen = document.getElementById('appLoadingScreen');
             if (!loadingScreen) return;
+            const shouldShowLoadingScreen = window.KAIKA_LOADING_SHOULD_SHOW === true;
+            const loadingKey = window.KAIKA_LOADING_KEY;
 
             function hideLoadingScreen() {
+                try {
+                    if (loadingKey) {
+                        sessionStorage.setItem(loadingKey, '1');
+                    }
+                } catch (error) {
+                    // sessionStorage が使えない環境では表示制御だけ継続する
+                }
+                document.documentElement.classList.remove('show-app-loading');
                 loadingScreen.classList.add('is-hidden');
                 window.setTimeout(function () {
                     if (loadingScreen && loadingScreen.parentNode) {
@@ -1383,12 +1425,14 @@
                 }, 360);
             }
 
-            if (document.readyState === 'complete') {
+            if (!shouldShowLoadingScreen) {
                 hideLoadingScreen();
-            } else {
-                window.addEventListener('load', hideLoadingScreen, { once: true });
-                window.setTimeout(hideLoadingScreen, 4200);
+                return;
             }
+
+            const startedAt = Number(window.KAIKA_LOADING_STARTED_AT) || Date.now();
+            const remainingMs = Math.max(0, 2000 - (Date.now() - startedAt));
+            window.setTimeout(hideLoadingScreen, remainingMs);
         })();
 
         // アラート自動非表示

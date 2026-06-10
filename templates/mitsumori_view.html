@@ -17,7 +17,7 @@
             {% if status == 'draft' %}
             <a href="{{ url_for('user_mitsumori_edit', id=mitsumori.id) }}" class="doc-btn doc-btn-success">編集する</a>
             {% endif %}
-            <a href="{{ url_for('user_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF表示</a>
+            <a href="{{ url_for('user_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF</a>
         </div>
     </div>
 
