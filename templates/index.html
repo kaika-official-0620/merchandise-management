@@ -1604,6 +1604,7 @@
 
     .card-price-overlay,
     .card-sold-overlay,
+    .mobile-status-badge,
     .mobile-card-status {
         display: none;
     }
@@ -1652,6 +1653,7 @@
         }
 
         .mobile-cards .card-photo {
+            position: relative;
             width: 100%;
             height: auto;
             aspect-ratio: 1 / 1;
@@ -1690,17 +1692,43 @@
         }
 
         .card-sold-overlay {
+            display: none;
+        }
+
+        .mobile-status-badge {
             position: absolute;
-            inset: 0;
-            display: flex;
+            top: 4px;
+            right: 4px;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
+            max-width: calc(100% - 8px);
+            min-height: 18px;
+            padding: 2px 5px;
+            border-radius: 999px;
             color: #fff;
-            background: rgba(15, 23, 42, 0.28);
-            font-size: 0.76rem;
+            background: rgba(37, 99, 235, 0.9);
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+            font-size: 0.61rem;
             font-weight: 800;
-            letter-spacing: 0.04em;
-            z-index: 5;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            z-index: 7;
+        }
+
+        .mobile-status-badge.sold {
+            background: rgba(15, 23, 42, 0.88);
+        }
+
+        .mobile-status-badge.pending,
+        .mobile-status-badge.action {
+            background: rgba(217, 119, 6, 0.92);
+        }
+
+        .mobile-status-badge.unlisted {
+            background: rgba(71, 85, 105, 0.9);
         }
 
         .mobile-cards .card-status {
@@ -1708,22 +1736,11 @@
         }
 
         .mobile-cards .card-body {
-            display: block;
-            flex: 1 1 auto;
-            padding: 4px 4px 0;
-            background: #fff;
+            display: none;
         }
 
         .mobile-card-status {
-            display: -webkit-box;
-            min-height: 30px;
-            color: #334155;
-            font-size: 0.66rem;
-            font-weight: 700;
-            line-height: 1.35;
-            overflow: hidden;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
+            display: none;
         }
 
         .mobile-cards .card-prices,
@@ -1733,24 +1750,43 @@
 
         .mobile-cards .card-actions {
             display: flex;
+            align-items: center;
             margin-top: auto;
+            min-height: 38px;
             padding: 4px;
-            gap: 0;
+            gap: 4px;
             border-top: 0;
             background: #fff;
         }
 
-        .mobile-cards .card-actions > :not(.btn-detail) {
+        .mobile-cards .card-actions .btn-detail,
+        .mobile-cards .card-actions > :not(.js-sale-request-trigger):not(.sale-request-action-stack) {
             display: none !important;
         }
 
-        .mobile-cards .card-actions .btn-detail {
+        .mobile-cards .sale-request-action-stack {
+            display: flex;
+            width: 100%;
+        }
+
+        .mobile-cards .sale-request-action-stack > :not(.js-sale-request-trigger) {
+            display: none !important;
+        }
+
+        .mobile-cards .card-actions .js-sale-request-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: center;
             width: 100%;
             min-height: 30px;
             padding: 6px 4px;
             border-radius: 5px;
-            font-size: 0.72rem;
+            font-size: 0.66rem;
+            font-weight: 800;
             line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     }
 
@@ -2677,6 +2713,7 @@
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
         {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.listing_price or item.wholesale_price or item.purchase_price or 0) %}
+        {% set mobile_badge_label = '売却済み' if (item.is_sold or item.sale_date) else (item.mobile_status_label or '-') %}
         <div class="item-card {% if item.is_sold or item.sale_date %}card-sold{% elif item.can_send_completion_report %}card-completion-needed{% endif %}" data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
@@ -2708,6 +2745,7 @@
                     <div class="no-photo">-</div>
                     {% endif %}
                     <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
+                    <div class="mobile-status-badge {% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request or item.pending_shipping_request or item.can_send_completion_report or item.approved_shipping_request %}action{% elif item.appraisal_status in ['waiting', 'inspecting'] %}pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">{{ mobile_badge_label }}</div>
                     {% if item.is_sold or item.sale_date %}
                     <div class="card-sold-overlay">売却済み</div>
                     {% endif %}
@@ -4027,8 +4065,17 @@
         // 画像エリア内のクリックは伝搬を止める
         card.querySelectorAll('.card-photo, .card-photo-scroll, .card-photo-single').forEach(function (photoArea) {
             photoArea.addEventListener('click', function (e) {
+                if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                    const detailUrl = card.dataset.detailUrl || (card.querySelector('a[href*="/view/"]') || {}).href;
+                    if (detailUrl) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.location.href = detailUrl;
+                    }
+                    return;
+                }
                 e.stopPropagation();
-            });
+            }, true);
         });
 
         // カード全体のクリックで詳細ページへ
@@ -4040,9 +4087,9 @@
                 return;
             }
 
-            const detailLink = card.querySelector('a[href*="/view/"]');
-            if (detailLink) {
-                window.location.href = detailLink.href;
+            const detailUrl = card.dataset.detailUrl || (card.querySelector('a[href*="/view/"]') || {}).href;
+            if (detailUrl) {
+                window.location.href = detailUrl;
             }
         });
     });
