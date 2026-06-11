@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}月額利用料設定 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.fee-page{display:grid;gap:1.1rem}
+.fee-header,.fee-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05);min-width:0}
+.fee-header{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.fee-header h1{margin:0;color:#0f172a}.fee-header p{margin:.35rem 0 0;color:#64748b}
+.fee-table-wrap{overflow-x:auto;max-width:100%;min-width:0}.fee-table{width:100%;border-collapse:collapse;min-width:980px}
+.fee-table th,.fee-table td{padding:.7rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle}
+.fee-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.fee-table input[type=number]{width:110px;border:1px solid #cbd5e1;border-radius:9px;padding:.55rem}
+.fee-check{display:inline-flex;align-items:center;gap:.4rem;font-weight:700;white-space:nowrap}
+.fee-actions{display:flex;gap:.65rem;flex-wrap:wrap}
+@media(max-width:768px){.fee-header,.fee-card{padding:1rem;border-radius:10px;overflow:hidden}.fee-table{min-width:780px}.fee-actions .btn{width:100%;justify-content:center}}
+</style>
+<div class="fee-page">
+  <section class="fee-header">
+    <div>
+      <h1>月額利用料設定</h1>
+      <p>顧客ごとに月額利用料の有無、金額、無料キャンペーン、無料期間を設定します。締め日は月末が既定です。</p>
+    </div>
+    <div class="fee-actions">
+      <a href="{{ url_for('admin_monthly_settlements') }}" class="btn btn-primary">精算書作成へ</a>
+      <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+    </div>
+  </section>
+  <section class="fee-card">
+    <div class="fee-table-wrap">
+      <table class="fee-table">
+        <thead>
+          <tr>
+            <th>クライアント</th>
+            <th>月額利用料</th>
+            <th>金額</th>
+            <th>無料キャンペーン</th>
+            <th>無料期間</th>
+            <th>締め日</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for client in clients %}
+          {% set setting = client.monthly_setting %}
+          <tr>
+            <form method="POST">
+              <input type="hidden" name="user_id" value="{{ client.id }}">
+              <td><strong>{{ client.name }}</strong><br><small>{{ client.email or client.username }}</small></td>
+              <td><label class="fee-check"><input type="checkbox" name="monthly_fee_enabled" value="1" {% if setting.monthly_fee_enabled %}checked{% endif %}> あり</label></td>
+              <td><input type="number" name="monthly_fee_amount" min="0" value="{{ setting.monthly_fee_amount }}"></td>
+              <td><label class="fee-check"><input type="checkbox" name="free_campaign_enabled" value="1" {% if setting.free_campaign_enabled %}checked{% endif %}> あり</label></td>
+              <td><input type="number" name="free_period_days" min="0" value="{{ setting.free_period_days }}"> 日</td>
+              <td><input type="number" name="closing_day" min="1" max="31" value="{{ setting.closing_day or '' }}" placeholder="月末"></td>
+              <td><button type="submit" class="btn btn-primary btn-sm">保存</button></td>
+            </form>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

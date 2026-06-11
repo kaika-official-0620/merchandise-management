@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}書類履歴 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.user-docs{display:grid;gap:1.15rem;min-width:0}.user-doc-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05);min-width:0}
+.user-doc-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.user-doc-head h1,.user-doc-panel h2{margin:0;color:#0f172a}.user-doc-head p{margin:.35rem 0 0;color:#64748b}
+.user-doc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.85rem}.user-doc-card{border:1px solid #dbeafe;border-radius:12px;padding:1rem;text-decoration:none;color:inherit;background:#f8fbff;display:grid;gap:.55rem}.user-doc-card.active,.user-doc-card:hover{border-color:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.12)}
+.user-doc-no{display:inline-flex;align-items:center;justify-content:center;width:1.9rem;height:1.9rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
+.user-doc-table-wrap{overflow-x:auto;max-width:100%;min-width:0}.user-doc-table{width:100%;border-collapse:collapse;min-width:760px}.user-doc-table th,.user-doc-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left}.user-doc-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.doc-actions{display:flex;gap:.6rem;flex-wrap:wrap}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
+@media(max-width:768px){.user-doc-panel{padding:1rem;border-radius:10px;overflow:hidden}.user-doc-grid{grid-template-columns:1fr 1fr}.doc-actions .btn{width:100%;justify-content:center}.user-doc-table{min-width:620px}}
+</style>
+<div class="user-docs">
+  <section class="user-doc-panel user-doc-head">
+    <div>
+      <h1>書類履歴</h1>
+      <p>送付済み・確認可能な書類をカテゴリ別に確認できます。</p>
+    </div>
+  </section>
+  <section class="user-doc-panel">
+    <div class="user-doc-grid">
+      {% for card in category_cards %}
+      <a class="user-doc-card {% if card.selected %}active{% endif %}" href="{{ card.url }}">
+        <span class="user-doc-no">{{ card.step }}</span>
+        <strong>{{ card.title }}</strong>
+        <small>{{ card.description }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% if selected_category %}
+  <section class="user-doc-panel">
+    <div class="user-doc-head">
+      <div>
+        <h2>{{ selected_meta.title }}</h2>
+        <p>{{ selected_meta.description }}</p>
+      </div>
+      <a href="{{ url_for('documents') }}" class="btn btn-outline">カテゴリ一覧へ</a>
+    </div>
+    {% if history_rows %}
+    <div class="user-doc-table-wrap">
+      <table class="user-doc-table">
+        <thead><tr><th>書類</th><th>No./書類名</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for row in history_rows %}
+          <tr>
+            <td>{{ row.document_type }}</td>
+            <td>{{ row.document_no }}</td>
+            <td>{{ row.issue_date }}</td>
+            <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
+            <td>{{ row.status_label }}</td>
+            <td class="doc-actions">
+              {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
+              {% if row.download_url %}<a href="{{ row.download_url }}" class="btn btn-secondary btn-sm">ダウンロード</a>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-box">このカテゴリの書類はまだありません。</div>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

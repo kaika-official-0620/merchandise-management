@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}業者関連書類 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.vendor-doc-page{display:grid;gap:1.25rem}
+.vendor-doc-header,.vendor-doc-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.vendor-doc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap}
+.vendor-doc-header h1,.vendor-doc-card h2{margin:0;color:#0f172a}
+.vendor-doc-header p{margin:.35rem 0 0;color:#64748b;line-height:1.7}
+.vendor-doc-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.9rem}
+.vendor-doc-form .wide{grid-column:1/-1}
+.vendor-doc-form label{display:block;font-weight:700;color:#475569;font-size:.86rem;margin-bottom:.35rem}
+.vendor-doc-form input,.vendor-doc-form select,.vendor-doc-form textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:.68rem .75rem;font-size:.94rem;background:#fff}
+.vendor-doc-form textarea{min-height:92px;resize:vertical}
+.vendor-actions{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center}
+.vendor-table-wrap{overflow-x:auto}
+.vendor-table{width:100%;border-collapse:collapse;min-width:920px}
+.vendor-table th,.vendor-table td{padding:.75rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+.vendor-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.status-chip{display:inline-flex;border-radius:999px;padding:.28rem .65rem;background:#e0f2fe;color:#0369a1;font-weight:800;font-size:.78rem;white-space:nowrap}
+.empty-box{border:1px dashed #cbd5e1;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b;background:#f8fafc}
+@media(max-width:768px){
+  .vendor-doc-header,.vendor-doc-card{padding:1rem;border-radius:10px}
+  .vendor-doc-form{grid-template-columns:1fr}
+  .vendor-table{min-width:760px}
+  .vendor-actions .btn{width:100%;justify-content:center}
+}
+</style>
+
+<div class="vendor-doc-page">
+  <section class="vendor-doc-header">
+    <div>
+      <h1>業者関連書類</h1>
+      <p>業者から届いたPDF・画像書類を、顧客・商品・登録日・状態と紐づけて管理します。</p>
+    </div>
+    <div class="vendor-actions">
+      <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-secondary">書類管理へ戻る</a>
+      <a href="{{ url_for('admin_documents_history', category='vendor') }}" class="btn btn-outline">履歴を見る</a>
+    </div>
+  </section>
+
+  <section class="vendor-doc-card">
+    <h2>書類を登録</h2>
+    <form method="POST" enctype="multipart/form-data" class="vendor-doc-form">
+      <div>
+        <label for="user_id">対象クライアント</label>
+        <select id="user_id" name="user_id" required onchange="if(this.value){location.href='{{ url_for('admin_vendor_documents') }}?user_id='+this.value}">
+          <option value="">選択してください</option>
+          {% for client in clients %}
+          <option value="{{ client.id }}" {% if selected_user_id == client.id %}selected{% endif %}>{{ client.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="item_id">対象商品</label>
+        <select id="item_id" name="item_id">
+          <option value="">未指定</option>
+          {% for item in items %}
+          <option value="{{ item.id }}">{{ item.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="status">状態</label>
+        <select id="status" name="status">
+          <option value="received">受領済み</option>
+          <option value="registered">登録済み</option>
+          <option value="shared">共有済み</option>
+          <option value="sent">送付済み</option>
+        </select>
+      </div>
+      <div>
+        <label for="title">書類名</label>
+        <input id="title" name="title" placeholder="例: 業者買取明細書">
+      </div>
+      <div>
+        <label for="source_request_id">申請ID</label>
+        <input id="source_request_id" name="source_request_id" type="number" min="0" placeholder="任意">
+      </div>
+      <div>
+        <label for="related_document_id">関連書類ID</label>
+        <input id="related_document_id" name="related_document_id" type="number" min="0" placeholder="任意">
+      </div>
+      <div class="wide">
+        <label for="file">ファイル（{{ allowed_extensions }}）</label>
+        <input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>
+      </div>
+      <div class="wide">
+        <label for="notes">メモ</label>
+        <textarea id="notes" name="notes" placeholder="確認事項や業者名など"></textarea>
+      </div>
+      <div class="wide vendor-actions">
+        <button type="submit" class="btn btn-primary">登録する</button>
+        <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-outline">買取明細書を作成</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="vendor-doc-card">
+    <h2>登録済み書類</h2>
+    {% if documents %}
+    <div class="vendor-table-wrap">
+      <table class="vendor-table">
+        <thead>
+          <tr>
+            <th>登録日</th>
+            <th>クライアント</th>
+            <th>対象商品</th>
+            <th>書類名 / ファイル</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+          <tr>
+            <td>{{ doc.registered_label }}</td>
+            <td>{{ doc.client_name or '-' }}</td>
+            <td>{{ doc.item_name or '未指定' }}</td>
+            <td>
+              <strong>{{ doc.title or doc.original_filename }}</strong><br>
+              <span>{{ doc.original_filename }}</span>
+            </td>
+            <td><span class="status-chip">{{ doc.status_label }}</span></td>
+            <td class="vendor-actions">
+              <a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ダウンロード</a>
+              <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-secondary btn-sm">買取明細書へ</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-box">登録済みの業者関連書類はありません。</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

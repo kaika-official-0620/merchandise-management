@@ -40916,5 +40916,22 @@ if "admin_auction_keisan_add" not in app.view_functions:
 else:
     app.view_functions["admin_auction_keisan_add"] = admin_auction_keisan_add_from_documents
 
+try:
+    import importlib.util as _kaika_business_importlib_util
+    import sys as _kaika_business_sys
+
+    _kaika_business_patch_path = os.path.join(os.path.dirname(__file__), "kaika_business_flow_patch_20260611.py")
+    if os.path.exists(_kaika_business_patch_path):
+        _kaika_business_spec = _kaika_business_importlib_util.spec_from_file_location(
+            "kaika_business_flow_patch_20260611",
+            _kaika_business_patch_path,
+        )
+        _kaika_business_patch = _kaika_business_importlib_util.module_from_spec(_kaika_business_spec)
+        _kaika_business_sys.modules["kaika_business_flow_patch_20260611"] = _kaika_business_patch
+        _kaika_business_spec.loader.exec_module(_kaika_business_patch)
+        _kaika_business_patch.apply(_kaika_business_sys.modules.get(__name__))
+except Exception as _kaika_business_patch_error:
+    print(f"[WARN] kaika business flow patch apply failed: {_kaika_business_patch_error}", flush=True)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

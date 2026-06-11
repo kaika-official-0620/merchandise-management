@@ -81,6 +81,14 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] render runtime patches skipped: {patch_exc}", flush=True)
 
+try:
+    from kaika_business_flow_patch_20260611 import apply as apply_business_flow_patch
+
+    setattr(module, "_kaika_business_flow_patch_20260611_applied", False)
+    apply_business_flow_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] kaika business flow patch skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"

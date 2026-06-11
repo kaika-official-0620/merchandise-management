@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}精算書送付待機 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.settle-page{display:grid;gap:1.1rem}
+.settle-header,.settle-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.settle-header{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.settle-header h1{margin:0;color:#0f172a}.settle-header p{margin:.35rem 0 0;color:#64748b}
+.settle-filter{display:flex;gap:.7rem;align-items:end;flex-wrap:wrap}.settle-filter label{display:block;font-weight:700;color:#475569;font-size:.84rem;margin-bottom:.3rem}.settle-filter input{border:1px solid #cbd5e1;border-radius:9px;padding:.6rem}
+.settle-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.9rem}
+.client-card{border:1px solid #e2e8f0;border-radius:12px;padding:1rem;display:grid;gap:.75rem;background:#f8fafc}
+.client-card h3{margin:0;color:#0f172a}.client-card p{margin:0;color:#64748b}.fee-amount{font-size:1.35rem;font-weight:900;color:#0f766e}
+.settle-actions{display:flex;gap:.65rem;flex-wrap:wrap}
+@media(max-width:768px){.settle-header,.settle-card{padding:1rem;border-radius:10px}.settle-actions .btn{width:100%;justify-content:center}}
+</style>
+<div class="settle-page">
+  <section class="settle-header">
+    <div>
+      <h1>精算書送付待機</h1>
+      <p>{{ selected_month }} 分を月末締めで作成します。撮影・梱包費、発送サポート費、その他費用は作成時に編集できます。</p>
+    </div>
+    <div class="settle-actions">
+      <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-outline">既存の精算書一覧</a>
+      <a href="{{ url_for('admin_monthly_fee_settings') }}" class="btn btn-secondary">月額設定</a>
+    </div>
+  </section>
+  <section class="settle-card">
+    <form method="GET" class="settle-filter">
+      <div>
+        <label for="month">対象月</label>
+        <input id="month" type="month" name="month" value="{{ selected_month }}">
+      </div>
+      <button type="submit" class="btn btn-primary">表示</button>
+    </form>
+  </section>
+  <section class="settle-grid">
+    {% for client in clients %}
+    <article class="client-card">
+      <div>
+        <h3>{{ client.name }}</h3>
+        <p>{{ client.email or client.username }}</p>
+      </div>
+      <div>
+        <p>月額利用料</p>
+        <div class="fee-amount">¥{{ "{:,}".format(client.effective_monthly_fee or 0) }}</div>
+      </div>
+      <div class="settle-actions">
+        <a href="{{ client.settlement_url }}" class="btn btn-primary">精算書を作成</a>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

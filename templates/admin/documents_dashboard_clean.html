@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}書類管理 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.doc-clean{display:grid;gap:1.2rem}.doc-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:1.2rem;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.doc-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.doc-head h1,.doc-panel h2{margin:0;color:#0f172a}.doc-head p,.doc-panel p{color:#64748b;line-height:1.7}
+.doc-stage-grid,.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem}
+.stage-card,.quick-card{display:grid;gap:.65rem;text-decoration:none;color:inherit;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:1rem;min-height:100%}
+.stage-card:hover,.quick-card:hover{border-color:#93c5fd;box-shadow:0 14px 28px rgba(37,99,235,.12)}
+.stage-card-head{display:flex;gap:.7rem;align-items:center}.stage-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
+.doc-actions{display:flex;gap:.65rem;flex-wrap:wrap}.doc-table-wrap{overflow-x:auto}.doc-table{width:100%;border-collapse:collapse;min-width:900px}.doc-table th,.doc-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.doc-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.empty-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b}
+@media(max-width:768px){.doc-panel{padding:1rem;border-radius:10px}.doc-actions .btn{width:100%;justify-content:center}.doc-table{min-width:760px}}
+</style>
+<div class="doc-clean">
+  <section class="doc-panel doc-head">
+    <div>
+      <h1>書類管理</h1>
+      <p>顧客からの受付、業者への依頼、業者関連書類、顧客へ送付する書類を段階別に整理しています。</p>
+    </div>
+    <div class="doc-actions">
+      <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">書類履歴</a>
+      <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-primary">業者書類登録</a>
+    </div>
+  </section>
+
+  {% if selected_group == 'all' %}
+  <section class="doc-panel">
+    <h2>処理ステップ</h2>
+    <div class="doc-stage-grid">
+      {% for card in stage_cards %}
+      <a class="stage-card" href="{{ card.url }}">
+        <div class="stage-card-head"><span class="stage-no">{{ card.step }}</span><strong>{{ card.title }}</strong></div>
+        <p>{{ card.description }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="doc-panel">
+    <h2>よく使う処理</h2>
+    <div class="quick-grid">
+      {% for link in quick_links %}
+      <a class="quick-card" href="{{ link.url }}">
+        <strong>{{ link.title }}</strong>
+        <p>{{ link.description }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <section class="doc-panel">
+    <div class="doc-head">
+      <div>
+        <h2>
+          {% if selected_group == 'client_incoming' %}顧客からの書類受付
+          {% elif selected_group == 'vendor_outgoing' %}業者へ依頼する書類
+          {% elif selected_group == 'vendor_incoming' %}業者関連書類
+          {% else %}顧客へ送付する書類{% endif %}
+        </h2>
+        <p>この段階に関連する書類だけを表示しています。</p>
+      </div>
+      <div class="doc-actions">
+        <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">ステップ一覧へ戻る</a>
+        {% if selected_group == 'vendor_incoming' %}
+        <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-primary">業者書類を登録</a>
+        {% elif selected_group == 'client_outgoing' %}
+        <a href="{{ url_for('admin_monthly_settlements') }}" class="btn btn-primary">精算書を作成</a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  {% if selected_group == 'vendor_incoming' %}
+  <section class="doc-panel">
+    {% if vendor_documents %}
+    <div class="doc-table-wrap">
+      <table class="doc-table">
+        <thead><tr><th>登録日</th><th>クライアント</th><th>対象商品</th><th>書類</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for doc in vendor_documents %}
+          <tr>
+            <td>{{ doc.registered_label }}</td>
+            <td>{{ doc.client_name or '-' }}</td>
+            <td>{{ doc.item_name or '未指定' }}</td>
+            <td>{{ doc.title or doc.original_filename }}</td>
+            <td>{{ doc.status_label }}</td>
+            <td><a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ダウンロード</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-box">登録済みの業者関連書類はありません。</div>{% endif %}
+  </section>
+  {% elif selected_group == 'client_outgoing' %}
+  <section class="doc-panel">
+    <div class="doc-actions">
+      <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-outline">精算書一覧</a>
+      <a href="{{ url_for('admin_documents_history', category='kaitori') }}" class="btn btn-outline">買取明細書履歴</a>
+    </div>
+    {% if shikiriosho_waiting %}
+    <div class="doc-table-wrap">
+      <table class="doc-table">
+        <thead><tr><th>書類種別</th><th>No.</th><th>クライアント</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for row in shikiriosho_waiting %}
+          <tr>
+            <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
+            <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td><td>{{ row.status_label }}</td>
+            <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-box">送付待機中または履歴表示できる精算書はありません。</div>{% endif %}
+  </section>
+  {% else %}
+  <section class="doc-panel">
+    {% if request_rows %}
+    <div class="doc-table-wrap">
+      <table class="doc-table">
+        <thead><tr><th>申請ID</th><th>クライアント</th><th>商品</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for row in request_rows %}
+          <tr>
+            <td>{{ row.id or '-' }}</td>
+            <td>{{ row.client_name or row.user_name or row.username or '-' }}</td>
+            <td>{{ row.product_name or row.item_summary or row.item_names or '-' }}</td>
+            <td>{{ row.status_label or row.status or '-' }}</td>
+            <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-box">この段階の処理対象はありません。</div>{% endif %}
+  </section>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

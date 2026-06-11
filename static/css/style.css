@@ -77,8 +77,8 @@ body {
 
 .app-loading-screen img {
     display: block;
-    width: clamp(132px, 34vw, 260px);
-    max-width: 72vw;
+    width: clamp(104px, 24vw, 180px);
+    max-width: 56vw;
     height: auto;
     object-fit: contain;
 }
