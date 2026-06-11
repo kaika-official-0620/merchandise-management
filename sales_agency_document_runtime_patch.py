@@ -1614,6 +1614,9 @@ def apply(module: Any) -> None:
         )
 
     def documents_v2():
+        active_tab = (request.args.get("tab") or "kaitori").strip()
+        if active_tab not in {"kaitori", "mitsumori", "shoudaku", "shikiri", "keisan"}:
+            active_tab = "kaitori"
         conn, cur = open_cursor()
         try:
             cur.execute(
@@ -1671,6 +1674,7 @@ def apply(module: Any) -> None:
             user_mitsumori_list=user_mitsumori_list,
             user_keisan_list=user_keisan_list,
             shikiriosho_list=shikiriosho_list,
+            active_tab=active_tab,
         )
 
     def user_invoice_list_v2():
@@ -1760,7 +1764,7 @@ def apply(module: Any) -> None:
         mitsumori = (load_mitsumori_for_user(id) or [None])[0]
         if mitsumori and is_admin_vendor_mitsumori(mitsumori):
             flash("業者向け依頼書はユーザー画面には表示されません。", "error")
-            return redirect(url_for("documents"))
+            return redirect(url_for("documents", tab="mitsumori") + "#document-history-tabs")
         return originals["user_mitsumori_view"](id)
 
     def user_mitsumori_edit_v2(id: int):
