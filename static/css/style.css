@@ -2598,3 +2598,25 @@ li,
         padding: 0.65rem 0.75rem;
     }
 }
+
+/* 発送・取引完了系の操作ボタンは角丸を控えめに統一 */
+.btn-sale-request,
+.btn-shipping-request,
+.btn-completion-request,
+.btn-edit-request,
+.btn-edit-shipping-request,
+.btn-edit-completion-request,
+.sale-request-action-stack .btn,
+.item-detail-action-panel .detail-action-btn,
+.item-detail-action-panel .detail-action-state,
+.sale-request-footer .btn,
+.admin-card-actions .btn,
+.request-actions .btn,
+.request-action-btn {
+    border-radius: 6px !important;
+}
+
+.sale-request-complete-badge,
+.item-detail-action-panel .request-pill {
+    border-radius: 6px !important;
+}

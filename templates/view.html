@@ -21,7 +21,7 @@
     display: inline-flex;
     align-items: center;
     padding: 0.28rem 0.75rem;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 0.82rem;
     font-weight: 700;
 }
@@ -126,6 +126,271 @@
     align-items: center;
     gap: 0.45rem;
     color: #475569;
+}
+
+.item-detail-action-panel {
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #d7dfeb;
+    border-radius: 8px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.item-detail-action-summary {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.item-detail-action-label {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.item-detail-action-status {
+    color: #0f172a;
+    font-size: 0.98rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item-detail-action-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.detail-action-btn,
+.detail-action-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.6rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+}
+
+.detail-action-btn {
+    cursor: pointer;
+}
+
+.detail-action-state {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+
+.detail-action-btn.shipping {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.detail-action-btn.completion {
+    background: #0f766e;
+    color: #fff;
+}
+
+.detail-action-btn.edit-request {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.detail-action-btn.admin-check {
+    background: #2563eb;
+    color: #fff;
+}
+
+.sale-request-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 1rem;
+}
+
+.sale-request-modal.open {
+    display: flex;
+}
+
+.sale-request-content {
+    width: min(100%, 500px);
+    max-height: 92vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+
+.sale-request-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    background: #f59e0b;
+    color: #fff;
+}
+
+.sale-request-header.edit {
+    background: #7c3aed;
+}
+
+.sale-request-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.sale-request-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+.sale-request-body {
+    padding: 1.1rem;
+}
+
+.sale-request-product {
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.sale-request-help,
+.form-hint {
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.sale-request-inline-message {
+    display: none;
+    margin: 0 0 1rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.sale-request-inline-message.show {
+    display: block;
+}
+
+.sale-request-inline-message.error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+}
+
+.sale-request-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.sale-request-form label {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: #334155;
+    font-weight: 700;
+}
+
+.sale-request-form input[type="number"],
+.sale-request-form input[type="file"] {
+    width: 100%;
+    padding: 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.file-upload-area {
+    padding: 1rem;
+    border: 2px dashed #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    text-align: center;
+    cursor: pointer;
+}
+
+.file-upload-area.has-file {
+    border-color: #10b981;
+    background: #ecfdf5;
+}
+
+.file-upload-icon {
+    font-size: 1.7rem;
+    margin-bottom: 0.35rem;
+}
+
+.file-upload-text {
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.file-upload-name {
+    margin-top: 0.35rem;
+    color: #047857;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.sale-request-footer {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem 1.1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.sale-request-footer .btn {
+    flex: 1;
+    min-height: 42px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.sale-request-footer .btn-cancel {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+.sale-request-footer .btn-submit {
+    background: #f59e0b;
+    border: 1px solid #f59e0b;
+    color: #fff;
+}
+
+.sale-request-footer .btn-submit.edit {
+    background: #7c3aed;
+    border-color: #7c3aed;
 }
 
 /* コピーボタン */
@@ -479,6 +744,22 @@
 
 /* スマホ用レイアウト */
 @media (max-width: 768px) {
+    .item-detail-action-panel {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 0.8rem;
+    }
+
+    .item-detail-action-buttons {
+        justify-content: stretch;
+    }
+
+    .detail-action-btn,
+    .detail-action-state {
+        width: 100%;
+        min-height: 42px;
+    }
+
     .view-container {
         display: flex;
         flex-direction: column;
@@ -577,6 +858,84 @@
         <a href="{{ back_url }}" class="btn btn-secondary">一覧へ戻る</a>
     </div>
 </div>
+
+{% set is_admin_view = current_user.is_admin() or current_user.is_owner() %}
+<section class="item-detail-action-panel">
+    <div class="item-detail-action-summary">
+        <span class="item-detail-action-label">現在の状態</span>
+        <strong class="item-detail-action-status">{{ item.mobile_status_label or '状態未設定' }}</strong>
+    </div>
+    <div class="item-detail-action-buttons">
+        {% if is_admin_view %}
+            {% if item.pending_completion_request %}
+            <a href="{{ url_for('admin_completion_requests', q=item.id) }}" class="detail-action-btn admin-check">取引完了BOXで確認</a>
+            {% elif item.pending_shipping_request or item.approved_shipping_request %}
+            <a href="{{ url_for('admin_shipping_requests', q=item.id) }}" class="detail-action-btn admin-check">発送依頼BOXで確認</a>
+            {% elif item.shipment_marked %}
+            <span class="detail-action-state">発送済み</span>
+            {% elif item.is_sold or item.sale_date %}
+            <span class="detail-action-state">売却済み</span>
+            {% else %}
+            <span class="detail-action-state">管理者編集は上部の編集から行えます</span>
+            {% endif %}
+        {% else %}
+            {% if item.is_sold or item.sale_date %}
+            <span class="detail-action-state">売却済み</span>
+            {% elif item.pending_sales_agency %}
+            <span class="detail-action-state">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}</span>
+            {% elif item.pending_completion_request %}
+            <span class="detail-action-state">取引完了報告送信済み</span>
+            <button type="button"
+                class="detail-action-btn edit-request js-sale-request-trigger"
+                data-action="edit"
+                data-request-id="{{ item.completion_request.id }}"
+                data-request-type="completion_report"
+                data-product-name="{{ item.product_name or '' }}"
+                data-sale-price="{{ item.completion_request.sale_price or 0 }}"
+                data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
+                data-commission="{{ item.completion_request.commission or 0 }}"
+                data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
+                data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
+                取引完了報告を修正
+            </button>
+            {% elif item.can_send_completion_report %}
+            <button type="button"
+                class="detail-action-btn completion js-sale-request-trigger"
+                data-action="create-completion"
+                data-item-id="{{ item.id }}"
+                data-product-name="{{ item.product_name or '' }}"
+                data-listing-price="{{ item.listing_price or 0 }}">
+                取引完了報告
+            </button>
+            {% elif item.approved_shipping_request %}
+            <span class="detail-action-state">発送準備中</span>
+            {% elif item.pending_shipping_request %}
+            <span class="detail-action-state">発送依頼送信済み</span>
+            <button type="button"
+                class="detail-action-btn edit-request js-sale-request-trigger"
+                data-action="edit"
+                data-request-id="{{ item.shipping_request.id }}"
+                data-request-type="shipping_request"
+                data-product-name="{{ item.product_name or '' }}"
+                data-sale-price="0"
+                data-shipping-cost="0"
+                data-commission="0"
+                data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
+                data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
+                発送依頼を修正
+            </button>
+            {% else %}
+            <button type="button"
+                class="detail-action-btn shipping js-sale-request-trigger"
+                data-action="create-shipping"
+                data-item-id="{{ item.id }}"
+                data-product-name="{{ item.product_name or '' }}">
+                発送依頼を送る
+            </button>
+            {% endif %}
+        {% endif %}
+    </div>
+</section>
 
 {% if not current_user.is_admin() %}
 <section class="sales-agency-detail-panel">
@@ -1036,6 +1395,354 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeLightbox();
     if (e.key === 'ArrowLeft') lightboxPrev();
     if (e.key === 'ArrowRight') lightboxNext();
+});
+</script>
+{% endif %}
+
+{% if not current_user.is_admin() and not current_user.is_owner() %}
+<div class="sale-request-modal" id="saleRequestModal">
+    <div class="sale-request-content">
+        <div class="sale-request-header">
+            <h3 id="saleRequestTitle">発送依頼を送る</h3>
+            <button type="button" class="sale-request-close" onclick="closeSaleRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="saleRequestForm">
+            <input type="hidden" id="saleRequestItemId" name="item_id" value="">
+            <input type="hidden" id="saleRequestType" name="request_type" value="shipping_request">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="saleRequestProductName"></div>
+                <p class="sale-request-help" id="saleRequestHelp">発送依頼では、売れた商品が分かる画像と発送用QRコード画像を送ってください。</p>
+                <div class="sale-request-inline-message" id="saleRequestInlineMessage"></div>
+                <div class="sale-request-form">
+                    <div class="form-group" id="saleRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込）</label>
+                        <input type="number" id="saleRequestPrice" name="sale_price" required min="1" placeholder="販売価格を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestShippingGroup" style="display: none;">
+                        <label>送料</label>
+                        <input type="number" id="saleRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestCommissionGroup" style="display: none;">
+                        <label>手数料</label>
+                        <input type="number" id="saleRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label id="saleRequestImageLabel1">売れた商品が分かる画像</label>
+                        <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('saleRequestQrImage').click();">
+                            <div class="file-upload-icon">+</div>
+                            <div class="file-upload-text" id="fileUploadText">画像を選択</div>
+                            <div class="file-upload-name" id="fileUploadName"></div>
+                        </div>
+                        <input type="file" id="saleRequestQrImage" name="qr_image" accept="image/*" style="display:none;">
+                    </div>
+                    <div class="form-group">
+                        <label id="saleRequestImageLabel2">発送用QRコード画像</label>
+                        <div class="file-upload-area" id="fileUploadArea2" onclick="document.getElementById('saleRequestQrImage2').click();">
+                            <div class="file-upload-icon">+</div>
+                            <div class="file-upload-text" id="fileUploadText2">画像を選択</div>
+                            <div class="file-upload-name" id="fileUploadName2"></div>
+                        </div>
+                        <input type="file" id="saleRequestQrImage2" name="qr_image2" accept="image/*" style="display:none;">
+                    </div>
+                    <p class="form-hint" id="saleRequestImageHint">発送依頼では2枚とも必須です。</p>
+                </div>
+            </div>
+            <div class="sale-request-footer">
+                <button type="button" class="btn btn-cancel" onclick="closeSaleRequestModal()">キャンセル</button>
+                <button type="submit" class="btn btn-submit" id="saleRequestSubmitLabel">発送依頼を送信</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="sale-request-modal" id="editRequestModal">
+    <div class="sale-request-content">
+        <div class="sale-request-header edit">
+            <h3 id="editRequestTitle">発送依頼の修正</h3>
+            <button type="button" class="sale-request-close" onclick="closeEditRequestModal()">&times;</button>
+        </div>
+        <form action="" method="POST" enctype="multipart/form-data" id="editRequestForm">
+            <input type="hidden" id="editRequestId" name="request_id" value="">
+            <input type="hidden" id="editRequestType" value="shipping_request">
+            <div class="sale-request-body">
+                <div class="sale-request-product" id="editRequestProductName"></div>
+                <p class="sale-request-help" id="editRequestHelp">送信した画像を差し替えできます。</p>
+                <div class="sale-request-inline-message" id="editRequestInlineMessage"></div>
+                <div class="sale-request-form">
+                    <div class="form-group" id="editRequestPriceGroup" style="display: none;">
+                        <label>売上金額（税込）</label>
+                        <input type="number" id="editRequestPrice" name="sale_price" required min="1" placeholder="販売価格を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestShippingGroup" style="display: none;">
+                        <label>送料</label>
+                        <input type="number" id="editRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestCommissionGroup" style="display: none;">
+                        <label>手数料</label>
+                        <input type="number" id="editRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>現在の画像1</label>
+                        <div id="editCurrentImage" data-has-image="false" style="display: none; margin-bottom: 0.6rem;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label id="editRequestImageLabel1">新しい画像1</label>
+                        <div class="file-upload-area" id="editFileUploadArea" onclick="document.getElementById('editRequestQrImage').click();">
+                            <div class="file-upload-icon">+</div>
+                            <div class="file-upload-text" id="editFileUploadText">画像を選択</div>
+                            <div class="file-upload-name" id="editFileUploadName"></div>
+                        </div>
+                        <input type="file" id="editRequestQrImage" name="qr_image" accept="image/*" style="display:none;">
+                    </div>
+                    <div class="form-group">
+                        <label>現在の画像2</label>
+                        <div id="editCurrentImage2" data-has-image="false" style="display: none; margin-bottom: 0.6rem;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label id="editRequestImageLabel2">新しい画像2</label>
+                        <div class="file-upload-area" id="editFileUploadArea2" onclick="document.getElementById('editRequestQrImage2').click();">
+                            <div class="file-upload-icon">+</div>
+                            <div class="file-upload-text" id="editFileUploadText2">画像を選択</div>
+                            <div class="file-upload-name" id="editFileUploadName2"></div>
+                        </div>
+                        <input type="file" id="editRequestQrImage2" name="qr_image2" accept="image/*" style="display:none;">
+                    </div>
+                    <p class="form-hint" id="editRequestImageHint">発送依頼では2枚とも必須です。</p>
+                </div>
+            </div>
+            <div class="sale-request-footer">
+                <button type="button" class="btn btn-cancel" onclick="closeEditRequestModal()">キャンセル</button>
+                <button type="submit" class="btn btn-submit edit" id="editRequestSubmitLabel">発送依頼を保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const detailSaleRequestModeConfig = {
+    shipping_request: {
+        title: '発送依頼を送る',
+        editTitle: '発送依頼の修正',
+        submit: '発送依頼を送信',
+        editSubmit: '発送依頼を保存',
+        help: '発送依頼では、売れた商品が分かる画像と発送用QRコード画像を送ってください。',
+        image1: '売れた商品が分かる画像',
+        image2: '発送用QRコード画像',
+        imageHint: '発送依頼では2枚とも必須です。',
+        requireSecondImage: true
+    },
+    completion_report: {
+        title: '取引完了報告を送る',
+        editTitle: '取引完了報告の修正',
+        submit: '取引完了報告を送信',
+        editSubmit: '取引完了報告を保存',
+        help: '売上・送料・手数料が確認できる取引完了画面の画像を送ってください。',
+        image1: '取引完了画面',
+        image2: '補足画像（任意）',
+        imageHint: '取引完了画面のスクリーンショットを送ってください。',
+        requireSecondImage: false
+    }
+};
+
+function getDetailSaleRequestConfig(requestType) {
+    return detailSaleRequestModeConfig[requestType] || detailSaleRequestModeConfig.shipping_request;
+}
+
+function setDetailSaleRequestMessage(prefix, message) {
+    const messageEl = document.getElementById(prefix + 'InlineMessage');
+    if (!messageEl) return;
+    messageEl.textContent = message || '';
+    messageEl.className = message ? 'sale-request-inline-message show error' : 'sale-request-inline-message';
+}
+
+function resetDetailUploadArea(areaId, textId, nameId, text) {
+    const area = document.getElementById(areaId);
+    const label = document.getElementById(textId);
+    const name = document.getElementById(nameId);
+    if (area) area.classList.remove('has-file');
+    if (label) label.textContent = text;
+    if (name) name.textContent = '';
+}
+
+function setDetailSaleRequestSubmitting(prefix, isSubmitting) {
+    const submit = document.getElementById(prefix + 'SubmitLabel');
+    if (!submit) return;
+    if (!submit.dataset.defaultLabel) submit.dataset.defaultLabel = submit.textContent;
+    submit.disabled = isSubmitting;
+    submit.textContent = isSubmitting ? '送信中...' : submit.dataset.defaultLabel;
+}
+
+function applyDetailSaleRequestMode(prefix, requestType) {
+    const config = getDetailSaleRequestConfig(requestType);
+    const isEdit = prefix === 'editRequest';
+    document.getElementById(prefix + 'Title').textContent = isEdit ? config.editTitle : config.title;
+    document.getElementById(prefix + 'Help').textContent = config.help;
+    document.getElementById(prefix + 'Type').value = requestType;
+    const submit = document.getElementById(prefix + 'SubmitLabel');
+    submit.textContent = isEdit ? config.editSubmit : config.submit;
+    submit.dataset.defaultLabel = submit.textContent;
+    document.getElementById(prefix + 'ImageLabel1').textContent = config.image1;
+    document.getElementById(prefix + 'ImageLabel2').textContent = config.image2;
+    document.getElementById(prefix + 'ImageHint').textContent = config.imageHint;
+    const secondGroup = document.getElementById(prefix + 'QrImage2').closest('.form-group');
+    secondGroup.style.display = '';
+    setDetailSaleRequestMessage(prefix, '');
+}
+
+function validateDetailSaleRequest(prefix) {
+    const requestType = document.getElementById(prefix + 'Type').value || 'shipping_request';
+    const input1 = document.getElementById(prefix + 'QrImage');
+    const input2 = document.getElementById(prefix + 'QrImage2');
+    const current1 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage' : '');
+    const current2 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage2' : '');
+    const hasImage1 = !!(input1 && input1.files && input1.files.length) || !!(current1 && current1.dataset.hasImage === 'true');
+    const hasImage2 = !!(input2 && input2.files && input2.files.length) || !!(current2 && current2.dataset.hasImage === 'true');
+    if (requestType === 'shipping_request' && (!hasImage1 || !hasImage2)) {
+        setDetailSaleRequestMessage(prefix, '発送依頼では画像を2枚選択してください。');
+        return false;
+    }
+    if (requestType === 'completion_report' && !hasImage1) {
+        setDetailSaleRequestMessage(prefix, '取引完了報告では画像を1枚以上選択してください。');
+        return false;
+    }
+    return true;
+}
+
+function openShippingRequestModal(itemId, productName) {
+    document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
+    document.getElementById('saleRequestItemId').value = itemId;
+    document.getElementById('saleRequestProductName').textContent = productName;
+    document.getElementById('saleRequestQrImage').value = '';
+    document.getElementById('saleRequestQrImage2').value = '';
+    resetDetailUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', '画像を選択');
+    resetDetailUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '画像を選択');
+    applyDetailSaleRequestMode('saleRequest', 'shipping_request');
+    document.getElementById('saleRequestModal').classList.add('open');
+}
+
+function openCompletionRequestModal(itemId, productName) {
+    document.getElementById('saleRequestForm').action = '/sale-request/submit/' + itemId;
+    document.getElementById('saleRequestItemId').value = itemId;
+    document.getElementById('saleRequestProductName').textContent = productName;
+    document.getElementById('saleRequestQrImage').value = '';
+    document.getElementById('saleRequestQrImage2').value = '';
+    resetDetailUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', '画像を選択');
+    resetDetailUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '画像を選択');
+    applyDetailSaleRequestMode('saleRequest', 'completion_report');
+    document.getElementById('saleRequestModal').classList.add('open');
+}
+
+function closeSaleRequestModal() {
+    setDetailSaleRequestSubmitting('saleRequest', false);
+    setDetailSaleRequestMessage('saleRequest', '');
+    document.getElementById('saleRequestModal').classList.remove('open');
+}
+
+function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, qrImagePath, qrImagePath2) {
+    document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
+    document.getElementById('editRequestId').value = requestId;
+    document.getElementById('editRequestProductName').textContent = productName;
+    document.getElementById('editRequestQrImage').value = '';
+    document.getElementById('editRequestQrImage2').value = '';
+    document.getElementById('editRequestPrice').value = salePrice || '';
+    document.getElementById('editRequestShipping').value = shippingCost || 0;
+    document.getElementById('editRequestCommission').value = commission || 0;
+    resetDetailUploadArea('editFileUploadArea', 'editFileUploadText', 'editFileUploadName', '画像を選択');
+    resetDetailUploadArea('editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', '画像を選択');
+    applyDetailSaleRequestMode('editRequest', requestType || 'shipping_request');
+
+    const currentImage = document.getElementById('editCurrentImage');
+    const currentImage2 = document.getElementById('editCurrentImage2');
+    if (qrImagePath) {
+        currentImage.innerHTML = '<img src="/static/' + qrImagePath + '" style="max-width: 100px; max-height: 100px; border-radius: 6px;">';
+        currentImage.style.display = 'block';
+        currentImage.dataset.hasImage = 'true';
+    } else {
+        currentImage.innerHTML = '';
+        currentImage.style.display = 'none';
+        currentImage.dataset.hasImage = 'false';
+    }
+    if (qrImagePath2) {
+        currentImage2.innerHTML = '<img src="/static/' + qrImagePath2 + '" style="max-width: 100px; max-height: 100px; border-radius: 6px;">';
+        currentImage2.style.display = 'block';
+        currentImage2.dataset.hasImage = 'true';
+    } else {
+        currentImage2.innerHTML = '';
+        currentImage2.style.display = 'none';
+        currentImage2.dataset.hasImage = 'false';
+    }
+    document.getElementById('editRequestModal').classList.add('open');
+}
+
+function closeEditRequestModal() {
+    setDetailSaleRequestSubmitting('editRequest', false);
+    setDetailSaleRequestMessage('editRequest', '');
+    document.getElementById('editRequestModal').classList.remove('open');
+}
+
+document.addEventListener('click', function(event) {
+    const trigger = event.target.closest('.js-sale-request-trigger');
+    if (!trigger) return;
+    event.preventDefault();
+    const action = trigger.dataset.action;
+    const productName = trigger.dataset.productName || '';
+    if (action === 'create-shipping') {
+        openShippingRequestModal(trigger.dataset.itemId, productName);
+    } else if (action === 'create-completion') {
+        openCompletionRequestModal(trigger.dataset.itemId, productName);
+    } else if (action === 'edit') {
+        openEditRequestModal(
+            trigger.dataset.requestId,
+            trigger.dataset.requestType,
+            productName,
+            Number(trigger.dataset.salePrice || 0),
+            Number(trigger.dataset.shippingCost || 0),
+            Number(trigger.dataset.commission || 0),
+            trigger.dataset.qrImagePath || '',
+            trigger.dataset.qrImagePath2 || ''
+        );
+    }
+});
+
+function setupDetailFileUpload(inputId, areaId, textId, nameId) {
+    const input = document.getElementById(inputId);
+    const area = document.getElementById(areaId);
+    const text = document.getElementById(textId);
+    const name = document.getElementById(nameId);
+    if (!input || !area) return;
+    input.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            area.classList.add('has-file');
+            text.textContent = '選択済み';
+            name.textContent = this.files[0].name;
+        } else {
+            area.classList.remove('has-file');
+            name.textContent = '';
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupDetailFileUpload('saleRequestQrImage', 'fileUploadArea', 'fileUploadText', 'fileUploadName');
+    setupDetailFileUpload('saleRequestQrImage2', 'fileUploadArea2', 'fileUploadText2', 'fileUploadName2');
+    setupDetailFileUpload('editRequestQrImage', 'editFileUploadArea', 'editFileUploadText', 'editFileUploadName');
+    setupDetailFileUpload('editRequestQrImage2', 'editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2');
+
+    document.getElementById('saleRequestForm')?.addEventListener('submit', function(event) {
+        if (!validateDetailSaleRequest('saleRequest')) {
+            event.preventDefault();
+            return;
+        }
+        setDetailSaleRequestSubmitting('saleRequest', true);
+    });
+
+    document.getElementById('editRequestForm')?.addEventListener('submit', function(event) {
+        if (!validateDetailSaleRequest('editRequest')) {
+            event.preventDefault();
+            return;
+        }
+        setDetailSaleRequestSubmitting('editRequest', true);
+    });
 });
 </script>
 {% endif %}

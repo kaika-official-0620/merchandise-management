@@ -13378,6 +13378,8 @@ def view_item(id):
             item_dict.get('expected_shipping', 0) or 0,
             item_dict.get('expected_commission', 0) or 0
         )
+
+    enrich_item_sale_request_state(item_dict, include_all_users=current_user.is_admin() or current_user.is_owner())
     
     # リファラーから戻り先URLを判定
     referrer = request.referrer or ''
@@ -34841,6 +34843,118 @@ def has_shipped_sale_request(cur, item_id):
             LIMIT 1
         """, (item_id,))
     return cur.fetchone() is not None
+
+
+def enrich_item_sale_request_state(item_dict, include_all_users=False):
+    """Attach the same sale request state used by the item list to one detail item."""
+    item_id = item_dict.get('id')
+    item_dict['pending_shipping_request'] = False
+    item_dict['shipping_request'] = None
+    item_dict['pending_completion_request'] = False
+    item_dict['completion_request'] = None
+    item_dict['approved_shipping_request'] = None
+    item_dict['shipped_shipping_request'] = None
+    item_dict['shipping_request_approved'] = bool(item_dict.get('is_shipped'))
+    item_dict['shipment_marked'] = bool(item_dict.get('is_shipped'))
+    item_dict['can_send_completion_report'] = bool(item_dict.get('is_shipped')) and not item_dict.get('sale_date')
+    item_dict['pending_sale_request'] = False
+    item_dict['sale_request'] = None
+    item_dict['mobile_status_label'] = '売却済み' if (item_dict.get('sale_date') or item_dict.get('is_sold')) else '発送依頼を送る'
+
+    if not item_id:
+        return item_dict
+
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if include_all_users:
+                cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = %s ORDER BY created_at DESC", (item_id,))
+            else:
+                cur.execute(
+                    "SELECT * FROM sale_requests WHERE merchandise_id = %s AND user_id = %s ORDER BY created_at DESC",
+                    (item_id, current_user.id),
+                )
+        else:
+            cur = conn.cursor()
+            if include_all_users:
+                cur.execute("SELECT * FROM sale_requests WHERE merchandise_id = ? ORDER BY created_at DESC", (item_id,))
+            else:
+                cur.execute(
+                    "SELECT * FROM sale_requests WHERE merchandise_id = ? AND user_id = ? ORDER BY created_at DESC",
+                    (item_id, current_user.id),
+                )
+
+        requests = [dict(req) for req in cur.fetchall()]
+        cur.close()
+        conn.close()
+        conn = None
+    except Exception as e:
+        print(f"Error fetching detail sale request state: {e}", flush=True)
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        requests = []
+
+    pending_shipping_request = None
+    pending_completion_request = None
+    approved_shipping_request = None
+    shipped_shipping_request = None
+
+    for req_dict in requests:
+        request_type = normalize_sale_request_type(req_dict.get('request_type'))
+        req_dict['request_type'] = request_type
+        req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+        status = req_dict.get('status')
+
+        if status == 'pending':
+            if request_type == 'completion_report' and pending_completion_request is None:
+                pending_completion_request = req_dict
+            elif request_type == 'shipping_request' and pending_shipping_request is None:
+                pending_shipping_request = req_dict
+        elif status == 'approved' and request_type == 'shipping_request' and approved_shipping_request is None:
+            approved_shipping_request = req_dict
+            if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
+                shipped_shipping_request = req_dict
+
+    item_dict['pending_shipping_request'] = pending_shipping_request is not None
+    item_dict['shipping_request'] = pending_shipping_request
+    item_dict['pending_completion_request'] = pending_completion_request is not None
+    item_dict['completion_request'] = pending_completion_request
+    item_dict['approved_shipping_request'] = approved_shipping_request
+    item_dict['shipped_shipping_request'] = shipped_shipping_request
+    item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+    item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+    item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
+    item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
+    item_dict['sale_request'] = pending_completion_request or pending_shipping_request
+
+    sales_agency_request = item_dict.get('sales_agency_request') or {}
+    if item_dict.get('sale_date') or item_dict.get('is_sold'):
+        item_dict['mobile_status_label'] = '売却済み'
+    elif item_dict.get('pending_completion_request'):
+        item_dict['mobile_status_label'] = '取引完了報告確認中'
+    elif item_dict.get('pending_shipping_request'):
+        item_dict['mobile_status_label'] = '発送依頼確認中'
+    elif item_dict.get('can_send_completion_report'):
+        item_dict['mobile_status_label'] = '取引完了報告を送る'
+    elif item_dict.get('approved_shipping_request'):
+        item_dict['mobile_status_label'] = '発送準備中'
+    elif item_dict.get('pending_sales_agency'):
+        item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '査定待ち'
+    elif item_dict.get('appraisal_status') == 'inspecting':
+        item_dict['mobile_status_label'] = '査定中'
+    elif item_dict.get('appraisal_status') == 'waiting':
+        item_dict['mobile_status_label'] = '査定待ち'
+    elif item_dict.get('is_listed'):
+        item_dict['mobile_status_label'] = '認証済み'
+    else:
+        item_dict['mobile_status_label'] = '発送依頼を送る'
+
+    return item_dict
 
 
 def record_sale_request_event(conn, sale_request_id, event_type, actor_user_id=None, note=None):
