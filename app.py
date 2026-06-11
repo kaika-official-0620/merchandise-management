@@ -40487,10 +40487,10 @@ def _fetch_admin_documents_request_summaries(limit=200):
         canceled_item_count = int(row.get("canceled_item_count") or 0)
         row["created_at"] = sales_agency_format_datetime(row.get("created_at"))
         row["service_name"] = get_sales_agency_service_name(row.get("service_type"))
-        row["client_name"] = row.get("user_name") or row.get("username") or "譛ｪ險ｭ螳壹Θ繝ｼ繧ｶ繝ｼ"
+        row["client_name"] = row.get("user_name") or row.get("username") or "未設定ユーザー"
         row["active_item_count"] = active_item_count
         row["canceled_item_count"] = canceled_item_count
-        row["item_summary"] = f"蟇ｾ雎｡蝠・刀 {active_item_count}轤ｹ" if active_item_count else "-"
+        row["item_summary"] = f"対象商品 {active_item_count}点" if active_item_count else "-"
     return rows
 
 
