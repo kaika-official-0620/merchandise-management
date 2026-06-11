@@ -433,7 +433,7 @@ def apply(module: Any) -> None:
         amount = safe_int(setting.get("monthly_fee_amount"))
         if not setting.get("free_campaign_enabled") or safe_int(setting.get("free_period_days")) <= 0:
             return amount
-        _month_text, _first, last = month_bounds(target_month)
+        _month_text, first, last = month_bounds(target_month)
         created_at = client.get("created_at")
         created_date = None
         if isinstance(created_at, datetime):
@@ -448,7 +448,7 @@ def apply(module: Any) -> None:
         if not created_date:
             return amount
         free_until = created_date + timedelta(days=safe_int(setting.get("free_period_days")))
-        return 0 if free_until > last else amount
+        return 0 if created_date <= last and free_until >= first else amount
 
     def save_vendor_upload(file_storage) -> tuple[str, str, str, int]:
         original_filename = secure_filename(file_storage.filename or "")

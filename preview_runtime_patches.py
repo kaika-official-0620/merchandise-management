@@ -1066,6 +1066,26 @@ def apply(module: Any) -> None:
         conn, cur = open_cursor()
         try:
             placeholder = "%s" if DATABASE_URL else "?"
+            def table_exists(table_name):
+                if DATABASE_URL:
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.tables
+                            WHERE table_schema = current_schema()
+                              AND table_name = %s
+                        ) AS exists
+                        """,
+                        (table_name,),
+                    )
+                    row = cur.fetchone()
+                    return bool(row.get("exists") if isinstance(row, dict) else row[0])
+                cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,))
+                return cur.fetchone() is not None
+
+            if table_exists("client_monthly_fee_settings"):
+                cur.execute(f"DELETE FROM client_monthly_fee_settings WHERE user_id = {placeholder}", (id,))
             cur.execute(
                 f"""
                 DELETE FROM user_kaitori_shoudaku_items
