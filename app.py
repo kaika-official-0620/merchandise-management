@@ -3402,7 +3402,8 @@ if DATABASE_URL:
         cur.execute('''
             CREATE TABLE IF NOT EXISTS analytics_memos (
                 id SERIAL PRIMARY KEY,
-                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                target_month VARCHAR(7) DEFAULT '',
                 memo_text TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -4408,9 +4409,11 @@ else:
         cur.execute('''
             CREATE TABLE IF NOT EXISTS analytics_memos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                target_month TEXT DEFAULT '',
                 memo_text TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, target_month)
             )
         ''')
         
@@ -5178,6 +5181,8 @@ class User(UserMixin):
         plan_change_effective_month='',
         shipping_addresses='[]',
         preferred_shipping_address_index=0,
+        last_name='',
+        first_name='',
     ):
         self.id = id
         self.username = username
@@ -5193,6 +5198,8 @@ class User(UserMixin):
         self.requested_monthly_plan = requested_monthly_plan or ''
         self.plan_change_effective_month = plan_change_effective_month or ''
         self.shipping_addresses = shipping_addresses or '[]'
+        self.last_name = last_name or ''
+        self.first_name = first_name or ''
         try:
             self.preferred_shipping_address_index = int(preferred_shipping_address_index or 0)
         except (TypeError, ValueError):
@@ -5369,6 +5376,8 @@ def build_user_from_record(user):
         get_optional_user_field('plan_change_effective_month'),
         get_optional_user_field('shipping_addresses', '[]'),
         get_optional_user_field('preferred_shipping_address_index', 0),
+        get_optional_user_field('last_name'),
+        get_optional_user_field('first_name'),
     )
 
 
@@ -5388,6 +5397,8 @@ def ensure_user_profile_columns():
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_change_requested_at TIMESTAMP",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS shipping_addresses TEXT DEFAULT '[]'",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_shipping_address_index INTEGER DEFAULT 0",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100)",
             ):
                 cur.execute(ddl)
         else:
@@ -5403,10 +5414,121 @@ def ensure_user_profile_columns():
                 'plan_change_requested_at': "ALTER TABLE users ADD COLUMN plan_change_requested_at TEXT",
                 'shipping_addresses': "ALTER TABLE users ADD COLUMN shipping_addresses TEXT DEFAULT '[]'",
                 'preferred_shipping_address_index': "ALTER TABLE users ADD COLUMN preferred_shipping_address_index INTEGER DEFAULT 0",
+                'last_name': "ALTER TABLE users ADD COLUMN last_name TEXT",
+                'first_name': "ALTER TABLE users ADD COLUMN first_name TEXT",
             }
             for column_name, ddl in sqlite_columns.items():
                 if column_name not in existing_columns:
                     cur.execute(ddl)
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def resolve_analytics_memo_target_month(start_month='', end_month=''):
+    start_month = (start_month or '').strip()
+    end_month = (end_month or '').strip()
+    if start_month and end_month and start_month == end_month:
+        return start_month
+    return end_month or start_month or get_jst_now().strftime('%Y-%m')
+
+
+def ensure_analytics_memo_schema():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS analytics_memos (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    target_month VARCHAR(7) DEFAULT '',
+                    memo_text TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cur.execute("ALTER TABLE analytics_memos ADD COLUMN IF NOT EXISTS target_month VARCHAR(7) DEFAULT ''")
+            cur.execute("UPDATE analytics_memos SET target_month = '' WHERE target_month IS NULL")
+            cur.execute("""
+                DO $$
+                DECLARE constraint_name text;
+                BEGIN
+                    FOR constraint_name IN
+                        SELECT c.conname
+                        FROM pg_constraint c
+                        JOIN pg_attribute a
+                          ON a.attrelid = c.conrelid
+                         AND a.attnum = ANY(c.conkey)
+                        WHERE c.conrelid = 'analytics_memos'::regclass
+                          AND c.contype = 'u'
+                        GROUP BY c.conname, c.conkey
+                        HAVING array_length(c.conkey, 1) = 1
+                           AND bool_or(a.attname = 'user_id')
+                    LOOP
+                        EXECUTE format('ALTER TABLE analytics_memos DROP CONSTRAINT %I', constraint_name);
+                    END LOOP;
+                END $$;
+            """)
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS analytics_memos_user_month_idx
+                ON analytics_memos (user_id, target_month)
+            """)
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS analytics_memos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    target_month TEXT DEFAULT '',
+                    memo_text TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, target_month)
+                )
+            """)
+            cur.execute("PRAGMA table_info(analytics_memos)")
+            existing_columns = {row['name'] for row in cur.fetchall()}
+            if 'target_month' not in existing_columns:
+                cur.execute("ALTER TABLE analytics_memos ADD COLUMN target_month TEXT DEFAULT ''")
+
+            cur.execute("PRAGMA index_list(analytics_memos)")
+            indexes = [dict(row) for row in cur.fetchall()]
+            has_user_only_unique = False
+            for index in indexes:
+                if not index.get('unique'):
+                    continue
+                cur.execute(f"PRAGMA index_info({index['name']})")
+                indexed_columns = [row['name'] for row in cur.fetchall()]
+                if indexed_columns == ['user_id']:
+                    has_user_only_unique = True
+                    break
+
+            if has_user_only_unique:
+                cur.execute("DROP TABLE IF EXISTS analytics_memos_new")
+                cur.execute("""
+                    CREATE TABLE analytics_memos_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        target_month TEXT DEFAULT '',
+                        memo_text TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, target_month)
+                    )
+                """)
+                cur.execute("""
+                    INSERT OR IGNORE INTO analytics_memos_new (id, user_id, target_month, memo_text, updated_at)
+                    SELECT id, user_id, COALESCE(target_month, ''), memo_text, updated_at
+                    FROM analytics_memos
+                """)
+                cur.execute("DROP TABLE analytics_memos")
+                cur.execute("ALTER TABLE analytics_memos_new RENAME TO analytics_memos")
+            else:
+                cur.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS analytics_memos_user_month_idx
+                    ON analytics_memos (user_id, target_month)
+                """)
+            cur.execute("UPDATE analytics_memos SET target_month = '' WHERE target_month IS NULL")
         conn.commit()
         cur.close()
     finally:
@@ -6380,6 +6502,8 @@ PLACEHOLDER_USER_DISPLAY_NAMES = {
     'my',
     'My',
     'MY',
+    '...',
+    '\u2026',
     '??',
     '???',
     '未設定',
@@ -6413,11 +6537,14 @@ def format_user_display_name(display_name, username=None, fallback=None, role=No
     return display_name_value
 
 
-def format_header_display_name(display_name, username=None, role=None):
+def format_header_display_name(display_name, username=None, role=None, last_name=None):
     display_name_value = (display_name or '').strip()
-    if is_placeholder_user_display_name(display_name_value, username=username, role=role):
-        return 'MY'
-    return display_name_value
+    if not is_placeholder_user_display_name(display_name_value, username=username, role=role):
+        return display_name_value
+    last_name_value = (last_name or '').strip()
+    if last_name_value and not is_placeholder_user_display_name(last_name_value, username=username, role=role):
+        return last_name_value
+    return 'MY'
 
 
 app.jinja_env.globals['format_user_display_name'] = format_user_display_name
@@ -6428,19 +6555,27 @@ app.jinja_env.globals['get_display_name_fallback_for_role'] = get_display_name_f
 
 def get_profile_missing_fields(user):
     """ホームで基本情報未登録を促すための不足項目"""
+    username = (getattr(user, 'username', '') or '').strip()
+    role = getattr(user, 'role', None)
+    display_name_value = (getattr(user, 'display_name', '') or '').strip()
+    last_name_value = (getattr(user, 'last_name', '') or '').strip()
+    name_value = ''
+    if not is_placeholder_user_display_name(display_name_value, username=username, role=role):
+        name_value = display_name_value
+    elif last_name_value and not is_placeholder_user_display_name(last_name_value, username=username, role=role):
+        name_value = last_name_value
     checks = [
-        ('お名前', (getattr(user, 'display_name', '') or '').strip()),
+        ('お名前', name_value),
         ('メールアドレス', (getattr(user, 'email', '') or '').strip()),
         ('電話番号', (getattr(user, 'phone', '') or '').strip()),
         ('郵便番号', (getattr(user, 'postal_code', '') or '').strip()),
         ('住所', (getattr(user, 'address', '') or '').strip()),
     ]
-    username = (getattr(user, 'username', '') or '').strip()
     missing = []
     for label, value in checks:
         if (
             not value
-            or (label == 'お名前' and is_placeholder_user_display_name(value, username=username))
+            or (label == 'お名前' and is_placeholder_user_display_name(value, username=username, role=role))
         ):
             missing.append(label)
     return missing
@@ -7295,13 +7430,12 @@ def profile():
     ensure_user_profile_columns()
     if request.method == 'POST':
         display_name = (request.form.get('display_name') or '').strip()
+        last_name = (request.form.get('last_name') or '').strip()
+        first_name = (request.form.get('first_name') or '').strip()
         email = (request.form.get('email') or '').strip()
         phone = (request.form.get('phone') or '').strip()
         postal_code = (request.form.get('postal_code') or '').strip()
         address = (request.form.get('address') or '').strip()
-        if is_placeholder_user_display_name(display_name, username=current_user.username, role=current_user.role):
-            flash('お名前（本名）を入力してください。右上の「ユーザー」は未設定時の仮表示です。', 'error')
-            return redirect(url_for('profile'))
         if not email:
             flash('メールアドレスを入力してください。', 'error')
             return redirect(url_for('profile'))
@@ -7364,6 +7498,8 @@ def profile():
             cur.execute("""
                 UPDATE users
                 SET display_name = %s,
+                    last_name = %s,
+                    first_name = %s,
                     email = %s,
                     phone = %s,
                     postal_code = %s,
@@ -7375,7 +7511,7 @@ def profile():
                     plan_change_requested_at = CASE WHEN %s <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = %s
             """, (
-                display_name, email, phone, postal_code, address,
+                display_name, last_name, first_name, email, phone, postal_code, address,
                 shipping_addresses_json, preferred_shipping_address_index,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
@@ -7383,6 +7519,8 @@ def profile():
             cur.execute("""
                 UPDATE users
                 SET display_name = ?,
+                    last_name = ?,
+                    first_name = ?,
                     email = ?,
                     phone = ?,
                     postal_code = ?,
@@ -7394,7 +7532,7 @@ def profile():
                     plan_change_requested_at = CASE WHEN ? <> '' THEN CURRENT_TIMESTAMP ELSE plan_change_requested_at END
                 WHERE id = ?
             """, (
-                display_name, email, phone, postal_code, address,
+                display_name, last_name, first_name, email, phone, postal_code, address,
                 shipping_addresses_json, preferred_shipping_address_index,
                 requested_monthly_plan, plan_effective_month, requested_monthly_plan, current_user.id
             ))
@@ -7413,7 +7551,7 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
-                   u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.display_name, u.last_name, u.first_name, u.email, u.phone, u.postal_code, u.address,
                    u.shipping_addresses, u.preferred_shipping_address_index,
                    u.inventory_summary_period_default, u.requested_monthly_plan,
                    u.plan_change_effective_month, u.plan_change_requested_at,
@@ -7430,7 +7568,7 @@ def profile():
         cur.execute("""
             SELECT u.subscription_status, u.stripe_subscription_id, 
                    u.last_payment_date, u.next_payment_date,
-                   u.display_name, u.email, u.phone, u.postal_code, u.address,
+                   u.display_name, u.last_name, u.first_name, u.email, u.phone, u.postal_code, u.address,
                    u.shipping_addresses, u.preferred_shipping_address_index,
                    u.inventory_summary_period_default, u.requested_monthly_plan,
                    u.plan_change_effective_month, u.plan_change_requested_at,
@@ -8074,6 +8212,27 @@ def index():
             return 50
 
         item_dict['status_priority'] = resolve_status_priority(item_dict)
+        sales_agency_request = item_dict.get('sales_agency_request') or {}
+        if item_dict.get('sale_date') or item_dict.get('is_sold'):
+            item_dict['mobile_status_label'] = '売却済み'
+        elif item_dict.get('pending_completion_request'):
+            item_dict['mobile_status_label'] = '取引完了報告確認中'
+        elif item_dict.get('pending_shipping_request'):
+            item_dict['mobile_status_label'] = '発送依頼確認中'
+        elif item_dict.get('can_send_completion_report'):
+            item_dict['mobile_status_label'] = '取引完了報告を送る'
+        elif item_dict.get('approved_shipping_request'):
+            item_dict['mobile_status_label'] = '発送準備中'
+        elif item_dict.get('pending_sales_agency'):
+            item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '査定待ち'
+        elif item_dict.get('appraisal_status') == 'inspecting':
+            item_dict['mobile_status_label'] = '査定中'
+        elif item_dict.get('appraisal_status') == 'waiting':
+            item_dict['mobile_status_label'] = '査定待ち'
+        elif item_dict.get('is_listed'):
+            item_dict['mobile_status_label'] = '認証済み'
+        else:
+            item_dict['mobile_status_label'] = '発送依頼を送る'
         
         # 全画像リスト（メイン + 追加）
         item_dict['all_photos'] = []
@@ -8196,6 +8355,7 @@ def index():
         {'key': 'profit_high', 'label': '利益が高い順'},
         {'key': 'sold_newest', 'label': '売却日が新しい順'},
     ]
+    is_filtered = bool(filter_type or search or summary_period != 'all' or sort_mode != 'priority')
 
     return render_template('index.html', items=processed_items, stats=dict(stats),
                          filter_type=filter_type, search=search, announcements=announcements,
@@ -8204,7 +8364,8 @@ def index():
                          summary_period=summary_period,
                          summary_period_options=summary_period_options,
                          sort_mode=sort_mode,
-                         sort_options=sort_options)
+                         sort_options=sort_options,
+                         is_filtered=is_filtered)
 
 # ===================
 # レポート機能
@@ -11569,6 +11730,7 @@ def user_analytics():
     管理者ログイン時: 管理者以外のすべてのユーザーの商品を分析
     一般ユーザーログイン時: 自分自身の商品を分析
     """
+    ensure_analytics_memo_schema()
     conn = get_db()
     analytics_data = {}
     
@@ -11593,6 +11755,7 @@ def user_analytics():
         period_preset,
         default_to_current=True
     )
+    memo_target_month = resolve_analytics_memo_target_month(start_month, end_month)
     selected_client_name = ''
     available_users = []
     client_summaries = []
@@ -11602,17 +11765,33 @@ def user_analytics():
         memo_text = request.form.get('analytics_memo', '')
         if DATABASE_URL:
             cur_memo = conn.cursor()
-            cur_memo.execute("""
-                INSERT INTO analytics_memos (user_id, memo_text, updated_at)
-                VALUES (%s, %s, CURRENT_TIMESTAMP)
-                ON CONFLICT (user_id)
-                DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
-            """, (current_user.id, memo_text))
+            cur_memo.execute(
+                "SELECT id FROM analytics_memos WHERE user_id = %s AND target_month = %s LIMIT 1",
+                (current_user.id, memo_target_month),
+            )
+            memo_row = cur_memo.fetchone()
+            if memo_row:
+                memo_id = memo_row['id'] if isinstance(memo_row, dict) else memo_row[0]
+                cur_memo.execute(
+                    "UPDATE analytics_memos SET memo_text = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (memo_text, memo_id),
+                )
+            else:
+                cur_memo.execute("""
+                    INSERT INTO analytics_memos (user_id, target_month, memo_text, updated_at)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                """, (current_user.id, memo_target_month, memo_text))
         else:
             cur_memo = conn.cursor()
-            cur_memo.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+            cur_memo.execute(
+                "UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND target_month = ?",
+                (memo_text, current_user.id, memo_target_month),
+            )
             if cur_memo.rowcount == 0:
-                cur_memo.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+                cur_memo.execute(
+                    "INSERT INTO analytics_memos (user_id, target_month, memo_text) VALUES (?, ?, ?)",
+                    (current_user.id, memo_target_month, memo_text),
+                )
         conn.commit()
         cur_memo.close()
         conn.close()
@@ -11831,7 +12010,10 @@ def user_analytics():
             analytics_data['inventory_health'] = {'stale_inventory_count': 0, 'stale_inventory_value': 0}
 
         # 分析メモ
-        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+        cur.execute(
+            "SELECT memo_text FROM analytics_memos WHERE user_id = %s AND target_month = %s",
+            (current_user.id, memo_target_month),
+        )
         memo_row = cur.fetchone()
         analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
         
@@ -12107,7 +12289,10 @@ def user_analytics():
             analytics_data['inventory_health'] = {'stale_inventory_count': 0, 'stale_inventory_value': 0}
 
         # 分析メモ
-        cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+        cur.execute(
+            "SELECT memo_text FROM analytics_memos WHERE user_id = ? AND target_month = ?",
+            (current_user.id, memo_target_month),
+        )
         memo_row = cur.fetchone()
         analytics_data['analytics_memo'] = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
         
@@ -12193,6 +12378,7 @@ def user_analytics():
     analytics_data['client_summaries'] = client_summaries
     analytics_data['period_preset'] = period_preset
     analytics_data['period_label'] = build_month_period_label(start_month, end_month)
+    analytics_data['memo_target_month'] = memo_target_month
     analytics_data.setdefault('inventory_health', {'stale_inventory_count': 0, 'stale_inventory_value': 0})
     total_sales_value = safe_int((analytics_data.get('summary') or {}).get('total_sales'))
     total_fee_value = safe_int((analytics_data.get('kpi') or {}).get('total_shipping')) + safe_int((analytics_data.get('kpi') or {}).get('total_commission'))
@@ -12363,6 +12549,39 @@ def user_analytics():
     
     return render_template('user_analytics.html', analytics=analytics_data,
                          start_month=start_month, end_month=end_month)
+
+
+@app.route('/my-analytics/memos')
+@login_required
+def analytics_memo_history():
+    ensure_analytics_memo_schema()
+    conn = get_db()
+    if DATABASE_URL:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT target_month, memo_text, updated_at
+            FROM analytics_memos
+            WHERE user_id = %s
+              AND COALESCE(TRIM(memo_text), '') <> ''
+            ORDER BY COALESCE(NULLIF(target_month, ''), '0000-00') DESC, updated_at DESC
+        """, (current_user.id,))
+        memos = [dict(row) for row in cur.fetchall()]
+    else:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT target_month, memo_text, updated_at
+            FROM analytics_memos
+            WHERE user_id = ?
+              AND COALESCE(TRIM(memo_text), '') <> ''
+            ORDER BY COALESCE(NULLIF(target_month, ''), '0000-00') DESC, updated_at DESC
+        """, (current_user.id,))
+        memos = [dict(row) for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    return render_template('analytics_memo_history.html', memos=memos)
+
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -15047,6 +15266,7 @@ def admin_user_items(id):
 @login_required
 @permission_required('analytics')
 def admin_analytics():
+    ensure_analytics_memo_schema()
     analytics_data = {}
     widgets = []
     overall_stats = {}
@@ -15064,6 +15284,10 @@ def admin_analytics():
     # 日付フィルター取得
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
+    analytics_memo_target_month = resolve_analytics_memo_target_month(
+        date_from[:7] if len(date_from) >= 7 else '',
+        date_to[:7] if len(date_to) >= 7 else '',
+    )
     
     try:
         conn = get_db()
@@ -15072,12 +15296,21 @@ def admin_analytics():
 
             if request.method == 'POST':
                 memo_text = request.form.get('analytics_memo', '')
-                cur.execute("""
-                    INSERT INTO analytics_memos (user_id, memo_text, updated_at)
-                    VALUES (%s, %s, CURRENT_TIMESTAMP)
-                    ON CONFLICT (user_id)
-                    DO UPDATE SET memo_text = EXCLUDED.memo_text, updated_at = CURRENT_TIMESTAMP
-                """, (current_user.id, memo_text))
+                cur.execute(
+                    "SELECT id FROM analytics_memos WHERE user_id = %s AND target_month = %s LIMIT 1",
+                    (current_user.id, analytics_memo_target_month),
+                )
+                memo_row = cur.fetchone()
+                if memo_row:
+                    cur.execute(
+                        "UPDATE analytics_memos SET memo_text = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                        (memo_text, memo_row['id']),
+                    )
+                else:
+                    cur.execute("""
+                        INSERT INTO analytics_memos (user_id, target_month, memo_text, updated_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    """, (current_user.id, analytics_memo_target_month, memo_text))
                 conn.commit()
                 flash('分析メモを保存しました', 'success')
             
@@ -15178,7 +15411,10 @@ def admin_analytics():
             auction_stats = dict(cur.fetchone() or {})
 
             # 分析メモ
-            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = %s", (current_user.id,))
+            cur.execute(
+                "SELECT memo_text FROM analytics_memos WHERE user_id = %s AND target_month = %s",
+                (current_user.id, analytics_memo_target_month),
+            )
             memo_row = cur.fetchone()
             analytics_memo = memo_row['memo_text'] if memo_row and memo_row.get('memo_text') else ''
             
@@ -15391,9 +15627,15 @@ def admin_analytics():
 
             if request.method == 'POST':
                 memo_text = request.form.get('analytics_memo', '')
-                cur.execute("UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (memo_text, current_user.id))
+                cur.execute(
+                    "UPDATE analytics_memos SET memo_text = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND target_month = ?",
+                    (memo_text, current_user.id, analytics_memo_target_month),
+                )
                 if cur.rowcount == 0:
-                    cur.execute("INSERT INTO analytics_memos (user_id, memo_text) VALUES (?, ?)", (current_user.id, memo_text))
+                    cur.execute(
+                        "INSERT INTO analytics_memos (user_id, target_month, memo_text) VALUES (?, ?, ?)",
+                        (current_user.id, analytics_memo_target_month, memo_text),
+                    )
                 conn.commit()
                 flash('分析メモを保存しました', 'success')
             
@@ -15476,7 +15718,10 @@ def admin_analytics():
             auction_stats = dict(cur.fetchone() or {})
 
             # 分析メモ
-            cur.execute("SELECT memo_text FROM analytics_memos WHERE user_id = ?", (current_user.id,))
+            cur.execute(
+                "SELECT memo_text FROM analytics_memos WHERE user_id = ? AND target_month = ?",
+                (current_user.id, analytics_memo_target_month),
+            )
             memo_row = cur.fetchone()
             analytics_memo = memo_row['memo_text'] if memo_row and memo_row['memo_text'] else ''
             
@@ -24851,6 +25096,9 @@ def admin_shikiriosho_view(id):
 @login_required
 def documents():
     """統合書類管理ページ"""
+    active_tab = (request.args.get('tab') or 'kaitori').strip()
+    if active_tab not in {'kaitori', 'mitsumori', 'shoudaku', 'shikiri', 'keisan'}:
+        active_tab = 'kaitori'
     conn = get_db()
     
     if DATABASE_URL:
@@ -24942,7 +25190,8 @@ def documents():
                           user_mitsumori_list=user_mitsumori_list,
                           user_kaitori_shoudaku_list=user_kaitori_shoudaku_list,
                           user_keisan_list=user_keisan_list,
-                          shikiriosho_list=shikiriosho_list)
+                          shikiriosho_list=shikiriosho_list,
+                          active_tab=active_tab)
 
 
 @app.route('/documents/list')
@@ -25890,7 +26139,7 @@ def user_mitsumori_add():
         flash('見積依頼書を作成しました', 'success')
         if status == 'draft':
             return redirect(url_for('user_document_list'))
-        return redirect(url_for('documents') + '#document-history-tabs')
+        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
     # GETリクエスト
     today = get_jst_now().strftime('%Y-%m-%d')
@@ -25968,11 +26217,11 @@ def user_mitsumori_edit(id):
     
     if not mitsumori:
         flash('見積依頼書が見つかりません', 'error')
-        return redirect(url_for('documents'))
+        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
     if mitsumori['status'] != 'draft':
         flash('完了済みの見積依頼書は編集できません', 'error')
-        return redirect(url_for('documents'))
+        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
     if request.method == 'POST':
         issue_date = request.form.get('issue_date')
@@ -26043,7 +26292,9 @@ def user_mitsumori_edit(id):
         conn.close()
         
         flash('見積依頼書を更新しました', 'success')
-        return redirect(url_for('documents'))
+        if status == 'draft':
+            return redirect(url_for('user_document_list'))
+        return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
     # GETリクエスト - 明細取得
     if DATABASE_URL:

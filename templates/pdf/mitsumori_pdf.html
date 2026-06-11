@@ -198,20 +198,107 @@
             white-space: pre-wrap;
         }
 
+        @page {
+            size: A4 portrait;
+            margin: 7mm 8mm;
+        }
+
         @media print {
             body {
                 margin: 0;
                 padding: 0;
+                font-size: 10px;
+                line-height: 1.32;
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
             }
 
             .container {
                 width: 100%;
-                max-height: 297mm;
                 margin: 0;
                 padding: 0;
-                overflow: hidden;
+                overflow: visible;
+            }
+
+            .document-title {
+                margin-bottom: 8px;
+                padding-bottom: 6px;
+                font-size: 19px;
+                letter-spacing: 0.24em;
+            }
+
+            .header-section {
+                margin-bottom: 8px;
+            }
+
+            .recipient-name {
+                margin-bottom: 4px;
+                padding-bottom: 3px;
+                font-size: 15px;
+            }
+
+            .request-text {
+                margin: 8px 0;
+                font-size: 10px;
+            }
+
+            .amount-company-row {
+                gap: 10px;
+                margin: 8px 0;
+            }
+
+            .request-amount-box {
+                gap: 8px;
+                padding: 8px;
+            }
+
+            .request-label,
+            .company-name {
+                font-size: 11px;
+            }
+
+            .request-amount {
+                font-size: 18px;
+            }
+
+            .company-info {
+                padding: 7px;
+            }
+
+            table {
+                margin: 8px 0;
+                font-size: 8.7px;
+            }
+
+            th,
+            td {
+                padding: 3px 4px;
+                line-height: 1.22;
+            }
+
+            .footer-section {
+                gap: 10px;
+                margin-top: 2px;
+            }
+
+            .footer-left,
+            .notes-section {
+                font-size: 8.5px;
+                line-height: 1.35;
+            }
+
+            .summary-table {
+                min-width: 250px;
+            }
+
+            .summary-table td {
+                padding: 3px 5px;
+            }
+
+            .notes-section {
+                min-height: 24px;
+                margin-top: 8px;
+                padding-top: 5px;
             }
 
             table,
@@ -220,6 +307,11 @@
             .amount-company-row,
             .footer-section {
                 page-break-inside: avoid;
+            }
+
+            .page-break-row {
+                break-before: page;
+                page-break-before: always;
             }
         }
     </style>
@@ -280,8 +372,10 @@
                 </tr>
             </thead>
             <tbody>
-                {% for i in range(15) %}
-                <tr>
+                {% set item_count = items|length if items else 0 %}
+                {% set row_count = item_count if item_count > 15 else 15 %}
+                {% for i in range(row_count) %}
+                <tr class="{% if i == 15 %}page-break-row{% endif %}">
                     <td class="text-center">{{ i + 1 }}</td>
                     <td>{% if items and i < items|length %}{{ items[i].item_name or '' }}{% endif %}</td>
                     <td class="text-center">{% if items and i < items|length %}{{ items[i].quantity or '' }}{% endif %}</td>

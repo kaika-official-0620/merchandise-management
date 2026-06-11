@@ -1073,8 +1073,14 @@
 
     <!-- メモ欄 -->
     <div class="analytics-section memo-section full-width">
-        <h2>メモ</h2>
-        <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, from_client_reports=1 if from_client_reports else None) }}" class="memo-form">
+        <div class="memo-heading-row">
+            <div>
+                <h2>メモ</h2>
+                <p class="memo-period-note">{{ analytics.memo_target_month or end_month or start_month }} のメモ</p>
+            </div>
+            <a href="{{ url_for('analytics_memo_history') }}" class="btn btn-secondary btn-sm">メモ履歴</a>
+        </div>
+        <form method="POST" action="{{ url_for('user_analytics', start_month=start_month, end_month=end_month, period_preset=analytics.period_preset, from_client_reports=1 if from_client_reports else None) }}" class="memo-form">
             <textarea name="analytics_memo" class="memo-textarea" rows="4" placeholder="分析メモを記録できます（次回も保持されます）">{{ analytics.analytics_memo or '' }}</textarea>
             <div class="memo-actions">
                 <button type="submit" class="btn btn-primary btn-sm">メモを保存</button>
@@ -2325,6 +2331,25 @@
     margin-bottom: 2rem;
 }
 
+.memo-heading-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.memo-heading-row h2 {
+    margin-bottom: 0.25rem;
+}
+
+.memo-period-note {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.6;
+}
+
 .memo-form {
     display: flex;
     flex-direction: column;
@@ -2344,6 +2369,18 @@
 .memo-actions {
     display: flex;
     justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+    .memo-heading-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .memo-heading-row .btn {
+        width: 100%;
+        text-align: center;
+    }
 }
 
 .analytics-grid {

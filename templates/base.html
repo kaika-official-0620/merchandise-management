@@ -352,7 +352,7 @@
         <img src="{{ url_for('static', filename='brand/kaika-header-logo-transparent.png') }}" alt="開花">
     </div>
     {% if current_user.is_authenticated %}
-    {% set nav_display_name = format_header_display_name(current_user.display_name, current_user.username, role=current_user.role) %}
+    {% set nav_display_name = format_header_display_name(current_user.display_name, current_user.username, role=current_user.role, last_name=current_user.last_name) %}
     <nav class="navbar">
         <div class="nav-container">
             <button type="button" class="hamburger-menu" onclick="toggleSidebar()">
@@ -724,7 +724,27 @@
         
         {% set is_user_home = request.endpoint == 'user_home' %}
         {% set hide_context_back = request.endpoint == 'admin_proxy_service_detail' and request.args.get('history_view') %}
-        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] or hide_context_back %}
+        {% set history_back_top_endpoints = [
+            'index',
+            'user_home',
+            'user_document_list',
+            'documents',
+            'user_analytics',
+            'inquiry_list',
+            'admin_dashboard',
+            'admin_items',
+            'admin_users',
+            'admin_documents_dashboard',
+            'admin_documents_dashboard_v2',
+            'admin_documents_history',
+            'admin_documents_history_v2',
+            'admin_analytics',
+            'admin_analytics_kaika',
+            'admin_analytics_kaika_sales',
+            'admin_inquiries',
+            'reports'
+        ] %}
+        {% set hide_history_back = request.endpoint == 'login' or request.path in ['/', '/admin', '/admin/home'] or request.endpoint in history_back_top_endpoints or hide_context_back %}
         {% if not hide_history_back %}
         <div
             class="history-back-bar"

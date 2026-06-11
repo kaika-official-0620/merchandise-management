@@ -206,6 +206,27 @@
         white-space: nowrap;
     }
 
+    .filter-return-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin: -0.35rem 0 1rem;
+    }
+
+    .filter-return-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        color: #334155;
+        background: #fff;
+        font-size: 0.88rem;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
     .btn-export {
         background: #f8fafc;
         border: 1px solid #d1d5db;
@@ -1581,6 +1602,158 @@
         border-radius: 12px;
     }
 
+    .card-price-overlay,
+    .card-sold-overlay,
+    .mobile-card-status {
+        display: none;
+    }
+
+    @media (max-width: 768px) {
+        .filter-return-bar {
+            justify-content: stretch;
+            margin: 0 0 0.5rem;
+            padding: 0 2px;
+        }
+
+        .filter-return-link {
+            width: 100%;
+            min-height: 40px;
+        }
+
+        .mobile-cards {
+            gap: 4px;
+            padding: 4px;
+        }
+
+        .mobile-cards .item-card {
+            display: flex;
+            flex-direction: column;
+            min-height: 188px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #fff;
+            opacity: 1;
+        }
+
+        .mobile-cards .item-card.card-sold {
+            background: #f8fafc;
+            opacity: 1;
+        }
+
+        .mobile-cards .card-header {
+            display: block;
+            padding: 0;
+            border-bottom: 0;
+            background: #fff;
+        }
+
+        .mobile-cards .card-title {
+            display: none;
+        }
+
+        .mobile-cards .card-photo {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+        }
+
+        .mobile-cards .card-photo-single img,
+        .mobile-cards .card-photo-scroll .scroll-thumb,
+        .mobile-cards .card-header.has-multi-photos .card-photo-scroll .scroll-thumb {
+            border-radius: 0;
+        }
+
+        .mobile-cards .item-card.card-sold .card-photo-single img,
+        .mobile-cards .item-card.card-sold .card-photo-scroll .scroll-thumb,
+        .mobile-cards .item-card.card-sold .no-photo {
+            opacity: 0.45;
+        }
+
+        .card-price-overlay {
+            position: absolute;
+            left: 4px;
+            bottom: 4px;
+            display: inline-flex;
+            max-width: calc(100% - 8px);
+            padding: 2px 5px;
+            border-radius: 5px;
+            color: #fff;
+            background: rgba(15, 23, 42, 0.82);
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            z-index: 6;
+        }
+
+        .card-sold-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: rgba(15, 23, 42, 0.28);
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            z-index: 5;
+        }
+
+        .mobile-cards .card-status {
+            display: none;
+        }
+
+        .mobile-cards .card-body {
+            display: block;
+            flex: 1 1 auto;
+            padding: 4px 4px 0;
+            background: #fff;
+        }
+
+        .mobile-card-status {
+            display: -webkit-box;
+            min-height: 30px;
+            color: #334155;
+            font-size: 0.66rem;
+            font-weight: 700;
+            line-height: 1.35;
+            overflow: hidden;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .mobile-cards .card-prices,
+        .mobile-cards .card-row {
+            display: none;
+        }
+
+        .mobile-cards .card-actions {
+            display: flex;
+            margin-top: auto;
+            padding: 4px;
+            gap: 0;
+            border-top: 0;
+            background: #fff;
+        }
+
+        .mobile-cards .card-actions > :not(.btn-detail) {
+            display: none !important;
+        }
+
+        .mobile-cards .card-actions .btn-detail {
+            width: 100%;
+            min-height: 30px;
+            padding: 6px 4px;
+            border-radius: 5px;
+            font-size: 0.72rem;
+            line-height: 1.2;
+        }
+    }
+
     /* 承認待ちバッジ */
     .badge-waiting {
         display: inline-block;
@@ -2112,6 +2285,12 @@
     </div>
 </div>
 
+{% if is_filtered %}
+<div class="filter-return-bar">
+    <a href="{{ url_for('index') }}" class="filter-return-link">検索を解除して戻る</a>
+</div>
+{% endif %}
+
 <!-- フィルターパネル -->
 <div class="filter-panel" id="filterPanel">
     <div class="filter-tabs-header">
@@ -2146,7 +2325,7 @@
         <div class="filter-group">
             <a href="{{ url_for('index', summary_period=summary_period, sort=sort_mode) }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
             <a href="{{ url_for('index', filter='sold', summary_period=summary_period, sort=sort_mode) }}"
-                class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済</a>
+                class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済み</a>
             <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode) }}"
                 class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
             <div class="filter-item">
@@ -2164,7 +2343,7 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
-                                    <option value="sold">売却済</option>
+                                    <option value="sold">売却済み</option>
                                     <option value="appraisal_pending">査定待ち</option>
                                     <option value="listed">出品中</option>
                                     <option value="unlisted">未出品</option>
@@ -2358,7 +2537,7 @@
                     </td>
                     <td>
                         {% if item.is_sold or item.sale_date %}
-                        <span class="status-badge sold">売却済</span>
+                        <span class="status-badge sold">売却済み</span>
                         {% elif item.pending_completion_request %}
                         <span class="status-badge pending-sale">完了報告確認中</span>
                         {% elif item.pending_shipping_request %}
@@ -2497,6 +2676,7 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
+        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.listing_price or item.wholesale_price or item.purchase_price or 0) %}
         <div class="item-card {% if item.is_sold or item.sale_date %}card-sold{% elif item.can_send_completion_report %}card-completion-needed{% endif %}" data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
@@ -2527,6 +2707,10 @@
                     {% else %}
                     <div class="no-photo">-</div>
                     {% endif %}
+                    <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
+                    {% if item.is_sold or item.sale_date %}
+                    <div class="card-sold-overlay">売却済み</div>
+                    {% endif %}
                 </div>
                 <div class="card-title">
                     <span class="card-id">{{ item.kaika_product_code or '-' }}</span>
@@ -2541,7 +2725,7 @@
                 </div>
                 <div class="card-status">
                     {% if item.is_sold or item.sale_date %}
-                    <span class="status-badge sold">売却済</span>
+                    <span class="status-badge sold">売却済み</span>
                     {% elif item.pending_completion_request %}
                     <span class="status-badge pending-sale">完了報告確認中</span>
                     {% elif item.pending_shipping_request %}
@@ -2560,6 +2744,7 @@
                 </div>
             </div>
             <div class="card-body">
+                <div class="mobile-card-status">{{ item.mobile_status_label or '-' }}</div>
                 <div class="card-prices three-col">
                     <div class="price-item">
                         <span class="price-label">卸価格</span>

@@ -9,14 +9,14 @@
 </div>
 
 <div class="doc-tabs" id="document-history-tabs">
-    <button class="doc-tab active" data-tab="kaitori">買取明細書</button>
-    <button class="doc-tab" data-tab="mitsumori">見積依頼書</button>
-    <button class="doc-tab" data-tab="shoudaku">買取承諾書</button>
-    <button class="doc-tab" data-tab="shikiri">精算書</button>
-    <button class="doc-tab" data-tab="keisan">計算書</button>
+    <button class="doc-tab {% if active_tab == 'kaitori' %}active{% endif %}" data-tab="kaitori">買取明細書</button>
+    <button class="doc-tab {% if active_tab == 'mitsumori' %}active{% endif %}" data-tab="mitsumori">見積依頼書</button>
+    <button class="doc-tab {% if active_tab == 'shoudaku' %}active{% endif %}" data-tab="shoudaku">買取承諾書</button>
+    <button class="doc-tab {% if active_tab == 'shikiri' %}active{% endif %}" data-tab="shikiri">精算書</button>
+    <button class="doc-tab {% if active_tab == 'keisan' %}active{% endif %}" data-tab="keisan">計算書</button>
 </div>
 
-<section class="tab-content active" id="tab-kaitori">
+<section class="tab-content {% if active_tab == 'kaitori' %}active{% endif %}" id="tab-kaitori">
     <div class="tab-header">
         <div>
             <h2>買取明細書</h2>
@@ -64,7 +64,7 @@
     {% endif %}
 </section>
 
-<section class="tab-content" id="tab-mitsumori">
+<section class="tab-content {% if active_tab == 'mitsumori' %}active{% endif %}" id="tab-mitsumori">
     <div class="tab-header">
         <div>
             <h2>見積依頼書</h2>
@@ -112,7 +112,7 @@
     {% endif %}
 </section>
 
-<section class="tab-content" id="tab-shoudaku">
+<section class="tab-content {% if active_tab == 'shoudaku' %}active{% endif %}" id="tab-shoudaku">
     <div class="tab-header">
         <div>
             <h2>買取承諾書・個人買取</h2>
@@ -152,7 +152,7 @@
     {% endif %}
 </section>
 
-<section class="tab-content" id="tab-shikiri">
+<section class="tab-content {% if active_tab == 'shikiri' %}active{% endif %}" id="tab-shikiri">
     <div class="tab-header">
         <div>
             <h2>精算書</h2>
@@ -185,7 +185,7 @@
     {% endif %}
 </section>
 
-<section class="tab-content" id="tab-keisan">
+<section class="tab-content {% if active_tab == 'keisan' %}active{% endif %}" id="tab-keisan">
     <div class="tab-header">
         <div>
             <h2>計算書</h2>
@@ -507,6 +507,9 @@ document.querySelectorAll('.doc-tab').forEach(function(tab) {
         if (target) {
             target.classList.add('active');
         }
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab.dataset.tab);
+        window.history.replaceState({}, '', url.toString());
     });
 });
 </script>
