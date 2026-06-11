@@ -44,16 +44,17 @@
           {% for client in clients %}
           {% set setting = client.monthly_setting %}
           <tr>
-            <form method="POST">
-              <input type="hidden" name="user_id" value="{{ client.id }}">
-              <td><strong>{{ client.name }}</strong><br><small>{{ client.email or client.username }}</small></td>
-              <td><label class="fee-check"><input type="checkbox" name="monthly_fee_enabled" value="1" {% if setting.monthly_fee_enabled %}checked{% endif %}> あり</label></td>
-              <td><input type="number" name="monthly_fee_amount" min="0" value="{{ setting.monthly_fee_amount }}"></td>
-              <td><label class="fee-check"><input type="checkbox" name="free_campaign_enabled" value="1" {% if setting.free_campaign_enabled %}checked{% endif %}> あり</label></td>
-              <td><input type="number" name="free_period_days" min="0" value="{{ setting.free_period_days }}"> 日</td>
-              <td><input type="number" name="closing_day" min="1" max="31" value="{{ setting.closing_day or '' }}" placeholder="月末"></td>
-              <td><button type="submit" class="btn btn-primary btn-sm">保存</button></td>
-            </form>
+            <td>
+              <form id="monthly-fee-form-{{ client.id }}" method="POST"></form>
+              <input form="monthly-fee-form-{{ client.id }}" type="hidden" name="user_id" value="{{ client.id }}">
+              <strong>{{ client.name }}</strong><br><small>{{ client.email or client.username }}</small>
+            </td>
+            <td><label class="fee-check"><input form="monthly-fee-form-{{ client.id }}" type="checkbox" name="monthly_fee_enabled" value="1" {% if setting.monthly_fee_enabled %}checked{% endif %}> あり</label></td>
+            <td><input form="monthly-fee-form-{{ client.id }}" type="number" name="monthly_fee_amount" min="0" value="{{ setting.monthly_fee_amount }}"></td>
+            <td><label class="fee-check"><input form="monthly-fee-form-{{ client.id }}" type="checkbox" name="free_campaign_enabled" value="1" {% if setting.free_campaign_enabled %}checked{% endif %}> あり</label></td>
+            <td><input form="monthly-fee-form-{{ client.id }}" type="number" name="free_period_days" min="0" value="{{ setting.free_period_days }}"> 日</td>
+            <td><input form="monthly-fee-form-{{ client.id }}" type="number" name="closing_day" min="1" max="31" value="{{ setting.closing_day or '' }}" placeholder="月末"></td>
+            <td><button form="monthly-fee-form-{{ client.id }}" type="submit" class="btn btn-primary btn-sm">保存</button></td>
           </tr>
           {% endfor %}
         </tbody>
