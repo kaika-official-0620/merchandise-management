@@ -14,7 +14,7 @@
 
 {% macro request_card(req) %}
 {% set purchase_price = req.purchase_price or 0 %}
-{% set profit = (req.sale_price or 0) - purchase_price - (req.shipping_cost or 0) - (req.commission or 0) %}
+{% set profit = (req.sale_price or 0) - purchase_price - (req.shipping_cost or 0) - (req.commission or 0) - (req.other_cost or 0) %}
 <article class="request-card {{ req.status }}">
     <div class="request-card-head">
         <div class="request-card-tags">
@@ -118,6 +118,10 @@
             </div>
             {% endif %}
 
+            {% if req.user_note %}
+            <div class="admin-note">ユーザー備考: {{ req.user_note }}</div>
+            {% endif %}
+
             {% if req.admin_note %}
             <div class="admin-note">メモ: {{ req.admin_note }}</div>
             {% endif %}
@@ -162,6 +166,7 @@
                     data-sale-price="{{ req.sale_price or 0 }}"
                     data-shipping-cost="{{ req.shipping_cost or 0 }}"
                     data-commission="{{ req.commission or 0 }}"
+                    data-other-cost="{{ req.other_cost or 0 }}"
                     data-purchase-price="{{ purchase_price }}"
                     onclick="openApproveModal(this)">
                 承認する
@@ -401,6 +406,10 @@
                     <label for="approveCommission">手数料</label>
                     <input type="number" id="approveCommission" name="approved_commission" min="0">
                 </div>
+                <div class="field" style="margin-top:.85rem;">
+                    <label for="approveOtherCost">その他費用</label>
+                    <input type="number" id="approveOtherCost" name="approved_other_cost" min="0">
+                </div>
             </div>
             <div class="field" style="margin-top:1rem;">
                 <label for="approveAdminNote">管理メモ</label>
@@ -439,6 +448,7 @@
 const approveSalePriceInput = document.getElementById('approveSalePrice');
 const approveShippingCostInput = document.getElementById('approveShippingCost');
 const approveCommissionInput = document.getElementById('approveCommission');
+const approveOtherCostInput = document.getElementById('approveOtherCost');
 const approvePreviewGrid = document.getElementById('approvePreviewGrid');
 const approvePurchasePreview = document.getElementById('approvePurchasePreview');
 const approveProfitPreview = document.getElementById('approveProfitPreview');
@@ -453,7 +463,8 @@ function syncApprovePreview() {
   const salePrice = Number(approveSalePriceInput?.value || 0);
   const shippingCost = Number(approveShippingCostInput?.value || 0);
   const commission = Number(approveCommissionInput?.value || 0);
-  const profit = salePrice - purchasePrice - shippingCost - commission;
+  const otherCost = Number(approveOtherCostInput?.value || 0);
+  const profit = salePrice - purchasePrice - shippingCost - commission - otherCost;
   approvePurchasePreview.textContent = formatYen(purchasePrice);
   approveProfitPreview.textContent = formatYen(profit);
   approveProfitPreview.classList.toggle('positive', profit >= 0);
@@ -470,12 +481,16 @@ function openApproveModal(button) {
     : '売れた商品画像と発送用QR画像を確認して承認してください。承認後、実際に発送したタイミングで「発送しました」を押します。';
   document.getElementById('approveForm').action = '/admin/sale-request/' + button.dataset.requestId + '/approve';
   document.getElementById('approveCompletionFields').style.display = isCompletion ? 'block' : 'none';
+  if (approveOtherCostInput?.closest('.field')) {
+    approveOtherCostInput.closest('.field').style.display = isCompletion ? 'block' : 'none';
+  }
   approvePreviewGrid.classList.toggle('open', isCompletion);
   approvePreviewGrid.dataset.purchasePrice = button.dataset.purchasePrice || 0;
   approveSalePriceInput.required = isCompletion;
   approveSalePriceInput.value = isCompletion ? (button.dataset.salePrice || '') : '';
   approveShippingCostInput.value = isCompletion ? (button.dataset.shippingCost || 0) : '';
   approveCommissionInput.value = isCompletion ? (button.dataset.commission || 0) : '';
+  approveOtherCostInput.value = isCompletion ? (button.dataset.otherCost || 0) : '';
   document.getElementById('approveAdminNote').value = '';
   syncApprovePreview();
   document.getElementById('approveModal').classList.add('open');
@@ -493,7 +508,7 @@ function closeModal(id) {
   document.getElementById(id)?.classList.remove('open');
 }
 
-[approveSalePriceInput, approveShippingCostInput, approveCommissionInput].forEach((el) => {
+[approveSalePriceInput, approveShippingCostInput, approveCommissionInput, approveOtherCostInput].forEach((el) => {
   el?.addEventListener('input', syncApprovePreview);
 });
 

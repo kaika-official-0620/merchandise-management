@@ -35,7 +35,7 @@
   </section>
   <section class="settle-grid">
     {% for client in clients %}
-    <article class="client-card">
+    <article class="client-card" data-detail-url="{{ client.settlement_url }}">
       <div>
         <h3>{{ client.name }}</h3>
         <p>{{ client.email or client.username }}</p>

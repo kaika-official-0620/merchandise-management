@@ -89,6 +89,13 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] kaika business flow patch skipped: {patch_exc}", flush=True)
 
+try:
+    from kaika_followup_patch_20260612 import apply as apply_followup_patch
+
+    apply_followup_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] kaika followup patch skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"

@@ -1719,7 +1719,7 @@
         }
 
         .mobile-status-badge.sold {
-            background: rgba(15, 23, 42, 0.88);
+            background: rgba(220, 38, 38, 0.94);
         }
 
         .mobile-status-badge.pending,
@@ -1866,7 +1866,7 @@
         justify-content: center;
         width: 100%;
         padding: 0.42rem 0.7rem;
-        border-radius: 999px;
+        border-radius: 6px;
         font-size: 0.76rem;
         font-weight: 700;
         line-height: 1.2;
@@ -2378,11 +2378,15 @@
             <div class="filter-item">
                 <label>販売状況</label>
                 <select id="tab-filter-status">
-                    <option value="">すべて</option>
-                                    <option value="sold">売却済み</option>
-                                    <option value="appraisal_pending">査定待ち</option>
-                                    <option value="listed">出品中</option>
-                                    <option value="unlisted">未出品</option>
+                    <option value="" selected>すべて</option>
+                    <option value="sold">売却済みのみ</option>
+                    <option value="transaction">取引中のみ</option>
+                    <option value="listed">出品中のみ</option>
+                    <option value="agency">業者依頼中のみ</option>
+                    <option value="shipping_pending">発送依頼中のみ</option>
+                    <option value="completion_pending">取引完了依頼中のみ</option>
+                    <option value="appraisal_pending">査定待ちのみ</option>
+                    <option value="unlisted">未出品のみ</option>
                 </select>
             </div>
         </div>
@@ -2503,7 +2507,7 @@
                     data-profit="{{ item.profit if (item.is_sold or item.sale_date) else (item.expected_profit if item.expected_profit is defined else 0) }}"
                     data-sale-date="{{ item.sale_date or '' }}"
                     data-status-priority="{{ item.status_priority or 50 }}"
-                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request %}completion_pending{% elif item.pending_shipping_request %}shipping_pending{% elif item.can_send_completion_report or item.approved_shipping_request %}transaction{% elif item.pending_sales_agency %}agency{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
                     data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
@@ -2629,6 +2633,8 @@
                                 data-sale-price="{{ item.completion_request.sale_price or 0 }}"
                                 data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
                                 data-commission="{{ item.completion_request.commission or 0 }}"
+                                data-other-cost="{{ item.completion_request.other_cost or 0 }}"
+                                data-user-note="{{ item.completion_request.user_note or '' }}"
                                 data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
                                 data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
                                 取引完了報告を修正
@@ -2723,7 +2729,7 @@
             data-profit="{{ item.profit if (item.is_sold or item.sale_date) else (item.expected_profit if item.expected_profit is defined else 0) }}"
             data-sale-date="{{ item.sale_date or '' }}"
             data-status-priority="{{ item.status_priority or 50 }}"
-            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request %}completion_pending{% elif item.pending_shipping_request %}shipping_pending{% elif item.can_send_completion_report or item.approved_shipping_request %}transaction{% elif item.pending_sales_agency %}agency{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}true{% else %}false{% endif %}"
             data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
@@ -2745,7 +2751,7 @@
                     <div class="no-photo">-</div>
                     {% endif %}
                     <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
-                    <div class="mobile-status-badge {% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request or item.pending_shipping_request or item.can_send_completion_report or item.approved_shipping_request %}action{% elif item.appraisal_status in ['waiting', 'inspecting'] %}pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">{{ mobile_badge_label }}</div>
+                    <div class="mobile-status-badge {% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request or item.pending_shipping_request or item.can_send_completion_report or item.approved_shipping_request or item.pending_sales_agency %}action{% elif item.appraisal_status in ['waiting', 'inspecting'] %}pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}">{{ mobile_badge_label }}</div>
                     {% if item.is_sold or item.sale_date %}
                     <div class="card-sold-overlay">売却済み</div>
                     {% endif %}
@@ -2862,6 +2868,8 @@
                         data-sale-price="{{ item.completion_request.sale_price or 0 }}"
                         data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
                         data-commission="{{ item.completion_request.commission or 0 }}"
+                        data-other-cost="{{ item.completion_request.other_cost or 0 }}"
+                        data-user-note="{{ item.completion_request.user_note or '' }}"
                         data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
                         data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
                         取引完了報告を修正
@@ -3339,7 +3347,7 @@
             image1: '取引完了画面',
             image2: '補足画像（任意）',
             imageHint: '取引完了画面のスクリーンショットを送ってください。',
-            showFinancials: false,
+            showFinancials: true,
             requireSecondImage: false,
             primaryRequired: true
         }
@@ -3415,7 +3423,7 @@
     }
 
     function toggleSaleRequestFinancialFields(prefix, showFinancials) {
-        ['Price', 'Shipping', 'Commission'].forEach((fieldName) => {
+        ['Price', 'Shipping', 'Commission', 'OtherCost'].forEach((fieldName) => {
             const group = document.getElementById(prefix + fieldName + 'Group');
             const input = document.getElementById(prefix + fieldName);
             if (!group || !input) return;
@@ -3429,6 +3437,13 @@
                 input.value = fieldName === 'Price' ? '' : 0;
             }
         });
+        const noteGroup = document.getElementById(prefix + 'UserNoteGroup');
+        const noteInput = document.getElementById(prefix + 'UserNote');
+        if (noteGroup && noteInput) {
+            noteGroup.style.display = showFinancials ? '' : 'none';
+            noteInput.disabled = !showFinancials;
+            if (!showFinancials) noteInput.value = '';
+        }
     }
 
     function applySaleRequestMode(prefix, requestType, listingPrice = 0) {
@@ -3446,6 +3461,7 @@
         const priceInput = document.getElementById(prefix + 'Price');
         const shippingInput = document.getElementById(prefix + 'Shipping');
         const commissionInput = document.getElementById(prefix + 'Commission');
+        const otherCostInput = document.getElementById(prefix + 'OtherCost');
 
         if (titleEl) titleEl.textContent = prefix === 'editRequest' ? (config.editTitle || config.title) : config.title;
         if (helpEl) helpEl.textContent = config.help;
@@ -3460,6 +3476,7 @@
         if (priceInput && config.showFinancials) priceInput.value = listingPrice || '';
         if (shippingInput && config.showFinancials) shippingInput.value = shippingInput.value || 0;
         if (commissionInput && config.showFinancials) commissionInput.value = commissionInput.value || 0;
+        if (otherCostInput && config.showFinancials) otherCostInput.value = otherCostInput.value || 0;
         setSaleRequestSubmitting(prefix, false);
         setSaleRequestMessage(prefix, '');
     }
@@ -3485,6 +3502,8 @@
         document.getElementById('saleRequestPrice').value = 0;
         document.getElementById('saleRequestShipping').value = 0;
         document.getElementById('saleRequestCommission').value = 0;
+        document.getElementById('saleRequestOtherCost').value = 0;
+        document.getElementById('saleRequestUserNote').value = '';
         resetUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', 'クリックまたはドラッグして画像を選択');
         resetUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', 'クリックまたはドラッグして画像を選択');
         applySaleRequestMode('saleRequest', 'completion_report', listingPrice);
@@ -3501,13 +3520,15 @@
         document.getElementById('saleRequestModal').classList.remove('open');
     }
 
-    function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, qrImagePath, qrImagePath2) {
+    function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, otherCost, userNote, qrImagePath, qrImagePath2) {
         document.getElementById('editRequestId').value = requestId;
         document.getElementById('editRequestProductName').textContent = productName;
         document.getElementById('editRequestQrImage').value = '';
         document.getElementById('editRequestQrImage2').value = '';
         document.getElementById('editRequestShipping').value = shippingCost || 0;
         document.getElementById('editRequestCommission').value = commission || 0;
+        document.getElementById('editRequestOtherCost').value = otherCost || 0;
+        document.getElementById('editRequestUserNote').value = userNote || '';
 
         resetUploadArea('editFileUploadArea', 'editFileUploadText', 'editFileUploadName', 'クリックまたはドラッグして新しい画像を選択');
         resetUploadArea('editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', 'クリックまたはドラッグして新しい画像を選択');
@@ -3517,6 +3538,8 @@
             document.getElementById('editRequestPrice').value = salePrice || '';
             document.getElementById('editRequestShipping').value = shippingCost || 0;
             document.getElementById('editRequestCommission').value = commission || 0;
+            document.getElementById('editRequestOtherCost').value = otherCost || 0;
+            document.getElementById('editRequestUserNote').value = userNote || '';
         }
 
         const currentImage = document.getElementById('editCurrentImage');
@@ -3567,6 +3590,8 @@
         const salePrice = Number(trigger.dataset.salePrice || 0);
         const shippingCost = Number(trigger.dataset.shippingCost || 0);
         const commission = Number(trigger.dataset.commission || 0);
+        const otherCost = Number(trigger.dataset.otherCost || 0);
+        const userNote = trigger.dataset.userNote || '';
         const qrImagePath = trigger.dataset.qrImagePath || '';
         const qrImagePath2 = trigger.dataset.qrImagePath2 || '';
         const requestType = trigger.dataset.requestType || 'shipping_request';
@@ -3589,6 +3614,8 @@
                 salePrice,
                 shippingCost,
                 commission,
+                otherCost,
+                userNote,
                 qrImagePath,
                 qrImagePath2
             );
@@ -3734,6 +3761,18 @@
                             style="display:none;">
                     </div>
 
+                    <div class="form-group" id="saleRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用 <small>（任意）</small></label>
+                        <input type="number" id="saleRequestOtherCost" name="other_cost" min="0"
+                            placeholder="その他費用を入力" value="0">
+                    </div>
+
+                    <div class="form-group" id="saleRequestUserNoteGroup" style="display: none;">
+                        <label>備考 <small>（任意）</small></label>
+                        <textarea id="saleRequestUserNote" name="user_note" rows="3"
+                            placeholder="取引完了報告に関する補足があれば入力してください"></textarea>
+                    </div>
+
                     <div class="form-group" id="saleRequestCommissionGroup" style="display: none;">
                         <label>手数料 <small>（管理側確認用）</small></label>
                         <input type="number" id="saleRequestCommission" name="commission" min="0"
@@ -3777,6 +3816,18 @@
                         <label>送料 <small>（管理側確認用）</small></label>
                         <input type="number" id="editRequestShipping" name="shipping_cost" min="0"
                             placeholder="送料を入力" value="0">
+                    </div>
+
+                    <div class="form-group" id="editRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用 <small>（任意）</small></label>
+                        <input type="number" id="editRequestOtherCost" name="other_cost" min="0"
+                            placeholder="その他費用を入力" value="0">
+                    </div>
+
+                    <div class="form-group" id="editRequestUserNoteGroup" style="display: none;">
+                        <label>備考 <small>（任意）</small></label>
+                        <textarea id="editRequestUserNote" name="user_note" rows="3"
+                            placeholder="取引完了報告に関する補足があれば入力してください"></textarea>
                     </div>
 
                     <div class="form-group" id="editRequestCommissionGroup" style="display: none;">

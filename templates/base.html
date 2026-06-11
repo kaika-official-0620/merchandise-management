@@ -396,6 +396,7 @@
     {% endif %}
     
     <!-- サイドバーメニュー -->
+    <div class="sidebar-edge-trigger" aria-hidden="true"></div>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -1409,6 +1410,25 @@
         cursor: pointer;
     }
 
+    .sidebar-edge-trigger {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 36px;
+        height: 100vh;
+        z-index: 895;
+        background: transparent;
+        touch-action: pan-y;
+    }
+
+    body.sidebar-open .sidebar-edge-trigger {
+        pointer-events: none;
+    }
+
+    [data-detail-url] {
+        cursor: pointer;
+    }
+
     img.image-fallback {
         object-fit: contain !important;
         background: #f8fafc;
@@ -1417,6 +1437,9 @@
     @media (max-width: 768px) {
         .table-edge-scrollable {
             cursor: auto;
+        }
+        .sidebar-edge-trigger {
+            width: 42px;
         }
     }
     </style>
@@ -1546,6 +1569,50 @@
             const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !sidebar.classList.contains('open');
             setSidebarOpen(shouldOpen);
         }
+
+        (function setupSidebarEdgeTrigger() {
+            const edgeTrigger = document.querySelector('.sidebar-edge-trigger');
+            if (!edgeTrigger) {
+                return;
+            }
+
+            function openFromEdge(event) {
+                const active = document.activeElement;
+                if (active && active.matches && active.matches('input, textarea, select, [contenteditable="true"]')) {
+                    return;
+                }
+                event.preventDefault();
+                toggleSidebar(true);
+            }
+
+            edgeTrigger.addEventListener('mouseenter', function(event) {
+                if (window.matchMedia('(hover: hover)').matches) {
+                    openFromEdge(event);
+                }
+            });
+            edgeTrigger.addEventListener('click', openFromEdge);
+            edgeTrigger.addEventListener('touchstart', openFromEdge, { passive: false });
+        })();
+
+        (function setupDetailUrlClickTargets() {
+            document.addEventListener('click', function(event) {
+                const target = event.target;
+                if (!target || !target.closest) {
+                    return;
+                }
+                if (target.closest('a, button, input, textarea, select, label, summary, [role="button"], .no-row-click')) {
+                    return;
+                }
+                const detailTarget = target.closest('[data-detail-url]');
+                if (!detailTarget) {
+                    return;
+                }
+                const detailUrl = detailTarget.dataset.detailUrl;
+                if (detailUrl) {
+                    window.location.href = detailUrl;
+                }
+            });
+        })();
         
         // カテゴリトグル
         function toggleCategory(btn) {

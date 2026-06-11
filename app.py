@@ -12687,8 +12687,8 @@ def add_item():
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
-                    sales_destination, commission, is_shipped, notes, scope)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    sales_destination, commission, is_shipped, notes, created_by, updated_by, scope)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -12720,6 +12720,8 @@ def add_item():
                 commission_value,
                 'is_shipped' in request.form,
                 request.form.get('notes'),
+                current_user.id,
+                current_user.id,
                 'admin'
             ))
         else:
@@ -12729,8 +12731,8 @@ def add_item():
                     supplier_detail, id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping, expected_commission,
                     is_listed, listing_date, sale_date, sale_type, sale_price, shipping_cost,
-                    sales_destination, commission, is_shipped, notes, scope)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    sales_destination, commission, is_shipped, notes, created_by, updated_by, scope)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 current_user.id,
                 request.form.get('purchase_date') or None,
@@ -12762,6 +12764,8 @@ def add_item():
                 commission_value,
                 1 if 'is_shipped' in request.form else 0,
                 request.form.get('notes'),
+                current_user.id,
+                current_user.id,
                 'admin'
             ))
         
@@ -13380,6 +13384,31 @@ def view_item(id):
         )
 
     enrich_item_sale_request_state(item_dict, include_all_users=current_user.is_admin() or current_user.is_owner())
+
+    if current_user.is_admin() or current_user.is_owner():
+        actor_ids = [actor_id for actor_id in [item_dict.get('created_by'), item_dict.get('updated_by')] if actor_id]
+        actor_map = {}
+        if actor_ids:
+            try:
+                conn_actor = get_db()
+                if DATABASE_URL:
+                    cur_actor = conn_actor.cursor(cursor_factory=RealDictCursor)
+                    placeholders = ','.join(['%s'] * len(actor_ids))
+                    cur_actor.execute(f"SELECT id, username, display_name, email FROM users WHERE id IN ({placeholders})", actor_ids)
+                else:
+                    cur_actor = conn_actor.cursor()
+                    placeholders = ','.join(['?'] * len(actor_ids))
+                    cur_actor.execute(f"SELECT id, username, display_name, email FROM users WHERE id IN ({placeholders})", actor_ids)
+                actor_map = {
+                    dict(row).get('id'): (dict(row).get('display_name') or dict(row).get('username') or dict(row).get('email') or '不明')
+                    for row in cur_actor.fetchall()
+                }
+                cur_actor.close()
+                conn_actor.close()
+            except Exception as e:
+                print(f"Error resolving item actor names: {e}", flush=True)
+        item_dict['created_by_name'] = actor_map.get(item_dict.get('created_by')) or '既存データ'
+        item_dict['updated_by_name'] = actor_map.get(item_dict.get('updated_by')) or '-'
     
     # リファラーから戻り先URLを判定
     referrer = request.referrer or ''
@@ -23259,7 +23288,8 @@ def admin_items():
             items = []
             for item in items_raw:
                 item_dict = dict(item)
-                user_info = user_map.get(item_dict.get('user_id'))
+                creator_info = user_map.get(item_dict.get('created_by'))
+                user_info = creator_info or user_map.get(item_dict.get('user_id'))
                 if not user_info:
                     user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
@@ -23320,7 +23350,8 @@ def admin_items():
             items = []
             for item in items_raw:
                 item_dict = dict(item)
-                user_info = user_map.get(item_dict.get('user_id'))
+                creator_info = user_map.get(item_dict.get('created_by'))
+                user_info = creator_info or user_map.get(item_dict.get('user_id'))
                 if not user_info:
                     user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
@@ -41046,6 +41077,23 @@ try:
         _kaika_business_patch.apply(_kaika_business_sys.modules.get(__name__))
 except Exception as _kaika_business_patch_error:
     print(f"[WARN] kaika business flow patch apply failed: {_kaika_business_patch_error}", flush=True)
+
+try:
+    import importlib.util as _kaika_followup_importlib_util
+    import sys as _kaika_followup_sys
+
+    _kaika_followup_patch_path = os.path.join(os.path.dirname(__file__), "kaika_followup_patch_20260612.py")
+    if os.path.exists(_kaika_followup_patch_path):
+        _kaika_followup_spec = _kaika_followup_importlib_util.spec_from_file_location(
+            "kaika_followup_patch_20260612",
+            _kaika_followup_patch_path,
+        )
+        _kaika_followup_patch = _kaika_followup_importlib_util.module_from_spec(_kaika_followup_spec)
+        _kaika_followup_sys.modules["kaika_followup_patch_20260612"] = _kaika_followup_patch
+        _kaika_followup_spec.loader.exec_module(_kaika_followup_patch)
+        _kaika_followup_patch.apply(_kaika_followup_sys.modules.get(__name__))
+except Exception as _kaika_followup_patch_error:
+    print(f"[WARN] kaika followup patch apply failed: {_kaika_followup_patch_error}", flush=True)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

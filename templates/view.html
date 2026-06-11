@@ -894,6 +894,8 @@
                 data-sale-price="{{ item.completion_request.sale_price or 0 }}"
                 data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
                 data-commission="{{ item.completion_request.commission or 0 }}"
+                data-other-cost="{{ item.completion_request.other_cost or 0 }}"
+                data-user-note="{{ item.completion_request.user_note or '' }}"
                 data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
                 data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
                 取引完了報告を修正
@@ -1019,6 +1021,12 @@
             <dl class="detail-list">
                 <dt>管理No</dt>
                 <dd>{{ item.id }}</dd>
+                {% if current_user.is_admin() or current_user.is_owner() %}
+                <dt>登録者</dt>
+                <dd>{{ item.created_by_name or '既存データ' }}</dd>
+                <dt>最終更新者</dt>
+                <dd>{{ item.updated_by_name or '-' }}</dd>
+                {% endif %}
                 <dt>仕入日</dt>
                 <dd>{{ item.purchase_date or '-' }}</dd>
                 <dt>開花商品番号</dt>
@@ -1422,6 +1430,14 @@ document.addEventListener('keydown', function(e) {
                         <label>送料</label>
                         <input type="number" id="saleRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
                     </div>
+                    <div class="form-group" id="saleRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用</label>
+                        <input type="number" id="saleRequestOtherCost" name="other_cost" min="0" value="0" placeholder="その他費用を入力" disabled>
+                    </div>
+                    <div class="form-group" id="saleRequestUserNoteGroup" style="display: none;">
+                        <label>備考</label>
+                        <textarea id="saleRequestUserNote" name="user_note" rows="3" placeholder="補足があれば入力してください" disabled></textarea>
+                    </div>
                     <div class="form-group" id="saleRequestCommissionGroup" style="display: none;">
                         <label>手数料</label>
                         <input type="number" id="saleRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
@@ -1477,6 +1493,14 @@ document.addEventListener('keydown', function(e) {
                         <label>送料</label>
                         <input type="number" id="editRequestShipping" name="shipping_cost" min="0" value="0" placeholder="送料を入力" disabled>
                     </div>
+                    <div class="form-group" id="editRequestOtherCostGroup" style="display: none;">
+                        <label>その他費用</label>
+                        <input type="number" id="editRequestOtherCost" name="other_cost" min="0" value="0" placeholder="その他費用を入力" disabled>
+                    </div>
+                    <div class="form-group" id="editRequestUserNoteGroup" style="display: none;">
+                        <label>備考</label>
+                        <textarea id="editRequestUserNote" name="user_note" rows="3" placeholder="補足があれば入力してください" disabled></textarea>
+                    </div>
                     <div class="form-group" id="editRequestCommissionGroup" style="display: none;">
                         <label>手数料</label>
                         <input type="number" id="editRequestCommission" name="commission" min="0" value="0" placeholder="手数料を入力" disabled>
@@ -1529,7 +1553,8 @@ const detailSaleRequestModeConfig = {
         image1: '売れた商品が分かる画像',
         image2: '発送用QRコード画像',
         imageHint: '発送依頼では2枚とも必須です。',
-        requireSecondImage: true
+        requireSecondImage: true,
+        showFinancials: false
     },
     completion_report: {
         title: '取引完了報告を送る',
@@ -1540,7 +1565,8 @@ const detailSaleRequestModeConfig = {
         image1: '取引完了画面',
         image2: '補足画像（任意）',
         imageHint: '取引完了画面のスクリーンショットを送ってください。',
-        requireSecondImage: false
+        requireSecondImage: false,
+        showFinancials: true
     }
 };
 
@@ -1586,6 +1612,26 @@ function applyDetailSaleRequestMode(prefix, requestType) {
     document.getElementById(prefix + 'ImageHint').textContent = config.imageHint;
     const secondGroup = document.getElementById(prefix + 'QrImage2').closest('.form-group');
     secondGroup.style.display = '';
+    ['Price', 'Shipping', 'Commission', 'OtherCost'].forEach((fieldName) => {
+        const group = document.getElementById(prefix + fieldName + 'Group');
+        const input = document.getElementById(prefix + fieldName);
+        if (!group || !input) return;
+        group.style.display = config.showFinancials ? '' : 'none';
+        input.disabled = !config.showFinancials;
+        input.required = config.showFinancials && fieldName === 'Price';
+        if (!config.showFinancials) {
+            input.value = '';
+        } else if (!input.value) {
+            input.value = fieldName === 'Price' ? '' : 0;
+        }
+    });
+    const noteGroup = document.getElementById(prefix + 'UserNoteGroup');
+    const noteInput = document.getElementById(prefix + 'UserNote');
+    if (noteGroup && noteInput) {
+        noteGroup.style.display = config.showFinancials ? '' : 'none';
+        noteInput.disabled = !config.showFinancials;
+        if (!config.showFinancials) noteInput.value = '';
+    }
     setDetailSaleRequestMessage(prefix, '');
 }
 
@@ -1614,6 +1660,8 @@ function openShippingRequestModal(itemId, productName) {
     document.getElementById('saleRequestProductName').textContent = productName;
     document.getElementById('saleRequestQrImage').value = '';
     document.getElementById('saleRequestQrImage2').value = '';
+    document.getElementById('saleRequestOtherCost').value = 0;
+    document.getElementById('saleRequestUserNote').value = '';
     resetDetailUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', '画像を選択');
     resetDetailUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '画像を選択');
     applyDetailSaleRequestMode('saleRequest', 'shipping_request');
@@ -1626,6 +1674,8 @@ function openCompletionRequestModal(itemId, productName) {
     document.getElementById('saleRequestProductName').textContent = productName;
     document.getElementById('saleRequestQrImage').value = '';
     document.getElementById('saleRequestQrImage2').value = '';
+    document.getElementById('saleRequestOtherCost').value = 0;
+    document.getElementById('saleRequestUserNote').value = '';
     resetDetailUploadArea('fileUploadArea', 'fileUploadText', 'fileUploadName', '画像を選択');
     resetDetailUploadArea('fileUploadArea2', 'fileUploadText2', 'fileUploadName2', '画像を選択');
     applyDetailSaleRequestMode('saleRequest', 'completion_report');
@@ -1638,7 +1688,7 @@ function closeSaleRequestModal() {
     document.getElementById('saleRequestModal').classList.remove('open');
 }
 
-function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, qrImagePath, qrImagePath2) {
+function openEditRequestModal(requestId, requestType, productName, salePrice, shippingCost, commission, otherCost, userNote, qrImagePath, qrImagePath2) {
     document.getElementById('editRequestForm').action = '/sale-request/edit/' + requestId;
     document.getElementById('editRequestId').value = requestId;
     document.getElementById('editRequestProductName').textContent = productName;
@@ -1647,6 +1697,8 @@ function openEditRequestModal(requestId, requestType, productName, salePrice, sh
     document.getElementById('editRequestPrice').value = salePrice || '';
     document.getElementById('editRequestShipping').value = shippingCost || 0;
     document.getElementById('editRequestCommission').value = commission || 0;
+    document.getElementById('editRequestOtherCost').value = otherCost || 0;
+    document.getElementById('editRequestUserNote').value = userNote || '';
     resetDetailUploadArea('editFileUploadArea', 'editFileUploadText', 'editFileUploadName', '画像を選択');
     resetDetailUploadArea('editFileUploadArea2', 'editFileUploadText2', 'editFileUploadName2', '画像を選択');
     applyDetailSaleRequestMode('editRequest', requestType || 'shipping_request');
@@ -1698,6 +1750,8 @@ document.addEventListener('click', function(event) {
             Number(trigger.dataset.salePrice || 0),
             Number(trigger.dataset.shippingCost || 0),
             Number(trigger.dataset.commission || 0),
+            Number(trigger.dataset.otherCost || 0),
+            trigger.dataset.userNote || '',
             trigger.dataset.qrImagePath || '',
             trigger.dataset.qrImagePath2 || ''
         );

@@ -25,6 +25,19 @@
     </div>
 
     <!-- 問い合わせ一覧 -->
+    <form method="GET" class="admin-inquiry-search-form">
+        {% if status_filter %}
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        {% endif %}
+        <input type="search" name="q" value="{{ search_filters.q if search_filters is defined else '' }}" placeholder="顧客名・件名・本文・ステータスを検索">
+        <input type="date" name="date_from" value="{{ search_filters.date_from if search_filters is defined else '' }}" aria-label="開始日">
+        <input type="date" name="date_to" value="{{ search_filters.date_to if search_filters is defined else '' }}" aria-label="終了日">
+        <button type="submit" class="btn btn-primary">検索</button>
+        {% if is_inquiry_filtered %}
+        <a href="{{ url_for('admin_inquiries') }}" class="btn btn-secondary">検索解除</a>
+        {% endif %}
+    </form>
+
     {% if inquiries %}
     <div class="inquiry-table-container">
         <table class="inquiry-table">
@@ -41,7 +54,8 @@
             </thead>
             <tbody>
                 {% for inquiry in inquiries %}
-                <tr class="inquiry-row status-row-{{ inquiry.status }} {% if inquiry.status == 'new' %}unread{% endif %}">
+                <tr class="inquiry-row status-row-{{ inquiry.status }} {% if inquiry.status == 'new' %}unread{% endif %}"
+                    data-detail-url="{{ url_for('admin_inquiry_view', id=inquiry.id) }}">
                     <td data-label="ステータス">
                         <span class="inquiry-status status-{{ inquiry.status }}">
                             {{ statuses.get(inquiry.status, inquiry.status) }}
@@ -103,6 +117,27 @@
 
 .filter-section {
     margin-bottom: 1rem;
+}
+
+.admin-inquiry-search-form {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) 150px 150px auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+.admin-inquiry-search-form input {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
 }
 
 .filter-buttons {
@@ -263,6 +298,14 @@
 }
 
 @media (max-width: 768px) {
+    .admin-inquiry-search-form {
+        grid-template-columns: 1fr 1fr;
+    }
+    .admin-inquiry-search-form input[type="search"],
+    .admin-inquiry-search-form .btn {
+        grid-column: 1 / -1;
+    }
+
     .inquiry-table-container {
         overflow-x: visible;
         background: transparent;

@@ -422,7 +422,7 @@
         <div class="table-scroll">
             <table class="history-table">
                 <thead>
-                    <tr>
+                    <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
                         <th>書類種別</th>
                         <th>書類No.</th>
                         <th>クライアント</th>
