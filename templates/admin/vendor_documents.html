@@ -126,6 +126,9 @@
             <td class="vendor-actions">
               <a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ダウンロード</a>
               <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-secondary btn-sm">買取明細書へ</a>
+              <form method="POST" action="{{ doc.delete_url }}" onsubmit="return confirm('この業者関連書類を削除しますか？');" style="display:inline;">
+                <button type="submit" class="btn btn-danger btn-sm">削除</button>
+              </form>
             </td>
           </tr>
           {% endfor %}

@@ -55,6 +55,11 @@
             <td class="history-actions">
               {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
               {% if row.download_url %}<a href="{{ row.download_url }}" class="btn btn-secondary btn-sm">ダウンロード</a>{% endif %}
+              {% if row.can_delete and row.delete_url %}
+              <form method="POST" action="{{ row.delete_url }}" onsubmit="return confirm('この書類を削除しますか？');" style="display:inline;">
+                <button type="submit" class="btn btn-danger btn-sm">削除</button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

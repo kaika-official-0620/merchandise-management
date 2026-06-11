@@ -501,6 +501,7 @@ def apply(module: Any) -> None:
                 doc["registered_label"] = format_datetime(doc.get("registered_at"))
                 doc["status_label"] = status_label(doc.get("status"))
                 doc["download_url"] = url_for("admin_vendor_document_download", document_id=doc["id"])
+                doc["delete_url"] = url_for("admin_vendor_document_delete", document_id=doc["id"])
             return docs
         finally:
             cur.close()
@@ -673,7 +674,10 @@ def apply(module: Any) -> None:
                         detail_url=url_for("admin_vendor_documents") if admin else None,
                         download_url=url_for("admin_vendor_document_download", document_id=doc["id"]) if admin else None,
                         source="vendor_documents",
+                        can_delete=bool(admin),
                     )
+                    if admin and rows:
+                        rows[-1]["delete_url"] = url_for("admin_vendor_document_delete", document_id=doc["id"])
             elif category == "other":
                 where = "" if admin else f"WHERE user_id = {ph}"
                 params = () if admin else (params_user,)
@@ -780,6 +784,37 @@ def apply(module: Any) -> None:
         if not absolute_path.startswith(static_root) or not os.path.exists(absolute_path):
             abort(404)
         return send_file(absolute_path, as_attachment=True, download_name=doc.get("original_filename") or os.path.basename(absolute_path))
+
+    def admin_vendor_document_delete(document_id: int):
+        ensure_schema()
+        ph = placeholder()
+        conn, cur = open_cursor()
+        doc = None
+        try:
+            cur.execute(f"SELECT * FROM vendor_documents WHERE id = {ph}", (document_id,))
+            doc = row_to_dict(cur.fetchone())
+            if not doc:
+                flash("削除対象の業者関連書類が見つかりません。", "error")
+                return redirect(url_for("admin_vendor_documents"))
+            cur.execute(f"DELETE FROM vendor_documents WHERE id = {ph}", (document_id,))
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        stored_path = str(doc.get("stored_path") or "").replace("\\", "/").lstrip("/")
+        if stored_path.startswith("static/"):
+            stored_path = stored_path[len("static/") :]
+        absolute_path = os.path.abspath(os.path.join(app.static_folder, stored_path))
+        static_root = os.path.abspath(app.static_folder)
+        if absolute_path.startswith(static_root) and os.path.exists(absolute_path):
+            try:
+                os.remove(absolute_path)
+            except OSError:
+                flash("書類データは削除しましたが、ファイル削除は後処理が必要です。", "warning")
+                return redirect(url_for("admin_vendor_documents", user_id=doc.get("user_id") or ""))
+        flash("業者関連書類を削除しました。", "success")
+        return redirect(url_for("admin_vendor_documents", user_id=doc.get("user_id") or ""))
 
     def admin_monthly_fee_settings():
         ensure_schema()
@@ -1143,6 +1178,7 @@ def apply(module: Any) -> None:
     ensure_schema()
     register("admin_vendor_documents", "/admin/vendor-documents", admin_vendor_documents, ["GET", "POST"], admin=True)
     register("admin_vendor_document_download", "/admin/vendor-documents/<int:document_id>/download", admin_vendor_document_download, ["GET"], admin=True)
+    register("admin_vendor_document_delete", "/admin/vendor-documents/<int:document_id>/delete", admin_vendor_document_delete, ["POST"], admin=True)
     register("admin_monthly_fee_settings", "/admin/monthly-fee-settings", admin_monthly_fee_settings, ["GET", "POST"], admin=True)
     register("admin_monthly_settlements", "/admin/monthly-settlements", admin_monthly_settlements, ["GET"], admin=True)
     register("admin_monthly_settlement_create", "/admin/monthly-settlements/create", admin_monthly_settlement_create, ["GET", "POST"], admin=True)
