@@ -1059,7 +1059,7 @@ def apply(module: Any) -> None:
     def admin_documents_dashboard_clean():
         ensure_schema()
         selected_group = (request.args.get("group") or "all").strip()
-        allowed_groups = {"all", "client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing"}
+        allowed_groups = {"all", "client_incoming", "vendor_outgoing", "vendor_incoming", "client_outgoing", "client_reply"}
         if selected_group not in allowed_groups:
             selected_group = "all"
 
@@ -1092,6 +1092,13 @@ def apply(module: Any) -> None:
                 "description": "買取明細書、精算書、送付待機中の書類を確認します。",
                 "url": url_for("admin_documents_dashboard", group="client_outgoing"),
             },
+            {
+                "key": "client_reply",
+                "step": 5,
+                "title": "クライアント返信確認",
+                "description": "買取承諾書など、クライアントから返信済みの書類を確認します。",
+                "url": url_for("admin_documents_dashboard", group="client_reply"),
+            },
         ]
         quick_links = [
             {"title": "業者関連書類を登録", "url": url_for("admin_vendor_documents"), "description": "PDF、png、jpg、jpegを登録"},
@@ -1103,12 +1110,15 @@ def apply(module: Any) -> None:
         request_rows: list[dict[str, Any]] = []
         vendor_documents = []
         shikiriosho_waiting = []
+        reply_rows = []
         if selected_group != "all":
             if selected_group == "vendor_incoming":
                 vendor_documents = fetch_vendor_documents()
             elif selected_group == "client_outgoing":
                 shikiriosho_waiting = build_history_rows("shikiriosho", admin=True, limit=120)
                 request_rows = build_history_rows("kaitori", admin=True, limit=80)
+            elif selected_group == "client_reply":
+                reply_rows = build_history_rows("shoudaku", admin=True, limit=120)
             else:
                 try:
                     fetcher = getattr(module, "_fetch_admin_documents_request_summaries", None)
@@ -1126,6 +1136,7 @@ def apply(module: Any) -> None:
             request_rows=request_rows,
             vendor_documents=vendor_documents,
             shikiriosho_waiting=shikiriosho_waiting,
+            reply_rows=reply_rows,
         )
 
     def admin_documents_history_clean():

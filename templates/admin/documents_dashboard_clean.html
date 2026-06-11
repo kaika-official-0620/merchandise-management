@@ -56,7 +56,8 @@
           {% if selected_group == 'client_incoming' %}顧客からの書類受付
           {% elif selected_group == 'vendor_outgoing' %}業者へ依頼する書類
           {% elif selected_group == 'vendor_incoming' %}業者関連書類
-          {% else %}顧客へ送付する書類{% endif %}
+          {% elif selected_group == 'client_outgoing' %}顧客へ送付する書類
+          {% else %}クライアント返信確認{% endif %}
         </h2>
         <p>この段階に関連する書類だけを表示しています。</p>
       </div>
@@ -115,6 +116,28 @@
       </table>
     </div>
     {% else %}<div class="empty-box">送付待機中または履歴表示できる精算書はありません。</div>{% endif %}
+  </section>
+  {% elif selected_group == 'client_reply' %}
+  <section class="doc-panel">
+    <div class="doc-actions">
+      <a href="{{ url_for('admin_documents_history', category='shoudaku') }}" class="btn btn-outline">買取承諾書履歴</a>
+    </div>
+    {% if reply_rows %}
+    <div class="doc-table-wrap">
+      <table class="doc-table">
+        <thead><tr><th>書類種別</th><th>No./書類名</th><th>クライアント</th><th>日付</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for row in reply_rows %}
+          <tr>
+            <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
+            <td>{{ row.status_label }}</td>
+            <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-box">確認できるクライアント返信書類はありません。</div>{% endif %}
   </section>
   {% else %}
   <section class="doc-panel">
