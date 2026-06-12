@@ -5841,6 +5841,18 @@ def ensure_sale_request_financial_columns(conn):
     finally:
         cur.close()
 
+def build_completion_report_notes(existing_notes, user_note='', admin_note=''):
+    notes = (existing_notes or '').strip()
+    additions = []
+    if user_note:
+        additions.append(f"取引完了報告備考: {user_note.strip()}")
+    if admin_note:
+        additions.append(f"管理者メモ: {admin_note.strip()}")
+    for addition in additions:
+        if addition and addition not in notes:
+            notes = f"{notes}\n{addition}".strip()
+    return notes
+
 def calculate_profit_rate(profit, purchase_price):
     """利益率を計算（利益 ÷ 仕入れ金額 × 100）"""
     if purchase_price > 0:
@@ -35441,6 +35453,12 @@ def submit_sale_request(item_id):
         item_dict = dict(item)
         
         # 取引完了報告は発送依頼承認後のみ受け付ける
+        if request_type == 'completion_report' and item_dict.get('sale_date'):
+            flash('この商品は既に取引完了報告が処理済みです。', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+
         if request_type == 'completion_report' and not (item_dict.get('is_shipped') or has_shipped_sale_request(cur, item_id)):
             flash('先に発送依頼の承認を受けてから、取引完了報告を送信してください', 'error')
             cur.close()
@@ -35747,7 +35765,8 @@ def approve_sale_request(request_id):
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
-                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status, m.product_name
+                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status,
+                       m.product_name, m.notes AS item_notes
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 WHERE sr.id = %s
@@ -35776,6 +35795,7 @@ def approve_sale_request(request_id):
             approved_shipping_cost = shipping_cost
             approved_commission = commission
             approved_other_cost = other_cost
+            approved_item_notes = sale_request.get('item_notes') or ''
 
             if request_type == 'completion_report':
                 if approved_sale_price_input is not None:
@@ -35795,6 +35815,11 @@ def approve_sale_request(request_id):
                     flash('送料と手数料は0以上で入力してください', 'error')
                     conn.close()
                     return redirect(redirect_to)
+                approved_item_notes = build_completion_report_notes(
+                    sale_request.get('item_notes'),
+                    sale_request.get('user_note'),
+                    admin_note,
+                )
             
             cur = conn.cursor()
             if request_type == 'completion_report':
@@ -35816,7 +35841,7 @@ def approve_sale_request(request_id):
                 cur.execute('''
                     UPDATE merchandise 
                     SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, commission = %s, other_cost = %s,
-                        is_shipped = TRUE, sale_date = %s, updated_at = %s, updated_by = %s
+                        is_shipped = TRUE, sale_date = %s, notes = %s, updated_at = %s, updated_by = %s
                     WHERE id = %s
                 ''', (
                     approved_sale_price,
@@ -35824,6 +35849,7 @@ def approve_sale_request(request_id):
                     approved_commission,
                     approved_other_cost,
                     get_jst_now().date(),
+                    approved_item_notes,
                     get_jst_now(),
                     current_user.id,
                     merchandise_id,
@@ -35854,7 +35880,8 @@ def approve_sale_request(request_id):
             cur.row_factory = sqlite3.Row
             cur.execute("""
                 SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
-                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status, m.product_name
+                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status,
+                       m.product_name, m.notes AS item_notes
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 WHERE sr.id = ?
@@ -35883,6 +35910,7 @@ def approve_sale_request(request_id):
             approved_shipping_cost = shipping_cost
             approved_commission = commission
             approved_other_cost = other_cost
+            approved_item_notes = sale_request['item_notes'] or ''
 
             if request_type == 'completion_report':
                 if approved_sale_price_input is not None:
@@ -35904,6 +35932,11 @@ def approve_sale_request(request_id):
                     cur.close()
                     conn.close()
                     return redirect(redirect_to)
+                approved_item_notes = build_completion_report_notes(
+                    sale_request['item_notes'],
+                    sale_request['user_note'],
+                    admin_note,
+                )
             
             if request_type == 'completion_report':
                 cur.execute('''
@@ -35924,7 +35957,7 @@ def approve_sale_request(request_id):
                 cur.execute('''
                     UPDATE merchandise 
                     SET is_listed = 1, sale_price = ?, shipping_cost = ?, commission = ?, other_cost = ?,
-                        is_shipped = 1, sale_date = ?, updated_at = ?, updated_by = ?
+                        is_shipped = 1, sale_date = ?, notes = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                 ''', (
                     approved_sale_price,
@@ -35932,6 +35965,7 @@ def approve_sale_request(request_id):
                     approved_commission,
                     approved_other_cost,
                     get_jst_now().strftime('%Y-%m-%d'),
+                    approved_item_notes,
                     get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
                     current_user.id,
                     merchandise_id,
