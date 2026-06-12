@@ -33,6 +33,20 @@ def apply(module: Any) -> None:
     notify_admins_of_sale_request = getattr(module, "notify_admins_of_sale_request", lambda *_args, **_kwargs: None)
     notify_sale_request_user_status = getattr(module, "notify_sale_request_user_status", lambda *_args, **_kwargs: None)
     render_permission_denied = getattr(module, "render_permission_denied", None)
+    build_completion_report_notes = getattr(module, "build_completion_report_notes", None)
+
+    if build_completion_report_notes is None:
+        def build_completion_report_notes(existing_notes, user_note='', admin_note=''):
+            notes = (existing_notes or '').strip()
+            additions = []
+            if user_note:
+                additions.append(f"取引完了報告備考: {user_note.strip()}")
+            if admin_note:
+                additions.append(f"管理者メモ: {admin_note.strip()}")
+            for addition in additions:
+                if addition and addition not in notes:
+                    notes = f"{notes}\n{addition}".strip()
+            return notes
 
     def placeholder() -> str:
         return "%s" if DATABASE_URL else "?"
@@ -322,6 +336,12 @@ def apply(module: Any) -> None:
                 conn.close()
                 return redirect(url_for("index"))
 
+            if request_type == "completion_report" and item.get("sale_date"):
+                flash("この商品は既に取引完了報告が処理済みです。", "error")
+                cur.close()
+                conn.close()
+                return redirect(url_for("index"))
+
             if request_type == "completion_report" and not (item.get("is_shipped") or has_shipped_sale_request(cur, item_id)):
                 flash("先に発送依頼の承認を受けてから、取引完了報告を送信してください。", "error")
                 cur.close()
@@ -506,7 +526,7 @@ def apply(module: Any) -> None:
             conn, cur = open_cursor()
             cur.execute(
                 f"""
-                SELECT sr.*, m.product_name, m.purchase_price
+                SELECT sr.*, m.product_name, m.purchase_price, m.notes AS item_notes
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 WHERE sr.id = {placeholder()}
@@ -527,6 +547,7 @@ def apply(module: Any) -> None:
             approved_shipping_cost = safe_int(sale_request.get("shipping_cost"))
             approved_commission = safe_int(sale_request.get("commission"))
             approved_other_cost = safe_int(sale_request.get("other_cost"))
+            approved_item_notes = sale_request.get("item_notes") or ""
 
             if request_type == "completion_report":
                 if approved_sale_price_input is not None:
@@ -542,10 +563,19 @@ def apply(module: Any) -> None:
                     cur.close()
                     conn.close()
                     return redirect(redirect_to)
+                if approved_shipping_cost < 0 or approved_commission < 0 or approved_other_cost < 0:
+                    flash("送料・手数料・その他費用は0以上で入力してください。", "error")
+                    cur.close()
+                    conn.close()
+                    return redirect(redirect_to)
+                approved_item_notes = build_completion_report_notes(
+                    sale_request.get("item_notes"),
+                    sale_request.get("user_note"),
+                    admin_note,
+                )
             else:
                 approved_sale_price = approved_shipping_cost = approved_commission = approved_other_cost = 0
 
-            combined_fee_for_profit = approved_commission + approved_other_cost
             if request_type == "completion_report":
                 cur.execute(
                     f"""
@@ -565,17 +595,19 @@ def apply(module: Any) -> None:
                     UPDATE merchandise
                     SET is_listed = {placeholder()}, sale_price = {placeholder()}, shipping_cost = {placeholder()},
                         commission = {placeholder()}, other_cost = {placeholder()},
-                        is_shipped = {placeholder()}, sale_date = {placeholder()}, updated_at = {placeholder()}, updated_by = {placeholder()}
+                        is_shipped = {placeholder()}, sale_date = {placeholder()}, notes = {placeholder()},
+                        updated_at = {placeholder()}, updated_by = {placeholder()}
                     WHERE id = {placeholder()}
                     """,
                     (
                         True if DATABASE_URL else 1,
                         approved_sale_price,
                         approved_shipping_cost,
-                        combined_fee_for_profit,
+                        approved_commission,
                         approved_other_cost,
                         True if DATABASE_URL else 1,
                         get_jst_now().date() if DATABASE_URL else get_jst_now().strftime("%Y-%m-%d"),
+                        approved_item_notes,
                         get_jst_now() if DATABASE_URL else get_jst_now().strftime("%Y-%m-%d %H:%M:%S"),
                         current_user.id,
                         merchandise_id,
