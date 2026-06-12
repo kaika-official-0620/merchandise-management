@@ -4017,6 +4017,8 @@ if DATABASE_URL:
                 sale_price INTEGER NOT NULL,
                 shipping_cost INTEGER DEFAULT 0,
                 commission INTEGER DEFAULT 0,
+                other_cost INTEGER DEFAULT 0,
+                user_note TEXT,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
@@ -4048,6 +4050,18 @@ if DATABASE_URL:
         # commissionカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS commission INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS user_note TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
         except:
             pass
 
@@ -5052,6 +5066,8 @@ else:
                 sale_price INTEGER NOT NULL,
                 shipping_cost INTEGER DEFAULT 0,
                 commission INTEGER DEFAULT 0,
+                other_cost INTEGER DEFAULT 0,
+                user_note TEXT,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
                 status TEXT DEFAULT 'pending',
@@ -5083,6 +5099,18 @@ else:
         # commissionカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN commission INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN other_cost INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN user_note TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN other_cost INTEGER DEFAULT 0")
         except:
             pass
 
@@ -5790,8 +5818,28 @@ def permission_required(permission):
     return decorator
 
 # ヘルパー関数
-def calculate_profit(sale_price, purchase_price, shipping_cost, commission):
-    return sale_price - purchase_price - shipping_cost - commission
+def calculate_profit(sale_price, purchase_price, shipping_cost, commission, other_cost=0):
+    return sale_price - purchase_price - shipping_cost - commission - other_cost
+
+def ensure_sale_request_financial_columns(conn):
+    cur = conn.cursor()
+    try:
+        if DATABASE_URL:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS user_note TEXT")
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
+        else:
+            for sql in (
+                "ALTER TABLE sale_requests ADD COLUMN other_cost INTEGER DEFAULT 0",
+                "ALTER TABLE sale_requests ADD COLUMN user_note TEXT",
+                "ALTER TABLE merchandise ADD COLUMN other_cost INTEGER DEFAULT 0",
+            ):
+                try:
+                    cur.execute(sql)
+                except Exception:
+                    pass
+    finally:
+        cur.close()
 
 def calculate_profit_rate(profit, purchase_price):
     """利益率を計算（利益 ÷ 仕入れ金額 × 100）"""
@@ -6114,6 +6162,7 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
     sale_price = int(item.get('sale_price') or 0)
     shipping_cost = int(item.get('shipping_cost') or 0)
     commission = int(item.get('commission') or 0)
+    other_cost = int(item.get('other_cost') or 0)
     is_sold = merchandise_is_sold(item)
     item['is_sold'] = is_sold
     user_fee_breakdown = build_user_fee_components(item, fee_settings) if scope == 'user' else None
@@ -6135,6 +6184,7 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
     item['display_fee_total'] = display_fee_total
     item['display_commission_total'] = display_fee_total
     item['display_shipping_cost'] = shipping_cost
+    item['display_other_cost'] = other_cost
     item['sales_destination_display'] = format_sales_destination(item.get('sales_destination'), item.get('sale_type'))
     item['sale_type_labels'] = get_sale_type_labels(item.get('sale_type'))
     item['sale_type_summary'] = ' / '.join(item['sale_type_labels']) if item['sale_type_labels'] else '-'
@@ -6177,12 +6227,14 @@ def apply_inventory_display_metrics(item, scope='admin', fee_settings=None):
             fee_breakdown_details.append(f"開花手数料（仕入れ額に含む）: ¥{kaika_fee:,}")
     if shipping_cost:
         fee_breakdown_details.append(f"送料: ¥{shipping_cost:,}")
+    if other_cost:
+        fee_breakdown_details.append(f"その他費用: ¥{other_cost:,}")
     if not fee_breakdown_details:
         fee_breakdown_details.append("追加手数料はありません。")
     item['fee_breakdown_details'] = fee_breakdown_details
 
     if is_sold:
-        item['profit'] = calculate_profit(sale_price, display_purchase_price, shipping_cost, commission)
+        item['profit'] = calculate_profit(sale_price, display_purchase_price, shipping_cost, commission, other_cost)
         item['profit_rate'] = calculate_profit_rate(item['profit'], display_purchase_price)
 
     return item
@@ -30508,10 +30560,10 @@ def disposal_options():
     
     items = []
     user_info = {}
-    
+
     try:
         conn = get_db()
-        
+
         if DATABASE_URL:
             from psycopg2.extras import RealDictCursor
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -35347,6 +35399,8 @@ def submit_sale_request(item_id):
     sale_price = request.form.get('sale_price', type=int)
     shipping_cost = request.form.get('shipping_cost', type=int)
     commission = request.form.get('commission', type=int)
+    other_cost = request.form.get('other_cost', type=int)
+    user_note = (request.form.get('user_note') or '').strip()
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
 
@@ -35354,14 +35408,18 @@ def submit_sale_request(item_id):
         sale_price = 0
         shipping_cost = 0
         commission = 0
+        other_cost = 0
+        user_note = ''
     else:
         sale_price = sale_price or 0
         shipping_cost = shipping_cost or 0
         commission = commission or 0
+        other_cost = max(other_cost or 0, 0)
     
     conn = None
     try:
         conn = get_db()
+        ensure_sale_request_financial_columns(conn)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
         else:
@@ -35433,24 +35491,24 @@ def submit_sale_request(item_id):
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    qr_image_path, qr_image_path2, status, shipment_status
+                    other_cost, user_note, qr_image_path, qr_image_path2, status, shipment_status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
             ''', (
                 item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
-                qr_image_path, qr_image_path2,
+                other_cost, user_note, qr_image_path, qr_image_path2,
                 'pending_review' if request_type == 'shipping_request' else None
             ))
         else:
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    qr_image_path, qr_image_path2, status, shipment_status
+                    other_cost, user_note, qr_image_path, qr_image_path2, status, shipment_status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
             ''', (
                 item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
-                qr_image_path, qr_image_path2,
+                other_cost, user_note, qr_image_path, qr_image_path2,
                 'pending_review' if request_type == 'shipping_request' else None
             ))
 
@@ -35500,6 +35558,7 @@ def load_admin_sale_requests_data():
 
     try:
         conn = get_db()
+        ensure_sale_request_financial_columns(conn)
 
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -35676,9 +35735,11 @@ def approve_sale_request(request_id):
     approved_sale_price_input = request.form.get('approved_sale_price', type=int)
     approved_shipping_cost_input = request.form.get('approved_shipping_cost', type=int)
     approved_commission_input = request.form.get('approved_commission', type=int)
+    approved_other_cost_input = request.form.get('approved_other_cost', type=int)
     
     try:
         conn = get_db()
+        ensure_sale_request_financial_columns(conn)
         request_type = 'shipping_request'
         
         # 申請情報を取得
@@ -35686,7 +35747,7 @@ def approve_sale_request(request_id):
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
-                       sr.shipping_cost, sr.commission, sr.shipment_status, m.product_name
+                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status, m.product_name
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 WHERE sr.id = %s
@@ -35703,6 +35764,7 @@ def approve_sale_request(request_id):
             sale_price = sale_request['sale_price']
             shipping_cost = sale_request.get('shipping_cost') or 0
             commission = sale_request.get('commission') or 0
+            other_cost = sale_request.get('other_cost') or 0
             merchandise_id = sale_request['merchandise_id']
             request_user_id = sale_request['user_id']
             item_dict = {
@@ -35713,6 +35775,7 @@ def approve_sale_request(request_id):
             approved_sale_price = sale_price or 0
             approved_shipping_cost = shipping_cost
             approved_commission = commission
+            approved_other_cost = other_cost
 
             if request_type == 'completion_report':
                 if approved_sale_price_input is not None:
@@ -35721,12 +35784,14 @@ def approve_sale_request(request_id):
                     approved_shipping_cost = approved_shipping_cost_input
                 if approved_commission_input is not None:
                     approved_commission = approved_commission_input
+                if approved_other_cost_input is not None:
+                    approved_other_cost = approved_other_cost_input
 
                 if approved_sale_price <= 0:
                     flash('取引完了報告を承認するには売上金額を入力してください', 'error')
                     conn.close()
                     return redirect(redirect_to)
-                if approved_shipping_cost < 0 or approved_commission < 0:
+                if approved_shipping_cost < 0 or approved_commission < 0 or approved_other_cost < 0:
                     flash('送料と手数料は0以上で入力してください', 'error')
                     conn.close()
                     return redirect(redirect_to)
@@ -35736,7 +35801,7 @@ def approve_sale_request(request_id):
                 cur.execute('''
                     UPDATE sale_requests 
                     SET status = 'approved', processed_at = %s, processed_by = %s, admin_note = %s,
-                        sale_price = %s, shipping_cost = %s, commission = %s
+                        sale_price = %s, shipping_cost = %s, commission = %s, other_cost = %s
                     WHERE id = %s
                 ''', (
                     get_jst_now(),
@@ -35745,17 +35810,19 @@ def approve_sale_request(request_id):
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
+                    approved_other_cost,
                     request_id,
                 ))
                 cur.execute('''
                     UPDATE merchandise 
-                    SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, commission = %s,
+                    SET is_listed = TRUE, sale_price = %s, shipping_cost = %s, commission = %s, other_cost = %s,
                         is_shipped = TRUE, sale_date = %s, updated_at = %s, updated_by = %s
                     WHERE id = %s
                 ''', (
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
+                    approved_other_cost,
                     get_jst_now().date(),
                     get_jst_now(),
                     current_user.id,
@@ -35787,7 +35854,7 @@ def approve_sale_request(request_id):
             cur.row_factory = sqlite3.Row
             cur.execute("""
                 SELECT sr.id, sr.merchandise_id, sr.user_id, sr.request_type, sr.sale_price,
-                       sr.shipping_cost, sr.commission, sr.shipment_status, m.product_name
+                       sr.shipping_cost, sr.commission, sr.other_cost, sr.user_note, sr.shipment_status, m.product_name
                 FROM sale_requests sr
                 JOIN merchandise m ON sr.merchandise_id = m.id
                 WHERE sr.id = ?
@@ -35804,6 +35871,7 @@ def approve_sale_request(request_id):
             sale_price = sale_request['sale_price']
             shipping_cost = sale_request['shipping_cost'] or 0
             commission = sale_request['commission'] or 0
+            other_cost = sale_request['other_cost'] or 0
             merchandise_id = sale_request['merchandise_id']
             request_user_id = sale_request['user_id']
             item_dict = {
@@ -35814,6 +35882,7 @@ def approve_sale_request(request_id):
             approved_sale_price = sale_price or 0
             approved_shipping_cost = shipping_cost
             approved_commission = commission
+            approved_other_cost = other_cost
 
             if request_type == 'completion_report':
                 if approved_sale_price_input is not None:
@@ -35822,13 +35891,15 @@ def approve_sale_request(request_id):
                     approved_shipping_cost = approved_shipping_cost_input
                 if approved_commission_input is not None:
                     approved_commission = approved_commission_input
+                if approved_other_cost_input is not None:
+                    approved_other_cost = approved_other_cost_input
 
                 if approved_sale_price <= 0:
                     flash('取引完了報告を承認するには売上金額を入力してください', 'error')
                     cur.close()
                     conn.close()
                     return redirect(redirect_to)
-                if approved_shipping_cost < 0 or approved_commission < 0:
+                if approved_shipping_cost < 0 or approved_commission < 0 or approved_other_cost < 0:
                     flash('送料と手数料は0以上で入力してください', 'error')
                     cur.close()
                     conn.close()
@@ -35838,7 +35909,7 @@ def approve_sale_request(request_id):
                 cur.execute('''
                     UPDATE sale_requests 
                     SET status = 'approved', processed_at = ?, processed_by = ?, admin_note = ?,
-                        sale_price = ?, shipping_cost = ?, commission = ?
+                        sale_price = ?, shipping_cost = ?, commission = ?, other_cost = ?
                     WHERE id = ?
                 ''', (
                     get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -35847,17 +35918,19 @@ def approve_sale_request(request_id):
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
+                    approved_other_cost,
                     request_id,
                 ))
                 cur.execute('''
                     UPDATE merchandise 
-                    SET is_listed = 1, sale_price = ?, shipping_cost = ?, commission = ?,
+                    SET is_listed = 1, sale_price = ?, shipping_cost = ?, commission = ?, other_cost = ?,
                         is_shipped = 1, sale_date = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                 ''', (
                     approved_sale_price,
                     approved_shipping_cost,
                     approved_commission,
+                    approved_other_cost,
                     get_jst_now().strftime('%Y-%m-%d'),
                     get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
                     current_user.id,
@@ -36176,12 +36249,15 @@ def edit_sale_request(request_id):
     sale_price = request.form.get('sale_price', type=int)
     shipping_cost = request.form.get('shipping_cost', type=int)
     commission = request.form.get('commission', type=int)
+    other_cost = request.form.get('other_cost', type=int)
+    user_note = (request.form.get('user_note') or '').strip()
     qr_image = request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
     
     conn = None
     try:
         conn = get_db()
+        ensure_sale_request_financial_columns(conn)
         if DATABASE_URL:
             from psycopg2.extras import RealDictCursor as RDC
             cur = conn.cursor(cursor_factory=RDC)
@@ -36210,10 +36286,16 @@ def edit_sale_request(request_id):
             sale_price = 0
             shipping_cost = 0
             commission = 0
+            other_cost = 0
+            user_note = ''
         else:
             sale_price = sale_price if sale_price is not None else (sale_request_dict.get('sale_price') or 0)
             shipping_cost = shipping_cost if shipping_cost is not None else (sale_request_dict.get('shipping_cost') or 0)
             commission = commission if commission is not None else (sale_request_dict.get('commission') or 0)
+            other_cost = other_cost if other_cost is not None else (sale_request_dict.get('other_cost') or 0)
+            other_cost = max(other_cost or 0, 0)
+            if not user_note:
+                user_note = sale_request_dict.get('user_note') or ''
 
         qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2, sale_request_dict)
         validation_error = validate_sale_request_payload(
@@ -36234,17 +36316,17 @@ def edit_sale_request(request_id):
         if DATABASE_URL:
             cur.execute('''
                 UPDATE sale_requests 
-                SET sale_price = %s, shipping_cost = %s, commission = %s,
+                SET sale_price = %s, shipping_cost = %s, commission = %s, other_cost = %s, user_note = %s,
                     qr_image_path = %s, qr_image_path2 = %s
                 WHERE id = %s
-            ''', (sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, request_id))
+            ''', (sale_price, shipping_cost, commission, other_cost, user_note, qr_image_path, qr_image_path2, request_id))
         else:
             cur.execute('''
                 UPDATE sale_requests 
-                SET sale_price = ?, shipping_cost = ?, commission = ?,
+                SET sale_price = ?, shipping_cost = ?, commission = ?, other_cost = ?, user_note = ?,
                     qr_image_path = ?, qr_image_path2 = ?
                 WHERE id = ?
-            ''', (sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, request_id))
+            ''', (sale_price, shipping_cost, commission, other_cost, user_note, qr_image_path, qr_image_path2, request_id))
 
         record_sale_request_event(
             conn,

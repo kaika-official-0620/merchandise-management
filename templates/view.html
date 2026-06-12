@@ -1249,6 +1249,8 @@
                 <dd>{{ item.sales_destination|clean_display('-') }}</dd>
                 <dt>手数料</dt>
                 <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
+                <dt>その他費用</dt>
+                <dd>¥{{ "{:,}".format(item.other_cost or 0) }}</dd>
                 <dt>発送状態</dt>
                 <dd>
                     {% if item.is_shipped %}
