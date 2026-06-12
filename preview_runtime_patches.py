@@ -1790,7 +1790,19 @@ def apply(module: Any) -> None:
                 request_row["merchandise_items"] = items
                 request_row["service_name"] = get_service_display_name(request_row.get("service_type"))
                 request_row["client_name"] = request_row.get("user_name") or request_row.get("username") or "未設定"
+                request_row["client_identifier"] = f"ユーザーID {request_row.get('user_id') or '-'}"
+                contact_parts = []
+                if request_row.get("username"):
+                    contact_parts.append(f"ログインID: {request_row.get('username')}")
+                if request_row.get("user_email"):
+                    contact_parts.append(f"メール: {request_row.get('user_email')}")
+                request_row["client_contact_label"] = " / ".join(contact_parts) if contact_parts else "連絡先未登録"
                 request_row["status_label"] = get_sales_agency_status_label(request_row.get("status"), viewer="admin")
+                request_row["client_status_label"] = get_sales_agency_status_label(
+                    request_row.get("status"),
+                    viewer="client",
+                    service_type=request_row.get("service_type"),
+                )
                 request_row["pending_appraisal_count"] = source_request.get("pending_appraisal_count") if source_request else 0
                 request_row["request_can_create_documents"] = (
                     request_row.get("service_type") == "wholesale"
