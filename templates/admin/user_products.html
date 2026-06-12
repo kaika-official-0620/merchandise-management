@@ -1462,6 +1462,10 @@
                 <option value="product_asc">商品名順</option>
                 {% else %}
                 <option value="status_priority">未売却・対応待ち優先</option>
+                <option value="sold_bottom">売却済みを下に回す</option>
+                <option value="created_newest">登録順（新しい順）</option>
+                <option value="updated_newest">更新順（新しい順）</option>
+                <option value="timeline_newest">時系列順（仕入日が新しい順）</option>
                 <option value="purchase_newest">仕入日が新しい順</option>
                 <option value="purchase_oldest">仕入日が古い順</option>
                 <option value="purchase_high">仕入額が高い順</option>
@@ -1545,8 +1549,10 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
-                    <option value="sold">売却済</option>
-                    <option value="listed">出品中</option>
+                    <option value="sold">売却済みのみ</option>
+                    <option value="transaction">取引中のみ</option>
+                    <option value="listed">出品中のみ</option>
+                    <option value="agency">業者依頼中のみ</option>
                     <option value="unlisted">未出品</option>
                 </select>
             </div>
@@ -1647,8 +1653,10 @@
                     data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_listed %}30{% else %}10{% endif %}"
-                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-created-at="{{ item.created_at or '' }}"
+                    data-updated-at="{{ item.updated_at or '' }}"
+                    data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
                     data-detail-url="{{ url_for('view_item', id=item.id) }}">
                     {% if not long_term_only %}
                     <td>
@@ -1710,7 +1718,11 @@
                     </td>
                     <td>
                         {% if item.is_sold or item.sale_date %}
-                        <span class="status-badge sold">売却済</span>
+                        <span class="status-badge sold">売却済み</span>
+                        {% elif item.is_shipped %}
+                        <span class="status-badge listed">取引中</span>
+                        {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                        <span class="status-badge listed">業者依頼中</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1798,11 +1810,13 @@
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-owner="{{ item.owner_display_name or item.owner_username or '' }}" data-owner-id="{{ item.user_id or '' }}"
-            data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_listed %}30{% else %}10{% endif %}"
-            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
             data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
+            data-created-at="{{ item.created_at or '' }}"
+            data-updated-at="{{ item.updated_at or '' }}"
             data-detail-url="{{ url_for('view_item', id=item.id) }}">
             <div
                 class="user-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
@@ -1840,7 +1854,11 @@
                 </div>
                 <div class="user-card-status">
                     {% if item.is_sold or item.sale_date %}
-                    <span class="status-badge sold">売却済</span>
+                    <span class="status-badge sold">売却済み</span>
+                    {% elif item.is_shipped %}
+                    <span class="status-badge listed">取引中</span>
+                    {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                    <span class="status-badge listed">業者依頼中</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -2251,6 +2269,8 @@
         sale_price: 'salePrice',
         profit: 'profit',
         days_since_purchase: 'daysSincePurchase',
+        created_at: 'createdAt',
+        updated_at: 'updatedAt',
         status_rank: 'statusRank'
     };
     const numericSortColumns = new Set(['purchase_price', 'listing_price', 'sale_price', 'profit', 'days_since_purchase', 'status_rank']);
@@ -2308,6 +2328,10 @@
 
         const sortMap = {
             status_priority: ['status_rank', true],
+            sold_bottom: ['status_rank', true],
+            created_newest: ['created_at', false],
+            updated_newest: ['updated_at', false],
+            timeline_newest: ['purchase_date', false],
             storage_desc: ['days_since_purchase', false],
             storage_asc: ['days_since_purchase', true],
             purchase_oldest: ['purchase_date', true],
@@ -2324,6 +2348,18 @@
         sortDirection[column] = ascending;
         sortTable(column, ascending);
     }
+
+    document.querySelectorAll('#itemsTable tbody tr[data-detail-url]').forEach(row => {
+        row.addEventListener('click', function (e) {
+            if (e.target.closest('a, button, input, select, textarea, label, form, .photo-cell, .action-buttons')) {
+                return;
+            }
+            const detailUrl = this.dataset.detailUrl;
+            if (detailUrl) {
+                window.location.href = detailUrl;
+            }
+        });
+    });
 
     // ========== ライトボックス機能 ==========
     let currentPhotos = [];

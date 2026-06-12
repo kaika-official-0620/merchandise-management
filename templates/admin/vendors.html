@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}業者マスター - 開花{% endblock %}
+
+{% block content %}
+<style>
+.vendors-page{display:grid;gap:1.15rem}
+.vendors-panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+.vendors-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+.vendors-head h1,.vendors-panel h2{margin:0;color:#0f172a}
+.vendors-head p{margin:.35rem 0 0;color:#64748b;line-height:1.7}
+.vendor-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem}
+.vendor-form .wide{grid-column:1/-1}
+.vendor-form label{display:block;margin-bottom:.3rem;font-size:.82rem;font-weight:800;color:#475569}
+.vendor-form input,.vendor-form textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;padding:.65rem .7rem;font:inherit}
+.vendor-form textarea{min-height:86px;resize:vertical}
+.vendor-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.vendor-table-wrap{overflow-x:auto}
+.vendor-table{width:100%;border-collapse:collapse;min-width:760px}
+.vendor-table th,.vendor-table td{padding:.7rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+.vendor-table th{background:#f8fafc;color:#475569;font-size:.82rem}
+.empty-box{border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;padding:1.2rem;text-align:center}
+@media(max-width:768px){.vendors-panel{padding:.9rem}.vendor-form{grid-template-columns:1fr}.vendor-actions .btn{width:100%;justify-content:center}.vendor-table{min-width:680px}}
+</style>
+
+<div class="vendors-page">
+  <section class="vendors-panel vendors-head">
+    <div>
+      <h1>業者マスター</h1>
+      <p>業者向け見積依頼書や業者関連書類で使う流し先業者を登録します。</p>
+    </div>
+    <div class="vendor-actions">
+      <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-secondary">業者関連書類へ</a>
+      <a href="{{ url_for('admin_documents_dashboard', group='vendor_outgoing') }}" class="btn btn-outline">書類管理へ</a>
+    </div>
+  </section>
+
+  <section class="vendors-panel">
+    <h2>{{ '業者を編集' if editing_vendor else '業者を登録' }}</h2>
+    <form method="POST" class="vendor-form">
+      <div>
+        <label for="name">業者名 *</label>
+        <input id="name" name="name" required value="{{ editing_vendor.name if editing_vendor else '' }}">
+      </div>
+      <div>
+        <label for="contact_name">担当者名</label>
+        <input id="contact_name" name="contact_name" value="{{ editing_vendor.contact_name if editing_vendor else '' }}">
+      </div>
+      <div>
+        <label for="phone">電話番号</label>
+        <input id="phone" name="phone" value="{{ editing_vendor.phone if editing_vendor else '' }}">
+      </div>
+      <div>
+        <label for="email">メールアドレス</label>
+        <input id="email" name="email" type="email" value="{{ editing_vendor.email if editing_vendor else '' }}">
+      </div>
+      <div class="wide">
+        <label for="address">住所</label>
+        <input id="address" name="address" value="{{ editing_vendor.address if editing_vendor else '' }}">
+      </div>
+      <div class="wide">
+        <label for="memo">メモ</label>
+        <textarea id="memo" name="memo">{{ editing_vendor.memo if editing_vendor else '' }}</textarea>
+      </div>
+      <div class="wide vendor-actions">
+        <button type="submit" class="btn btn-primary">{{ '更新する' if editing_vendor else '登録する' }}</button>
+        {% if editing_vendor %}<a href="{{ url_for('admin_vendors') }}" class="btn btn-secondary">新規登録に戻る</a>{% endif %}
+      </div>
+    </form>
+  </section>
+
+  <section class="vendors-panel">
+    <h2>登録済み業者</h2>
+    {% if vendors %}
+    <div class="vendor-table-wrap">
+      <table class="vendor-table">
+        <thead><tr><th>業者名</th><th>担当者</th><th>電話</th><th>メール</th><th>住所</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for vendor in vendors %}
+          <tr data-detail-url="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}">
+            <td><strong>{{ vendor.name }}</strong></td>
+            <td>{{ vendor.contact_name or '-' }}</td>
+            <td>{{ vendor.phone or '-' }}</td>
+            <td>{{ vendor.email or '-' }}</td>
+            <td>{{ vendor.address or '-' }}</td>
+            <td><a href="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}" class="btn btn-info btn-sm">編集</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-box">登録済み業者はありません。</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

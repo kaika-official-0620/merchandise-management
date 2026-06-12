@@ -21,7 +21,6 @@
     </div>
     <div class="doc-actions">
       <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">書類履歴</a>
-      <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-primary">業者書類登録</a>
     </div>
   </section>
 
@@ -37,36 +36,29 @@
       {% endfor %}
     </div>
   </section>
-  <section class="doc-panel">
-    <h2>よく使う処理</h2>
-    <div class="quick-grid">
-      {% for link in quick_links %}
-      <a class="quick-card" href="{{ link.url }}">
-        <strong>{{ link.title }}</strong>
-        <p>{{ link.description }}</p>
-      </a>
-      {% endfor %}
-    </div>
-  </section>
   {% else %}
   <section class="doc-panel">
     <div class="doc-head">
       <div>
         <h2>
           {% if selected_group == 'client_incoming' %}顧客からの書類受付
-          {% elif selected_group == 'vendor_outgoing' %}業者へ依頼する書類
-          {% elif selected_group == 'vendor_incoming' %}業者関連書類
-          {% elif selected_group == 'client_outgoing' %}顧客へ送付する書類
-          {% else %}クライアント返信確認{% endif %}
+          {% elif selected_group == 'vendor_outgoing' %}業者へ依頼する見積依頼書作成
+          {% elif selected_group == 'vendor_incoming' %}業者関連書類登録
+          {% elif selected_group == 'client_outgoing' %}顧客へ送付する買取明細書作成
+          {% else %}書類管理{% endif %}
         </h2>
         <p>この段階に関連する書類だけを表示しています。</p>
       </div>
       <div class="doc-actions">
         <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">ステップ一覧へ戻る</a>
-        {% if selected_group == 'vendor_incoming' %}
+        {% if selected_group == 'vendor_outgoing' %}
+        <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
+        <a href="{{ url_for('admin_mitsumori_add') }}" class="btn btn-primary">業者向け見積依頼書を作成</a>
+        {% elif selected_group == 'vendor_incoming' %}
+        <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
         <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-primary">業者書類を登録</a>
         {% elif selected_group == 'client_outgoing' %}
-        <a href="{{ url_for('admin_monthly_settlements') }}" class="btn btn-primary">精算書を作成</a>
+        <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">買取明細書を作成</a>
         {% endif %}
       </div>
     </div>
@@ -77,11 +69,12 @@
     {% if vendor_documents %}
     <div class="doc-table-wrap">
       <table class="doc-table">
-        <thead><tr><th>登録日</th><th>クライアント</th><th>対象商品</th><th>書類</th><th>状態</th><th>操作</th></tr></thead>
+        <thead><tr><th>登録日</th><th>流し先業者</th><th>関連クライアント</th><th>対象商品</th><th>書類</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for doc in vendor_documents %}
           <tr>
             <td>{{ doc.registered_label }}</td>
+            <td>{{ doc.vendor_display_name or '-' }}</td>
             <td>{{ doc.client_name or '-' }}</td>
             <td>{{ doc.item_name or '未指定' }}</td>
             <td>{{ doc.title or doc.original_filename }}</td>
@@ -97,15 +90,14 @@
   {% elif selected_group == 'client_outgoing' %}
   <section class="doc-panel">
     <div class="doc-actions">
-      <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-outline">精算書一覧</a>
       <a href="{{ url_for('admin_documents_history', category='kaitori') }}" class="btn btn-outline">買取明細書履歴</a>
     </div>
-    {% if shikiriosho_waiting %}
+    {% if client_outgoing_rows %}
     <div class="doc-table-wrap">
       <table class="doc-table">
         <thead><tr><th>書類種別</th><th>No.</th><th>クライアント</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
-        {% for row in shikiriosho_waiting %}
+        {% for row in client_outgoing_rows %}
           <tr>
             <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
             <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td><td>{{ row.status_label }}</td>
@@ -115,40 +107,19 @@
         </tbody>
       </table>
     </div>
-    {% else %}<div class="empty-box">送付待機中または履歴表示できる精算書はありません。</div>{% endif %}
-  </section>
-  {% elif selected_group == 'client_reply' %}
-  <section class="doc-panel">
-    <div class="doc-actions">
-      <a href="{{ url_for('admin_documents_history', category='shoudaku') }}" class="btn btn-outline">買取承諾書履歴</a>
-    </div>
-    {% if reply_rows %}
-    <div class="doc-table-wrap">
-      <table class="doc-table">
-        <thead><tr><th>書類種別</th><th>No./書類名</th><th>クライアント</th><th>日付</th><th>状態</th><th>操作</th></tr></thead>
-        <tbody>
-        {% for row in reply_rows %}
-          <tr>
-            <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
-            <td>{{ row.status_label }}</td>
-            <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}<div class="empty-box">確認できるクライアント返信書類はありません。</div>{% endif %}
+    {% else %}<div class="empty-box">作成済みまたは送付待機中の買取明細書はありません。</div>{% endif %}
   </section>
   {% else %}
   <section class="doc-panel">
     {% if request_rows %}
     <div class="doc-table-wrap">
       <table class="doc-table">
-        <thead><tr><th>申請ID</th><th>クライアント</th><th>商品</th><th>状態</th><th>操作</th></tr></thead>
+        <thead><tr><th>受付番号</th><th>クライアント番号</th><th>クライアント</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in request_rows %}
           <tr>
-            <td>{{ row.id or '-' }}</td>
+            <td>{{ row.reception_number or row.id or '-' }}</td>
+            <td>{{ row.client_number or row.user_id or '-' }}</td>
             <td>{{ row.client_name or row.user_name or row.username or '-' }}</td>
             <td>{{ row.product_name or row.item_summary or row.item_names or '-' }}</td>
             <td>{{ row.status_label or row.status or '-' }}</td>

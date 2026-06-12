@@ -26,7 +26,7 @@
 
     {% if has_source_request %}
     <div class="form-info-box source-info-box">
-        <p><strong>申請情報:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+        <p><strong>申請情報:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 受付番号 {{ source_request.reception_number or source_request.id }}</p>
         <p><strong>対象商品:</strong> {{ source_request.pending_appraisal_count }}件の「査定待ち」商品から、業者向け依頼書を作成できます。</p>
         <p><strong>次の流れ:</strong> この見積依頼書を作成したあと、業者から届く買取明細書を登録し、その後にユーザー向け買取明細書を発行します。</p>
     </div>

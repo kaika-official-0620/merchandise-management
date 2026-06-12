@@ -58,6 +58,50 @@
     gap: 0.9rem;
 }
 
+.agency-filter-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.agency-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+    align-items: end;
+}
+
+.agency-filter-field {
+    min-width: 0;
+}
+
+.agency-filter-field label {
+    display: block;
+    margin-bottom: .35rem;
+    color: #334155;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.agency-filter-field input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: .68rem .75rem;
+    font-size: .92rem;
+}
+
+.agency-filter-actions {
+    display: flex;
+    gap: .55rem;
+    flex-wrap: wrap;
+    margin-top: .85rem;
+}
+
 .stat-card {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -76,6 +120,84 @@
     color: #0f172a;
     font-size: 1.8rem;
     font-weight: 700;
+}
+
+.client-summary-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.client-summary-panel h2 {
+    margin: 0 0 .35rem;
+    color: #0f172a;
+}
+
+.client-summary-panel p {
+    margin: 0;
+    color: #64748b;
+}
+
+.client-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: .85rem;
+    margin-top: 1rem;
+}
+
+.client-summary-card {
+    display: grid;
+    gap: .55rem;
+    padding: .9rem;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.client-summary-card:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 12px 26px rgba(37, 99, 235, .12);
+}
+
+.client-summary-head {
+    display: flex;
+    justify-content: space-between;
+    gap: .7rem;
+    align-items: center;
+}
+
+.client-summary-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.client-summary-count {
+    flex: 0 0 auto;
+    min-width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #fff;
+    font-weight: 800;
+}
+
+.client-summary-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    color: #64748b;
+    font-size: .82rem;
 }
 
 .requests-list {
@@ -592,6 +714,16 @@
         flex: 1 1 auto;
         justify-content: center;
     }
+
+    .agency-filter-grid,
+    .client-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .agency-filter-actions .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
 }
 </style>
 
@@ -600,18 +732,41 @@
 </div>
 
 <div class="sales-agency-container">
-    <div class="service-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab {% if service_filter == 'all' %}active{% endif %}">すべての申請</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-wholesale {% if service_filter == 'wholesale' %}active{% endif %}">業者卸販売</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='auction', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-auction {% if service_filter == 'auction' %}active{% endif %}">業者オークション</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type='simultaneous', status=status_filter if status_filter != 'all' else None) }}" class="filter-tab service-simultaneous {% if service_filter == 'simultaneous' %}active{% endif %}">同時出品</a>
-    </div>
-
     <div class="service-legend">
         <span class="service-legend-item"><span class="legend-dot wholesale"></span>業者卸販売サービス</span>
         <span class="service-legend-item"><span class="legend-dot auction"></span>業者オークション出品</span>
         <span class="service-legend-item"><span class="legend-dot simultaneous"></span>同時出品サービス</span>
     </div>
+
+    <form class="agency-filter-panel" method="GET">
+        {% if service_filter != 'all' %}
+        <input type="hidden" name="service_type" value="{{ service_filter }}">
+        {% endif %}
+        {% if status_filter != 'all' %}
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        {% endif %}
+        <div class="agency-filter-grid">
+            <div class="agency-filter-field">
+                <label for="agency-q">検索</label>
+                <input id="agency-q" type="text" name="q" value="{{ q_filter or '' }}" placeholder="クライアント名 / ユーザーID / 商品名">
+            </div>
+            <div class="agency-filter-field">
+                <label for="agency-date-from">開始日</label>
+                <input id="agency-date-from" type="date" name="date_from" value="{{ date_from_filter or '' }}">
+            </div>
+            <div class="agency-filter-field">
+                <label for="agency-date-to">終了日</label>
+                <input id="agency-date-to" type="date" name="date_to" value="{{ date_to_filter or '' }}">
+            </div>
+            <div class="agency-filter-field">
+                <label>&nbsp;</label>
+                <div class="agency-filter-actions" style="margin-top:0;">
+                    <button type="submit" class="btn btn-primary">検索</button>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status=status_filter if status_filter != 'all' else None) }}" class="btn btn-secondary">解除</a>
+                </div>
+            </div>
+        </div>
+    </form>
 
     <div class="stats-grid">
         <div class="stat-card">
@@ -640,14 +795,37 @@
         </div>
     </div>
 
+    {% if requests %}
+    <section class="client-summary-panel">
+        <h2>クライアント別</h2>
+        <p>未対応が埋もれないよう、同じクライアントの申請をまとめています。</p>
+        <div class="client-summary-grid">
+            {% for client_key, group in requests|groupby('client_identifier') %}
+            {% set first = group[0] %}
+            <a class="client-summary-card" href="{{ first.detail_url }}">
+                <div class="client-summary-head">
+                    <span class="client-summary-name">{{ first.client_name|clean_display('クライアント名未登録') }}</span>
+                    <span class="client-summary-count">{{ group|length }}</span>
+                </div>
+                <div class="client-summary-meta">
+                    <span>{{ first.client_identifier|clean_display('識別情報未登録') }}</span>
+                    <span>最新 {{ ((first.updated_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.created_at) else '-' }}</span>
+                    <span>{{ first.status_label }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
     <div class="filter-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending') }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved') }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising') }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting') }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed') }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected') }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
+        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
     </div>
 
     {% if requests %}

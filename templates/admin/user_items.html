@@ -331,7 +331,7 @@
 
     .user-items-filter-form {
         display: grid;
-        grid-template-columns: 170px 170px 170px auto auto;
+        grid-template-columns: 160px 160px 160px 190px auto auto;
         gap: 0.75rem;
         align-items: end;
         background: white;
@@ -505,9 +505,9 @@
 
 <div class="user-items-toolbar">
     <div class="period-chip-row">
-        <a class="period-chip {% if period_preset == 'month' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='month', status=status_filter, back_url=back_url) }}">当月</a>
-        <a class="period-chip {% if period_preset == 'year' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='year', status=status_filter, back_url=back_url) }}">今年</a>
-        <a class="period-chip {% if period_preset == 'all' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='all', status=status_filter, back_url=back_url) }}">全期間</a>
+        <a class="period-chip {% if period_preset == 'month' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='month', status=status_filter, sort=sort_mode, back_url=back_url) }}">当月</a>
+        <a class="period-chip {% if period_preset == 'year' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='year', status=status_filter, sort=sort_mode, back_url=back_url) }}">今年</a>
+        <a class="period-chip {% if period_preset == 'all' %}active{% endif %}" href="{{ url_for('admin_user_items', id=user.id, period_preset='all', status=status_filter, sort=sort_mode, back_url=back_url) }}">全期間</a>
         <span class="period-chip active">表示期間: {{ period_label }}</span>
         {% if status_filter == 'sold' %}
         <span class="status-filter-badge">販売済みのみ表示中</span>
@@ -531,8 +531,25 @@
             <label for="status">表示対象</label>
             <select id="status" name="status">
                 <option value="all" {% if status_filter == 'all' %}selected{% endif %}>すべて</option>
-                <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>販売済み</option>
-                <option value="unsold" {% if status_filter == 'unsold' %}selected{% endif %}>在庫のみ</option>
+                <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>売却済みのみ</option>
+                <option value="transaction" {% if status_filter == 'transaction' %}selected{% endif %}>取引中のみ</option>
+                <option value="listed" {% if status_filter == 'listed' %}selected{% endif %}>出品中のみ</option>
+                <option value="agency" {% if status_filter == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
+                <option value="unsold" {% if status_filter == 'unsold' %}selected{% endif %}>未売却のみ</option>
+                <option value="unlisted" {% if status_filter == 'unlisted' %}selected{% endif %}>未出品のみ</option>
+            </select>
+        </div>
+        <div class="user-items-filter-group">
+            <label for="sort">並び替え</label>
+            <select id="sort" name="sort">
+                <option value="sold_bottom" {% if sort_mode == 'sold_bottom' %}selected{% endif %}>売却済みを下に回す</option>
+                <option value="registered" {% if sort_mode == 'registered' %}selected{% endif %}>登録順（新しい順）</option>
+                <option value="updated" {% if sort_mode == 'updated' %}selected{% endif %}>更新順（新しい順）</option>
+                <option value="timeline" {% if sort_mode == 'timeline' %}selected{% endif %}>時系列順</option>
+                <option value="sale_newest" {% if sort_mode == 'sale_newest' %}selected{% endif %}>売却日が新しい順</option>
+                <option value="purchase_high" {% if sort_mode == 'purchase_high' %}selected{% endif %}>仕入額が高い順</option>
+                <option value="sale_high" {% if sort_mode == 'sale_high' %}selected{% endif %}>売上が高い順</option>
+                <option value="profit_high" {% if sort_mode == 'profit_high' %}selected{% endif %}>利益が高い順</option>
             </select>
         </div>
         <button type="submit" class="btn btn-primary">適用</button>

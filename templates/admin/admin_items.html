@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}開花商品管理 - 株式会社 開花{% endblock %}
+{% block title %}開花商品一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
 {% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
@@ -1131,7 +1131,7 @@
 </style>
 
 <div class="page-header">
-    <h1>{% if sale_month %}{{ sale_month }} の販売商品{% else %}開花商品管理{% endif %}</h1>
+    <h1>{% if sale_month %}{{ sale_month }} の販売商品{% else %}開花商品一覧{% endif %}</h1>
 </div>
 
 {% if sale_month %}
@@ -1162,6 +1162,7 @@
         <button class="filter-tab-btn active" onclick="showFilterTab('text', event)">テキスト検索</button>
         <button class="filter-tab-btn" onclick="showFilterTab('status', event)">状態</button>
         <button class="filter-tab-btn" onclick="showFilterTab('price', event)">金額</button>
+        <button class="filter-tab-btn" onclick="showFilterTab('sort', event)">並び替え</button>
     </div>
 
     <!-- テキスト検索 -->
@@ -1208,9 +1209,10 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
-                    <option value="sold">売却済</option>
-                    <option value="appraisal_pending">査定待ち</option>
-                    <option value="listed">出品中</option>
+                    <option value="sold">売却済みのみ</option>
+                    <option value="transaction">取引中のみ</option>
+                    <option value="listed">出品中のみ</option>
+                    <option value="agency">業者依頼中のみ</option>
                     <option value="unlisted">未出品</option>
                 </select>
             </div>
@@ -1237,6 +1239,25 @@
                 <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-profit-max" placeholder="以下">
+            </div>
+        </div>
+    </div>
+
+    <div class="filter-tab-content" id="filter-sort">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label for="tab-sort-order">並び替え</label>
+                <select id="tab-sort-order" onchange="applySortOrder()">
+                    <option value="sold_bottom">売却済みを下に回す</option>
+                    <option value="created_newest">登録順（新しい順）</option>
+                    <option value="created_oldest">登録順（古い順）</option>
+                    <option value="updated_newest">更新順（新しい順）</option>
+                    <option value="timeline_newest">時系列順（仕入日が新しい順）</option>
+                    <option value="sale_newest">売却日が新しい順</option>
+                    <option value="purchase_high">仕入額が高い順</option>
+                    <option value="sale_high">売上が高い順</option>
+                    <option value="profit_high">利益が高い順</option>
+                </select>
             </div>
         </div>
     </div>
@@ -1288,11 +1309,14 @@
                     data-profit="{{ item.profit or 0 }}"
                     data-sale-type="{{ item.sale_type or '' }}"
                     data-sale-date="{{ item.sale_date or '' }}"
-                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.appraisal_status == 'waiting' %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-created-at="{{ item.created_at or '' }}"
+                    data-updated-at="{{ item.updated_at or '' }}"
+                    data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
                     data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
-                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt=""
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="" loading="lazy" decoding="async"
                             data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
                         {% if item.all_photos|length > 1 %}
                         <span class="photo-count-badge">{{ item.all_photos|length }}</span>
@@ -1356,9 +1380,11 @@
                     </td>
                     <td>
                         {% if item.is_sold or item.sale_date %}
-                        <span class="status-badge sold">売却済</span>
-                        {% elif item.appraisal_status == 'waiting' %}
-                        <span class="status-badge pending-sale">査定待ち</span>
+                        <span class="status-badge sold">売却済み</span>
+                        {% elif item.is_shipped %}
+                        <span class="status-badge pending-sale">取引中</span>
+                        {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                        <span class="status-badge pending-sale">業者依頼中</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1400,19 +1426,33 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        <div class="admin-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
+        <div class="admin-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}"
+            data-id="{{ item.id }}"
+            data-name="{{ item.product_name or '' }}"
+            data-brand="{{ item.brand_name or '' }}"
+            data-model="{{ item.model_number or '' }}"
+            data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
+            data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-purchase-price="{{ item.display_purchase_price or 0 }}"
+            data-sale-price="{{ item.display_sale_price or 0 }}"
+            data-profit="{{ item.profit or 0 }}"
+            data-sale-date="{{ item.sale_date or '' }}"
+            data-created-at="{{ item.created_at or '' }}"
+            data-updated-at="{{ item.updated_at or '' }}"
+            data-date="{{ item.purchase_date or '' }}">
             <div
                 class="admin-card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
                 <div class="admin-card-photo">
                     {% if item.all_photos and item.all_photos|length > 1 %}
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'>
                         {% for photo in item.all_photos %}
-                        <img src="{{ url_for('static', filename=photo) }}" alt=""
+                        <img src="{{ url_for('static', filename=photo) }}" alt="" loading="lazy" decoding="async"
                             onclick="openLightboxFromParent(this, {{ loop.index0 }})">
                         {% endfor %}
                     </div>
                     {% elif item.all_photos and item.all_photos|length == 1 %}
-                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt=""
+                    <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="" loading="lazy" decoding="async"
                         data-photos='{{ item.all_photos | tojson }}' onclick="openLightboxFromData(this, 0)">
                     {% else %}
                     <div class="no-photo">-</div>
@@ -1428,9 +1468,11 @@
                 </div>
                 <div class="admin-card-status">
                     {% if item.is_sold or item.sale_date %}
-                    <span class="status-badge sold">売却済</span>
-                    {% elif item.appraisal_status == 'waiting' %}
-                    <span class="status-badge pending-sale">査定待ち</span>
+                    <span class="status-badge sold">売却済み</span>
+                    {% elif item.is_shipped %}
+                    <span class="status-badge pending-sale">取引中</span>
+                    {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
+                    <span class="status-badge pending-sale">業者依頼中</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -1565,6 +1607,7 @@
             case 'text': contentId = 'filter-text'; break;
             case 'status': contentId = 'filter-status-tab'; break;
             case 'price': contentId = 'filter-price'; break;
+            case 'sort': contentId = 'filter-sort'; break;
         }
 
         document.getElementById(contentId).classList.add('active');
@@ -1588,6 +1631,8 @@
         document.getElementById('tab-filter-sale-max').value = '';
         document.getElementById('tab-filter-profit-min').value = '';
         document.getElementById('tab-filter-profit-max').value = '';
+        const sortOrder = document.getElementById('tab-sort-order');
+        if (sortOrder) sortOrder.value = 'sold_bottom';
 
         filterTable();
         updateFilterCount();
@@ -1618,6 +1663,7 @@
         if (document.getElementById('tab-filter-sale-max')?.value) count++;
         if (document.getElementById('tab-filter-profit-min')?.value) count++;
         if (document.getElementById('tab-filter-profit-max')?.value) count++;
+        if ((document.getElementById('tab-sort-order')?.value || 'sold_bottom') !== 'sold_bottom') count++;
 
         const countEl = document.getElementById('filterCount');
         if (count > 0) {
@@ -1662,9 +1708,8 @@
             return true;
         }
 
-        const rows = document.querySelectorAll('#itemsTable tbody tr');
-        rows.forEach(row => {
-            if (!row.dataset.id) return;
+        function matchesElement(row) {
+            if (!row.dataset.id) return false;
 
             const id = row.dataset.id;
             const name = (row.dataset.name || '').toLowerCase();
@@ -1681,37 +1726,118 @@
             const salePrice = row.dataset.salePrice || '0';
             const profit = row.dataset.profit || '0';
 
-            let show = true;
-
-            if (filterId && !id.includes(filterId)) show = false;
-            if (filterName && !name.includes(filterName)) show = false;
-            if (filterBrand && !brand.includes(filterBrand)) show = false;
-            if (filterModel && !model.includes(filterModel)) show = false;
-            if (filterOwner && !owner.includes(filterOwner)) show = false;
-            if (filterCondition && condition !== filterCondition) show = false;
-            if (filterStatus && status !== filterStatus) show = false;
+            if (filterId && !id.includes(filterId)) return false;
+            if (filterName && !name.includes(filterName)) return false;
+            if (filterBrand && !brand.includes(filterBrand)) return false;
+            if (filterModel && !model.includes(filterModel)) return false;
+            if (filterOwner && !owner.includes(filterOwner)) return false;
+            if (filterCondition && condition !== filterCondition) return false;
+            if (filterStatus && status !== filterStatus) return false;
             if (queryStatus === 'unsold') {
-                if (status === 'sold') show = false;
+                if (status === 'sold') return false;
             } else if (queryStatus && status !== queryStatus) {
-                show = false;
+                return false;
             }
-            if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
-            if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) show = false;
-            if (queryBrand && !brand.includes(queryBrand)) show = false;
-            if (queryDestination && !salesDestination.includes(queryDestination)) show = false;
-            if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) show = false;
-            if (queryDateTo && (!saleDate || saleDate > queryDateTo)) show = false;
+            if (querySaleType && !saleTypes.includes(querySaleType)) return false;
+            if (querySaleTypeNot && saleTypes.includes(querySaleTypeNot)) return false;
+            if (queryBrand && !brand.includes(queryBrand)) return false;
+            if (queryDestination && !salesDestination.includes(queryDestination)) return false;
+            if (queryDateFrom && (!saleDate || saleDate < queryDateFrom)) return false;
+            if (queryDateTo && (!saleDate || saleDate > queryDateTo)) return false;
 
-            if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) show = false;
-            if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) show = false;
-            if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) show = false;
+            if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
+            if (!checkPriceRange(salePrice, filterSaleMin, filterSaleMax)) return false;
+            if (!checkPriceRange(profit, filterProfitMin, filterProfitMax)) return false;
 
+            return true;
+        }
+
+        const rows = document.querySelectorAll('#itemsTable tbody tr');
+        rows.forEach(row => {
+            if (!row.dataset.id) return;
+            const show = matchesElement(row);
             row.style.display = show ? '' : 'none';
             if (show) visibleCount++;
         });
 
+        let mobileVisibleCount = 0;
+        document.querySelectorAll('#mobileCards .admin-item-card').forEach(card => {
+            if (!card.dataset.id) return;
+            const show = matchesElement(card);
+            card.style.display = show ? '' : 'none';
+            if (show) mobileVisibleCount++;
+        });
+
         const countEl = document.getElementById('filtered-count');
         if (countEl) countEl.textContent = visibleCount + '件表示';
+
+        const totalCountEl = document.querySelector('.total-count');
+        if (totalCountEl) totalCountEl.textContent = mobileVisibleCount || visibleCount;
+    }
+
+    function datasetValue(element, column) {
+        const keyMap = {
+            created_at: 'createdAt',
+            updated_at: 'updatedAt',
+            purchase_date: 'date',
+            sale_date: 'saleDate',
+            purchase_price: 'purchasePrice',
+            sale_price: 'salePrice',
+            profit: 'profit',
+            status_rank: 'statusRank',
+            owner_name: 'owner',
+            product_name: 'name',
+            brand_name: 'brand',
+            kaika_product_code: 'kaikaProductCode',
+            sales_destination: 'salesDestination',
+            commission_total: 'commissionTotal'
+        };
+        return element.dataset[keyMap[column] || column] || '';
+    }
+
+    function sortCards(column, ascending) {
+        const container = document.getElementById('mobileCards');
+        if (!container) return;
+        const cards = Array.from(container.querySelectorAll('.admin-item-card'));
+        cards.sort((a, b) => compareSortValues(a, b, column, ascending));
+        cards.forEach(card => container.appendChild(card));
+    }
+
+    function compareSortValues(a, b, column, ascending) {
+        if (!a.dataset.id) return 1;
+        if (!b.dataset.id) return -1;
+        const numericColumns = new Set(['purchase_price', 'commission_total', 'sale_price', 'profit', 'status_rank']);
+        let aVal = datasetValue(a, column);
+        let bVal = datasetValue(b, column);
+        if (numericColumns.has(column)) {
+            aVal = parseInt(aVal || '0', 10) || 0;
+            bVal = parseInt(bVal || '0', 10) || 0;
+        } else {
+            aVal = String(aVal || '').toLowerCase();
+            bVal = String(bVal || '').toLowerCase();
+        }
+        if (aVal === bVal) return 0;
+        return ascending ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+    }
+
+    function applySortOrder() {
+        const sortOrder = document.getElementById('tab-sort-order');
+        if (!sortOrder) return;
+        const sortMap = {
+            sold_bottom: ['status_rank', true],
+            created_newest: ['created_at', false],
+            created_oldest: ['created_at', true],
+            updated_newest: ['updated_at', false],
+            timeline_newest: ['purchase_date', false],
+            sale_newest: ['sale_date', false],
+            purchase_high: ['purchase_price', false],
+            sale_high: ['sale_price', false],
+            profit_high: ['profit', false],
+        };
+        const [column, ascending] = sortMap[sortOrder.value] || sortMap.sold_bottom;
+        sortTable(column, ascending);
+        sortCards(column, ascending);
+        updateFilterCount();
     }
 
     function openTransferModal(itemId, itemName) {
@@ -1793,40 +1919,24 @@
     function sortTable(column, ascending) {
         const tbody = document.querySelector('#itemsTable tbody');
         const rows = Array.from(tbody.querySelectorAll('tr'));
-        const datasetKey = column.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-
         rows.sort((a, b) => {
-            if (!a.dataset.id) return 1;
-            if (!b.dataset.id) return -1;
-
-            let aVal, bVal;
-
-            switch (column) {
-                case 'purchase_price':
-                case 'commission_total':
-                case 'sale_price':
-                case 'profit':
-                    aVal = parseInt(a.dataset[datasetKey] || '0') || 0;
-                    bVal = parseInt(b.dataset[datasetKey] || '0') || 0;
-                    break;
-                case 'kaika_product_code':
-                    aVal = (a.dataset.kaikaProductCode || '');
-                    bVal = (b.dataset.kaikaProductCode || '');
-                    break;
-                default:
-                    aVal = a.dataset[datasetKey] || '';
-                    bVal = b.dataset[datasetKey] || '';
-            }
-
-            if (ascending) {
-                return aVal > bVal ? 1 : -1;
-            } else {
-                return aVal < bVal ? 1 : -1;
-            }
+            return compareSortValues(a, b, column, ascending);
         });
 
         rows.forEach(row => tbody.appendChild(row));
     }
+
+    document.querySelectorAll('#itemsTable tbody tr[data-detail-url]').forEach(row => {
+        row.addEventListener('click', function (e) {
+            if (e.target.closest('a, button, input, select, textarea, label, form, .photo-cell, .action-buttons')) {
+                return;
+            }
+            const detailUrl = this.dataset.detailUrl;
+            if (detailUrl) {
+                window.location.href = detailUrl;
+            }
+        });
+    });
 
     // ========== ライトボックス機能 ==========
     let currentPhotos = [];

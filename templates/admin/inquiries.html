@@ -124,6 +124,7 @@
     grid-template-columns: minmax(190px, 1fr) 150px 150px auto auto;
     gap: 0.5rem;
     align-items: center;
+    min-width: 0;
     margin-bottom: 1rem;
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -133,6 +134,8 @@
 
 .admin-inquiry-search-form input {
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 38px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
@@ -299,7 +302,7 @@
 
 @media (max-width: 768px) {
     .admin-inquiry-search-form {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
     .admin-inquiry-search-form input[type="search"],
     .admin-inquiry-search-form .btn {
@@ -399,4 +402,16 @@
     }
 }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.inquiry-row[data-detail-url]').forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('a, button, input, select, textarea, label, form')) {
+                return;
+            }
+            window.location.href = row.dataset.detailUrl;
+        });
+    });
+});
+</script>
 {% endblock %}

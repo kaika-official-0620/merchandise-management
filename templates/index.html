@@ -2360,9 +2360,15 @@
     <div class="filter-tab-content" id="filter-status-tab">
         <div class="filter-group">
             <a href="{{ url_for('index', summary_period=summary_period, sort=sort_mode) }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
-            <a href="{{ url_for('index', filter='sold', summary_period=summary_period, sort=sort_mode) }}"
+            <a href="{{ url_for('index', filter='sold', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済み</a>
-            <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode) }}"
+            <a href="{{ url_for('index', filter='transaction', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'transaction' %}active{% endif %}">取引中</a>
+            <a href="{{ url_for('index', filter='listed', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'listed' %}active{% endif %}">出品中</a>
+            <a href="{{ url_for('index', filter='agency', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'agency' %}active{% endif %}">業者依頼中</a>
+            <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
             <div class="filter-item">
                 <label>状態</label>
@@ -2378,15 +2384,15 @@
             <div class="filter-item">
                 <label>販売状況</label>
                 <select id="tab-filter-status">
-                    <option value="" selected>すべて</option>
-                    <option value="sold">売却済みのみ</option>
-                    <option value="transaction">取引中のみ</option>
-                    <option value="listed">出品中のみ</option>
-                    <option value="agency">業者依頼中のみ</option>
-                    <option value="shipping_pending">発送依頼中のみ</option>
-                    <option value="completion_pending">取引完了依頼中のみ</option>
-                    <option value="appraisal_pending">査定待ちのみ</option>
-                    <option value="unlisted">未出品のみ</option>
+                    <option value="" {% if not filter_type %}selected{% endif %}>すべて</option>
+                    <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済みのみ</option>
+                    <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中のみ</option>
+                    <option value="listed" {% if filter_type == 'listed' %}selected{% endif %}>出品中のみ</option>
+                    <option value="agency" {% if filter_type == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
+                    <option value="shipping_pending" {% if filter_type == 'shipping_pending' %}selected{% endif %}>発送依頼中のみ</option>
+                    <option value="completion_pending" {% if filter_type == 'completion_pending' %}selected{% endif %}>取引完了依頼中のみ</option>
+                    <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定待ちのみ</option>
+                    <option value="unlisted" {% if filter_type == 'unlisted' %}selected{% endif %}>未出品のみ</option>
                 </select>
             </div>
         </div>
@@ -2839,7 +2845,6 @@
                 </div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-detail">詳細</a>
                 {% if current_user.is_admin() %}
                 <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
                 {% if item.can_delete %}
@@ -3282,6 +3287,18 @@
         };
         return map[column] || 2;
     }
+
+    document.querySelectorAll('#itemsTable tbody tr[data-detail-url]').forEach(row => {
+        row.addEventListener('click', function (e) {
+            if (e.target.closest('a, button, input, select, textarea, label, form, .photo-cell, .action-buttons')) {
+                return;
+            }
+            const detailUrl = this.dataset.detailUrl;
+            if (detailUrl) {
+                window.location.href = detailUrl;
+            }
+        });
+    });
 
     // 代行サービス掲載切り替え
     function toggleProxyService(itemId, btn) {

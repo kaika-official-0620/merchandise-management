@@ -202,9 +202,8 @@
 {% block content %}
 <style>
 .sale-requests-page { max-width: 1320px; margin: 0 auto; }
-.request-tabs, .stats-row, .filter-grid, .info-grid { display: grid; gap: 1rem; }
-.request-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; }
-.tab-link, .stat-card, .panel, .request-card, .modal-content { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
+.stats-row, .filter-grid, .info-grid { display: grid; gap: 1rem; }
+.stat-card, .panel, .request-card, .modal-content, .client-summary-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06); }
 .tab-link { padding: 1rem 1.1rem; display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: #0f172a; font-weight: 700; }
 .tab-link.shipping.active { border-color: #f59e0b; background: #fff7ed; }
 .tab-link.completion.active { border-color: #2563eb; background: #eff6ff; }
@@ -213,6 +212,13 @@
 .stat-card { padding: 1rem 1.1rem; }
 .stat-label { color: #64748b; font-size: 0.84rem; }
 .stat-value { margin-top: .35rem; font-size: 1.9rem; font-weight: 800; color: #0f172a; }
+.client-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .85rem; margin-top: 1rem; }
+.client-summary-card { display: grid; gap: .55rem; padding: .95rem; text-decoration: none; color: inherit; }
+.client-summary-card:hover { border-color: #93c5fd; box-shadow: 0 12px 26px rgba(37, 99, 235, .12); }
+.client-summary-head { display: flex; align-items: center; justify-content: space-between; gap: .7rem; }
+.client-summary-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; color: #0f172a; }
+.client-summary-count { flex: 0 0 auto; min-width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: #0f172a; color: #fff; font-weight: 800; }
+.client-summary-meta { display: flex; flex-wrap: wrap; gap: .4rem; color: #64748b; font-size: .82rem; }
 .panel { padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
 .panel h2, .panel h3 { margin: 0 0 .35rem; color: #0f172a; }
 .panel p { margin: 0; color: #64748b; }
@@ -287,7 +293,7 @@
   .stats-row, .filter-grid, .info-grid.completion, .info-grid.shipping { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
-  .request-tabs, .stats-row, .filter-grid, .info-grid.completion, .info-grid.shipping, .preview-grid { grid-template-columns: 1fr; }
+  .stats-row, .filter-grid, .info-grid.completion, .info-grid.shipping, .preview-grid, .client-summary-grid { grid-template-columns: 1fr; }
   .request-card-head, .request-main-top, .filter-actions, .modal-footer { flex-direction: column; align-items: stretch; }
   .request-card-body { grid-template-columns: 1fr; }
   .product-photo { width: 100%; height: 220px; }
@@ -299,17 +305,6 @@
 </div>
 
 <div class="sale-requests-page">
-    <div class="request-tabs">
-        <a href="{{ url_for('admin_shipping_requests') }}" class="tab-link shipping {% if active_box == 'shipping' %}active{% endif %}">
-            <span>発送依頼BOX</span>
-            <span class="tab-count">{{ shipping_counts.pending }}</span>
-        </a>
-        <a href="{{ url_for('admin_completion_requests') }}" class="tab-link completion {% if active_box == 'completion' %}active{% endif %}">
-            <span>取引完了BOX</span>
-            <span class="tab-count">{{ completion_counts.pending }}</span>
-        </a>
-    </div>
-
     <div class="stats-row">
         <div class="stat-card"><div class="stat-label">表示件数</div><div class="stat-value">{{ current_requests|length }}</div></div>
         <div class="stat-card"><div class="stat-label">未対応</div><div class="stat-value">{{ box_counts.pending }}</div></div>
@@ -348,6 +343,28 @@
             <a href="{{ url_for('admin_shipping_requests' if active_box == 'shipping' else 'admin_completion_requests') }}" class="btn btn-secondary">クリア</a>
         </div>
     </form>
+
+    {% if current_requests %}
+    <section class="panel">
+        <h3>クライアント別</h3>
+        <p>未処理を見落とさないよう、クライアント単位でまとめています。</p>
+        <div class="client-summary-grid">
+            {% for client_id, group in current_requests|groupby('user_id') %}
+            {% set first = group[0] %}
+            <a class="client-summary-card" href="{{ url_for('admin_shipping_requests' if active_box == 'shipping' else 'admin_completion_requests', q=(first.display_name or first.username or first.user_id)) }}">
+                <div class="client-summary-head">
+                    <span class="client-summary-name">{{ first.display_name or first.username or ('ID:' ~ first.user_id) }}</span>
+                    <span class="client-summary-count">{{ group|length }}</span>
+                </div>
+                <div class="client-summary-meta">
+                    <span>ユーザーID {{ first.user_id or '-' }}</span>
+                    <span>最終更新 {{ ((first.updated_at or first.requested_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.requested_at or first.created_at) else '-' }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
 
     <section class="panel">
         <h2>{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }}</h2>

@@ -7764,6 +7764,10 @@ def index():
     sort_mode = (request.args.get('sort') or 'priority').strip()
     allowed_sort_modes = {
         'priority',
+        'registered',
+        'updated',
+        'timeline',
+        'sold_bottom',
         'newest',
         'oldest',
         'purchase_high',
@@ -8247,6 +8251,52 @@ def index():
         
         processed_items.append(item_dict)
 
+    def matches_inventory_status(row, status_key):
+        if not status_key:
+            return True
+        is_sold_item = bool(row.get('sale_date') or row.get('is_sold'))
+        if status_key == 'sold':
+            return is_sold_item
+        if status_key in {'unsold', 'active'}:
+            return not is_sold_item
+        if status_key == 'transaction':
+            return (
+                not is_sold_item
+                and (
+                    row.get('pending_completion_request')
+                    or row.get('pending_shipping_request')
+                    or row.get('can_send_completion_report')
+                    or row.get('approved_shipping_request')
+                    or row.get('shipment_marked')
+                )
+            )
+        if status_key == 'listed':
+            return not is_sold_item and bool(row.get('is_listed')) and not row.get('pending_sales_agency')
+        if status_key == 'agency':
+            return not is_sold_item and bool(row.get('pending_sales_agency'))
+        if status_key == 'shipping_pending':
+            return not is_sold_item and bool(row.get('pending_shipping_request'))
+        if status_key == 'completion_pending':
+            return not is_sold_item and bool(row.get('pending_completion_request'))
+        if status_key == 'appraisal_pending':
+            return not is_sold_item and row.get('appraisal_status') in {'waiting', 'inspecting'}
+        if status_key == 'unlisted':
+            return not is_sold_item and not row.get('is_listed') and not row.get('pending_sales_agency')
+        return True
+
+    enriched_status_filters = {
+        'transaction',
+        'listed',
+        'agency',
+        'shipping_pending',
+        'completion_pending',
+        'appraisal_pending',
+        'unlisted',
+        'active',
+    }
+    if filter_type in enriched_status_filters:
+        processed_items = [item for item in processed_items if matches_inventory_status(item, filter_type)]
+
     def parse_sort_datetime(value):
         if not value:
             return datetime.min
@@ -8290,6 +8340,27 @@ def index():
             return 0.0
 
     sort_handlers = {
+        'registered': lambda row: (
+            sold_sort_rank(row),
+            -sort_timestamp(row.get('created_at') or row.get('purchase_date')),
+            -item_sort_id(row),
+        ),
+        'updated': lambda row: (
+            sold_sort_rank(row),
+            -sort_timestamp(row.get('updated_at') or row.get('created_at') or row.get('purchase_date')),
+            -item_sort_id(row),
+        ),
+        'timeline': lambda row: (
+            sold_sort_rank(row),
+            -sort_timestamp(row.get('purchase_date') or row.get('created_at')),
+            -item_sort_id(row),
+        ),
+        'sold_bottom': lambda row: (
+            sold_sort_rank(row),
+            int(row.get('status_priority') or 50),
+            -sort_timestamp(row.get('updated_at') or row.get('created_at') or row.get('purchase_date')),
+            -item_sort_id(row),
+        ),
         'priority': lambda row: (
             sold_sort_rank(row),
             int(row.get('status_priority') or 50),
@@ -8347,6 +8418,10 @@ def index():
     summary_period_options = get_inventory_summary_period_options()
     sort_options = [
         {'key': 'priority', 'label': 'おすすめ順（未出品・対応待ち優先）'},
+        {'key': 'registered', 'label': '登録順（新しい順）'},
+        {'key': 'updated', 'label': '更新順（新しい順）'},
+        {'key': 'timeline', 'label': '時系列順（仕入日が新しい順）'},
+        {'key': 'sold_bottom', 'label': '売却済みを下に回す'},
         {'key': 'newest', 'label': '新しい順'},
         {'key': 'oldest', 'label': '古い順'},
         {'key': 'purchase_high', 'label': '仕入額が高い順'},
@@ -15101,8 +15176,11 @@ def admin_edit_user(id):
 @permission_required('users')
 def admin_user_items(id):
     status_filter = (request.args.get('status', 'all') or 'all').strip()
-    if status_filter not in {'all', 'sold', 'unsold'}:
+    if status_filter not in {'all', 'sold', 'unsold', 'transaction', 'listed', 'agency', 'unlisted'}:
         status_filter = 'all'
+    sort_mode = (request.args.get('sort') or 'sold_bottom').strip()
+    if sort_mode not in {'sold_bottom', 'registered', 'updated', 'timeline', 'sale_newest', 'purchase_high', 'sale_high', 'profit_high'}:
+        sort_mode = 'sold_bottom'
 
     start_month = request.args.get('start_month', '')
     end_month = request.args.get('end_month', '')
@@ -15240,7 +15318,58 @@ def admin_user_items(id):
         elif status_filter == 'unsold':
             if is_sold_item:
                 continue
+        elif status_filter == 'transaction':
+            if is_sold_item or not item.get('is_shipped'):
+                continue
+        elif status_filter == 'listed':
+            if is_sold_item or not item.get('is_listed'):
+                continue
+        elif status_filter == 'agency':
+            if is_sold_item or item.get('appraisal_status') not in {'waiting', 'inspecting'}:
+                continue
+        elif status_filter == 'unlisted':
+            if is_sold_item or item.get('is_listed') or item.get('appraisal_status') in {'waiting', 'inspecting'}:
+                continue
         filtered_items.append(item)
+
+    def user_item_timestamp(row, key):
+        value = row.get(key)
+        if isinstance(value, datetime):
+            return value
+        if hasattr(value, 'date') and callable(value.date):
+            try:
+                return datetime.combine(value.date(), datetime.min.time())
+            except Exception:
+                pass
+        if value:
+            text = str(value).strip()
+            for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+                try:
+                    return datetime.strptime(text[:26], fmt)
+                except ValueError:
+                    continue
+        return datetime.min
+
+    def user_item_number(row, key):
+        try:
+            return float(row.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def user_item_sold_rank(row):
+        return 1 if row.get('sale_date_obj') else 0
+
+    sort_map = {
+        'sold_bottom': lambda row: (user_item_sold_rank(row), -user_item_timestamp(row, 'updated_at').timestamp() if user_item_timestamp(row, 'updated_at') != datetime.min else 0, -(row.get('id') or 0)),
+        'registered': lambda row: (user_item_sold_rank(row), -user_item_timestamp(row, 'created_at').timestamp() if user_item_timestamp(row, 'created_at') != datetime.min else 0, -(row.get('id') or 0)),
+        'updated': lambda row: (user_item_sold_rank(row), -user_item_timestamp(row, 'updated_at').timestamp() if user_item_timestamp(row, 'updated_at') != datetime.min else 0, -(row.get('id') or 0)),
+        'timeline': lambda row: (user_item_sold_rank(row), -user_item_timestamp(row, 'purchase_date').timestamp() if user_item_timestamp(row, 'purchase_date') != datetime.min else 0, -(row.get('id') or 0)),
+        'sale_newest': lambda row: (0 if row.get('sale_date_obj') else 1, -user_item_timestamp(row, 'sale_date').timestamp() if user_item_timestamp(row, 'sale_date') != datetime.min else 0, -(row.get('id') or 0)),
+        'purchase_high': lambda row: (user_item_sold_rank(row), -user_item_number(row, 'display_purchase_price'), -(row.get('id') or 0)),
+        'sale_high': lambda row: (user_item_sold_rank(row), -user_item_number(row, 'display_sale_price'), -(row.get('id') or 0)),
+        'profit_high': lambda row: (user_item_sold_rank(row), -user_item_number(row, 'profit'), -(row.get('id') or 0)),
+    }
+    filtered_items.sort(key=sort_map.get(sort_mode, sort_map['sold_bottom']))
 
     monthly_summary = [
         monthly_summary_map[key]
@@ -15252,6 +15381,7 @@ def admin_user_items(id):
             'admin_user_items',
             id=id,
             status='all',
+            sort=sort_mode,
             start_month=start_month,
             end_month=end_month,
             period_preset=period_preset,
@@ -15261,6 +15391,7 @@ def admin_user_items(id):
             'admin_user_items',
             id=id,
             status='sold',
+            sort=sort_mode,
             start_month=start_month,
             end_month=end_month,
             period_preset=period_preset,
@@ -15270,6 +15401,7 @@ def admin_user_items(id):
             'admin_user_items',
             id=id,
             status='unsold',
+            sort=sort_mode,
             start_month=start_month,
             end_month=end_month,
             period_preset=period_preset,
@@ -15285,6 +15417,7 @@ def admin_user_items(id):
         summary=summary,
         monthly_summary=monthly_summary,
         status_filter=status_filter,
+        sort_mode=sort_mode,
         start_month=start_month,
         end_month=end_month,
         period_preset=period_preset,
@@ -30960,6 +31093,10 @@ def admin_disposal_requests():
     filtered_user_id = request.args.get('user_id', type=int)
     filtered_merchandise_id = request.args.get('merchandise_id', type=int)
     filtered_reason = (request.args.get('reason') or '').strip()
+    filtered_q = (request.args.get('q') or '').strip()
+    filtered_status = (request.args.get('status') or '').strip()
+    filtered_date_from = (request.args.get('date_from') or '').strip()
+    filtered_date_to = (request.args.get('date_to') or '').strip()
     filter_tags = []
     requests = []
 
@@ -30980,6 +31117,19 @@ def admin_disposal_requests():
         if filtered_reason in ('long_term', 'overdue'):
             where_clauses.append("dr.reason = %s")
             params.append(filtered_reason)
+        if filtered_q:
+            where_clauses.append("(m.product_name ILIKE %s OR m.brand_name ILIKE %s OR u.display_name ILIKE %s OR u.username ILIKE %s OR CAST(u.id AS TEXT) = %s)")
+            like_q = f"%{filtered_q}%"
+            params.extend([like_q, like_q, like_q, like_q, filtered_q])
+        if filtered_status:
+            where_clauses.append("dr.status = %s")
+            params.append(filtered_status)
+        if filtered_date_from:
+            where_clauses.append("DATE(dr.created_at) >= %s")
+            params.append(filtered_date_from)
+        if filtered_date_to:
+            where_clauses.append("DATE(dr.created_at) <= %s")
+            params.append(filtered_date_to)
 
         query = """
             SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
@@ -31007,6 +31157,19 @@ def admin_disposal_requests():
         if filtered_reason in ('long_term', 'overdue'):
             where_clauses.append("dr.reason = ?")
             params.append(filtered_reason)
+        if filtered_q:
+            where_clauses.append("(m.product_name LIKE ? OR m.brand_name LIKE ? OR u.display_name LIKE ? OR u.username LIKE ? OR CAST(u.id AS TEXT) = ?)")
+            like_q = f"%{filtered_q}%"
+            params.extend([like_q, like_q, like_q, like_q, filtered_q])
+        if filtered_status:
+            where_clauses.append("dr.status = ?")
+            params.append(filtered_status)
+        if filtered_date_from:
+            where_clauses.append("DATE(dr.created_at) >= ?")
+            params.append(filtered_date_from)
+        if filtered_date_to:
+            where_clauses.append("DATE(dr.created_at) <= ?")
+            params.append(filtered_date_to)
 
         query = """
             SELECT dr.*, m.product_name, m.brand_name, m.photo_path, m.purchase_price,
@@ -31041,6 +31204,12 @@ def admin_disposal_requests():
         if requests:
             product_name = requests[0].get('product_name')
         filter_tags.append(f"商品: {product_name or f'ID {filtered_merchandise_id}'}")
+    if filtered_q:
+        filter_tags.append(f"検索: {filtered_q}")
+    if filtered_status:
+        filter_tags.append(f"ステータス: {filtered_status}")
+    if filtered_date_from or filtered_date_to:
+        filter_tags.append(f"日付: {filtered_date_from or '指定なし'}〜{filtered_date_to or '指定なし'}")
 
     for req in requests:
         status_context = get_long_term_request_status_context(
@@ -31085,7 +31254,11 @@ def admin_disposal_requests():
                            filter_tags=filter_tags,
                            filtered_user_id=filtered_user_id,
                            filtered_merchandise_id=filtered_merchandise_id,
-                           filtered_reason=filtered_reason)
+                           filtered_reason=filtered_reason,
+                           filtered_q=filtered_q,
+                           filtered_status=filtered_status,
+                           filtered_date_from=filtered_date_from,
+                           filtered_date_to=filtered_date_to)
 
 
 @app.route('/admin/disposal-request/<int:request_id>/process', methods=['POST'])
@@ -36748,6 +36921,9 @@ def admin_sales_agency_requests():
 
     service_filter = request.args.get('service_type', 'all')
     status_filter = request.args.get('status', 'all')
+    q_filter = (request.args.get('q') or '').strip()
+    date_from_filter = (request.args.get('date_from') or '').strip()
+    date_to_filter = (request.args.get('date_to') or '').strip()
     box_title = {
         'wholesale': '業者卸販売BOX',
         'auction': '業者オークションBOX',
@@ -36776,6 +36952,12 @@ def admin_sales_agency_requests():
         if status_filter != 'all':
             conditions.append(f"sar.status = {placeholder}")
             params.append(status_filter)
+        if date_from_filter:
+            conditions.append(f"DATE(sar.created_at) >= {placeholder}")
+            params.append(date_from_filter)
+        if date_to_filter:
+            conditions.append(f"DATE(sar.created_at) <= {placeholder}")
+            params.append(date_to_filter)
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ''
         cur.execute(
@@ -36824,6 +37006,24 @@ def admin_sales_agency_requests():
             request_row, _ = fetch_sales_agency_request_details(request_id, viewer='admin')
             if not request_row:
                 continue
+            if q_filter:
+                needle = q_filter.lower()
+                haystack_parts = [
+                    str(request_row.get('id') or ''),
+                    str(request_row.get('user_id') or ''),
+                    str(request_row.get('client_name') or ''),
+                    str(request_row.get('client_identifier') or ''),
+                    str(request_row.get('service_name') or ''),
+                    str(request_row.get('status_label') or ''),
+                ]
+                for item in request_row.get('merchandise_items') or []:
+                    haystack_parts.extend([
+                        str(item.get('id') or ''),
+                        str(item.get('product_name') or ''),
+                        str(item.get('brand_name') or ''),
+                    ])
+                if needle not in " ".join(haystack_parts).lower():
+                    continue
             request_row['detail_url'] = url_for('admin_sales_agency_request_detail', id=request_row['id'])
             requests_list.append(request_row)
 
@@ -36833,6 +37033,9 @@ def admin_sales_agency_requests():
             stats=stats,
             status_filter=status_filter,
             service_filter=service_filter,
+            q_filter=q_filter,
+            date_from_filter=date_from_filter,
+            date_to_filter=date_to_filter,
             box_title=box_title,
             service_types=SALES_AGENCY_SERVICE_TYPES,
             statuses=SALES_AGENCY_STATUS,
@@ -36846,6 +37049,9 @@ def admin_sales_agency_requests():
             stats=stats,
             status_filter=status_filter,
             service_filter=service_filter,
+            q_filter=q_filter,
+            date_from_filter=date_from_filter,
+            date_to_filter=date_to_filter,
             box_title=box_title,
             service_types=SALES_AGENCY_SERVICE_TYPES,
             statuses=SALES_AGENCY_STATUS,
@@ -38207,7 +38413,7 @@ def admin_documents_history_v2():
         },
         {
             'step': '5',
-            'title': 'クライアント返信確認',
+            'title': '顧客からの書類受付（履歴）',
             'copy': 'クライアント側から届いた見積依頼書や確認書類を後から確認します。',
             'count_label': f"{count_document_history(doc_type='user_mitsumori', direction='client_outgoing')}件",
             'url': url_for('admin_documents_history', doc_type='user_mitsumori', direction='client_outgoing'),
@@ -40998,7 +41204,7 @@ def admin_documents_dashboard_preview():
         },
         {
             "step": "5",
-            "title": "クライアント返信確認",
+            "title": "顧客からの書類受付（履歴）",
             "description": "クライアント側から届いた見積依頼書や確認書類を、管理画面で受領・確認する専用画面です。ここでは新規作成せず受信内容だけを確認します。",
             "count_label": "受領書類を確認",
             "url": url_for("admin_mitsumori_list"),

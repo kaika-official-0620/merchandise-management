@@ -42,7 +42,7 @@
     <div class="form-section">
         <h3>案件情報</h3>
         <div class="attachment-info">
-            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 申請ID {{ source_request.id }}</p>
+            <p><strong>対象案件:</strong> {{ source_request.service_name }} / {{ source_request.client_name }} / 受付番号 {{ source_request.reception_number or source_request.id }}</p>
             <p>この案件に紐づく既存データを引用して精算書を作成します。明細は必要に応じて編集できます。</p>
         </div>
     </div>

@@ -58,6 +58,85 @@
     color: #10b981;
 }
 
+.client-summary-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.client-summary-panel h2 {
+    margin: 0 0 .35rem;
+    color: #0f172a;
+}
+
+.client-summary-panel p {
+    margin: 0;
+    color: #64748b;
+}
+
+.client-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: .85rem;
+    margin-top: 1rem;
+}
+
+.client-summary-card {
+    display: grid;
+    gap: .55rem;
+    padding: .9rem;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.client-summary-card:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, .12);
+}
+
+.client-summary-head {
+    display: flex;
+    justify-content: space-between;
+    gap: .7rem;
+    align-items: center;
+}
+
+.client-summary-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.client-summary-count {
+    flex: 0 0 auto;
+    min-width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #fff;
+    font-weight: 800;
+}
+
+.client-summary-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    color: #64748b;
+    font-size: .82rem;
+}
+
 .requests-list {
     display: flex;
     flex-direction: column;
@@ -92,6 +171,51 @@
     color: #9a3412;
     font-size: 0.82rem;
     font-weight: 600;
+}
+
+.disposal-filter-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.disposal-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+    align-items: end;
+}
+
+.disposal-filter-field {
+    min-width: 0;
+}
+
+.disposal-filter-field label {
+    display: block;
+    margin-bottom: .35rem;
+    color: #334155;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.disposal-filter-field input,
+.disposal-filter-field select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: .68rem .75rem;
+    font-size: .92rem;
+}
+
+.disposal-filter-actions {
+    display: flex;
+    gap: .55rem;
+    flex-wrap: wrap;
 }
 
 .request-card {
@@ -382,6 +506,16 @@
     .stats-cards {
         grid-template-columns: 1fr;
     }
+
+    .disposal-filter-grid,
+    .client-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .disposal-filter-actions .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
     
     .request-body {
         grid-template-columns: 1fr;
@@ -419,6 +553,45 @@
             <div class="stat-value">{{ completed_count }}</div>
         </div>
     </div>
+
+    <form class="disposal-filter-panel" method="GET">
+        <div class="disposal-filter-grid">
+            <div class="disposal-filter-field">
+                <label for="disposal-q">検索</label>
+                <input id="disposal-q" type="text" name="q" value="{{ filtered_q or '' }}" placeholder="クライアント名 / ユーザーID / 商品名">
+            </div>
+            <div class="disposal-filter-field">
+                <label for="disposal-status">ステータス</label>
+                <select id="disposal-status" name="status">
+                    <option value="">すべて</option>
+                    <option value="pending" {% if filtered_status == 'pending' %}selected{% endif %}>未処理</option>
+                    <option value="processing" {% if filtered_status == 'processing' %}selected{% endif %}>処理中</option>
+                    <option value="completed" {% if filtered_status == 'completed' %}selected{% endif %}>完了</option>
+                    <option value="rejected" {% if filtered_status == 'rejected' %}selected{% endif %}>却下</option>
+                </select>
+            </div>
+            <div class="disposal-filter-field">
+                <label for="disposal-reason">理由</label>
+                <select id="disposal-reason" name="reason">
+                    <option value="">すべて</option>
+                    <option value="long_term" {% if filtered_reason == 'long_term' %}selected{% endif %}>長期保存</option>
+                    <option value="overdue" {% if filtered_reason == 'overdue' %}selected{% endif %}>月謝未払い</option>
+                </select>
+            </div>
+            <div class="disposal-filter-field">
+                <label for="disposal-date-from">開始日</label>
+                <input id="disposal-date-from" type="date" name="date_from" value="{{ filtered_date_from or '' }}">
+            </div>
+            <div class="disposal-filter-field">
+                <label for="disposal-date-to">終了日</label>
+                <input id="disposal-date-to" type="date" name="date_to" value="{{ filtered_date_to or '' }}">
+            </div>
+        </div>
+        <div class="disposal-filter-actions" style="margin-top:.85rem;">
+            <button type="submit" class="btn btn-primary">絞り込む</button>
+            <a href="{{ url_for('admin_disposal_requests') }}" class="btn btn-secondary">検索を解除</a>
+        </div>
+    </form>
     
     <!-- 申請一覧 -->
     {% if filter_tags %}
@@ -432,6 +605,26 @@
     {% endif %}
 
     {% if requests %}
+    <section class="client-summary-panel">
+        <h2>クライアント別</h2>
+        <p>未処理が埋もれないよう、同じクライアントの申請をまとめています。</p>
+        <div class="client-summary-grid">
+            {% for user_id, group in requests|groupby('user_id') %}
+            {% set first = group[0] %}
+            <a class="client-summary-card" href="{{ url_for('admin_disposal_requests', q=(first.display_name or first.username or first.user_id)) }}">
+                <div class="client-summary-head">
+                    <span class="client-summary-name">{{ first.display_name or first.username or ('ID:' ~ first.user_id) }}</span>
+                    <span class="client-summary-count">{{ group|length }}</span>
+                </div>
+                <div class="client-summary-meta">
+                    <span>ユーザーID {{ first.user_id or '-' }}</span>
+                    <span>最終更新 {{ ((first.updated_at or first.requested_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.requested_at or first.created_at) else '-' }}</span>
+                    <span>{{ first.status_label }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
     <div class="requests-list">
         {% for req in requests %}
         <div class="request-card {{ req.status_stage }}">
