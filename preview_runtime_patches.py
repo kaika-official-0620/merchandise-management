@@ -1539,7 +1539,19 @@ def apply(module: Any) -> None:
                 request_row["merchandise_items"] = items
                 request_row["service_name"] = get_service_display_name(request_row.get("service_type"))
                 request_row["client_name"] = request_row.get("user_name") or request_row.get("username") or "未設定"
+                request_row["client_identifier"] = f"ユーザーID {request_row.get('user_id') or '-'}"
+                contact_parts = []
+                if request_row.get("username"):
+                    contact_parts.append(f"ログインID: {request_row.get('username')}")
+                if request_row.get("user_email"):
+                    contact_parts.append(f"メール: {request_row.get('user_email')}")
+                request_row["client_contact_label"] = " / ".join(contact_parts) if contact_parts else "連絡先未登録"
                 request_row["status_label"] = get_sales_agency_status_label(request_row.get("status"), viewer="admin")
+                request_row["client_status_label"] = get_sales_agency_status_label(
+                    request_row.get("status"),
+                    viewer="client",
+                    service_type=request_row.get("service_type"),
+                )
                 request_row["pending_appraisal_count"] = source_request.get("pending_appraisal_count") if source_request else 0
                 request_row["request_can_create_documents"] = (
                     request_row.get("service_type") == "wholesale"
@@ -1720,6 +1732,9 @@ def apply(module: Any) -> None:
 
         status_filter = request.args.get("status", "all")
         service_filter = request.args.get("service_type", "all")
+        q_filter = (request.args.get("q") or "").strip()
+        date_from_filter = (request.args.get("date_from") or "").strip()
+        date_to_filter = (request.args.get("date_to") or "").strip()
         box_title = {
             "wholesale": "業者卸販売BOX",
             "auction": "業者オークションBOX",
@@ -1727,7 +1742,7 @@ def apply(module: Any) -> None:
         }.get(service_filter, "販売代行サービス申請BOX")
 
         requests_list = []
-        stats = {"pending": 0, "approved": 0, "appraising": 0, "completed": 0, "rejected": 0}
+        stats = {"pending": 0, "approved": 0, "appraising": 0, "inspecting": 0, "completed": 0, "rejected": 0}
 
         conn, cur = open_cursor()
         try:
@@ -1741,11 +1756,18 @@ def apply(module: Any) -> None:
             if service_filter != "all":
                 conditions.append(f"sar.service_type = {placeholder}")
                 params.append(service_filter)
+            if date_from_filter:
+                conditions.append(f"DATE(sar.created_at) >= {placeholder}")
+                params.append(date_from_filter)
+            if date_to_filter:
+                conditions.append(f"DATE(sar.created_at) <= {placeholder}")
+                params.append(date_to_filter)
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
             cur.execute(
                 f"""
                 SELECT sar.*, u.display_name AS user_name, u.username,
+                       u.email AS user_email,
                        p.display_name AS processor_name
                 FROM sales_agency_requests sar
                 JOIN users u ON sar.user_id = u.id
@@ -1755,8 +1777,9 @@ def apply(module: Any) -> None:
                     WHEN 'pending' THEN 0
                     WHEN 'approved' THEN 1
                     WHEN 'appraising' THEN 2
-                    WHEN 'completed' THEN 3
-                    WHEN 'rejected' THEN 4
+                    WHEN 'inspecting' THEN 3
+                    WHEN 'completed' THEN 4
+                    WHEN 'rejected' THEN 5
                     ELSE 9
                 END, sar.created_at DESC
                 """,
@@ -1783,6 +1806,25 @@ def apply(module: Any) -> None:
                 }.get(request_row.get("status"), [])
                 request_row["created_at"] = as_timestamp_text(request_row.get("created_at"))
                 request_row["processed_at"] = as_timestamp_text(request_row.get("processed_at"))
+                if q_filter:
+                    needle = q_filter.lower()
+                    haystack_parts = [
+                        str(request_row.get("id") or ""),
+                        str(request_row.get("user_id") or ""),
+                        str(request_row.get("client_name") or ""),
+                        str(request_row.get("client_identifier") or ""),
+                        str(request_row.get("client_contact_label") or ""),
+                        str(request_row.get("service_name") or ""),
+                        str(request_row.get("status_label") or ""),
+                    ]
+                    for item in request_row.get("merchandise_items") or []:
+                        haystack_parts.extend([
+                            str(item.get("id") or ""),
+                            str(item.get("product_name") or ""),
+                            str(item.get("brand_name") or ""),
+                        ])
+                    if needle not in " ".join(haystack_parts).lower():
+                        continue
                 requests_list.append(request_row)
 
             stat_params = []
@@ -1808,6 +1850,9 @@ def apply(module: Any) -> None:
             stats=stats,
             status_filter=status_filter,
             service_filter=service_filter,
+            q_filter=q_filter,
+            date_from_filter=date_from_filter,
+            date_to_filter=date_to_filter,
             box_title=box_title,
             service_types=SALES_AGENCY_SERVICE_TYPES,
             statuses=SALES_AGENCY_STATUS,
