@@ -37024,6 +37024,17 @@ def admin_sales_agency_requests():
                     ])
                 if needle not in " ".join(haystack_parts).lower():
                     continue
+            request_row.setdefault('client_name', request_row.get('user_name') or request_row.get('username') or '未設定ユーザー')
+            request_row.setdefault('client_identifier', f"ユーザーID {request_row.get('user_id') or '-'}")
+            request_row.setdefault(
+                'status_label',
+                get_sales_agency_status_label(request_row.get('status'), viewer='admin', service_type=request_row.get('service_type'))
+            )
+            request_row.setdefault(
+                'client_status_label',
+                get_sales_agency_status_label(request_row.get('status'), viewer='client', service_type=request_row.get('service_type'))
+            )
+            request_row.setdefault('merchandise_items', [])
             request_row['detail_url'] = url_for('admin_sales_agency_request_detail', id=request_row['id'])
             requests_list.append(request_row)
 
