@@ -5853,6 +5853,48 @@ def build_completion_report_notes(existing_notes, user_note='', admin_note=''):
             notes = f"{notes}\n{addition}".strip()
     return notes
 
+def delete_static_upload_file(relative_path):
+    if not relative_path:
+        return
+    normalized_path = str(relative_path).replace('\\', '/').lstrip('/')
+    if not normalized_path.startswith('uploads/'):
+        return
+    static_upload_root = os.path.abspath(os.path.join(app.root_path, 'static', 'uploads'))
+    file_path = os.path.abspath(os.path.join(app.root_path, 'static', *normalized_path.split('/')))
+    try:
+        if os.path.commonpath([static_upload_root, file_path]) != static_upload_root:
+            return
+    except ValueError:
+        return
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        pass
+
+def cleanup_sale_request_uploads_for_item(cur, item_id):
+    if DATABASE_URL:
+        cur.execute(
+            "SELECT qr_image_path, qr_image_path2 FROM sale_requests WHERE merchandise_id = %s",
+            (item_id,),
+        )
+    else:
+        cur.execute(
+            "SELECT qr_image_path, qr_image_path2 FROM sale_requests WHERE merchandise_id = ?",
+            (item_id,),
+        )
+    for row in cur.fetchall():
+        if isinstance(row, dict):
+            qr_image_path = row.get('qr_image_path')
+            qr_image_path2 = row.get('qr_image_path2')
+        elif hasattr(row, 'keys'):
+            qr_image_path = row['qr_image_path']
+            qr_image_path2 = row['qr_image_path2']
+        else:
+            qr_image_path = row[0] if len(row) > 0 else None
+            qr_image_path2 = row[1] if len(row) > 1 else None
+        delete_static_upload_file(qr_image_path)
+        delete_static_upload_file(qr_image_path2)
+
 def calculate_profit_rate(profit, purchase_price):
     """利益率を計算（利益 ÷ 仕入れ金額 × 100）"""
     if purchase_price > 0:
@@ -24359,6 +24401,8 @@ def admin_delete_item(id):
                     return redirect(request.referrer or url_for('admin_user_products'))
     
     # 削除実行
+    cleanup_sale_request_uploads_for_item(cur, id)
+
     if DATABASE_URL:
         cur.execute("DELETE FROM merchandise WHERE id = %s", (id,))
     else:
