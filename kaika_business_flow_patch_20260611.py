@@ -1052,7 +1052,7 @@ def apply(module: Any) -> None:
     def admin_vendor_delete(vendor_id: int):
         ensure_schema()
         ph = placeholder()
-        conn, cur = open_cursor(False)
+        conn, cur = open_cursor()
         try:
             cur.execute(f"SELECT * FROM vendors WHERE id = {ph}", (vendor_id,))
             vendor = row_to_dict(cur.fetchone())
