@@ -564,11 +564,14 @@ def apply(module: Any) -> None:
                 SELECT vd.*,
                        u.display_name AS client_display_name,
                        u.username AS client_username,
+                       editor.display_name AS editor_display_name,
+                       editor.username AS editor_username,
                        m.product_name AS item_product_name,
                        m.kaika_product_code AS item_code,
                        v.name AS master_vendor_name
                 FROM vendor_documents vd
                 LEFT JOIN users u ON vd.user_id = u.id
+                LEFT JOIN users editor ON vd.edited_by = editor.id
                 LEFT JOIN merchandise m ON vd.item_id = m.id
                 LEFT JOIN vendors v ON vd.vendor_id = v.id
                 {where}
@@ -583,6 +586,8 @@ def apply(module: Any) -> None:
                 doc["vendor_display_name"] = clean_text(doc.get("master_vendor_name"), "") or clean_text(doc.get("vendor_name"), "未指定")
                 doc["item_name"] = clean_text(doc.get("item_product_name"), "") or clean_text(doc.get("extracted_item_name"), "未指定")
                 doc["registered_label"] = format_datetime(doc.get("registered_at"))
+                doc["edited_label"] = format_datetime(doc.get("edited_at"))
+                doc["editor_name"] = clean_text(doc.get("editor_display_name"), "") or clean_text(doc.get("editor_username"), "")
                 doc["status_label"] = status_label(doc.get("status"))
                 doc["amount_difference"] = safe_int(doc.get("amount_difference"))
                 doc["difference_rate"] = safe_int(doc.get("difference_rate"))

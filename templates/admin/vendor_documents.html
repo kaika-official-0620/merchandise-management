@@ -135,7 +135,8 @@
             <th>流し先業者</th>
             <th>関連クライアント</th>
             <th>対象商品</th>
-            <th>業者額 / 顧客額</th>
+            <th>業者買取額 / 顧客支払額</th>
+            <th>差額 / 編集履歴</th>
             <th>書類名 / ファイル</th>
             <th>状態</th>
             <th>操作</th>
@@ -149,9 +150,14 @@
             <td>{{ doc.client_name or '-' }}</td>
             <td>{{ doc.item_name or '未指定' }}</td>
             <td>
-              <div>業者 ¥{{ "{:,}".format(doc.vendor_amount or 0) }}</div>
-              <div>顧客 ¥{{ "{:,}".format(doc.customer_amount or 0) }}</div>
-              <small>差額 ¥{{ "{:,}".format(doc.amount_difference or 0) }}</small>
+              <div>業者買取額（参考金額） ¥{{ "{:,}".format(doc.vendor_amount or 0) }}</div>
+              <div>顧客へ支払う金額 ¥{{ "{:,}".format(doc.customer_amount or 0) }}</div>
+            </td>
+            <td>
+              <div>差額 ¥{{ "{:,}".format(doc.amount_difference or 0) }}</div>
+              <div>差額率 {{ doc.difference_rate or 0 }}%</div>
+              <small>編集した管理者: {{ doc.editor_name or '-' }}</small><br>
+              <small>編集日時: {{ doc.edited_label or doc.registered_label or '-' }}</small>
             </td>
             <td>
               <strong>{{ doc.title or doc.original_filename }}</strong><br>
@@ -160,7 +166,7 @@
             <td><span class="status-chip">{{ doc.status_label }}</span></td>
             <td class="vendor-actions">
               <a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ダウンロード</a>
-              <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-secondary btn-sm">顧客向け明細へ</a>
+              <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-secondary btn-sm">顧客向け買取明細書へ</a>
               <form method="POST" action="{{ doc.delete_url }}" onsubmit="return confirm('この業者関連書類を削除しますか？');" style="display:inline;">
                 <button type="submit" class="btn btn-danger btn-sm">削除</button>
               </form>

@@ -110,6 +110,21 @@
     </div>
 
     <div class="form-section">
+        <h3>業者書類の参考金額</h3>
+        <div class="attachment-info">
+            {% if source_vendor_kaitori is defined and source_vendor_kaitori %}
+            <p><strong>業者買取額（参考金額）:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.vendor_amount or 0) }}</p>
+            <p><strong>顧客へ支払う金額:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.customer_amount or 0) }}</p>
+            <p><strong>差額:</strong> ¥{{ "{:,}".format(source_vendor_kaitori.amount_difference or 0) }} / <strong>差額率:</strong> {{ source_vendor_kaitori.difference_rate or 0 }}%</p>
+            <p><strong>編集した管理者:</strong> {{ source_vendor_kaitori.editor_name or '-' }} / <strong>編集日時:</strong> {{ source_vendor_kaitori.edited_label or '-' }}</p>
+            {% else %}
+            <p>業者買取額は「業者関連書類登録」の参考金額を確認してください。顧客へ支払う金額は、下の明細の買取金額欄で管理者が入力・編集できます。</p>
+            <p>差額、差額率、編集した管理者、編集日時は、業者関連書類側で確認できます。</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-section">
         <h3>買取商品</h3>
         <div class="product-selector">
             <label>登録商品から追加：</label>
