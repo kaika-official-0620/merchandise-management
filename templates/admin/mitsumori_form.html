@@ -646,8 +646,122 @@
         min-width: 0;
     }
 
+    .table-responsive {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .items-table,
+    .items-table thead,
+    .items-table tbody,
+    .items-table tfoot,
+    .items-table tr,
+    .items-table th,
+    .items-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
     .items-table {
-        min-width: 760px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .items-table thead {
+        display: none;
+    }
+
+    .items-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .items-table .item-row {
+        padding: 0.8rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .items-table .item-row td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.42rem 0;
+        border: 0;
+        text-align: left;
+    }
+
+    .items-table .item-row td::before {
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+    }
+
+    .items-table .item-row td:nth-child(1)::before {
+        content: "No.";
+    }
+
+    .items-table .item-row td:nth-child(2) {
+        grid-template-columns: 1fr;
+    }
+
+    .items-table .item-row td:nth-child(2)::before {
+        content: "商品名・内容";
+    }
+
+    .items-table .item-row td:nth-child(3)::before {
+        content: "数量";
+    }
+
+    .items-table .item-row td:nth-child(4)::before {
+        content: "単価";
+    }
+
+    .items-table .item-row td:nth-child(5)::before {
+        content: "金額";
+    }
+
+    .items-table .item-row td:nth-child(6)::before {
+        content: "操作";
+    }
+
+    .items-table .item-row .row-amount,
+    .items-table .item-row .item-no {
+        text-align: left;
+    }
+
+    .items-table tfoot {
+        margin-top: 0.75rem;
+    }
+
+    .items-table tfoot tr {
+        display: grid;
+        gap: 0.45rem;
+        padding: 0.85rem;
+        border-radius: 6px;
+        background: #eff6ff;
+    }
+
+    .items-table tfoot td {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+    }
+
+    .items-table tfoot td:empty {
+        display: none;
+    }
+
+    .items-table tfoot .text-right,
+    #total-amount {
+        text-align: left;
     }
 
     .form-actions,
