@@ -2366,8 +2366,12 @@
                 class="filter-btn {% if filter_type == 'transaction' %}active{% endif %}">取引中</a>
             <a href="{{ url_for('index', filter='listed', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'listed' %}active{% endif %}">出品中</a>
+            <a href="{{ url_for('index', filter='certified', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'certified' %}active{% endif %}">認証済み</a>
             <a href="{{ url_for('index', filter='agency', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'agency' %}active{% endif %}">業者依頼中</a>
+            <a href="{{ url_for('index', filter='appraisal_pending', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'appraisal_pending' %}active{% endif %}">査定中</a>
             <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'unsold' %}active{% endif %}">未売却</a>
             <div class="filter-item">
@@ -2388,10 +2392,11 @@
                     <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済みのみ</option>
                     <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中のみ</option>
                     <option value="listed" {% if filter_type == 'listed' %}selected{% endif %}>出品中のみ</option>
+                    <option value="certified" {% if filter_type == 'certified' %}selected{% endif %}>認証済みのみ</option>
                     <option value="agency" {% if filter_type == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
                     <option value="shipping_pending" {% if filter_type == 'shipping_pending' %}selected{% endif %}>発送依頼中のみ</option>
                     <option value="completion_pending" {% if filter_type == 'completion_pending' %}selected{% endif %}>取引完了依頼中のみ</option>
-                    <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定待ちのみ</option>
+                    <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定中のみ</option>
                     <option value="unlisted" {% if filter_type == 'unlisted' %}selected{% endif %}>未出品のみ</option>
                 </select>
             </div>
@@ -3102,7 +3107,7 @@
             if (filterCondition && condition !== filterCondition) return false;
             if (filterStore && store !== filterStore) return false;
             if (filterDate && date !== filterDate) return false;
-            if (filterStatus && status !== filterStatus) return false;
+            if (filterStatus && !statusMatchesFilter(status, filterStatus)) return false;
 
             // 料金フィルター
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
@@ -3286,6 +3291,15 @@
             'profit': 15
         };
         return map[column] || 2;
+    }
+
+    function statusMatchesFilter(status, filterStatus) {
+        if (!filterStatus) return true;
+        if (filterStatus === status) return true;
+        if (filterStatus === 'certified') return status === 'listed';
+        if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
+        if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';
+        return false;
     }
 
     document.querySelectorAll('#itemsTable tbody tr[data-detail-url]').forEach(row => {

@@ -260,8 +260,25 @@ def apply(module: Any) -> None:
 
         user_info: dict[str, Any] = {}
         if request.method == "POST":
+            display_name_submitted = "display_name" in request.form
+            new_display_name = (request.form.get("display_name") or "").strip()
             current_password = request.form.get("current_password") or ""
             new_password = request.form.get("new_password") or ""
+            did_update = False
+            if display_name_submitted:
+                conn, cur = open_cursor()
+                try:
+                    cur.execute(
+                        f"UPDATE users SET display_name = {placeholder()} WHERE id = {placeholder()}",
+                        (new_display_name or None, current_user.id),
+                    )
+                    conn.commit()
+                    did_update = True
+                    flash("表示名を保存しました。", "success")
+                finally:
+                    cur.close()
+                    conn.close()
+
             if current_password and new_password:
                 conn, cur = open_cursor()
                 try:
@@ -271,14 +288,15 @@ def apply(module: Any) -> None:
                         cur.execute(f"UPDATE users SET password_hash = {placeholder()} WHERE id = {placeholder()}",
                                     (generate_password_hash(new_password), current_user.id))
                         conn.commit()
+                        did_update = True
                         flash("パスワードを変更しました。", "success")
                     else:
                         flash("現在のパスワードが正しくありません。", "error")
                 finally:
                     cur.close()
                     conn.close()
-            else:
-                flash("管理者設定で変更できる項目はパスワードのみです。", "info")
+            elif not did_update:
+                flash("変更する内容を入力してください。", "info")
             return redirect(url_for("profile"))
 
         try:

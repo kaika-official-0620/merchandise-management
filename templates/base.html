@@ -369,9 +369,9 @@
             <div class="nav-user" id="navUser">
                 <div class="user-menu-trigger" onclick="toggleUserMenu(event)" title="{{ nav_display_name }}">
                     <span class="user-name">{{ nav_display_name }}</span>
-                    {% if current_user.is_owner() %}
+                    {% if current_user.is_owner() and nav_display_name != 'オーナー' %}
                     <span class="user-badge owner">オーナー</span>
-                    {% elif current_user.is_admin() %}
+                    {% elif current_user.is_admin() and nav_display_name != '管理者' %}
                     <span class="user-badge">管理者</span>
                     {% endif %}
                     <span class="menu-arrow">▼</span>
@@ -739,6 +739,14 @@
             'admin_documents_dashboard_v2',
             'admin_documents_history',
             'admin_documents_history_v2',
+            'admin_vendor_documents',
+            'admin_vendors',
+            'admin_monthly_fee_settings',
+            'admin_monthly_settlements',
+            'admin_shipping_requests',
+            'admin_completion_requests',
+            'admin_sales_agency_requests',
+            'admin_disposal_requests',
             'admin_analytics',
             'admin_analytics_kaika',
             'admin_analytics_kaika_sales',

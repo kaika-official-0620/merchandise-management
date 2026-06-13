@@ -20,7 +20,7 @@
                 <input type="text" value="{{ shikiriosho.document_no if shikiriosho else document_no }}" readonly class="form-control readonly">
             </div>
             <div class="form-group">
-                <label for="issue_date">請求日 *</label>
+                <label for="issue_date">発行日 *</label>
                 <input type="date" id="issue_date" name="issue_date" value="{{ shikiriosho.issue_date if shikiriosho else today }}" required class="form-control">
             </div>
             <div class="form-group">
@@ -214,7 +214,7 @@
                 </div>
                 <div class="preview-meta">
                     <div>書類No.: <strong id="shikiri-preview-document-no">-</strong></div>
-                    <div>請求日: <strong id="shikiri-preview-issue-date">-</strong></div>
+                    <div>発行日: <strong id="shikiri-preview-issue-date">-</strong></div>
                     <div>支払期限: <strong id="shikiri-preview-due-date">-</strong></div>
                 </div>
             </div>

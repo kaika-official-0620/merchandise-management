@@ -1552,7 +1552,9 @@
                     <option value="sold">売却済みのみ</option>
                     <option value="transaction">取引中のみ</option>
                     <option value="listed">出品中のみ</option>
+                    <option value="certified">認証済みのみ</option>
                     <option value="agency">業者依頼中のみ</option>
+                    <option value="appraisal_pending">査定中のみ</option>
                     <option value="unlisted">未出品</option>
                 </select>
             </div>
@@ -1656,7 +1658,7 @@
                     data-created-at="{{ item.created_at or '' }}"
                     data-updated-at="{{ item.updated_at or '' }}"
                     data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
-                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
                     data-detail-url="{{ url_for('view_item', id=item.id) }}">
                     {% if not long_term_only %}
                     <td>
@@ -1722,7 +1724,7 @@
                         {% elif item.is_shipped %}
                         <span class="status-badge listed">取引中</span>
                         {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
-                        <span class="status-badge listed">業者依頼中</span>
+                        <span class="status-badge listed">査定中</span>
                         {% elif item.is_listed %}
                         <span class="status-badge listed">出品中</span>
                         {% else %}
@@ -1811,7 +1813,7 @@
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
             data-owner="{{ item.owner_display_name or item.owner_username or '' }}" data-owner-id="{{ item.user_id or '' }}"
             data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
-            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}agency{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-purchase-price="{{ item.wholesale_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
             data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
@@ -1858,7 +1860,7 @@
                     {% elif item.is_shipped %}
                     <span class="status-badge listed">取引中</span>
                     {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
-                    <span class="status-badge listed">業者依頼中</span>
+                    <span class="status-badge listed">査定中</span>
                     {% elif item.is_listed %}
                     <span class="status-badge listed">出品中</span>
                     {% else %}
@@ -2143,10 +2145,10 @@
             if (filterModel && !model.includes(filterModel)) show = false;
             if (filterOwnerId && ownerId !== filterOwnerId) show = false;
             if (filterCondition && condition !== filterCondition) show = false;
-            if (filterStatus && status !== filterStatus) show = false;
+            if (filterStatus && !statusMatchesFilter(status, filterStatus)) show = false;
             if (queryStatus === 'unsold') {
                 if (status === 'sold') show = false;
-            } else if (queryStatus && status !== queryStatus) {
+            } else if (queryStatus && !statusMatchesFilter(status, queryStatus)) {
                 show = false;
             }
             if (querySaleType && !saleTypes.includes(querySaleType)) show = false;
@@ -2320,6 +2322,15 @@
         } else {
             sortElements('#itemsTable tbody', 'tr', column, ascending);
         }
+    }
+
+    function statusMatchesFilter(status, filterStatus) {
+        if (!filterStatus) return true;
+        if (status === filterStatus) return true;
+        if (filterStatus === 'certified') return status === 'listed';
+        if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
+        if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';
+        return false;
     }
 
     function applySortSelection() {

@@ -10,6 +10,9 @@
 .stage-card:hover,.quick-card:hover{border-color:#93c5fd;box-shadow:0 14px 28px rgba(37,99,235,.12)}
 .stage-card-head{display:flex;gap:.7rem;align-items:center}.stage-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
 .doc-actions{display:flex;gap:.65rem;flex-wrap:wrap}.doc-table-wrap{overflow-x:auto}.doc-table{width:100%;border-collapse:collapse;min-width:900px}.doc-table th,.doc-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.doc-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.doc-table tr[data-detail-url]{cursor:pointer}.doc-table tr[data-detail-url]:hover td{background:#f8fbff}
+.doc-mini-link{color:#2563eb;text-decoration:none;font-weight:700}.doc-mini-link:hover{text-decoration:underline}
+.doc-note{margin:.45rem 0 0;color:#64748b;font-size:.88rem;line-height:1.7}
 .empty-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b}
 @media(max-width:768px){.doc-panel{padding:1rem;border-radius:10px}.doc-actions .btn{width:100%;justify-content:center}.doc-table{min-width:760px}}
 </style>
@@ -26,7 +29,7 @@
 
   {% if selected_group == 'all' %}
   <section class="doc-panel">
-    <h2>処理ステップ</h2>
+    <h2>ユーザー用処理ステップ</h2>
     <div class="doc-stage-grid">
       {% for card in stage_cards %}
       <a class="stage-card" href="{{ card.url }}">
@@ -34,6 +37,28 @@
         <p>{{ card.description }}</p>
       </a>
       {% endfor %}
+    </div>
+  </section>
+  <section class="doc-panel">
+    <h2>開花用書類作成</h2>
+    <p class="doc-note">開花商品や店舗買取など、既存ユーザーとは別扱いの書類を作成します。ユーザー商品は混ぜず、必要な書類だけを選んで作成してください。</p>
+    <div class="doc-stage-grid">
+      <a class="quick-card" href="{{ url_for('admin_mitsumori_add') }}">
+        <div class="stage-card-head"><span class="stage-no">1</span><strong>開花商品用 業者向け見積依頼書作成</strong></div>
+        <p>開花商品一覧の商品を確認し、業者向けの見積依頼書を作成・PDF出力します。</p>
+      </a>
+      <a class="quick-card" href="{{ url_for('admin_vendor_documents') }}">
+        <div class="stage-card-head"><span class="stage-no">2</span><strong>開花商品用 業者関連書類登録</strong></div>
+        <p>業者から戻ったPDF・画像を登録し、商品と金額を手動で紐づけます。</p>
+      </a>
+      <a class="quick-card" href="{{ url_for('admin_mitsumori_add') }}">
+        <div class="stage-card-head"><span class="stage-no">3</span><strong>開花用 見積依頼書作成</strong></div>
+        <p>店舗買取などの個人顧客情報を手入力して、見積依頼書を作成します。</p>
+      </a>
+      <a class="quick-card" href="{{ url_for('admin_kaitori_shoudaku_add') }}">
+        <div class="stage-card-head"><span class="stage-no">4</span><strong>開花買取承諾書作成</strong></div>
+        <p>開花側で扱う買取承諾書を作成し、PDFで確認できます。</p>
+      </a>
     </div>
   </section>
   {% else %}
@@ -72,7 +97,7 @@
         <thead><tr><th>登録日</th><th>流し先業者</th><th>関連クライアント</th><th>対象商品</th><th>書類</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for doc in vendor_documents %}
-          <tr>
+          <tr data-detail-url="{{ doc.download_url }}">
             <td>{{ doc.registered_label }}</td>
             <td>{{ doc.vendor_display_name or '-' }}</td>
             <td>{{ doc.client_name or '-' }}</td>
@@ -98,7 +123,7 @@
         <thead><tr><th>書類種別</th><th>No.</th><th>クライアント</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in client_outgoing_rows %}
-          <tr>
+          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
             <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
             <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td><td>{{ row.status_label }}</td>
             <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
@@ -114,14 +139,18 @@
     {% if request_rows %}
     <div class="doc-table-wrap">
       <table class="doc-table">
-        <thead><tr><th>受付番号</th><th>クライアント番号</th><th>クライアント</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
+        <thead><tr><th>受付番号</th><th>受付日</th><th>ユーザーID</th><th>クライアント</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in request_rows %}
-          <tr>
+          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
             <td>{{ row.reception_number or row.id or '-' }}</td>
+            <td>{{ row.created_date_label or '-' }}</td>
             <td>{{ row.client_number or row.user_id or '-' }}</td>
             <td>{{ row.client_name or row.user_name or row.username or '-' }}</td>
-            <td>{{ row.product_name or row.item_summary or row.item_names or '-' }}</td>
+            <td>
+              {{ row.product_name or row.item_summary or row.item_names or '-' }}
+              {% if row.item_detail_url %}<br><a class="doc-mini-link" href="{{ row.item_detail_url }}">商品詳細を見る</a>{% endif %}
+            </td>
             <td>{{ row.status_label or row.status or '-' }}</td>
             <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
           </tr>
@@ -134,4 +163,13 @@
   {% endif %}
   {% endif %}
 </div>
+<script>
+document.querySelectorAll('.doc-table tr[data-detail-url]').forEach(function(row){
+  row.addEventListener('click', function(event){
+    if (event.target.closest('a, button, input, select, textarea, form, label')) return;
+    const url = row.dataset.detailUrl;
+    if (url) window.location.href = url;
+  });
+});
+</script>
 {% endblock %}

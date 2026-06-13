@@ -31,6 +31,20 @@
     </section>
 
     <section class="admin-profile-card">
+        <h2>表示名</h2>
+        <p class="admin-profile-note">管理者画面右上に表示する名前です。未設定の場合、オーナーは「オーナー」、管理者は「管理者」と表示されます。</p>
+        <form method="POST" class="admin-password-form">
+            <label>
+                表示名
+                <input type="text" name="display_name" maxlength="100" value="{{ profile_user.display_name or '' }}" placeholder="例: 田中">
+            </label>
+            <div class="admin-profile-actions">
+                <button type="submit" class="btn btn-primary">表示名を保存</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="admin-profile-card">
         <h2>パスワード変更</h2>
         <form method="POST" class="admin-password-form">
             <label>
@@ -68,6 +82,13 @@
     margin: 0 0 1rem;
     font-size: 1rem;
     color: #0f172a;
+}
+
+.admin-profile-note {
+    margin: -0.35rem 0 0.9rem;
+    color: #64748b;
+    line-height: 1.7;
+    font-size: 0.9rem;
 }
 
 .admin-profile-list {

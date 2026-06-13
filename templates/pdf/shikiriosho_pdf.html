@@ -75,7 +75,7 @@
             font-size: 12px;
         }
         
-        /* 請求金額と会社情報を横並び */
+        /* 精算金額と会社情報を横並び */
         .amount-company-row {
             display: flex;
             justify-content: space-between;
@@ -265,12 +265,12 @@
             </div>
         </div>
         
-        <div class="request-text">下記の通りご請求申し上げます。</div>
+        <div class="request-text">下記の通りご精算申し上げます。</div>
         
-        <!-- 請求金額（左）と会社情報（右）を一列に -->
+        <!-- 精算金額（左）と会社情報（右）を一列に -->
         <div class="amount-company-row">
             <div class="request-amount-box">
-                <div class="request-label">請求金額</div>
+                <div class="request-label">精算金額</div>
                 <div class="request-amount">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }} (税込)</div>
             </div>
             

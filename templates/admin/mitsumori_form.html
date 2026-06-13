@@ -82,17 +82,9 @@
         <div class="product-selector">
             <label>商品を追加</label>
             {% if not has_source_request %}
-            <select id="product-filter" class="form-control product-filter-select">
-                <option value="">すべて</option>
-                <option value="sold">売却済みのみ</option>
-                <option value="inventory">在庫のみ</option>
-            </select>
-            <select id="sold-days-filter" class="form-control product-filter-select">
-                <option value="">売却日: すべて</option>
-                <option value="7">直近7日</option>
-                <option value="30">直近30日</option>
-                <option value="90">直近90日</option>
-            </select>
+            <input type="search" id="product-search-client" class="form-control product-filter-select" placeholder="クライアント名">
+            <input type="search" id="product-search-user-id" class="form-control product-filter-select" placeholder="ユーザーID">
+            <input type="search" id="product-search-name" class="form-control product-filter-select" placeholder="商品名">
             {% else %}
             <span class="source-filter-note">この申請の査定待ち商品のみ選択できます。</span>
             {% endif %}
@@ -691,8 +683,9 @@ const targetUserId = {{ (target_user_id or 0)|int }};
 
 const itemsBody = document.getElementById('items-body');
 const productSelect = document.getElementById('product-select');
-const productFilter = document.getElementById('product-filter');
-const soldDaysFilter = document.getElementById('sold-days-filter');
+const productSearchClient = document.getElementById('product-search-client');
+const productSearchUserId = document.getElementById('product-search-user-id');
+const productSearchName = document.getElementById('product-search-name');
 const productSelectMeta = document.getElementById('product-select-meta');
 const adminForm = document.getElementById('admin-mitsumori-form');
 const adminPreviewModal = document.getElementById('admin-document-preview-modal');
@@ -803,9 +796,31 @@ function setProductMeta(option) {
     productSelectMeta.textContent = pieces.join(' / ');
 }
 
+function normalizeSearchText(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function filterProductOptions(products) {
+    if (hasSourceRequest) return products;
+    const clientQuery = normalizeSearchText(productSearchClient?.value);
+    const userIdQuery = normalizeSearchText(productSearchUserId?.value);
+    const nameQuery = normalizeSearchText(productSearchName?.value);
+    return products.filter((product) => {
+        const clientName = normalizeSearchText(product.user_name || product.owner_name || '');
+        const userId = normalizeSearchText(product.user_id || '');
+        const productName = normalizeSearchText(`${product.product_name || ''} ${product.brand_name || ''}`);
+        if (clientQuery && !clientName.includes(clientQuery)) return false;
+        if (userIdQuery && !userId.includes(userIdQuery)) return false;
+        if (nameQuery && !productName.includes(nameQuery)) return false;
+        return true;
+    });
+}
+
+let cachedProducts = [];
+
 function setProductOptions(products) {
     productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
-    products.forEach((product) => {
+    filterProductOptions(products).forEach((product) => {
         const option = document.createElement('option');
         option.value = product.id;
         option.textContent = product.brand_name
@@ -815,6 +830,8 @@ function setProductOptions(products) {
         option.dataset.brandName = product.brand_name || '';
         option.dataset.unitPrice = product.purchase_price || product.listing_price || 0;
         option.dataset.appraisalStatusLabel = product.appraisal_status_label || '';
+        option.dataset.userName = product.user_name || '';
+        option.dataset.userId = product.user_id || '';
         productSelect.appendChild(option);
     });
     setProductMeta(productSelect.options[productSelect.selectedIndex]);
@@ -831,26 +848,23 @@ async function loadProducts() {
     if (targetUserId) {
         params.set('user_id', String(targetUserId));
     }
-    if (productFilter && productFilter.value === 'sold') {
-        params.set('sold_only', '1');
-    }
-    if (productFilter && productFilter.value === 'inventory') {
-        params.set('inventory_only', '1');
-    }
-    if (soldDaysFilter && soldDaysFilter.value) {
-        params.set('sold_days', soldDaysFilter.value);
-    }
 
     try {
         const response = await fetch(`/api/admin/products?${params.toString()}`);
         const products = await response.json();
-        setProductOptions(Array.isArray(products) ? products : []);
+        cachedProducts = Array.isArray(products) ? products : [];
+        setProductOptions(cachedProducts);
     } catch (error) {
         console.error('商品一覧の取得に失敗しました', error);
         productSelect.innerHTML = '<option value="">商品取得に失敗しました</option>';
         setProductMeta(null);
     }
 }
+
+[productSearchClient, productSearchUserId, productSearchName].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('input', () => setProductOptions(cachedProducts));
+});
 
 function addSelectedProduct() {
     const option = productSelect.options[productSelect.selectedIndex];

@@ -1347,6 +1347,24 @@ def apply(module: Any) -> None:
                 for row in request_rows:
                     row["reception_number"] = row.get("reception_number") or reception_number_for(row)
                     row["client_number"] = row.get("client_number") or row.get("user_id") or row.get("client_id") or "-"
+                    row["created_date_label"] = (
+                        row.get("created_date_label")
+                        or format_datetime(row.get("created_at"))
+                        or format_datetime(row.get("submitted_at"))
+                        or format_datetime(row.get("updated_at"))
+                    )
+                    if not row.get("item_detail_url"):
+                        item_candidates = row.get("merchandise_items") or row.get("items") or []
+                        if isinstance(item_candidates, (list, tuple)) and item_candidates and isinstance(item_candidates[0], dict):
+                            first_item = item_candidates[0]
+                        else:
+                            first_item = {}
+                        item_id = first_item.get("id") or first_item.get("merchandise_id") or row.get("merchandise_id") or row.get("item_id")
+                        if item_id:
+                            try:
+                                row["item_detail_url"] = url_for("view_item", id=item_id)
+                            except Exception:
+                                row["item_detail_url"] = None
         return render_template(
             "admin/documents_dashboard_clean.html",
             selected_group=selected_group,

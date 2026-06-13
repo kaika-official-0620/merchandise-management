@@ -6644,6 +6644,14 @@ def format_user_display_name(display_name, username=None, fallback=None, role=No
 
 
 def format_header_display_name(display_name, username=None, role=None, last_name=None):
+    role_value = (role or '').strip()
+    if role_value == 'owner':
+        return 'オーナー'
+    if role_value == 'admin':
+        display_name_value = (display_name or '').strip()
+        if not is_placeholder_user_display_name(display_name_value, username=username, role=role_value):
+            return display_name_value
+        return '管理者'
     display_name_value = (display_name or '').strip()
     if not is_placeholder_user_display_name(display_name_value, username=username, role=role):
         return display_name_value
@@ -8378,6 +8386,8 @@ def index():
             )
         if status_key == 'listed':
             return not is_sold_item and bool(row.get('is_listed')) and not row.get('pending_sales_agency')
+        if status_key == 'certified':
+            return not is_sold_item and bool(row.get('is_listed')) and not row.get('pending_sales_agency')
         if status_key == 'agency':
             return not is_sold_item and bool(row.get('pending_sales_agency'))
         if status_key == 'shipping_pending':
@@ -8393,6 +8403,7 @@ def index():
     enriched_status_filters = {
         'transaction',
         'listed',
+        'certified',
         'agency',
         'shipping_pending',
         'completion_pending',
@@ -15282,7 +15293,7 @@ def admin_edit_user(id):
 @permission_required('users')
 def admin_user_items(id):
     status_filter = (request.args.get('status', 'all') or 'all').strip()
-    if status_filter not in {'all', 'sold', 'unsold', 'transaction', 'listed', 'agency', 'unlisted'}:
+    if status_filter not in {'all', 'sold', 'unsold', 'transaction', 'listed', 'certified', 'agency', 'appraisal_pending', 'unlisted'}:
         status_filter = 'all'
     sort_mode = (request.args.get('sort') or 'sold_bottom').strip()
     if sort_mode not in {'sold_bottom', 'registered', 'updated', 'timeline', 'sale_newest', 'purchase_high', 'sale_high', 'profit_high'}:
@@ -15430,7 +15441,13 @@ def admin_user_items(id):
         elif status_filter == 'listed':
             if is_sold_item or not item.get('is_listed'):
                 continue
+        elif status_filter == 'certified':
+            if is_sold_item or not item.get('is_listed') or item.get('appraisal_status') in {'waiting', 'inspecting'}:
+                continue
         elif status_filter == 'agency':
+            if is_sold_item or item.get('appraisal_status') not in {'waiting', 'inspecting'}:
+                continue
+        elif status_filter == 'appraisal_pending':
             if is_sold_item or item.get('appraisal_status') not in {'waiting', 'inspecting'}:
                 continue
         elif status_filter == 'unlisted':
@@ -27661,6 +27678,7 @@ def api_get_all_products():
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
+                       m.user_id,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -27672,6 +27690,7 @@ def api_get_all_products():
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
+                       m.user_id,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -27712,6 +27731,7 @@ def api_get_all_products():
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
+                       m.user_id,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
@@ -27723,6 +27743,7 @@ def api_get_all_products():
                 SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
+                       m.user_id,
                        u.display_name as user_name
                 FROM merchandise m
                 LEFT JOIN users u ON m.user_id = u.id
