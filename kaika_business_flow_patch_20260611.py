@@ -1049,6 +1049,29 @@ def apply(module: Any) -> None:
 
         return render_template("admin/vendors.html", vendors=load_vendors(), editing_vendor=editing_vendor)
 
+    def admin_vendor_delete(vendor_id: int):
+        ensure_schema()
+        ph = placeholder()
+        conn, cur = open_cursor(False)
+        try:
+            cur.execute(f"SELECT * FROM vendors WHERE id = {ph}", (vendor_id,))
+            vendor = row_to_dict(cur.fetchone())
+            if not vendor:
+                flash("業者が見つかりません。", "error")
+                return redirect(url_for("admin_vendors"))
+            cur.execute(f"SELECT COUNT(*) AS count FROM vendor_documents WHERE vendor_id = {ph}", (vendor_id,))
+            usage = row_to_dict(cur.fetchone())
+            if safe_int(usage.get("count")) > 0:
+                flash("業者関連書類に紐づいているため削除できません。", "error")
+                return redirect(url_for("admin_vendors"))
+            cur.execute(f"DELETE FROM vendors WHERE id = {ph}", (vendor_id,))
+            conn.commit()
+            flash("業者を削除しました。", "success")
+        finally:
+            cur.close()
+            conn.close()
+        return redirect(url_for("admin_vendors"))
+
     def admin_monthly_fee_settings():
         ensure_schema()
         clients = load_clients()
@@ -1437,6 +1460,7 @@ def apply(module: Any) -> None:
     register("admin_vendor_document_delete", "/admin/vendor-documents/<int:document_id>/delete", admin_vendor_document_delete, ["POST"], admin=True)
     register("admin_vendors", "/admin/vendors", admin_vendors, ["GET", "POST"], admin=True)
     register("admin_vendor_edit", "/admin/vendors/<int:vendor_id>/edit", admin_vendors, ["GET", "POST"], admin=True)
+    register("admin_vendor_delete", "/admin/vendors/<int:vendor_id>/delete", admin_vendor_delete, ["POST"], admin=True)
     register("admin_monthly_fee_settings", "/admin/monthly-fee-settings", admin_monthly_fee_settings, ["GET", "POST"], admin=True)
     register("admin_monthly_settlements", "/admin/monthly-settlements", admin_monthly_settlements, ["GET"], admin=True)
     register("admin_monthly_settlement_create", "/admin/monthly-settlements/create", admin_monthly_settlement_create, ["GET", "POST"], admin=True)

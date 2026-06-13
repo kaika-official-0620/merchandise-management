@@ -82,7 +82,12 @@
             <td>{{ vendor.phone or '-' }}</td>
             <td>{{ vendor.email or '-' }}</td>
             <td>{{ vendor.address or '-' }}</td>
-            <td><a href="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}" class="btn btn-info btn-sm">編集</a></td>
+            <td>
+              <a href="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}" class="btn btn-info btn-sm">編集</a>
+              <form method="POST" action="{{ url_for('admin_vendor_delete', vendor_id=vendor.id) }}" style="display:inline" onsubmit="return confirm('この業者を削除しますか？ 業者関連書類に紐づいている場合は削除できません。');">
+                <button type="submit" class="btn btn-danger btn-sm">削除</button>
+              </form>
+            </td>
           </tr>
         {% endfor %}
         </tbody>
