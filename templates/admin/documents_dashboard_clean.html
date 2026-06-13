@@ -14,7 +14,22 @@
 .doc-mini-link{color:#2563eb;text-decoration:none;font-weight:700}.doc-mini-link:hover{text-decoration:underline}
 .doc-note{margin:.45rem 0 0;color:#64748b;font-size:.88rem;line-height:1.7}
 .empty-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b}
-@media(max-width:768px){.doc-panel{padding:1rem;border-radius:10px}.doc-actions .btn{width:100%;justify-content:center}.doc-table{min-width:760px}}
+@media(max-width:768px){
+  .doc-clean,.doc-panel,.doc-head,.doc-table-wrap{min-width:0;max-width:100%}
+  .doc-panel{padding:1rem;border-radius:10px}
+  .doc-head{display:grid}
+  .doc-actions{width:100%}
+  .doc-actions .btn{width:100%;justify-content:center}
+  .doc-table-wrap{overflow:visible}
+  .doc-table,.doc-table thead,.doc-table tbody,.doc-table tr,.doc-table th,.doc-table td{display:block;width:100%;min-width:0;box-sizing:border-box}
+  .doc-table{border-collapse:separate;border-spacing:0}
+  .doc-table thead{display:none}
+  .doc-table tbody{display:grid;gap:.75rem}
+  .doc-table tr{padding:.85rem;border:1px solid #e2e8f0;border-radius:6px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+  .doc-table td{padding:.4rem 0;border:0;word-break:break-word}
+  .doc-table td+td{border-top:1px solid #f1f5f9}
+  .doc-table .btn{width:100%;justify-content:center}
+}
 </style>
 <div class="doc-clean">
   <section class="doc-panel doc-head">
