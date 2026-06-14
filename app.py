@@ -37887,6 +37887,56 @@ def ensure_admin_documents_performance_indexes():
             "merchandise",
             ("user_id", "sale_date"),
         )
+        append_index_if_columns(
+            "idx_user_mitsumori_document_created",
+            "user_mitsumori",
+            ("document_no", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_user_mitsumori_scope_created",
+            "user_mitsumori",
+            ("document_scope", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_invoices_no_created",
+            "invoices",
+            ("invoice_no", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_user_kaitori_shoudaku_created",
+            "user_kaitori_shoudaku",
+            ("created_at", "id"),
+        )
+        append_index_if_columns(
+            "idx_admin_kaitori_shoudaku_created",
+            "admin_kaitori_shoudaku",
+            ("created_at", "id"),
+        )
+        append_index_if_columns(
+            "idx_admin_kaitori_shoudaku_scope_created",
+            "admin_kaitori_shoudaku",
+            ("document_scope", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_shikiriosho_created",
+            "shikiriosho",
+            ("created_at", "id"),
+        )
+        append_index_if_columns(
+            "idx_user_keisan_admin_created",
+            "user_keisan",
+            ("is_admin_created", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_vendor_documents_scope_registered",
+            "vendor_documents",
+            ("document_scope", "registered_at"),
+        )
+        append_index_if_columns(
+            "idx_service_documents_user_created",
+            "service_documents",
+            ("user_id", "created_at"),
+        )
 
         for statement in statements:
             cur.execute(statement)
@@ -39988,6 +40038,7 @@ def admin_documents_dashboard_v2():
 @login_required
 @admin_required
 def admin_documents_history_v2():
+    ensure_admin_documents_performance_indexes()
     filters = {
         'doc_type': request.args.get('doc_type', 'all'),
         'client': request.args.get('client', '').strip(),
