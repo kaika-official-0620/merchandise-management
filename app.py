@@ -39076,19 +39076,22 @@ def build_admin_document_type_cards_counted_v2():
         return int(value or 0)
 
     try:
+        like_placeholder = '%s' if DATABASE_URL else '?'
         count_map[('user_mitsumori', 'client_incoming')] = scalar_count(
-            """
+            f"""
             SELECT COUNT(*) AS count
             FROM user_mitsumori
-            WHERE COALESCE(document_no, '') NOT LIKE 'MT-%'
-            """
+            WHERE COALESCE(document_no, '') NOT LIKE {like_placeholder}
+            """,
+            ('MT-%',),
         )
         count_map[('user_mitsumori', 'vendor_outgoing')] = scalar_count(
-            """
+            f"""
             SELECT COUNT(*) AS count
             FROM user_mitsumori
-            WHERE COALESCE(document_no, '') LIKE 'MT-%'
-            """
+            WHERE COALESCE(document_no, '') LIKE {like_placeholder}
+            """,
+            ('MT-%',),
         )
         count_map[('user_kaitori_shoudaku', 'client_incoming')] = scalar_count(
             "SELECT COUNT(*) AS count FROM user_kaitori_shoudaku"
@@ -39097,7 +39100,8 @@ def build_admin_document_type_cards_counted_v2():
             "SELECT COUNT(*) AS count FROM admin_kaitori_shoudaku"
         )
         count_map[('invoice', 'client_outgoing')] = scalar_count(
-            "SELECT COUNT(*) AS count FROM invoices WHERE COALESCE(invoice_no, '') LIKE 'KT-%'"
+            f"SELECT COUNT(*) AS count FROM invoices WHERE COALESCE(invoice_no, '') LIKE {like_placeholder}",
+            ('KT-%',),
         )
         count_map[('shikiriosho', 'client_outgoing')] = scalar_count(
             "SELECT COUNT(*) AS count FROM shikiriosho"

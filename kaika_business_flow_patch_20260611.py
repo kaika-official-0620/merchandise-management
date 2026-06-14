@@ -752,7 +752,8 @@ def apply(module: Any) -> None:
                         where_parts.append(f"COALESCE(document_scope, '') = {ph}")
                         params_list.append("vendor_outgoing")
                     else:
-                        where_parts.append("document_no LIKE 'MT-%'")
+                        where_parts.append(f"document_no LIKE {ph}")
+                        params_list.append("MT-%")
                 elif category == "kaika_mitsumori":
                     if has_document_scope:
                         where_parts.append(f"COALESCE(document_scope, '') IN ({ph}, {ph})")
@@ -763,7 +764,8 @@ def apply(module: Any) -> None:
                     if has_document_scope:
                         where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
                         params_list.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
-                    where_parts.append("COALESCE(document_no, '') NOT LIKE 'MT-%'")
+                    where_parts.append(f"COALESCE(document_no, '') NOT LIKE {ph}")
+                    params_list.append("MT-%")
                 where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
                 cur.execute(f"SELECT * FROM user_mitsumori {where} ORDER BY created_at DESC LIMIT {int(limit)}", tuple(params_list))
                 for doc in rows_to_dicts(cur.fetchall()):
