@@ -920,7 +920,7 @@
                     {% for item in req.merchandise_items %}
                     <div class="request-item">
                         {% if item.photo_path %}
-                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}">
+                        <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name|clean_display('商品名未登録') }}" loading="lazy" decoding="async">
                         {% else %}
                         <div class="placeholder"></div>
                         {% endif %}

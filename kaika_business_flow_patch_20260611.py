@@ -128,6 +128,65 @@ def apply(module: Any) -> None:
         definition = pg_definition if DATABASE_URL else sqlite_definition
         cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
+    performance_indexes_ready = False
+
+    def create_index_if_possible(cur, index_name: str, table_name: str, columns: tuple[str, ...]) -> None:
+        if not table_exists(cur, table_name):
+            return
+        if not all(column_exists(cur, table_name, column) for column in columns):
+            return
+        column_sql = ", ".join(columns)
+        cur.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({column_sql})")
+
+    def ensure_performance_indexes() -> None:
+        nonlocal performance_indexes_ready
+        if performance_indexes_ready:
+            return
+        conn, cur = open_cursor(False)
+        try:
+            index_specs = [
+                ("idx_user_mitsumori_scope_created", "user_mitsumori", ("document_scope", "created_at")),
+                ("idx_user_mitsumori_user_scope_created", "user_mitsumori", ("user_id", "document_scope", "created_at")),
+                ("idx_user_mitsumori_document_no", "user_mitsumori", ("document_no",)),
+                ("idx_invoices_sender_created", "invoices", ("sender_id", "created_at")),
+                ("idx_invoices_created", "invoices", ("created_at",)),
+                ("idx_user_shoudaku_user_created", "user_kaitori_shoudaku", ("user_id", "created_at")),
+                ("idx_user_shoudaku_created", "user_kaitori_shoudaku", ("created_at",)),
+                ("idx_admin_shoudaku_scope_created", "admin_kaitori_shoudaku", ("document_scope", "created_at")),
+                ("idx_admin_shoudaku_created", "admin_kaitori_shoudaku", ("created_at",)),
+                ("idx_shikiriosho_recipient_issue", "shikiriosho", ("recipient_id", "issue_date")),
+                ("idx_shikiriosho_issue", "shikiriosho", ("issue_date",)),
+                ("idx_user_keisan_user_created", "user_keisan", ("user_id", "created_at")),
+                ("idx_user_keisan_user_admin_status", "user_keisan", ("user_id", "is_admin_created", "status")),
+                ("idx_vendor_documents_scope_user_registered", "vendor_documents", ("document_scope", "user_id", "registered_at")),
+                ("idx_vendor_documents_scope_registered", "vendor_documents", ("document_scope", "registered_at")),
+                ("idx_service_documents_user_created", "service_documents", ("user_id", "created_at")),
+                ("idx_sales_agency_requests_service_status_created", "sales_agency_requests", ("service_type", "status", "created_at")),
+                ("idx_sales_agency_requests_user_service_created", "sales_agency_requests", ("user_id", "service_type", "created_at")),
+                ("idx_sales_agency_request_items_request_status", "sales_agency_request_items", ("request_id", "item_status")),
+                ("idx_sale_requests_type_status_user_created", "sale_requests", ("request_type", "status", "user_id", "created_at")),
+                ("idx_sale_requests_merchandise_type_status", "sale_requests", ("merchandise_id", "request_type", "status")),
+                ("idx_sale_request_events_request_created", "sale_request_events", ("sale_request_id", "created_at")),
+                ("idx_disposal_requests_user_status_created", "item_disposal_requests", ("user_id", "status", "created_at")),
+                ("idx_disposal_requests_merchandise_status", "item_disposal_requests", ("merchandise_id", "status")),
+                ("idx_merchandise_user_created", "merchandise", ("user_id", "created_at")),
+                ("idx_merchandise_scope_created", "merchandise", ("scope", "created_at")),
+                ("idx_merchandise_user_sale_date", "merchandise", ("user_id", "sale_date")),
+            ]
+            for index_name, table_name, columns in index_specs:
+                create_index_if_possible(cur, index_name, table_name, columns)
+            conn.commit()
+            performance_indexes_ready = True
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            app.logger.warning("Failed to ensure lightweight performance indexes", exc_info=True)
+        finally:
+            cur.close()
+            conn.close()
+
     def ensure_schema() -> None:
         conn, cur = open_cursor()
         try:
@@ -674,11 +733,137 @@ def apply(module: Any) -> None:
 
     def count_history_rows(category: str, admin: bool = False) -> int:
         ensure_schema()
-        try:
-            rows = build_history_rows(category, admin=admin, limit=5000)
-            return len(rows)
-        except Exception:
+        ensure_performance_indexes()
+        category_aliases = {
+            "user_mitsumori": "client_incoming",
+            "mitsumori_houjin": "vendor_estimate",
+            "mitsumori": "client_incoming",
+            "invoice": "kaitori",
+            "shoudaku": "user_shoudaku",
+            "user_kaitori_shoudaku": "user_shoudaku",
+            "admin_kaitori_shoudaku": "kaika_shoudaku",
+            "user_keisan": "keisan",
+            "kaika_estimate": "kaika_mitsumori",
+        }
+        category = category_aliases.get(category, category)
+        if not admin and category not in {key for key, _title, _desc in USER_HISTORY_CATEGORIES}:
             return 0
+        if category == "client_incoming":
+            total = count_history_rows("client_mitsumori", admin=admin)
+            if admin:
+                total += count_history_rows("user_shoudaku", admin=admin)
+            return total
+        if category == "vendor_estimate":
+            category = "vendor_mitsumori"
+
+        ph = placeholder()
+        conn, cur = open_cursor()
+        try:
+            params_user = None if admin else current_user.id
+
+            def count_from(table_name: str, where_parts: list[str] | None = None, params: list[Any] | tuple[Any, ...] = ()) -> int:
+                if not table_exists(cur, table_name):
+                    return 0
+                where_parts = where_parts or []
+                where_sql = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+                cur.execute(f"SELECT COUNT(*) AS count FROM {table_name} {where_sql}", tuple(params))
+                row = cur.fetchone()
+                if row is None:
+                    return 0
+                if isinstance(row, dict):
+                    return safe_int(row.get("count"))
+                return safe_int(row[0])
+
+            if category in {"client_mitsumori", "vendor_mitsumori", "kaika_mitsumori"}:
+                if not table_exists(cur, "user_mitsumori"):
+                    return 0
+                where_parts: list[str] = []
+                params_list: list[Any] = []
+                has_document_scope = column_exists(cur, "user_mitsumori", "document_scope")
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    params_list.append(params_user)
+                if category == "vendor_mitsumori":
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, '') = {ph}")
+                        params_list.append("vendor_outgoing")
+                    else:
+                        where_parts.append(f"document_no LIKE {ph}")
+                        params_list.append("MT-%")
+                elif category == "kaika_mitsumori":
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, '') IN ({ph}, {ph})")
+                        params_list.extend(["kaika_vendor_outgoing", "kaika_estimate"])
+                    else:
+                        where_parts.append("1 = 0")
+                else:
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
+                        params_list.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
+                    where_parts.append(f"COALESCE(document_no, '') NOT LIKE {ph}")
+                    params_list.append("MT-%")
+                return count_from("user_mitsumori", where_parts, params_list)
+
+            if category == "kaitori":
+                where_parts = [] if admin else [f"sender_id = {ph}"]
+                params = [] if admin else [params_user]
+                return count_from("invoices", where_parts, params)
+
+            if category == "user_shoudaku":
+                where_parts = [] if admin else [f"user_id = {ph}"]
+                params = [] if admin else [params_user]
+                return count_from("user_kaitori_shoudaku", where_parts, params)
+
+            if category == "kaika_shoudaku":
+                if not table_exists(cur, "admin_kaitori_shoudaku"):
+                    return 0
+                where_parts = []
+                params: list[Any] = []
+                if column_exists(cur, "admin_kaitori_shoudaku", "document_scope"):
+                    where_parts.append(f"COALESCE(document_scope, {ph}) <> {ph}")
+                    params.extend(["kaika_shoudaku", "vendor_incoming"])
+                return count_from("admin_kaitori_shoudaku", where_parts, params)
+
+            if category == "shikiriosho":
+                where_parts = [] if admin else [f"recipient_id = {ph}"]
+                params = [] if admin else [params_user]
+                return count_from("shikiriosho", where_parts, params)
+
+            if category == "keisan":
+                where_parts = [] if admin else [f"user_id = {ph}"]
+                params = [] if admin else [params_user]
+                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
+                    where_parts.append(
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        if DATABASE_URL
+                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                    )
+                return count_from("user_keisan", where_parts, params)
+
+            if category == "vendor":
+                where_parts: list[str] = []
+                params: list[Any] = []
+                if table_exists(cur, "vendor_documents") and column_exists(cur, "vendor_documents", "document_scope"):
+                    where_parts.append(f"COALESCE(document_scope, 'user_flow') = {ph}")
+                    params.append("user_flow")
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    where_parts.append("COALESCE(status, '') IN ('shared', 'sent')")
+                    params.append(params_user)
+                return count_from("vendor_documents", where_parts, params)
+
+            if category == "other":
+                where_parts = [] if admin else [f"user_id = {ph}"]
+                params = [] if admin else [params_user]
+                return count_from("service_documents", where_parts, params)
+
+            return 0
+        except Exception:
+            app.logger.warning("Failed to count history rows for %s", category, exc_info=True)
+            return 0
+        finally:
+            cur.close()
+            conn.close()
 
     def build_history_rows(category: str, admin: bool = False, user_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
         ensure_schema()

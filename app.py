@@ -31906,6 +31906,7 @@ def admin_notify_long_term_item(item_id):
 @admin_required
 def admin_disposal_requests():
     """管理者向け商品処分申請一覧"""
+    ensure_admin_documents_performance_indexes()
     filtered_user_id = request.args.get('user_id', type=int)
     filtered_merchandise_id = request.args.get('merchandise_id', type=int)
     filtered_reason = (request.args.get('reason') or '').strip()
@@ -36637,6 +36638,7 @@ def submit_sale_request(item_id):
     return redirect(url_for('index'))
 
 def load_admin_sale_requests_data():
+    ensure_admin_documents_performance_indexes()
     requests_list = []
     shipping_requests = []
     completion_requests = []
@@ -37807,6 +37809,10 @@ def ensure_admin_documents_performance_indexes():
             "CREATE INDEX IF NOT EXISTS idx_sales_agency_requests_admin_documents ON sales_agency_requests (status, created_at DESC, id DESC)",
         ]
 
+        def append_index_if_columns(index_name, table_name, columns):
+            if all(sales_agency_column_exists(cur, table_name, column) for column in columns):
+                statements.append(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({', '.join(columns)})")
+
         if sales_agency_column_exists(cur, 'sales_agency_request_items', 'item_status'):
             statements.append(
                 "CREATE INDEX IF NOT EXISTS idx_sales_agency_request_items_request_status ON sales_agency_request_items (request_id, item_status)"
@@ -37830,6 +37836,57 @@ def ensure_admin_documents_performance_indexes():
                 statements.append(
                     "CREATE INDEX IF NOT EXISTS idx_user_keisan_sales_request ON user_keisan (sales_agency_request_id, id)"
                 )
+
+        append_index_if_columns(
+            "idx_sales_agency_requests_service_status_created",
+            "sales_agency_requests",
+            ("service_type", "status", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_sales_agency_requests_user_service_created",
+            "sales_agency_requests",
+            ("user_id", "service_type", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_sale_requests_type_status_user_created",
+            "sale_requests",
+            ("request_type", "status", "user_id", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_sale_requests_merchandise_type_status",
+            "sale_requests",
+            ("merchandise_id", "request_type", "status"),
+        )
+        append_index_if_columns(
+            "idx_sale_request_events_request_created",
+            "sale_request_events",
+            ("sale_request_id", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_disposal_requests_user_status_created",
+            "item_disposal_requests",
+            ("user_id", "status", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_disposal_requests_merchandise_status",
+            "item_disposal_requests",
+            ("merchandise_id", "status"),
+        )
+        append_index_if_columns(
+            "idx_merchandise_user_created",
+            "merchandise",
+            ("user_id", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_merchandise_scope_created",
+            "merchandise",
+            ("scope", "created_at"),
+        )
+        append_index_if_columns(
+            "idx_merchandise_user_sale_date",
+            "merchandise",
+            ("user_id", "sale_date"),
+        )
 
         for statement in statements:
             cur.execute(statement)
@@ -38172,6 +38229,310 @@ def sales_agency_my_requests():
         statuses=SALES_AGENCY_STATUS_CLIENT,
     )
 
+
+def fetch_sales_agency_request_list_summaries(service_filter='all', status_filter='all', date_from_filter='', date_to_filter=''):
+    _ensure_sales_agency_document_columns()
+    ensure_admin_documents_performance_indexes()
+    conn, cur = sales_agency_open_cursor()
+    try:
+        placeholder = sales_agency_placeholder()
+        request_columns = {
+            'created_mitsumori_id': sales_agency_column_exists(cur, 'sales_agency_requests', 'created_mitsumori_id'),
+            'created_invoice_id': sales_agency_column_exists(cur, 'sales_agency_requests', 'created_invoice_id'),
+            'vendor_mitsumori_id': sales_agency_column_exists(cur, 'sales_agency_requests', 'vendor_mitsumori_id'),
+            'vendor_kaitori_shoudaku_id': sales_agency_column_exists(cur, 'sales_agency_requests', 'vendor_kaitori_shoudaku_id'),
+            'client_invoice_id': sales_agency_column_exists(cur, 'sales_agency_requests', 'client_invoice_id'),
+        }
+        item_columns = {
+            'appraisal_status': sales_agency_column_exists(cur, 'merchandise', 'appraisal_status'),
+            'sale_price': sales_agency_column_exists(cur, 'merchandise', 'sale_price'),
+            'item_status': sales_agency_column_exists(cur, 'sales_agency_request_items', 'item_status'),
+            'canceled_at': sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_at'),
+            'canceled_by': sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_by'),
+            'cancel_reason': sales_agency_column_exists(cur, 'sales_agency_request_items', 'cancel_reason'),
+        }
+        snapshot_column_exists = {
+            snapshot_column: sales_agency_column_exists(cur, 'sales_agency_request_items', snapshot_column)
+            for _source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS
+        }
+        shikiriosho_request_exists = sales_agency_column_exists(cur, 'shikiriosho', 'sales_agency_request_id')
+        keisan_request_exists = sales_agency_column_exists(cur, 'user_keisan', 'sales_agency_request_id')
+        keisan_admin_created_exists = sales_agency_column_exists(cur, 'user_keisan', 'is_admin_created')
+
+        vendor_mitsumori_exprs = []
+        if request_columns['vendor_mitsumori_id']:
+            vendor_mitsumori_exprs.append('sar.vendor_mitsumori_id')
+        if request_columns['created_mitsumori_id']:
+            vendor_mitsumori_exprs.append('sar.created_mitsumori_id')
+        vendor_mitsumori_expr = f"COALESCE({', '.join(vendor_mitsumori_exprs)})" if len(vendor_mitsumori_exprs) > 1 else (vendor_mitsumori_exprs[0] if vendor_mitsumori_exprs else 'NULL')
+
+        client_invoice_exprs = []
+        if request_columns['client_invoice_id']:
+            client_invoice_exprs.append('sar.client_invoice_id')
+        if request_columns['created_invoice_id']:
+            client_invoice_exprs.append('sar.created_invoice_id')
+        client_invoice_expr = f"COALESCE({', '.join(client_invoice_exprs)})" if len(client_invoice_exprs) > 1 else (client_invoice_exprs[0] if client_invoice_exprs else 'NULL')
+        vendor_kaitori_expr = 'sar.vendor_kaitori_shoudaku_id' if request_columns['vendor_kaitori_shoudaku_id'] else 'NULL'
+
+        conditions = []
+        params = []
+        if service_filter != 'all':
+            conditions.append(f"sar.service_type = {placeholder}")
+            params.append(service_filter)
+        if status_filter != 'all':
+            conditions.append(f"sar.status = {placeholder}")
+            params.append(status_filter)
+        if date_from_filter:
+            conditions.append(f"DATE(sar.created_at) >= {placeholder}")
+            params.append(date_from_filter)
+        if date_to_filter:
+            conditions.append(f"DATE(sar.created_at) <= {placeholder}")
+            params.append(date_to_filter)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ''
+
+        cur.execute(
+            f'''
+            SELECT sar.id, sar.user_id, sar.service_type, sar.status, sar.created_at,
+                   sar.processed_at, sar.admin_note,
+                   {vendor_mitsumori_expr} AS vendor_mitsumori_id,
+                   {vendor_kaitori_expr} AS vendor_kaitori_shoudaku_id,
+                   {client_invoice_expr} AS client_invoice_id,
+                   u.display_name AS user_name, u.username,
+                   p.display_name AS processor_name
+            FROM sales_agency_requests sar
+            JOIN users u ON sar.user_id = u.id
+            LEFT JOIN users p ON sar.processed_by = p.id
+            {where_clause}
+            ORDER BY CASE sar.status
+                WHEN 'pending' THEN 0
+                WHEN 'approved' THEN 1
+                WHEN 'appraising' THEN 2
+                WHEN 'inspecting' THEN 3
+                WHEN 'completed' THEN 4
+                WHEN 'rejected' THEN 5
+                ELSE 9
+            END, sar.created_at DESC
+            ''',
+            tuple(params),
+        )
+        request_rows = sales_agency_rows_to_dicts(cur.fetchall())
+        request_ids = [row.get('id') for row in request_rows if row.get('id')]
+        if not request_ids:
+            return []
+
+        marks = ', '.join([placeholder] * len(request_ids))
+        select_columns = [
+            'sari.request_id',
+            'sari.id AS request_item_id',
+            'sari.merchandise_id AS request_merchandise_id',
+            'm.id',
+            'm.product_name',
+            'm.brand_name',
+            'm.model_number',
+            'm.kaika_product_code',
+            'm.photo_path',
+        ]
+        select_columns.append('m.appraisal_status' if item_columns['appraisal_status'] else "NULL AS appraisal_status")
+        select_columns.append('m.sale_price' if item_columns['sale_price'] else "NULL AS sale_price")
+        select_columns.append("COALESCE(sari.item_status, 'active') AS item_status" if item_columns['item_status'] else "'active' AS item_status")
+        select_columns.append('sari.canceled_at AS canceled_at' if item_columns['canceled_at'] else 'NULL AS canceled_at')
+        select_columns.append('sari.canceled_by AS canceled_by' if item_columns['canceled_by'] else 'NULL AS canceled_by')
+        select_columns.append('sari.cancel_reason AS cancel_reason' if item_columns['cancel_reason'] else 'NULL AS cancel_reason')
+        for _source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS:
+            select_columns.append(
+                f"sari.{snapshot_column} AS {snapshot_column}"
+                if snapshot_column_exists.get(snapshot_column)
+                else f"NULL AS {snapshot_column}"
+            )
+
+        cur.execute(
+            f'''
+            SELECT {', '.join(select_columns)}
+            FROM sales_agency_request_items sari
+            LEFT JOIN merchandise m ON sari.merchandise_id = m.id
+            WHERE sari.request_id IN ({marks})
+            ORDER BY sari.request_id, sari.id DESC
+            ''',
+            tuple(request_ids),
+        )
+        items_by_request = {request_id: [] for request_id in request_ids}
+        for item in sales_agency_rows_to_dicts(cur.fetchall()):
+            request_id = item.get('request_id')
+            item_status = (item.get('item_status') or 'active').strip()
+            item['item_status'] = item_status
+            actual_merchandise_id = item.get('id')
+            merchandise_id = actual_merchandise_id or item.get('request_merchandise_id')
+            item['id'] = merchandise_id
+            item['is_missing_source_item'] = actual_merchandise_id is None
+            has_snapshot_info = False
+            for source_column, snapshot_column in SALES_AGENCY_ITEM_SNAPSHOT_COLUMNS:
+                if not item.get(source_column) and item.get(snapshot_column):
+                    item[source_column] = item.get(snapshot_column)
+                if item.get(snapshot_column):
+                    has_snapshot_info = True
+            if not item.get('product_name'):
+                fallback_parts = [
+                    item.get('brand_name'),
+                    item.get('model_number'),
+                    item.get('kaika_product_code'),
+                ]
+                fallback_name = " / ".join(str(part).strip() for part in fallback_parts if str(part or "").strip())
+                item['product_name'] = fallback_name or f"商品データ削除済み（元商品ID {merchandise_id or item.get('request_merchandise_id') or '-'}）"
+            if not item.get('brand_name'):
+                item['brand_name'] = ''
+            if item['is_missing_source_item']:
+                if has_snapshot_info:
+                    item['source_item_warning'] = '元の商品データが削除または未同期です。申請時の控え情報で表示しています。'
+                else:
+                    item['source_item_warning'] = '元の商品データが削除または未同期です。控え情報がないため元商品IDで表示しています。'
+            item['detail_url'] = url_for('view_item', id=actual_merchandise_id) if actual_merchandise_id else None
+            item['request_item_id'] = item.get('request_item_id')
+            item['is_cancelled'] = item_status == 'cancelled'
+            if item['is_cancelled']:
+                item['item_status_label'] = 'キャンセル'
+            else:
+                appraisal_status = item.get('appraisal_status') if item_columns['appraisal_status'] else ''
+                item['appraisal_status_label'] = get_sales_agency_appraisal_label(appraisal_status)
+                item['item_status_label'] = item.get('appraisal_status_label') or '受付済み'
+            items_by_request.setdefault(request_id, []).append(item)
+
+        shikiriosho_map = {}
+        if shikiriosho_request_exists:
+            cur.execute(
+                f'''
+                SELECT sales_agency_request_id, MAX(id) AS id
+                FROM shikiriosho
+                WHERE sales_agency_request_id IN ({marks})
+                GROUP BY sales_agency_request_id
+                ''',
+                tuple(request_ids),
+            )
+            shikiriosho_map = {row.get('sales_agency_request_id'): row.get('id') for row in sales_agency_rows_to_dicts(cur.fetchall())}
+
+        auction_keisan_map = {}
+        if keisan_request_exists:
+            admin_condition = ''
+            if keisan_admin_created_exists:
+                admin_condition = (
+                    'AND COALESCE(is_admin_created, FALSE) = TRUE'
+                    if DATABASE_URL
+                    else 'AND COALESCE(is_admin_created, 0) = 1'
+                )
+            cur.execute(
+                f'''
+                SELECT sales_agency_request_id, MAX(id) AS id
+                FROM user_keisan
+                WHERE sales_agency_request_id IN ({marks})
+                  {admin_condition}
+                GROUP BY sales_agency_request_id
+                ''',
+                tuple(request_ids),
+            )
+            auction_keisan_map = {row.get('sales_agency_request_id'): row.get('id') for row in sales_agency_rows_to_dicts(cur.fetchall())}
+    finally:
+        cur.close()
+        conn.close()
+
+    summaries = []
+    for request_row in request_rows:
+        request_id = request_row.get('id')
+        merchandise_items = items_by_request.get(request_id, [])
+        waiting_count = 0
+        active_count = 0
+        canceled_count = 0
+        for item in merchandise_items:
+            if item.get('is_cancelled'):
+                canceled_count += 1
+                continue
+            active_count += 1
+            if item.get('appraisal_status') in {'waiting', 'inspecting'}:
+                waiting_count += 1
+        if not item_columns['appraisal_status'] and request_row.get('status') in {'approved', 'appraising', 'inspecting'}:
+            waiting_count = active_count
+
+        request_row['created_at'] = sales_agency_format_datetime(request_row.get('created_at'))
+        request_row['processed_at'] = sales_agency_format_datetime(request_row.get('processed_at'))
+        request_row['service_name'] = get_sales_agency_service_name(request_row.get('service_type'))
+        request_row['client_name'] = request_row.get('user_name') or request_row.get('username') or '未設定ユーザー'
+        request_row['client_identifier'] = f"ユーザーID {request_row.get('user_id') or '-'}"
+        request_row['status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='admin', service_type=request_row.get('service_type'))
+        request_row['client_status_label'] = get_sales_agency_status_label(request_row.get('status'), viewer='client', service_type=request_row.get('service_type'))
+        request_row['pending_appraisal_count'] = waiting_count
+        request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
+        request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
+        request_row['merchandise_items'] = merchandise_items
+        request_row['active_item_count'] = active_count
+        request_row['canceled_item_count'] = canceled_count
+        request_row['request_item_total'] = len(merchandise_items)
+        request_row['created_mitsumori_id'] = request_row.get('vendor_mitsumori_id')
+        request_row['created_invoice_id'] = request_row.get('client_invoice_id')
+        request_row['vendor_mitsumori_id'] = request_row.get('vendor_mitsumori_id')
+        request_row['client_invoice_id'] = request_row.get('client_invoice_id')
+        request_row['shikiriosho_id'] = shikiriosho_map.get(request_id)
+        request_row['auction_keisan_id'] = auction_keisan_map.get(request_id)
+
+        service_type = request_row.get('service_type') or ''
+        vendor_mitsumori_id = request_row.get('vendor_mitsumori_id')
+        vendor_kaitori_id = request_row.get('vendor_kaitori_shoudaku_id')
+        client_invoice_id = request_row.get('client_invoice_id')
+        shikiriosho_id = request_row.get('shikiriosho_id')
+        auction_keisan_id = request_row.get('auction_keisan_id')
+        handled_vendor_services = {'wholesale', 'auction', 'simultaneous'}
+        request_row['request_can_create_vendor_estimate'] = (
+            service_type in handled_vendor_services
+            and request_row.get('status') in {'pending', 'approved', 'appraising', 'inspecting', 'completed'}
+            and active_count > 0
+            and not vendor_mitsumori_id
+        )
+        request_row['request_can_register_vendor_kaitori'] = (
+            service_type in handled_vendor_services
+            and bool(vendor_mitsumori_id)
+            and not vendor_kaitori_id
+            and active_count > 0
+        )
+        request_row['request_can_create_client_invoice'] = (
+            (
+                service_type == 'wholesale'
+                and bool(vendor_kaitori_id)
+                and not client_invoice_id
+            )
+            or (
+                service_type == 'simultaneous'
+                and active_count > 0
+                and not client_invoice_id
+            )
+        )
+        request_row['request_can_create_shikiriosho'] = (
+            service_type == 'wholesale'
+            and bool(vendor_kaitori_id)
+            and not shikiriosho_id
+        )
+        request_row['request_can_create_auction_keisan'] = (
+            service_type in {'auction', 'simultaneous'}
+            and active_count > 0
+            and not auction_keisan_id
+        )
+        if client_invoice_id or shikiriosho_id or auction_keisan_id:
+            request_row['document_flow_label'] = 'クライアントへ返送'
+        elif vendor_kaitori_id:
+            request_row['document_flow_label'] = '業者から回答受領'
+        elif vendor_mitsumori_id:
+            request_row['document_flow_label'] = '開花から業者へ依頼'
+        else:
+            request_row['document_flow_label'] = 'クライアントから受付'
+        request_row['request_can_create_documents'] = any(
+            [
+                request_row['request_can_create_vendor_estimate'],
+                request_row['request_can_register_vendor_kaitori'],
+                request_row['request_can_create_client_invoice'],
+                request_row['request_can_create_shikiriosho'],
+                request_row['request_can_create_auction_keisan'],
+            ]
+        )
+        summaries.append(request_row)
+    return summaries
+
+
 @app.route('/admin/sales-agency-requests')
 @login_required
 def admin_sales_agency_requests():
@@ -38203,44 +38564,15 @@ def admin_sales_agency_requests():
     }
 
     try:
+        requests_list = fetch_sales_agency_request_list_summaries(
+            service_filter=service_filter,
+            status_filter=status_filter,
+            date_from_filter=date_from_filter,
+            date_to_filter=date_to_filter,
+        )
+
         conn, cur = sales_agency_open_cursor()
         placeholder = sales_agency_placeholder()
-        params = []
-        conditions = []
-
-        if service_filter != 'all':
-            conditions.append(f"sar.service_type = {placeholder}")
-            params.append(service_filter)
-        if status_filter != 'all':
-            conditions.append(f"sar.status = {placeholder}")
-            params.append(status_filter)
-        if date_from_filter:
-            conditions.append(f"DATE(sar.created_at) >= {placeholder}")
-            params.append(date_from_filter)
-        if date_to_filter:
-            conditions.append(f"DATE(sar.created_at) <= {placeholder}")
-            params.append(date_to_filter)
-
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ''
-        cur.execute(
-            f'''
-            SELECT sar.id
-            FROM sales_agency_requests sar
-            {where_clause}
-            ORDER BY CASE sar.status
-                WHEN 'pending' THEN 0
-                WHEN 'approved' THEN 1
-                WHEN 'appraising' THEN 2
-                WHEN 'inspecting' THEN 3
-                WHEN 'completed' THEN 4
-                WHEN 'rejected' THEN 5
-                ELSE 9
-            END, sar.created_at DESC
-            ''',
-            tuple(params),
-        )
-        request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in cur.fetchall()]
-
         stat_params = []
         stat_conditions = []
         if service_filter != 'all':
@@ -38257,19 +38589,17 @@ def admin_sales_agency_requests():
             tuple(stat_params),
         )
         for row in cur.fetchall():
-            row_dict = dict(row)
+            row_dict = row if isinstance(row, dict) else dict(row)
             if row_dict.get('status') in stats:
                 stats[row_dict['status']] = row_dict.get('cnt', 0)
 
         cur.close()
         conn.close()
 
-        for request_id in request_ids:
-            request_row, _ = fetch_sales_agency_request_details(request_id, viewer='admin')
-            if not request_row:
-                continue
-            if q_filter:
-                needle = q_filter.lower()
+        if q_filter:
+            needle = q_filter.lower()
+            filtered_by_keyword = []
+            for request_row in requests_list:
                 haystack_parts = [
                     str(request_row.get('id') or ''),
                     str(request_row.get('user_id') or ''),
@@ -38284,21 +38614,9 @@ def admin_sales_agency_requests():
                         str(item.get('product_name') or ''),
                         str(item.get('brand_name') or ''),
                     ])
-                if needle not in " ".join(haystack_parts).lower():
-                    continue
-            request_row.setdefault('client_name', request_row.get('user_name') or request_row.get('username') or '未設定ユーザー')
-            request_row.setdefault('client_identifier', f"ユーザーID {request_row.get('user_id') or '-'}")
-            request_row.setdefault(
-                'status_label',
-                get_sales_agency_status_label(request_row.get('status'), viewer='admin', service_type=request_row.get('service_type'))
-            )
-            request_row.setdefault(
-                'client_status_label',
-                get_sales_agency_status_label(request_row.get('status'), viewer='client', service_type=request_row.get('service_type'))
-            )
-            request_row.setdefault('merchandise_items', [])
-            request_row['detail_url'] = url_for('admin_sales_agency_request_detail', id=request_row['id'])
-            requests_list.append(request_row)
+                if needle in " ".join(haystack_parts).lower():
+                    filtered_by_keyword.append(request_row)
+            requests_list = filtered_by_keyword
 
         current_filters = {
             'q': q_filter,

@@ -2525,7 +2525,7 @@
                         {% if item.all_photos and item.all_photos|length > 0 %}
                         <div class="photo-cell" data-photos='{{ item.all_photos | tojson }}'
                             data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
-                            <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="">
+                            <img src="{{ url_for('static', filename=item.all_photos[0]) }}" class="table-thumb" alt="" loading="lazy" decoding="async">
                             {% if item.all_photos|length > 1 %}
                             <span class="photo-count-badge">{{ item.all_photos|length }}</span>
                             {% endif %}
@@ -2751,14 +2751,14 @@
                     <div class="card-photo-scroll" data-photos='{{ item.all_photos | tojson }}'
                         data-name="{{ item.product_name | e }}">
                         {% for photo in item.all_photos %}
-                        <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt=""
+                        <img src="{{ url_for('static', filename=photo) }}" class="scroll-thumb" alt="" loading="lazy" decoding="async"
                             onclick="openItemLightboxFromParent(this, {{ loop.index0 }})">
                         {% endfor %}
                     </div>
                     {% elif item.all_photos and item.all_photos|length == 1 %}
                     <div class="card-photo-single" data-photos='{{ item.all_photos | tojson }}'
                         data-name="{{ item.product_name | e }}" onclick="openItemLightboxFromData(this, 0)">
-                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="">
+                        <img src="{{ url_for('static', filename=item.all_photos[0]) }}" alt="" loading="lazy" decoding="async">
                     </div>
                     {% else %}
                     <div class="no-photo">-</div>

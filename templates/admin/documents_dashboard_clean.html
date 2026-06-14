@@ -158,7 +158,7 @@
             <td>
               <div class="{% if row.item_image_url %}doc-item-cell{% else %}doc-item-plain{% endif %}">
                 {% if row.item_image_url %}
-                <img class="doc-item-thumb" src="{{ row.item_image_url }}" alt="">
+                <img class="doc-item-thumb" src="{{ row.item_image_url }}" alt="" loading="lazy" decoding="async">
                 {% endif %}
                 <div>
                   {{ row.product_name or row.item_summary or row.item_names or '-' }}
