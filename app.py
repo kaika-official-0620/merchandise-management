@@ -39309,6 +39309,216 @@ def fetch_admin_document_history_rows_v2():
         conn.close()
 
 
+def fetch_admin_document_history_rows_v2():
+    rows = []
+    conn, cur = document_open_cursor()
+    try:
+        has_created_mitsumori_id = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_mitsumori_id')
+        has_created_invoice_id = sales_agency_column_exists(cur, 'sales_agency_requests', 'created_invoice_id')
+        has_keisan_admin_created = _docs_column_exists(cur, 'user_keisan', 'is_admin_created')
+
+        mitsumori_service_select = "COALESCE(sar_m.service_type, '') AS service_type"
+        mitsumori_service_join = """
+            LEFT JOIN (
+                SELECT created_mitsumori_id, MAX(service_type) AS service_type
+                FROM sales_agency_requests
+                WHERE created_mitsumori_id IS NOT NULL
+                GROUP BY created_mitsumori_id
+            ) sar_m ON sar_m.created_mitsumori_id = m.id
+        """ if has_created_mitsumori_id else ""
+        if not has_created_mitsumori_id:
+            mitsumori_service_select = "'' AS service_type"
+
+        invoice_service_select = "COALESCE(sar_i.service_type, '') AS service_type"
+        invoice_service_join = """
+            LEFT JOIN (
+                SELECT created_invoice_id, MAX(service_type) AS service_type
+                FROM sales_agency_requests
+                WHERE created_invoice_id IS NOT NULL
+                GROUP BY created_invoice_id
+            ) sar_i ON sar_i.created_invoice_id = i.id
+        """ if has_created_invoice_id else ""
+        if not has_created_invoice_id:
+            invoice_service_select = "'' AS service_type"
+
+        admin_created_condition = "1 = 1"
+        if has_keisan_admin_created:
+            admin_created_condition = (
+                "COALESCE(k.is_admin_created, FALSE) = TRUE"
+                if DATABASE_URL
+                else "COALESCE(k.is_admin_created, 0) = 1"
+            )
+
+        cur.execute(
+            f"""
+            SELECT *
+            FROM (
+                SELECT 'shikiriosho' AS kind,
+                       s.id AS id,
+                       s.document_no AS document_no,
+                       s.issue_date AS issue_date,
+                       s.total_amount AS total_amount,
+                       s.status AS status,
+                       s.created_at AS created_at,
+                       '' AS service_type,
+                       '' AS subject,
+                       s.recipient_name AS recipient_name,
+                       '' AS notes,
+                       u.display_name AS client_name,
+                       u.username AS username,
+                       '' AS company_name,
+                       '' AS customer_name,
+                       '' AS auction_name,
+                       COALESCE(s.issue_date, s.created_at) AS sort_value
+                FROM shikiriosho s
+                LEFT JOIN users u ON s.recipient_id = u.id
+
+                UNION ALL
+
+                SELECT 'user_mitsumori' AS kind,
+                       m.id AS id,
+                       m.document_no AS document_no,
+                       m.issue_date AS issue_date,
+                       m.total_amount AS total_amount,
+                       m.status AS status,
+                       m.created_at AS created_at,
+                       {mitsumori_service_select},
+                       m.subject AS subject,
+                       '' AS recipient_name,
+                       m.notes AS notes,
+                       u.display_name AS client_name,
+                       u.username AS username,
+                       m.company_name AS company_name,
+                       '' AS customer_name,
+                       '' AS auction_name,
+                       COALESCE(m.issue_date, m.created_at) AS sort_value
+                FROM user_mitsumori m
+                LEFT JOIN users u ON m.user_id = u.id
+                {mitsumori_service_join}
+
+                UNION ALL
+
+                SELECT 'user_kaitori_shoudaku' AS kind,
+                       k.id AS id,
+                       k.document_no AS document_no,
+                       k.issue_date AS issue_date,
+                       k.total_amount AS total_amount,
+                       k.status AS status,
+                       k.created_at AS created_at,
+                       '' AS service_type,
+                       '' AS subject,
+                       '' AS recipient_name,
+                       k.notes AS notes,
+                       u.display_name AS client_name,
+                       u.username AS username,
+                       '' AS company_name,
+                       k.customer_name AS customer_name,
+                       '' AS auction_name,
+                       COALESCE(k.issue_date, k.created_at) AS sort_value
+                FROM user_kaitori_shoudaku k
+                LEFT JOIN users u ON k.user_id = u.id
+
+                UNION ALL
+
+                SELECT 'invoice' AS kind,
+                       i.id AS id,
+                       i.invoice_no AS document_no,
+                       i.issue_date AS issue_date,
+                       i.total_amount AS total_amount,
+                       i.status AS status,
+                       i.created_at AS created_at,
+                       {invoice_service_select},
+                       '' AS subject,
+                       i.recipient_name AS recipient_name,
+                       i.notes AS notes,
+                       u.display_name AS client_name,
+                       u.username AS username,
+                       '' AS company_name,
+                       '' AS customer_name,
+                       '' AS auction_name,
+                       COALESCE(i.issue_date, i.created_at) AS sort_value
+                FROM invoices i
+                LEFT JOIN users u ON i.sender_id = u.id
+                {invoice_service_join}
+                WHERE i.invoice_no LIKE 'KT-%'
+
+                UNION ALL
+
+                SELECT 'user_keisan' AS kind,
+                       k.id AS id,
+                       k.document_no AS document_no,
+                       k.issue_date AS issue_date,
+                       k.total_amount AS total_amount,
+                       k.status AS status,
+                       k.created_at AS created_at,
+                       'auction' AS service_type,
+                       k.subject AS subject,
+                       k.recipient_name AS recipient_name,
+                       k.notes AS notes,
+                       u.display_name AS client_name,
+                       u.username AS username,
+                       '' AS company_name,
+                       '' AS customer_name,
+                       ps.auction_name AS auction_name,
+                       COALESCE(k.issue_date, k.created_at) AS sort_value
+                FROM user_keisan k
+                LEFT JOIN users u ON k.user_id = u.id
+                LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
+                WHERE {admin_created_condition}
+            ) history_rows
+            ORDER BY sort_value DESC, id DESC
+            """
+        )
+
+        for row in document_rows_to_dicts(cur.fetchall()):
+            kind = row.get('kind') or ''
+            document_no = row.get('document_no') or '-'
+            service_type = row.get('service_type') or ''
+            client_name = (
+                row.get('client_name')
+                or row.get('recipient_name')
+                or row.get('username')
+                or row.get('company_name')
+                or '-'
+            )
+            is_admin_mitsumori = kind == 'user_mitsumori' and str(document_no).startswith('MT-')
+            rows.append(
+                {
+                    'kind': kind,
+                    'id': row.get('id'),
+                    'document_type': '',
+                    'document_no': document_no,
+                    'client_name': client_name,
+                    'service_type': service_type,
+                    'service_name': get_sales_agency_service_name(service_type) if service_type else '',
+                    'issue_date': document_format_date(row.get('issue_date') or row.get('created_at')),
+                    'total_amount': int(row.get('total_amount') or 0),
+                    'status': row.get('status') or '',
+                    'status_label': document_status_label(kind, row.get('status')),
+                    'direction_key': 'vendor' if is_admin_mitsumori else ('incoming' if kind in {'user_mitsumori', 'user_kaitori_shoudaku'} else 'outgoing'),
+                    'direction_label': '',
+                    'subject': row.get('subject') or row.get('customer_name') or row.get('auction_name') or '',
+                    'notes': row.get('notes') or '',
+                    'detail_endpoint': (
+                        'admin_mitsumori_view'
+                        if is_admin_mitsumori
+                        else {
+                            'user_mitsumori': 'admin_user_mitsumori_view',
+                            'user_kaitori_shoudaku': 'admin_user_kaitori_shoudaku_view',
+                            'invoice': 'admin_kaitori_view',
+                            'shikiriosho': 'admin_shikiriosho_view',
+                            'user_keisan': 'admin_auction_keisan_view',
+                        }.get(kind)
+                    ),
+                    'sort_key': str(row.get('sort_value') or row.get('issue_date') or row.get('created_at') or ''),
+                }
+            )
+        return rows
+    finally:
+        cur.close()
+        conn.close()
+
+
 def fetch_admin_document_history_rows_with_vendor_statements_v2():
     rows = [dict(row) for row in fetch_admin_document_history_rows_v2()]
     conn, cur = sales_agency_open_cursor()
