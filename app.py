@@ -16,6 +16,8 @@ import time
 import calendar
 import traceback
 import re
+import hmac
+import uuid
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -304,6 +306,46 @@ def ensure_proxy_service_keisan_columns(conn=None, cur=None):
         ]
         for column_name, pg_sql, sqlite_sql in item_column_specs:
             if _docs_column_exists(cur, 'user_keisan_items', column_name):
+                continue
+            cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
+        if managed_conn:
+            conn.commit()
+    finally:
+        if managed_cursor:
+            cur.close()
+        if managed_conn:
+            conn.close()
+
+
+def ensure_proxy_service_followup_columns(conn=None, cur=None):
+    managed_conn = False
+    managed_cursor = False
+
+    if conn is None:
+        conn = get_db()
+        managed_conn = True
+    if cur is None:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
+        managed_cursor = True
+
+    try:
+        column_specs = [
+            (
+                'followup_completed_at',
+                "ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_at TIMESTAMP",
+                "ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_at TIMESTAMP",
+            ),
+            (
+                'followup_completed_by',
+                "ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_by INTEGER REFERENCES users(id)",
+                "ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_by INTEGER REFERENCES users(id)",
+            ),
+        ]
+        for column_name, pg_sql, sqlite_sql in column_specs:
+            if _docs_column_exists(cur, 'proxy_service_settings', column_name):
                 continue
             cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
         if managed_conn:
@@ -1795,6 +1837,7 @@ def submit_proxy_service_keisan_document(conn, keisan_id, actor_user_id, now=Non
         'reflected_count': reflected_count,
         'updated_source_count': len(updated_source_ids),
         'auction_id': keisan.get('proxy_service_auction_id'),
+        'recipient_name': winner_name,
     }
 
 
@@ -2508,6 +2551,7 @@ def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='
     date_to = (date_to or '').strip()
 
     sync_proxy_service_keisan_documents(conn)
+    ensure_proxy_service_followup_columns(conn)
 
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -2615,13 +2659,15 @@ def build_proxy_service_history_datasets(conn, now=None, keyword='', sale_mode='
             + int(card.get('pending_prepare_count') or 0)
             + int(card.get('prepared_count') or 0)
         )
+        card['is_manually_completed'] = bool(card.get('followup_completed_at'))
+        card['manual_completed_at_display'] = format_optional_datetime(card.get('followup_completed_at'), fallback='-')
         card['draft_doc_count'] = keisan_summary.get('draft_count', 0)
         card['completed_doc_count'] = keisan_summary.get('completed_count', 0)
         card['submitted_doc_count'] = keisan_summary.get('submitted_count', 0)
         card['winner_names'] = winner_names[:5]
         card['winner_names_summary'] = ' / '.join(winner_names[:3]) if winner_names else '-'
         card['item_names_summary'] = ' / '.join(item_names[:3]) if item_names else '-'
-        card['is_pending_followup'] = card['attention_count'] > 0
+        card['is_pending_followup'] = card['attention_count'] > 0 and not card['is_manually_completed']
 
         overall_summary['item_count'] += int(card.get('item_count') or 0)
         overall_summary['bid_count'] += int(card.get('bid_count') or 0)
@@ -3554,6 +3600,8 @@ if DATABASE_URL:
                 page_description TEXT,
                 start_datetime TIMESTAMP,
                 end_datetime TIMESTAMP,
+                followup_completed_at TIMESTAMP,
+                followup_completed_by INTEGER REFERENCES users(id),
                 updated_by INTEGER REFERENCES users(id),
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -3575,6 +3623,13 @@ if DATABASE_URL:
         # オークション名カラムを追加（複数オークション対応）
         try:
             cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS auction_name VARCHAR(100) DEFAULT 'オークション'")
+        except:
+            pass
+
+        # サービス終了後対応の手動完了マーカー
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS followup_completed_at TIMESTAMP")
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN IF NOT EXISTS followup_completed_by INTEGER REFERENCES users(id)")
         except:
             pass
         
@@ -4600,6 +4655,8 @@ else:
                 page_description TEXT,
                 start_datetime TIMESTAMP,
                 end_datetime TIMESTAMP,
+                followup_completed_at TIMESTAMP,
+                followup_completed_by INTEGER REFERENCES users(id),
                 updated_by INTEGER REFERENCES users(id),
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -4624,6 +4681,16 @@ else:
         # オークション名カラムを追加（複数オークション対応）
         try:
             cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN auction_name TEXT DEFAULT 'オークション'")
+        except:
+            pass
+
+        # サービス終了後対応の手動完了マーカー
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_at TIMESTAMP")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE proxy_service_settings ADD COLUMN followup_completed_by INTEGER REFERENCES users(id)")
         except:
             pass
         
@@ -8351,6 +8418,7 @@ def index():
             item_dict['mobile_status_label'] = '認証済み'
         else:
             item_dict['mobile_status_label'] = '発送依頼を送る'
+        item_dict['status_tags'] = build_inventory_status_tags(item_dict)
         
         # 全画像リスト（メイン + 追加）
         item_dict['all_photos'] = []
@@ -17257,6 +17325,7 @@ def admin_proxy_service_detail(auction_id):
         conn = get_db()
         now = get_jst_now()
         ensure_proxy_service_keisan_columns(conn)
+        ensure_proxy_service_followup_columns(conn)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT * FROM proxy_service_settings WHERE id = %s", (auction_id,))
@@ -18357,6 +18426,74 @@ def admin_proxy_service_history_archive():
     )
 
 
+@app.route('/admin/proxy-service/<int:auction_id>/mark-followup-complete', methods=['POST'])
+@login_required
+def admin_proxy_service_mark_followup_complete(auction_id):
+    """管理者用：終了後対応を手動で完了済みにする"""
+    if not (current_user.is_owner() or current_user.is_admin()):
+        flash('オーナーまたは管理者のみ利用できます', 'error')
+        return redirect(url_for('index'))
+
+    if not current_user.can_manage_proxy_service():
+        return get_proxy_publish_denied_response()
+
+    conn = get_db()
+    now = get_jst_now()
+    updated_at_value = now.strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        ensure_proxy_service_followup_columns(conn)
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id FROM proxy_service_settings WHERE id = %s", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('オークションが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service_history'))
+            cur.execute(
+                """
+                UPDATE proxy_service_settings
+                SET followup_completed_at = %s,
+                    followup_completed_by = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (updated_at_value, current_user.id, auction_id),
+            )
+        else:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM proxy_service_settings WHERE id = ?", (auction_id,))
+            settings = cur.fetchone()
+            if not settings:
+                cur.close()
+                conn.close()
+                flash('オークションが見つかりません', 'error')
+                return redirect(url_for('admin_proxy_service_history'))
+            cur.execute(
+                """
+                UPDATE proxy_service_settings
+                SET followup_completed_at = ?,
+                    followup_completed_by = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at_value, current_user.id, updated_at_value, auction_id),
+            )
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('このサービス終了後対応を完了済みにし、過去履歴へ移動しました', 'success')
+        return redirect(url_for('admin_proxy_service_history_archive'))
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        flash(f'完了処理中にエラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('admin_proxy_service_detail', auction_id=auction_id, history_view=1))
+
+
 @app.route('/admin/proxy-service/<int:auction_id>/finalize', methods=['POST'])
 @login_required
 def admin_proxy_service_finalize(auction_id):
@@ -19244,7 +19381,11 @@ def admin_proxy_service_document_history():
             doc['item_summary'] = ' / '.join(item_names[:3]) or '-'
             if len(item_names) > 3:
                 doc['item_summary'] += f' ほか{len(item_names) - 3}点'
-            doc['client_name'] = doc.get('user_name') or doc.get('username') or '-'
+            account_name = doc.get('user_name') or doc.get('username') or '-'
+            recipient_name = doc.get('recipient_name') or account_name
+            doc['client_name'] = account_name
+            doc['sent_to_display'] = recipient_name
+            doc['document_type_label'] = '計算書'
             doc['auction_name_display'] = doc.get('auction_name') or f"オークション #{doc.get('proxy_service_auction_id')}"
             doc['sale_mode_label'] = '早い者勝ち' if doc.get('sale_mode') == 'fixed' else 'オークション'
             doc['issue_date_display'] = doc.get('issue_date') or '-'
@@ -19252,9 +19393,16 @@ def admin_proxy_service_document_history():
             status_label, status_class = get_proxy_service_keisan_status_meta(doc.get('status'))
             doc['status_label'] = status_label
             doc['status_class'] = status_class
+            doc['sent_at_display'] = (
+                format_optional_datetime(doc.get('updated_at'), fallback='-')
+                if doc.get('status') == 'submitted'
+                else '-'
+            )
             doc['keyword_blob'] = ' '.join([
                 doc.get('document_no') or '',
                 doc.get('client_name') or '',
+                doc.get('sent_to_display') or '',
+                doc.get('document_type_label') or '',
                 doc.get('auction_name_display') or '',
                 doc.get('item_summary') or '',
             ]).lower()
@@ -19615,7 +19763,8 @@ def admin_auction_keisan_submit(id):
         redirect_auction_id = redirect_auction_id or result.get('auction_id')
         conn.commit()
         conn.close()
-        flash(f"書類を送付し、{result.get('reflected_count', 0)}件をユーザー商品へ反映しました", 'success')
+        recipient_name = result.get('recipient_name') or 'クライアント'
+        flash(f"{recipient_name}様へ計算書を送付し、{result.get('reflected_count', 0)}件をユーザー商品へ反映しました", 'success')
         if next_url.startswith('/'):
             return redirect(next_url)
         if redirect_auction_id:
@@ -21852,11 +22001,393 @@ def api_master_data():
 # バックアップ・リストア
 # ===================
 
+ADMIN_BACKUP_TABLES = [
+    'users', 'merchandise', 'customers', 'sale_requests',
+    'shikiriosho', 'shikiriosho_items', 'invoices', 'invoice_items',
+    'user_mitsumori', 'user_mitsumori_items', 'user_keisan', 'user_keisan_items',
+    'user_kaitori_shoudaku', 'user_kaitori_shoudaku_items', 'service_documents',
+    'announcements', 'master_brand_categories', 'master_brands',
+    'master_suppliers', 'master_conditions', 'master_payment_methods',
+    'master_supplier_details', 'master_document_settings',
+    'proxy_service_settings', 'line_settings', 'line_scheduled_messages',
+    'inquiries', 'inquiry_replies',
+    'admin_kaitori_shoudaku', 'admin_kaitori_shoudaku_items',
+    'item_disposal_requests',
+    'proxy_service_users', 'proxy_service_bids',
+    'sales_agency_requests', 'sales_agency_request_items',
+]
+
+BACKUP_MANIFEST_FILENAME = 'backup_manifest.json'
+
+
+def get_backup_storage_dir():
+    storage_dir = (os.environ.get('BACKUP_STORAGE_DIR') or '').strip()
+    if not storage_dir:
+        storage_dir = os.path.join(app.config['UPLOAD_FOLDER'], '_system_backups')
+    os.makedirs(storage_dir, exist_ok=True)
+    return storage_dir
+
+
+def get_backup_retention_count():
+    raw_value = (os.environ.get('BACKUP_RETENTION_COUNT') or '7').strip()
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return 7
+
+
+def get_auto_backup_enabled():
+    raw_value = (os.environ.get('AUTO_BACKUP_ENABLED') or '1').strip().lower()
+    return raw_value in {'1', 'true', 'yes', 'on'}
+
+
+def get_auto_backup_hour_minute():
+    try:
+        hour = int((os.environ.get('AUTO_BACKUP_HOUR') or '2').strip())
+        minute = int((os.environ.get('AUTO_BACKUP_MINUTE') or '30').strip())
+    except ValueError:
+        hour, minute = 2, 30
+    return max(0, min(hour, 23)), max(0, min(minute, 59))
+
+
+def convert_backup_dates(obj):
+    if isinstance(obj, dict):
+        return {k: convert_backup_dates(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_backup_dates(item) for item in obj]
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    return obj
+
+
+def build_admin_backup_data(includes_images=False):
+    conn = get_db()
+    backup_data = {
+        'exported_at': get_jst_now().isoformat(),
+        'version': '3.2',
+        'includes_images': bool(includes_images),
+    }
+    for table in ADMIN_BACKUP_TABLES:
+        backup_data[table] = []
+
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
+
+        for table in ADMIN_BACKUP_TABLES:
+            try:
+                cur.execute(f"SELECT * FROM {table} ORDER BY id")
+                backup_data[table] = [dict(row) for row in cur.fetchall()]
+            except Exception as e:
+                print(f"Table {table} backup skipped: {e}")
+                backup_data[table] = []
+        cur.close()
+    finally:
+        conn.close()
+
+    return convert_backup_dates(backup_data)
+
+
+def add_uploaded_file_to_backup_zip(zip_file, file_path, added_files):
+    if not file_path:
+        return
+
+    file_path = str(file_path).replace('\\', '/')
+    filename = file_path[8:] if file_path.startswith('uploads/') else os.path.basename(file_path)
+    if not filename or filename in added_files:
+        return
+
+    uploads_path = os.path.realpath(app.config['UPLOAD_FOLDER'])
+    full_path = os.path.realpath(os.path.join(uploads_path, filename))
+    if not full_path.startswith(uploads_path + os.sep):
+        return
+    if os.path.exists(full_path):
+        zip_file.write(full_path, f'images/{filename}')
+        added_files.add(filename)
+
+
+def write_admin_backup_zip(zip_file, backup_data):
+    zip_file.writestr(
+        'backup_data.json',
+        json.dumps(backup_data, ensure_ascii=False, indent=2, default=str).encode('utf-8')
+    )
+
+    added_files = set()
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        return added_files
+
+    for item in backup_data.get('merchandise', []):
+        add_uploaded_file_to_backup_zip(zip_file, item.get('photo_path'), added_files)
+        additional_photos = item.get('additional_photos')
+        if additional_photos:
+            try:
+                additional_list = json.loads(additional_photos) if isinstance(additional_photos, str) else additional_photos
+                for add_photo in additional_list or []:
+                    add_uploaded_file_to_backup_zip(zip_file, add_photo, added_files)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        add_uploaded_file_to_backup_zip(zip_file, item.get('id_document_path'), added_files)
+        add_uploaded_file_to_backup_zip(zip_file, item.get('consent_form_path'), added_files)
+
+    for req in backup_data.get('sale_requests', []):
+        add_uploaded_file_to_backup_zip(zip_file, req.get('qr_image_path'), added_files)
+        add_uploaded_file_to_backup_zip(zip_file, req.get('qr_image_path2'), added_files)
+
+    return added_files
+
+
+def build_admin_backup_zip_buffer():
+    backup_data = build_admin_backup_data(includes_images=True)
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        write_admin_backup_zip(zip_file, backup_data)
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def get_backup_manifest_path():
+    return os.path.join(get_backup_storage_dir(), BACKUP_MANIFEST_FILENAME)
+
+
+def load_server_backup_history():
+    manifest_path = get_backup_manifest_path()
+    if not os.path.exists(manifest_path):
+        return []
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
+            payload = json.load(manifest_file)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    history = payload.get('backups', []) if isinstance(payload, dict) else []
+    if not isinstance(history, list):
+        return []
+
+    prepared = []
+    for record in history:
+        if not isinstance(record, dict):
+            continue
+        record = dict(record)
+        backup_id = record.get('id')
+        filename = os.path.basename(record.get('storage_filename') or '')
+        if not backup_id or not filename:
+            continue
+        file_path = os.path.join(get_backup_storage_dir(), filename)
+        if os.path.exists(file_path):
+            record['size_bytes'] = os.path.getsize(file_path)
+            record['size_label'] = format_file_size(record['size_bytes'])
+            if has_request_context():
+                record['download_url'] = url_for('download_server_backup', backup_id=backup_id)
+            prepared.append(record)
+
+    return sorted(prepared, key=lambda item: item.get('created_at') or '', reverse=True)
+
+
+def serialize_backup_record(record):
+    persisted_keys = [
+        'id', 'created_at', 'storage_filename', 'download_name', 'trigger', 'trigger_label',
+        'created_by', 'created_by_name', 'size_bytes', 'size_label',
+        'user_count', 'item_count', 'image_count',
+    ]
+    return {key: record.get(key) for key in persisted_keys if key in record}
+
+
+def save_server_backup_history(history):
+    manifest_path = get_backup_manifest_path()
+    tmp_path = manifest_path + '.tmp'
+    payload = {
+        'updated_at': get_jst_now().isoformat(),
+        'backups': [serialize_backup_record(record) for record in history],
+    }
+    with open(tmp_path, 'w', encoding='utf-8') as manifest_file:
+        json.dump(payload, manifest_file, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, manifest_path)
+
+
+def format_file_size(size_bytes):
+    size = float(size_bytes or 0)
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if size < 1024 or unit == 'GB':
+            return f"{size:.1f} {unit}" if unit != 'B' else f"{int(size)} B"
+        size /= 1024
+    return f"{size_bytes} B"
+
+
+def prune_server_backups(history):
+    retention_count = get_backup_retention_count()
+    sorted_history = sorted(history, key=lambda item: item.get('created_at') or '', reverse=True)
+    keep = sorted_history[:retention_count]
+    delete = sorted_history[retention_count:]
+    storage_dir = get_backup_storage_dir()
+
+    for record in delete:
+        filename = os.path.basename(record.get('storage_filename') or '')
+        if not filename:
+            continue
+        file_path = os.path.join(storage_dir, filename)
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError as e:
+            print(f"Backup retention cleanup skipped {filename}: {e}")
+
+    return keep
+
+
+def create_server_backup(trigger='manual', created_by=None, created_by_name=None):
+    now = get_jst_now()
+    backup_id = uuid.uuid4().hex
+    timestamp = now.strftime('%Y%m%d_%H%M%S')
+    storage_filename = f'{timestamp}_{backup_id}.zip'
+    download_name = f'merchandise_full_backup_{timestamp}.zip'
+    file_path = os.path.join(get_backup_storage_dir(), storage_filename)
+
+    backup_data = build_admin_backup_data(includes_images=True)
+    image_count = 0
+    try:
+        with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            image_count = len(write_admin_backup_zip(zip_file, backup_data))
+    except Exception:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        raise
+
+    record = {
+        'id': backup_id,
+        'created_at': now.isoformat(),
+        'storage_filename': storage_filename,
+        'download_name': download_name,
+        'trigger': trigger,
+        'trigger_label': {
+            'manual': '手動',
+            'auto': '自動',
+            'render-cron': 'Render Cron',
+        }.get(trigger, trigger),
+        'created_by': created_by,
+        'created_by_name': created_by_name,
+        'size_bytes': os.path.getsize(file_path),
+        'size_label': format_file_size(os.path.getsize(file_path)),
+        'user_count': len(backup_data.get('users', [])),
+        'item_count': len(backup_data.get('merchandise', [])),
+        'image_count': image_count,
+    }
+
+    history = load_server_backup_history()
+    history.insert(0, record)
+    history = prune_server_backups(history)
+    save_server_backup_history(history)
+    return record
+
+
+def get_backup_schedule_info():
+    hour, minute = get_auto_backup_hour_minute()
+    info = {
+        'enabled': get_auto_backup_enabled(),
+        'time_label': f'{hour:02d}:{minute:02d}',
+        'retention_count': get_backup_retention_count(),
+        'storage_dir': get_backup_storage_dir(),
+        'cron_endpoint_enabled': bool((os.environ.get('BACKUP_CRON_TOKEN') or '').strip()),
+        'next_run': None,
+    }
+
+    scheduler_obj = globals().get('scheduler')
+    if scheduler_obj is not None and getattr(scheduler_obj, 'running', False):
+        job = scheduler_obj.get_job('daily_server_backup')
+        if job and job.next_run_time:
+            info['next_run'] = job.next_run_time.strftime('%Y-%m-%d %H:%M')
+
+    return info
+
+
+def run_auto_server_backup():
+    try:
+        record = create_server_backup(trigger='auto')
+        print(f"[{get_jst_now()}] Auto backup created: {record['download_name']} ({record['size_label']})")
+    except Exception as e:
+        print(f"[{get_jst_now()}] Auto backup failed: {e}")
+
+
 @app.route('/admin/backup')
 @login_required
 @permission_required('backup')
 def admin_backup():
-    return render_template('admin/backup.html')
+    return render_template(
+        'admin/backup.html',
+        backup_history=load_server_backup_history(),
+        backup_schedule=get_backup_schedule_info(),
+    )
+
+
+@app.route('/admin/backup/create', methods=['POST'])
+@login_required
+@permission_required('backup')
+def create_manual_server_backup():
+    try:
+        record = create_server_backup(
+            trigger='manual',
+            created_by=current_user.id,
+            created_by_name=getattr(current_user, 'display_name', None) or getattr(current_user, 'username', None),
+        )
+        flash(f"バックアップを作成しました: {record['download_name']}", 'success')
+    except Exception as e:
+        print(f"Manual backup failed: {e}")
+        flash('バックアップ作成に失敗しました。時間をおいて再度お試しください。', 'error')
+    return redirect(url_for('admin_backup'))
+
+
+@app.route('/admin/backup/history/<backup_id>/download')
+@login_required
+@permission_required('backup')
+def download_server_backup(backup_id):
+    history = load_server_backup_history()
+    record = next((item for item in history if item.get('id') == backup_id), None)
+    if not record:
+        flash('バックアップファイルが見つかりません。', 'error')
+        return redirect(url_for('admin_backup'))
+
+    filename = os.path.basename(record.get('storage_filename') or '')
+    file_path = os.path.join(get_backup_storage_dir(), filename)
+    if not filename or not os.path.exists(file_path):
+        flash('バックアップファイルが保存先に見つかりません。', 'error')
+        return redirect(url_for('admin_backup'))
+
+    return send_file(
+        file_path,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=record.get('download_name') or filename,
+    )
+
+
+@app.route('/internal/backups/run', methods=['POST'])
+def run_backup_from_cron():
+    expected_token = (os.environ.get('BACKUP_CRON_TOKEN') or '').strip()
+    if not expected_token:
+        abort(404)
+
+    supplied_token = (request.headers.get('X-Backup-Token') or request.args.get('token') or '').strip()
+    if not hmac.compare_digest(supplied_token, expected_token):
+        abort(403)
+
+    try:
+        record = create_server_backup(trigger='render-cron')
+    except Exception as e:
+        print(f"Render Cron backup failed: {e}")
+        return jsonify({'status': 'error', 'message': 'backup_failed'}), 500
+
+    return jsonify({
+        'status': 'ok',
+        'backup_id': record['id'],
+        'download_name': record['download_name'],
+        'size_bytes': record['size_bytes'],
+    })
 
 @app.route('/admin/backup/export')
 @login_required
@@ -23643,10 +24174,17 @@ def admin_items():
     
     # 利益計算と利益率の追加、最終更新者名の追加
     all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
+    item_ids = [item.get('id') for item in items if item.get('id')]
+    sale_request_state_maps = load_sale_request_state_maps(item_ids)
+    sales_agency_items = load_sales_agency_item_map(item_ids, viewer='client')
     for item in items:
         item['product_name'] = clean_display_text(item.get('product_name'), fallback='商品名未登録')
         item['notes'] = clean_display_text(item.get('notes'), fallback='')
         item['store_name'] = clean_display_text(item.get('store_name'), fallback='-')
+        apply_sale_request_state_from_maps(item, sale_request_state_maps)
+        sales_agency_request = sales_agency_items.get(item.get('id'))
+        item['pending_sales_agency'] = sales_agency_request is not None
+        item['sales_agency_request'] = sales_agency_request
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
         if item.get('sale_date'):
@@ -23670,6 +24208,8 @@ def admin_items():
             item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
         else:
             item['updated_by_name'] = '-'
+        item['mobile_status_label'] = resolve_inventory_mobile_status_label(item)
+        item['status_tags'] = build_inventory_status_tags(item)
         
         # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
         if current_user.is_owner():
@@ -23953,9 +24493,16 @@ def admin_user_products():
     # 利益計算と利益率の追加、最終更新者名の追加
     all_users_map = {u['id'] if isinstance(u, dict) else u['id']: (dict(u).get('display_name') or dict(u).get('username')) for u in users}
     fee_settings = get_fee_settings()
+    item_ids = [item.get('id') for item in items if item.get('id')]
+    sale_request_state_maps = load_sale_request_state_maps(item_ids)
+    sales_agency_items = load_sales_agency_item_map(item_ids, viewer='client')
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
+        apply_sale_request_state_from_maps(item, sale_request_state_maps)
+        sales_agency_request = sales_agency_items.get(item.get('id'))
+        item['pending_sales_agency'] = sales_agency_request is not None
+        item['sales_agency_request'] = sales_agency_request
         apply_inventory_display_metrics(item, scope='user', fee_settings=fee_settings)
         if item.get('sale_date'):
             sale_price = item.get('sale_price', 0) or 0
@@ -23977,6 +24524,8 @@ def admin_user_products():
             item['updated_by_name'] = all_users_map.get(updated_by_id, '不明')
         else:
             item['updated_by_name'] = '-'
+        item['mobile_status_label'] = resolve_inventory_mobile_status_label(item)
+        item['status_tags'] = build_inventory_status_tags(item)
         
         # 削除可能フラグを追加（オーナーは常にTrue、管理者は1日以内のみTrue）
         if current_user.is_owner():
@@ -25420,7 +25969,10 @@ def documents():
         
         # ユーザー計算書
         cur.execute("""
-            SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC
+            SELECT * FROM user_keisan
+            WHERE user_id = %s
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+            ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
 
@@ -25460,7 +26012,10 @@ def documents():
         
         # ユーザー計算書
         cur.execute("""
-            SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC
+            SELECT * FROM user_keisan
+            WHERE user_id = ?
+              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+            ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
 
@@ -26743,11 +27298,29 @@ def user_keisan_list():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM user_keisan WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+            cur.execute(
+                """
+                SELECT *
+                FROM user_keisan
+                WHERE user_id = %s
+                  AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+                ORDER BY created_at DESC
+                """,
+                (current_user.id,),
+            )
         else:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.execute("SELECT * FROM user_keisan WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+            cur.execute(
+                """
+                SELECT *
+                FROM user_keisan
+                WHERE user_id = ?
+                  AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+                ORDER BY created_at DESC
+                """,
+                (current_user.id,),
+            )
         
         for row in cur.fetchall():
             item = dict(row)
@@ -26990,7 +27563,16 @@ def user_keisan_view(id):
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur.execute(
+            """
+            SELECT *
+            FROM user_keisan
+            WHERE id = %s
+              AND user_id = %s
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+            """,
+            (id, current_user.id),
+        )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
@@ -26998,7 +27580,16 @@ def user_keisan_view(id):
         items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        cur.execute(
+            """
+            SELECT *
+            FROM user_keisan
+            WHERE id = ?
+              AND user_id = ?
+              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+            """,
+            (id, current_user.id),
+        )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
@@ -27022,7 +27613,16 @@ def user_keisan_pdf(id):
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur.execute(
+            """
+            SELECT *
+            FROM user_keisan
+            WHERE id = %s
+              AND user_id = %s
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+            """,
+            (id, current_user.id),
+        )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
@@ -27032,7 +27632,16 @@ def user_keisan_pdf(id):
             items = []
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM user_keisan WHERE id = ? AND user_id = ?", (id, current_user.id))
+        cur.execute(
+            """
+            SELECT *
+            FROM user_keisan
+            WHERE id = ?
+              AND user_id = ?
+              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+            """,
+            (id, current_user.id),
+        )
         row = cur.fetchone()
         if row:
             columns = [d[0] for d in cur.description]
@@ -27545,6 +28154,7 @@ def api_get_products():
     inventory_only = request.args.get('inventory_only')
     sold_days = request.args.get('sold_days')
     exclude_used = request.args.get('exclude_used')
+    scope = (request.args.get('scope') or '').strip()
     sold_days_value = None
     if sold_days and sold_days.isdigit():
         sold_days_value = int(sold_days)
@@ -27638,6 +28248,7 @@ def api_get_all_products():
     inventory_only = request.args.get('inventory_only')
     sold_days = request.args.get('sold_days')
     exclude_used = request.args.get('exclude_used')
+    scope = (request.args.get('scope') or '').strip()
     sold_days_value = None
     if sold_days and sold_days.isdigit():
         sold_days_value = int(sold_days)
@@ -27654,6 +28265,11 @@ def api_get_all_products():
         if user_id:
             where_conditions.append("m.user_id = %s")
             params.append(user_id)
+
+        if scope == 'kaika':
+            where_conditions.append("(m.scope = 'admin' OR u.role IN ('admin', 'owner'))")
+        elif scope == 'user':
+            where_conditions.append("(COALESCE(m.scope, '') <> 'admin' AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
         
         if sold_only == '1':
             where_conditions.append("m.sale_date IS NOT NULL")
@@ -27707,6 +28323,11 @@ def api_get_all_products():
         if user_id:
             where_conditions.append("m.user_id = ?")
             params.append(user_id)
+
+        if scope == 'kaika':
+            where_conditions.append("(m.scope = 'admin' OR u.role IN ('admin', 'owner'))")
+        elif scope == 'user':
+            where_conditions.append("(COALESCE(m.scope, '') <> 'admin' AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
         
         if sold_only == '1':
             where_conditions.append("m.sale_date IS NOT NULL")
@@ -31226,6 +31847,7 @@ def admin_disposal_requests():
     filtered_status = (request.args.get('status') or '').strip()
     filtered_date_from = (request.args.get('date_from') or '').strip()
     filtered_date_to = (request.args.get('date_to') or '').strip()
+    selected_client_id = request.args.get('client_id', type=int)
     filter_tags = []
     requests = []
 
@@ -31371,12 +31993,38 @@ def admin_disposal_requests():
         req['finish_confirm_message'] = action_context['finish_confirm_message']
         req['allow_reject'] = action_context['allow_reject']
 
+    requests.sort(
+        key=lambda req: (
+            0 if req.get('status_stage') == 'pending' else 1,
+            -box_timestamp(req.get('updated_at') or req.get('processed_at') or req.get('created_at')),
+        )
+    )
+    current_filters = {
+        'q': filtered_q,
+        'status': filtered_status,
+        'reason': filtered_reason,
+        'date_from': filtered_date_from,
+        'date_to': filtered_date_to,
+    }
+    client_groups = build_client_box_groups(requests, 'admin_disposal_requests', current_filters)
+    selected_client = find_client_group(client_groups, selected_client_id)
+    list_back_url = url_for(
+        'admin_disposal_requests',
+        **{key: value for key, value in current_filters.items() if value},
+    )
+    if selected_client_id:
+        requests = [req for req in requests if req.get('user_id') == selected_client_id]
+
     pending_count = len([r for r in requests if r['status_stage'] == 'pending'])
     processing_count = len([r for r in requests if r['status_stage'] == 'processing'])
     completed_count = len([r for r in requests if r['status_stage'] == 'completed'])
     
     return render_template('admin/disposal_requests.html',
                            requests=requests,
+                           client_groups=client_groups,
+                           selected_client_id=selected_client_id,
+                           selected_client=selected_client,
+                           list_back_url=list_back_url,
                            pending_count=pending_count,
                            processing_count=processing_count,
                            completed_count=completed_count,
@@ -33362,11 +34010,27 @@ def init_scheduler():
         name='長期在庫商品自動移動',
         replace_existing=True
     )
-    
+
+    if get_auto_backup_enabled():
+        backup_hour, backup_minute = get_auto_backup_hour_minute()
+        scheduler.add_job(
+            run_auto_server_backup,
+            CronTrigger(hour=backup_hour, minute=backup_minute, timezone='Asia/Tokyo'),
+            id='daily_server_backup',
+            name='日次バックアップ作成',
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=3600
+        )
+
     scheduler.start()
     print(f"[{get_jst_now()}] Scheduler started: Monthly batch will run on last day of each month at 23:59 JST")
     print(f"[{get_jst_now()}] Scheduler started: LINE scheduled messages will be checked every minute")
     print(f"[{get_jst_now()}] Scheduler started: Overdue items check will run daily at 03:00 JST")
+    if get_auto_backup_enabled():
+        backup_hour, backup_minute = get_auto_backup_hour_minute()
+        print(f"[{get_jst_now()}] Scheduler started: Auto backup will run daily at {backup_hour:02d}:{backup_minute:02d} JST")
 
 # =============================================
 # 買取承諾書（ユーザー向け）
@@ -35048,6 +35712,15 @@ def get_sale_request_status_counts(requests_list):
     }
 
 
+def request_status_label_from_value(status):
+    return {
+        'pending': '未対応 未処理 承認待ち',
+        'approved': '承認済み 処理中',
+        'rejected': '差し戻し 却下',
+        'completed': '完了 処理完了',
+    }.get(status or '', status or '')
+
+
 def parse_sale_request_created_at(value):
     if not value:
         return None
@@ -35060,6 +35733,124 @@ def parse_sale_request_created_at(value):
                 return datetime.strptime(normalized, fmt)
             except ValueError:
                 continue
+    return None
+
+
+def parse_box_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str):
+        normalized = value.strip().replace('T', ' ')
+        for fmt in (
+            '%Y-%m-%d %H:%M:%S.%f',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d %H:%M',
+            '%Y-%m-%d',
+            '%Y/%m/%d %H:%M:%S',
+            '%Y/%m/%d %H:%M',
+            '%Y/%m/%d',
+        ):
+            try:
+                return datetime.strptime(normalized[:26], fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def format_box_datetime(value):
+    parsed = parse_box_datetime(value)
+    if not parsed:
+        return '-'
+    return parsed.strftime('%Y/%m/%d %H:%M')
+
+
+def box_timestamp(value):
+    parsed = parse_box_datetime(value)
+    return parsed.timestamp() if parsed else 0
+
+
+def build_client_box_groups(items, endpoint, filters=None, service_type=None):
+    filters = filters or {}
+    groups = {}
+    for item in items:
+        user_id = item.get('user_id')
+        if not user_id:
+            continue
+        group = groups.setdefault(user_id, {
+            'user_id': user_id,
+            'client_name': (
+                item.get('client_name')
+                or item.get('user_display_name')
+                or item.get('display_name')
+                or item.get('username')
+                or f'ID:{user_id}'
+            ),
+            'client_identifier': item.get('client_identifier') or f'ユーザーID {user_id}',
+            'total_count': 0,
+            'pending_count': 0,
+            'last_updated_raw': None,
+            'last_updated': '-',
+            'status_label': '確認済み',
+            'statuses': set(),
+        })
+        group['total_count'] += 1
+        status = item.get('status') or item.get('status_stage') or ''
+        group['statuses'].add(status)
+        if status == 'pending':
+            group['pending_count'] += 1
+
+        updated_raw = (
+            item.get('updated_at')
+            or item.get('processed_at')
+            or item.get('shipment_marked_at')
+            or item.get('requested_at')
+            or item.get('created_at')
+        )
+        if box_timestamp(updated_raw) >= box_timestamp(group.get('last_updated_raw')):
+            group['last_updated_raw'] = updated_raw
+            group['last_updated'] = format_box_datetime(updated_raw)
+
+    for group in groups.values():
+        statuses = group.pop('statuses', set())
+        if group['pending_count']:
+            group['status_label'] = '未処理あり'
+        elif 'processing' in statuses or 'approved' in statuses or 'appraising' in statuses or 'inspecting' in statuses:
+            group['status_label'] = '処理中'
+        elif 'rejected' in statuses:
+            group['status_label'] = '差し戻し/却下あり'
+        elif 'completed' in statuses:
+            group['status_label'] = '完了'
+
+        query_args = {
+            key: value
+            for key, value in filters.items()
+            if value and key != 'client_id'
+        }
+        query_args['client_id'] = group['user_id']
+        if service_type and service_type != 'all':
+            query_args['service_type'] = service_type
+        group['url'] = url_for(endpoint, **query_args)
+
+    return sorted(
+        groups.values(),
+        key=lambda group: (
+            0 if group['pending_count'] else 1,
+            -box_timestamp(group.get('last_updated_raw')),
+            str(group.get('client_name') or ''),
+        ),
+    )
+
+
+def find_client_group(client_groups, client_id):
+    if not client_id:
+        return None
+    for group in client_groups:
+        if group.get('user_id') == client_id:
+            return group
     return None
 
 
@@ -35105,6 +35896,8 @@ def filter_sale_requests(requests_list, filters):
                 req.get('user_display_name') or '',
                 req.get('username') or '',
                 req.get('request_type_label') or '',
+                request_status_label_from_value(req.get('status')),
+                str(req.get('user_id') or ''),
                 str(req.get('merchandise_id') or ''),
             ]
             combined = ' '.join(haystacks).lower()
@@ -35288,6 +36081,152 @@ def enrich_item_sale_request_state(item_dict, include_all_users=False):
         item_dict['mobile_status_label'] = '発送依頼を送る'
 
     return item_dict
+
+
+def load_sale_request_state_maps(merchandise_ids=None):
+    state_maps = {
+        'pending_shipping_requests': {},
+        'pending_completion_requests': {},
+        'approved_shipping_requests': {},
+        'shipped_shipping_requests': {},
+    }
+    item_ids = [item_id for item_id in (merchandise_ids or []) if item_id]
+    if merchandise_ids is not None and not item_ids:
+        return state_maps
+
+    conn = None
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            query = "SELECT * FROM sale_requests"
+            params = []
+            if item_ids:
+                placeholders = ','.join(['%s'] * len(item_ids))
+                query += f" WHERE merchandise_id IN ({placeholders})"
+                params.extend(item_ids)
+            query += " ORDER BY created_at DESC"
+            cur.execute(query, params)
+        else:
+            cur = conn.cursor()
+            query = "SELECT * FROM sale_requests"
+            params = []
+            if item_ids:
+                placeholders = ','.join(['?'] * len(item_ids))
+                query += f" WHERE merchandise_id IN ({placeholders})"
+                params.extend(item_ids)
+            query += " ORDER BY created_at DESC"
+            cur.execute(query, params)
+
+        for req in cur.fetchall():
+            req_dict = dict(req)
+            request_type = normalize_sale_request_type(req_dict.get('request_type'))
+            req_dict['request_type'] = request_type
+            req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+            merchandise_id = req_dict.get('merchandise_id')
+            status = req_dict.get('status')
+
+            if status == 'pending':
+                if request_type == 'completion_report':
+                    state_maps['pending_completion_requests'].setdefault(merchandise_id, req_dict)
+                else:
+                    state_maps['pending_shipping_requests'].setdefault(merchandise_id, req_dict)
+            elif status == 'approved' and request_type == 'shipping_request':
+                state_maps['approved_shipping_requests'].setdefault(merchandise_id, req_dict)
+                if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
+                    state_maps['shipped_shipping_requests'].setdefault(merchandise_id, req_dict)
+
+        cur.close()
+    except Exception as e:
+        print(f"Error loading sale request state maps: {e}", flush=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    return state_maps
+
+
+def apply_sale_request_state_from_maps(item_dict, state_maps):
+    item_id = item_dict.get('id')
+    shipping_request = state_maps.get('pending_shipping_requests', {}).get(item_id)
+    completion_request = state_maps.get('pending_completion_requests', {}).get(item_id)
+    approved_shipping_request = state_maps.get('approved_shipping_requests', {}).get(item_id)
+    shipped_shipping_request = state_maps.get('shipped_shipping_requests', {}).get(item_id)
+
+    item_dict['pending_shipping_request'] = shipping_request is not None
+    item_dict['shipping_request'] = shipping_request
+    item_dict['pending_completion_request'] = completion_request is not None
+    item_dict['completion_request'] = completion_request
+    item_dict['approved_shipping_request'] = approved_shipping_request
+    item_dict['shipped_shipping_request'] = shipped_shipping_request
+    item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+    item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
+    item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
+    item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
+    item_dict['sale_request'] = completion_request or shipping_request
+    return item_dict
+
+
+def build_inventory_status_tags(item):
+    tags = []
+    is_sold_item = bool(item.get('sale_date') or item.get('is_sold'))
+    if is_sold_item:
+        return ['sold']
+
+    tags.append('active')
+    if item.get('pending_completion_request'):
+        tags.append('completion_pending')
+    if item.get('pending_shipping_request'):
+        tags.append('shipping_pending')
+    if (
+        item.get('pending_completion_request')
+        or item.get('pending_shipping_request')
+        or item.get('can_send_completion_report')
+        or item.get('approved_shipping_request')
+        or item.get('shipment_marked')
+        or item.get('is_shipped')
+    ):
+        tags.append('transaction')
+    if item.get('pending_sales_agency'):
+        tags.append('agency')
+    if item.get('appraisal_status') in {'waiting', 'inspecting'}:
+        tags.append('appraisal_pending')
+    if item.get('is_listed') and not item.get('pending_sales_agency') and item.get('appraisal_status') not in {'waiting', 'inspecting'}:
+        tags.extend(['listed', 'certified'])
+    if not item.get('is_listed') and not item.get('pending_sales_agency') and item.get('appraisal_status') not in {'waiting', 'inspecting'}:
+        tags.append('unlisted')
+
+    unique_tags = []
+    for tag in tags:
+        if tag and tag not in unique_tags:
+            unique_tags.append(tag)
+    return unique_tags
+
+
+def resolve_inventory_mobile_status_label(item):
+    sales_agency_request = item.get('sales_agency_request') or {}
+    if item.get('sale_date') or item.get('is_sold'):
+        return '売却済み'
+    if item.get('pending_completion_request'):
+        return '取引完了報告確認中'
+    if item.get('pending_shipping_request'):
+        return '発送依頼確認中'
+    if item.get('can_send_completion_report'):
+        return '取引完了報告を送る'
+    if item.get('approved_shipping_request'):
+        return '発送準備中'
+    if item.get('pending_sales_agency'):
+        return sales_agency_request.get('status_label') or '業者依頼中'
+    if item.get('appraisal_status') == 'inspecting':
+        return '査定中'
+    if item.get('appraisal_status') == 'waiting':
+        return '査定待ち'
+    if item.get('is_listed'):
+        return '認証済み'
+    return '発送依頼を送る'
 
 
 def record_sale_request_event(conn, sale_request_id, event_type, actor_user_id=None, note=None):
@@ -35772,17 +36711,27 @@ def admin_shipping_requests():
         return render_permission_denied('管理者権限が必要です')
 
     view_data = load_admin_sale_requests_data()
+    selected_client_id = request.args.get('client_id', type=int)
     filters = {
         'q': request.args.get('q', '').strip(),
         'status': request.args.get('status', '').strip(),
         'date_from': request.args.get('date_from', '').strip(),
         'date_to': request.args.get('date_to', '').strip(),
     }
-    filtered_requests = filter_sale_requests(view_data['shipping_requests'], filters)
+    base_filtered_requests = filter_sale_requests(view_data['shipping_requests'], filters)
+    client_groups = build_client_box_groups(base_filtered_requests, 'admin_shipping_requests', filters)
+    filtered_requests = [
+        req for req in base_filtered_requests
+        if selected_client_id and req.get('user_id') == selected_client_id
+    ]
     view_data['filtered_requests'] = filtered_requests
-    view_data['current_counts'] = get_sale_request_status_counts(filtered_requests)
+    view_data['current_counts'] = get_sale_request_status_counts(base_filtered_requests)
     view_data['filter_values'] = filters
     view_data['active_box'] = 'shipping'
+    view_data['client_groups'] = client_groups
+    view_data['selected_client_id'] = selected_client_id
+    view_data['selected_client'] = find_client_group(client_groups, selected_client_id)
+    view_data['list_back_url'] = url_for('admin_shipping_requests', **{k: v for k, v in filters.items() if v})
     return render_template('admin/sale_requests.html', **view_data)
 
 
@@ -35793,17 +36742,27 @@ def admin_completion_requests():
         return render_permission_denied('管理者権限が必要です')
 
     view_data = load_admin_sale_requests_data()
+    selected_client_id = request.args.get('client_id', type=int)
     filters = {
         'q': request.args.get('q', '').strip(),
         'status': request.args.get('status', '').strip(),
         'date_from': request.args.get('date_from', '').strip(),
         'date_to': request.args.get('date_to', '').strip(),
     }
-    filtered_requests = filter_sale_requests(view_data['completion_requests'], filters)
+    base_filtered_requests = filter_sale_requests(view_data['completion_requests'], filters)
+    client_groups = build_client_box_groups(base_filtered_requests, 'admin_completion_requests', filters)
+    filtered_requests = [
+        req for req in base_filtered_requests
+        if selected_client_id and req.get('user_id') == selected_client_id
+    ]
     view_data['filtered_requests'] = filtered_requests
-    view_data['current_counts'] = get_sale_request_status_counts(filtered_requests)
+    view_data['current_counts'] = get_sale_request_status_counts(base_filtered_requests)
     view_data['filter_values'] = filters
     view_data['active_box'] = 'completion'
+    view_data['client_groups'] = client_groups
+    view_data['selected_client_id'] = selected_client_id
+    view_data['selected_client'] = find_client_group(client_groups, selected_client_id)
+    view_data['list_back_url'] = url_for('admin_completion_requests', **{k: v for k, v in filters.items() if v})
     return render_template('admin/sale_requests.html', **view_data)
 
 # 管理者：売却申請承認
@@ -36682,6 +37641,61 @@ def get_sales_agency_service_name(service_type):
     return SALES_AGENCY_SERVICE_TYPES.get((service_type or '').strip(), service_type or '')
 
 
+def load_sales_agency_item_map(merchandise_ids=None, viewer='client'):
+    item_ids = [item_id for item_id in (merchandise_ids or []) if item_id]
+    if merchandise_ids is not None and not item_ids:
+        return {}
+
+    request_map = {}
+    conn = None
+    try:
+        conn = get_db()
+        placeholder = '%s' if DATABASE_URL else '?'
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cur = conn.cursor()
+
+        query = """
+            SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
+            FROM sales_agency_request_items sari
+            JOIN sales_agency_requests sar ON sari.request_id = sar.id
+            WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+              AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
+        """
+        params = []
+        if item_ids:
+            placeholders = ','.join([placeholder] * len(item_ids))
+            query += f" AND sari.merchandise_id IN ({placeholders})"
+            params.extend(item_ids)
+        query += " ORDER BY sar.created_at DESC"
+        cur.execute(query, params)
+
+        for req in cur.fetchall():
+            req_dict = dict(req)
+            merchandise_id = req_dict.get('merchandise_id')
+            if merchandise_id in request_map:
+                continue
+            req_dict['service_name'] = get_sales_agency_service_name(req_dict.get('service_type'))
+            req_dict['status_label'] = get_sales_agency_status_label(
+                req_dict.get('status'),
+                viewer=viewer,
+                service_type=req_dict.get('service_type'),
+            )
+            request_map[merchandise_id] = req_dict
+        cur.close()
+    except Exception as e:
+        print(f"Error loading sales agency item map: {e}", flush=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    return request_map
+
+
 def get_sales_agency_appraisal_label(status):
     return SALES_AGENCY_APPRAISAL_LABELS.get((status or '').strip(), '')
 
@@ -37105,11 +38119,12 @@ def admin_sales_agency_requests():
     q_filter = (request.args.get('q') or '').strip()
     date_from_filter = (request.args.get('date_from') or '').strip()
     date_to_filter = (request.args.get('date_to') or '').strip()
+    selected_client_id = request.args.get('client_id', type=int)
     box_title = {
         'wholesale': '業者卸販売BOX',
         'auction': '業者オークションBOX',
         'simultaneous': '同時出品BOX',
-    }.get(service_filter, '販売代行サービス受信BOX')
+    }.get(service_filter, '販売代行申請BOX')
 
     requests_list = []
     stats = {
@@ -37219,9 +38234,50 @@ def admin_sales_agency_requests():
             request_row['detail_url'] = url_for('admin_sales_agency_request_detail', id=request_row['id'])
             requests_list.append(request_row)
 
+        current_filters = {
+            'q': q_filter,
+            'status': status_filter if status_filter != 'all' else '',
+            'date_from': date_from_filter,
+            'date_to': date_to_filter,
+        }
+        client_groups = build_client_box_groups(
+            requests_list,
+            'admin_sales_agency_requests',
+            current_filters,
+            service_type=service_filter,
+        )
+        selected_client = find_client_group(client_groups, selected_client_id)
+        list_back_url = url_for(
+            'admin_sales_agency_requests',
+            **{
+                key: value
+                for key, value in {
+                    'service_type': service_filter if service_filter != 'all' else '',
+                    'status': status_filter if status_filter != 'all' else '',
+                    'q': q_filter,
+                    'date_from': date_from_filter,
+                    'date_to': date_to_filter,
+                }.items()
+                if value
+            },
+        )
+        if selected_client_id:
+            requests_list = [req for req in requests_list if req.get('user_id') == selected_client_id]
+        current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path
+        for request_row in requests_list:
+            request_row['detail_url'] = url_for(
+                'admin_sales_agency_request_detail',
+                id=request_row['id'],
+                back_url=current_back_url,
+            )
+
         return render_template(
             'admin/sales_agency_requests.html',
             requests=requests_list,
+            client_groups=client_groups,
+            selected_client_id=selected_client_id,
+            selected_client=selected_client,
+            list_back_url=list_back_url,
             stats=stats,
             status_filter=status_filter,
             service_filter=service_filter,
@@ -37238,6 +38294,10 @@ def admin_sales_agency_requests():
         return render_template(
             'admin/sales_agency_requests.html',
             requests=[],
+            client_groups=[],
+            selected_client_id=selected_client_id,
+            selected_client=None,
+            list_back_url=url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None),
             stats=stats,
             status_filter=status_filter,
             service_filter=service_filter,
@@ -37263,11 +38323,14 @@ def admin_sales_agency_request_detail(id):
         flash('申請が見つかりません', 'error')
         return redirect(url_for('admin_sales_agency_requests'))
 
-    back_url = url_for(
-        'admin_sales_agency_requests',
-        service_type=request_row.get('service_type'),
-        status=request_row.get('status'),
-    )
+    back_url = resolve_internal_back_url(request.args.get('back_url', ''), '')
+    if not back_url:
+        back_url = url_for(
+            'admin_sales_agency_requests',
+            service_type=request_row.get('service_type'),
+            status=request_row.get('status'),
+            client_id=request_row.get('user_id'),
+        )
     return render_template(
         'admin/sales_agency_request_detail.html',
         req=request_row,
@@ -37598,7 +38661,7 @@ def document_status_label(kind, status):
         },
         'user_keisan': {
             'draft': '下書き',
-            'completed': '送信待ち',
+            'completed': '送付準備完了',
             'submitted': '送付済み',
         },
     }
@@ -37788,7 +38851,7 @@ def fetch_admin_document_history_rows_v2():
             rows.append({
                 'kind': 'user_keisan',
                 'id': row['id'],
-                'document_type': 'オークション計算書',
+                'document_type': '計算書',
                 'document_no': row.get('document_no') or '-',
                 'client_name': row.get('client_name') or row.get('recipient_name') or row.get('username') or '未設定',
                 'service_type': 'auction',
@@ -37915,7 +38978,7 @@ def normalize_admin_document_history_row_v2(row):
         normalized['document_key'] = 'auction_keisan'
         normalized['direction_key'] = 'client_outgoing'
         normalized['direction_label'] = '開花 → クライアント'
-        normalized['document_type'] = 'オークション計算書'
+        normalized['document_type'] = '計算書'
     elif kind == 'admin_kaitori_shoudaku':
         normalized['document_key'] = 'vendor_statement'
         normalized['direction_key'] = 'vendor_incoming'
@@ -37965,7 +39028,7 @@ def build_admin_document_type_cards_v2(rows):
             'direction': 'client_outgoing',
         },
         {
-            'title': '代行仕入れ計算書',
+            'title': '計算書',
             'description': '代行仕入れの計算書と送付状況を確認します。',
             'doc_type': 'user_keisan',
             'direction': 'client_outgoing',
@@ -39311,6 +40374,31 @@ def _docs_column_exists(cur, table_name, column_name):
     return False
 
 
+def _docs_table_exists(cur, table_name):
+    if DATABASE_URL:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_name = %s
+            LIMIT 1
+            """,
+            (table_name,),
+        )
+        return cur.fetchone() is not None
+    cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,))
+    return cur.fetchone() is not None
+
+
+def _docs_safe_int(value, default=0):
+    try:
+        if value is None or str(value).strip() == "":
+            return int(default)
+        return int(float(str(value).replace(",", "")))
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _ensure_sales_agency_document_columns():
     specs = {
         "sales_agency_requests": [
@@ -39389,6 +40477,78 @@ def _generate_prefixed_document_no(prefix, table_name, column_name):
         conn.close()
 
 
+def _docs_load_vendors():
+    conn, cur = _docs_open_cursor()
+    try:
+        if not _docs_table_exists(cur, "vendors"):
+            return []
+        cur.execute("SELECT * FROM vendors ORDER BY name, id")
+        vendors = _docs_rows_to_dicts(cur.fetchall())
+        for vendor in vendors:
+            vendor["display_name"] = (vendor.get("name") or "業者名未登録").strip()
+        return vendors
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _docs_load_clients():
+    conn, cur = _docs_open_cursor()
+    try:
+        cur.execute(
+            """
+            SELECT id, username, display_name, email
+            FROM users
+            WHERE role = 'user'
+            ORDER BY COALESCE(NULLIF(display_name, ''), username), id
+            """
+        )
+        clients = _docs_rows_to_dicts(cur.fetchall())
+        for client in clients:
+            client["name"] = client.get("display_name") or client.get("username") or f"ID:{client.get('id')}"
+        return clients
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _docs_load_latest_vendor_document_for_request(request_id):
+    if not request_id:
+        return None
+    conn, cur = _docs_open_cursor()
+    try:
+        if not _docs_table_exists(cur, "vendor_documents"):
+            return None
+        cur.execute(
+            f"""
+            SELECT vd.*,
+                   editor.display_name AS editor_display_name,
+                   editor.username AS editor_username,
+                   v.name AS master_vendor_name
+            FROM vendor_documents vd
+            LEFT JOIN users editor ON vd.edited_by = editor.id
+            LEFT JOIN vendors v ON vd.vendor_id = v.id
+            WHERE vd.source_request_id = {_docs_mark()}
+              AND COALESCE(vd.document_scope, 'user_flow') = 'user_flow'
+            ORDER BY vd.registered_at DESC, vd.id DESC
+            LIMIT 1
+            """,
+            (request_id,),
+        )
+        doc = _docs_row_to_dict(cur.fetchone())
+        if not doc:
+            return None
+        doc["document_no"] = doc.get("title") or doc.get("original_filename") or f"ID:{doc.get('id')}"
+        doc["editor_name"] = doc.get("editor_display_name") or doc.get("editor_username") or ""
+        edited_at = doc.get("edited_at") or doc.get("registered_at")
+        doc["edited_label"] = edited_at.strftime("%Y-%m-%d %H:%M") if hasattr(edited_at, "strftime") else str(edited_at or "")
+        doc["vendor_name"] = doc.get("master_vendor_name") or doc.get("vendor_name") or ""
+        return doc
+    finally:
+        cur.close()
+        conn.close()
+
+
 def _load_sales_agency_request_context(request_id):
     conn, cur = _docs_open_cursor()
     try:
@@ -39407,15 +40567,29 @@ def _load_sales_agency_request_context(request_id):
 
         cur.execute(
             f"""
-            SELECT m.*
+            SELECT
+                COALESCE(m.id, sari.merchandise_id) AS id,
+                sari.merchandise_id AS merchandise_id,
+                COALESCE(m.product_name, sari.snapshot_product_name, '') AS product_name,
+                COALESCE(m.brand_name, sari.snapshot_brand_name, '') AS brand_name,
+                COALESCE(m.photo_path, sari.snapshot_photo_path, '') AS photo_path,
+                COALESCE(m.kaika_product_code, sari.snapshot_kaika_product_code, '') AS kaika_product_code,
+                m.purchase_date,
+                m.model_number AS item_code,
+                m.item_condition,
+                m.purchase_price,
+                m.listing_price
             FROM sales_agency_request_items sari
-            JOIN merchandise m ON sari.merchandise_id = m.id
+            LEFT JOIN merchandise m ON sari.merchandise_id = m.id
             WHERE sari.request_id = {_docs_mark()}
-            ORDER BY m.id DESC
+            ORDER BY COALESCE(m.id, sari.merchandise_id) DESC
             """,
             (request_id,),
         )
         items = _docs_rows_to_dicts(cur.fetchall())
+        for item in items:
+            if not item.get("product_name"):
+                item["product_name"] = f"商品ID {item.get('merchandise_id') or item.get('id')}"
         request_row["client_name"] = request_row.get("user_name") or request_row.get("username") or f"ID:{request_row.get('user_id')}"
         request_row["service_name"] = get_sales_agency_service_name(request_row.get("service_type"))
         request_row["vendor_mitsumori_id"] = request_row.get("vendor_mitsumori_id") or request_row.get("created_mitsumori_id")
@@ -39861,51 +41035,77 @@ def admin_documents_dashboard_preview():
 def admin_mitsumori_add_from_documents():
     _ensure_sales_agency_document_columns()
     request_id = request.args.get("request_id", type=int) if request.method == "GET" else request.form.get("request_id", type=int)
-    if not request_id:
-        return _original_admin_mitsumori_add()
-    source_request, _items = _load_sales_agency_request_context(request_id)
+    scope = (request.values.get("scope") or "").strip()
+    is_kaika_vendor_scope = scope == "kaika_vendor"
+    is_kaika_estimate_scope = scope in {"kaika", "kaika_estimate"}
+    is_kaika_scope = is_kaika_vendor_scope or is_kaika_estimate_scope
+    source_request, _items = _load_sales_agency_request_context(request_id) if request_id else (None, [])
     if not source_request:
-        flash("対象の申請が見つかりません", "error")
-        return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+        if request_id:
+            flash("対象の申請が見つかりません", "error")
+            return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
 
     if request.method == "POST":
         issue_date = request.form.get("issue_date")
         valid_until = request.form.get("valid_until") or None
+        vendor_id = request.form.get("vendor_id", type=int)
+        vendors = _docs_load_vendors()
+        selected_vendor = next((vendor for vendor in vendors if vendor.get("id") == vendor_id), None)
+        target_user_id = request.form.get("target_user_id", type=int) or (source_request.get("user_id") if source_request else None)
+        document_scope = (
+            "kaika_vendor_outgoing"
+            if is_kaika_vendor_scope
+            else "kaika_estimate"
+            if is_kaika_estimate_scope
+            else "vendor_outgoing"
+        )
+        if document_scope in {"vendor_outgoing", "kaika_vendor_outgoing"} and not selected_vendor:
+            flash("登録済み業者から依頼先を選択してください。", "error")
+            return redirect(request.url)
         company_name = request.form.get("company_name", "")
         department = request.form.get("department", "")
         contact_person = request.form.get("contact_person", "")
         address = request.form.get("address", "")
+        if selected_vendor:
+            company_name = company_name or selected_vendor.get("name") or ""
+            contact_person = contact_person or selected_vendor.get("contact_name") or ""
+            address = address or selected_vendor.get("address") or ""
         subject = request.form.get("subject", "")
         notes = request.form.get("notes", "")
         status = request.form.get("status", "draft")
+        item_names = request.form.getlist("item_name[]")
+        merchandise_ids = request.form.getlist("merchandise_id[]")
+        quantities = request.form.getlist("quantity[]")
+        units = request.form.getlist("unit[]")
+        unit_prices = request.form.getlist("unit_price[]")
         items_data = []
         total_amount = 0
-        for i, item_name in enumerate(request.form.getlist("item_name[]"), start=1):
+        for index, item_name in enumerate(item_names):
             item_name = (item_name or "").strip()
             if not item_name:
                 continue
-            merchandise_ids = request.form.getlist("merchandise_id[]")
-            quantities = request.form.getlist("quantity[]")
-            units = request.form.getlist("unit[]")
-            unit_prices = request.form.getlist("unit_price[]")
-            quantity = int(quantities[i - 1] or 1)
-            unit_price = int(float(unit_prices[i - 1] or 0))
+            quantity = max(1, _docs_safe_int(quantities[index] if index < len(quantities) else 1, 1))
+            unit_price = max(0, _docs_safe_int(unit_prices[index] if index < len(unit_prices) else 0, 0))
             amount = quantity * unit_price
             total_amount += amount
             items_data.append(
                 {
                     "item_no": len(items_data) + 1,
                     "item_name": item_name,
-                    "merchandise_id": int(merchandise_ids[i - 1]) if i - 1 < len(merchandise_ids) and merchandise_ids[i - 1] else None,
+                    "merchandise_id": _docs_safe_int(merchandise_ids[index], 0) if index < len(merchandise_ids) and merchandise_ids[index] else None,
                     "quantity": quantity,
-                    "unit": units[i - 1] if i - 1 < len(units) else "",
+                    "unit": units[index] if index < len(units) else "点",
                     "unit_price": unit_price,
                     "amount": amount,
                 }
             )
+        if not items_data:
+            flash("商品を1件以上入力してください。", "error")
+            return redirect(request.url)
         conn, cur = _docs_open_cursor()
         try:
-            document_no = _generate_prefixed_document_no("MT", "user_mitsumori", "document_no")
+            document_no = _generate_prefixed_document_no("KM" if document_scope == "kaika_estimate" else "MT", "user_mitsumori", "document_no")
+            save_user_id = target_user_id or current_user.id
             if DATABASE_URL:
                 cur.execute(
                     """
@@ -39914,7 +41114,7 @@ def admin_mitsumori_add_from_documents():
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (document_no, source_request["user_id"], issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, "vendor_outgoing", request_id),
+                    (document_no, save_user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, document_scope, request_id),
                 )
                 mitsumori_id = _docs_row_to_dict(cur.fetchone())["id"]
             else:
@@ -39924,7 +41124,7 @@ def admin_mitsumori_add_from_documents():
                     (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, document_scope, sales_agency_request_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (document_no, source_request["user_id"], issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, "vendor_outgoing", request_id),
+                    (document_no, save_user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, document_scope, request_id),
                 )
                 mitsumori_id = cur.lastrowid
             for item in items_data:
@@ -39940,26 +41140,47 @@ def admin_mitsumori_add_from_documents():
         finally:
             cur.close()
             conn.close()
-        _update_sales_agency_request_link(request_id, {"vendor_mitsumori_id": mitsumori_id})
-        flash("業者向け依頼書を作成しました", "success")
+        if request_id and document_scope == "vendor_outgoing":
+            _update_sales_agency_request_link(request_id, {"vendor_mitsumori_id": mitsumori_id})
+        flash("見積依頼書を作成しました", "success")
+        if is_kaika_scope:
+            return redirect(url_for("admin_documents_history", category="kaika_mitsumori"))
         return redirect(url_for("admin_documents_dashboard", group="vendor_outgoing"))
 
-    items = _build_prefill_items_from_request(source_request)
+    items = _build_prefill_items_from_request(source_request) if source_request else []
+    target_user_id = (source_request.get("user_id") if source_request else request.args.get("target_user_id", type=int))
+    vendors = _docs_load_vendors()
+    clients = [] if is_kaika_scope else _docs_load_clients()
+    subject_default = "業者向け見積依頼書"
+    if source_request:
+        subject_default = f"{source_request.get('service_name')} 業者向け見積依頼書"
+    elif is_kaika_vendor_scope:
+        subject_default = "開花商品用 業者向け見積依頼書"
+    elif is_kaika_estimate_scope:
+        subject_default = "開花用 見積依頼書"
     return render_template(
         "admin/mitsumori_form.html",
         mitsumori=None,
         today=get_jst_now().strftime("%Y-%m-%d"),
-        document_no=_generate_prefixed_document_no("MT", "user_mitsumori", "document_no"),
+        document_no=_generate_prefixed_document_no("KM" if is_kaika_estimate_scope else "MT", "user_mitsumori", "document_no"),
         items=items,
         source_request=source_request,
-        target_user_id=source_request.get("user_id"),
+        source_request_products=items,
+        target_user_id=target_user_id,
+        scope=scope,
+        is_kaika_scope=is_kaika_scope,
+        is_kaika_vendor_scope=is_kaika_vendor_scope,
+        is_kaika_estimate_scope=is_kaika_estimate_scope,
+        vendors=vendors,
+        clients=clients,
+        back_url=url_for("admin_documents_dashboard", group="client_incoming" if source_request else "all"),
         default_valid_until=(get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d"),
         company_name_default="",
         department_default="",
         contact_person_default="",
         address_default="",
-        subject_default=f"{source_request.get('service_name')} 業者向け依頼書",
-        notes_default=f"{source_request.get('service_name')} の受付内容を引用しています",
+        subject_default=subject_default,
+        notes_default=(f"{source_request.get('service_name')} の受付内容を引用しています" if source_request else ""),
     )
 
 
@@ -39968,12 +41189,15 @@ def admin_mitsumori_add_from_documents():
 def admin_kaitori_shoudaku_add_from_documents():
     _ensure_sales_agency_document_columns()
     request_id = request.args.get("request_id", type=int) if request.method == "GET" else request.form.get("request_id", type=int)
-    if not request_id:
+    scope = (request.values.get("scope") or "").strip()
+    is_kaika_scope = scope == "kaika"
+    if not request_id and not is_kaika_scope:
         return _original_admin_kaitori_shoudaku_add()
-    source_request, _items = _load_sales_agency_request_context(request_id)
+    source_request, _items = _load_sales_agency_request_context(request_id) if request_id else (None, [])
     if not source_request:
-        flash("対象の申請が見つかりません", "error")
-        return redirect(url_for("admin_documents_dashboard", group="vendor_incoming"))
+        if request_id:
+            flash("対象の申請が見つかりません", "error")
+            return redirect(url_for("admin_documents_dashboard", group="vendor_incoming"))
 
     if request.method == "POST":
         document_no = f"KSH-{get_jst_now().strftime('%Y%m%d%H%M%S')}"
@@ -39988,11 +41212,12 @@ def admin_kaitori_shoudaku_add_from_documents():
         tax_rate = float(request.form.get("tax_rate", 10) or 10)
         vendor_response_file_path = None
         vendor_response_file_name = None
-        try:
-            vendor_response_file_path, vendor_response_file_name = _admin_vendor_response_upload(request.files.get("vendor_response_file"))
-        except Exception as exc:
-            flash(str(exc), "error")
-            return redirect(request.url)
+        if not is_kaika_scope:
+            try:
+                vendor_response_file_path, vendor_response_file_name = _admin_vendor_response_upload(request.files.get("vendor_response_file"))
+            except Exception as exc:
+                flash(str(exc), "error")
+                return redirect(request.url)
 
         product_names = request.form.getlist("product_name[]")
         brand_names = request.form.getlist("brand_name[]")
@@ -40005,8 +41230,8 @@ def admin_kaitori_shoudaku_add_from_documents():
             product_name = (product_name or "").strip()
             if not product_name:
                 continue
-            quantity = int(quantities[i - 1] or 1)
-            unit_price = int(float(unit_prices[i - 1] or 0))
+            quantity = max(1, _docs_safe_int(quantities[i - 1] if i - 1 < len(quantities) else 1, 1))
+            unit_price = max(0, _docs_safe_int(unit_prices[i - 1] if i - 1 < len(unit_prices) else 0, 0))
             amount = quantity * unit_price
             subtotal += amount
             rows.append((len(rows) + 1, product_name, brand_names[i - 1] if i - 1 < len(brand_names) else "", conditions[i - 1] if i - 1 < len(conditions) else "", quantity, unit_price, amount))
@@ -40015,6 +41240,7 @@ def admin_kaitori_shoudaku_add_from_documents():
 
         conn, cur = _docs_open_cursor()
         try:
+            document_scope = "kaika_shoudaku" if is_kaika_scope else "vendor_incoming"
             if DATABASE_URL:
                 cur.execute(
                     """
@@ -40023,7 +41249,7 @@ def admin_kaitori_shoudaku_add_from_documents():
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (document_no, current_user.id, company_name, company_address, company_phone, contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes, "vendor_incoming", request_id, vendor_response_file_path, vendor_response_file_name),
+                    (document_no, current_user.id, company_name, company_address, company_phone, contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes, document_scope, request_id, vendor_response_file_path, vendor_response_file_name),
                 )
                 kaitori_id = _docs_row_to_dict(cur.fetchone())["id"]
             else:
@@ -40033,7 +41259,7 @@ def admin_kaitori_shoudaku_add_from_documents():
                     (document_no, admin_id, company_name, company_address, company_phone, contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes, document_scope, sales_agency_request_id, vendor_response_file_path, vendor_response_file_name)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (document_no, current_user.id, company_name, company_address, company_phone, contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes, "vendor_incoming", request_id, vendor_response_file_path, vendor_response_file_name),
+                    (document_no, current_user.id, company_name, company_address, company_phone, contact_name, issue_date, subtotal, tax_amount, total_amount, tax_rate, payment_method, bank_info, notes, document_scope, request_id, vendor_response_file_path, vendor_response_file_name),
                 )
                 kaitori_id = cur.lastrowid
             for row in rows:
@@ -40049,11 +41275,14 @@ def admin_kaitori_shoudaku_add_from_documents():
         finally:
             cur.close()
             conn.close()
-        _update_sales_agency_request_link(request_id, {"vendor_kaitori_shoudaku_id": kaitori_id})
-        flash("業者買取明細書を登録しました", "success")
+        if request_id:
+            _update_sales_agency_request_link(request_id, {"vendor_kaitori_shoudaku_id": kaitori_id})
+        flash("開花買取承諾書を作成しました" if is_kaika_scope else "業者買取明細書を登録しました", "success")
+        if is_kaika_scope:
+            return redirect(url_for("admin_documents_history", category="kaika_shoudaku"))
         return redirect(url_for("admin_documents_dashboard", group="vendor_incoming"))
 
-    items = _build_prefill_items_from_request(source_request)
+    items = _build_prefill_items_from_request(source_request) if source_request else []
     return render_template(
         "admin/kaitori_shoudaku_form.html",
         kaitori=None,
@@ -40061,6 +41290,9 @@ def admin_kaitori_shoudaku_add_from_documents():
         mode="add",
         today=get_jst_now().strftime("%Y-%m-%d"),
         source_request=source_request,
+        is_kaika_scope=is_kaika_scope,
+        scope=scope,
+        back_url=url_for("admin_documents_dashboard", group="all" if is_kaika_scope else "vendor_incoming"),
     )
 
 
@@ -40093,7 +41325,7 @@ def admin_kaitori_add_from_documents():
             item_name = (item_name or "").strip()
             if not item_name:
                 continue
-            amount = int(float(amounts[i - 1] or 0))
+            amount = _docs_safe_int(amounts[i - 1] if i - 1 < len(amounts) else 0, 0)
             total_amount += amount
             items_data.append(
                 {
@@ -40156,6 +41388,13 @@ def admin_kaitori_add_from_documents():
     finally:
         cur.close()
         conn.close()
+    source_vendor_kaitori = _docs_load_latest_vendor_document_for_request(request_id)
+    if not source_vendor_kaitori and source_request.get("vendor_kaitori_shoudaku_id"):
+        loader = globals().get("_load_vendor_kaitori_document")
+        if callable(loader):
+            source_vendor_kaitori = loader(source_request)
+        else:
+            source_vendor_kaitori = {"document_no": f"ID:{source_request.get('vendor_kaitori_shoudaku_id')}"}
     return render_template(
         "admin/kaitori_form.html",
         kaitori=None,
@@ -40164,7 +41403,8 @@ def admin_kaitori_add_from_documents():
         document_no=_generate_prefixed_document_no("KT", "invoices", "invoice_no"),
         items=items,
         source_request=source_request,
-        source_vendor_kaitori={"document_no": f"ID:{source_request.get('vendor_kaitori_shoudaku_id')}"} if source_request.get("vendor_kaitori_shoudaku_id") else None,
+        source_vendor_kaitori=source_vendor_kaitori,
+        back_url=url_for("admin_documents_dashboard", group="client_outgoing"),
     )
 
 
@@ -40361,7 +41601,7 @@ def admin_auction_keisan_add_from_documents():
         finally:
             cur.close()
             conn.close()
-        flash("オークション計算書を作成しました", "success")
+        flash("計算書を作成しました", "success")
         return redirect(url_for("admin_documents_dashboard", group="client_outgoing"))
 
     items = _build_prefill_items_from_request(source_request) if source_request else []
@@ -40373,7 +41613,7 @@ def admin_auction_keisan_add_from_documents():
         source_request=source_request,
         user_id_default=(source_request.get("user_id") if source_request else None),
         recipient_name_default=(source_request.get("client_name") if source_request else ""),
-        subject_default=(f"{source_request.get('service_name')} 計算書" if source_request else "オークション計算書"),
+        subject_default=(f"{source_request.get('service_name')} 計算書" if source_request else "計算書"),
         notes_default=(f"{source_request.get('service_name')} の返送書類" if source_request else ""),
     )
 

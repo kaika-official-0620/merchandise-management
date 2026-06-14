@@ -2,47 +2,71 @@
 {% block title %}バックアップ・リストア - 株式会社 開花{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>バックアップ・リストア</h1>
+<div class="page-header backup-page-header">
+    <div>
+        <h1>バックアップ・リストア</h1>
+        <p class="page-lead">管理者が操作しなくても、毎日サーバー側に完全バックアップを保存します。</p>
+    </div>
+    <form method="POST" action="{{ url_for('create_manual_server_backup') }}">
+        <button type="submit" class="btn btn-primary">今すぐバックアップ作成</button>
+    </form>
 </div>
 
+<div class="backup-status-grid">
+    <div class="backup-status-card">
+        <span class="status-label">自動バックアップ</span>
+        <strong>{{ '有効' if backup_schedule.enabled else '無効' }}</strong>
+        <p>毎日 {{ backup_schedule.time_label }}（日本時間）</p>
+        {% if backup_schedule.next_run %}
+        <small>次回予定: {{ backup_schedule.next_run }}</small>
+        {% endif %}
+    </div>
+    <div class="backup-status-card">
+        <span class="status-label">保存世代</span>
+        <strong>最新 {{ backup_schedule.retention_count }} 件</strong>
+        <p>古い自動保存ファイルは順次削除されます。</p>
+    </div>
+    <div class="backup-status-card">
+        <span class="status-label">保存先</span>
+        <strong>Render Disk</strong>
+        <p class="storage-path">{{ backup_schedule.storage_dir }}</p>
+    </div>
+</div>
 
 <div class="backup-grid">
-    <!-- エクスポート -->
     <div class="admin-section">
-        <h2>データエクスポート（バックアップ）</h2>
-        <p class="section-desc">現在のデータをダウンロードします。定期的にバックアップを取ることをお勧めします。</p>
-        
+        <h2>手動ダウンロード</h2>
+        <p class="section-desc">すぐ手元に保管したい場合は、従来どおり直接ダウンロードできます。</p>
+
         <div class="backup-options">
             <div class="backup-option">
                 <div class="backup-content">
                     <h3>データのみバックアップ（JSON）</h3>
-                    <p>全ユーザー、全商品、全顧客データを含む（画像なし）</p>
+                    <p>ユーザー、商品、顧客などのデータを保存します。画像ファイルは含みません。</p>
                     <a href="{{ url_for('export_backup') }}" class="btn btn-secondary">JSONダウンロード</a>
                 </div>
             </div>
             <div class="backup-option highlight">
                 <div class="backup-content">
-                    <h3>完全バックアップ（ZIP）推奨</h3>
-                    <p>全データ＋画像ファイルを含む完全バックアップ</p>
+                    <h3>完全バックアップ（ZIP）</h3>
+                    <p>データと画像ファイルをまとめて保存します。復元用の推奨形式です。</p>
                     <a href="{{ url_for('export_backup_with_images') }}" class="btn btn-primary">ZIPダウンロード</a>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- インポート -->
+
     <div class="admin-section">
-        <h2>データインポート（リストア）</h2>
-        <p class="section-desc">バックアップファイルからデータを復元します。</p>
-        
+        <h2>復元</h2>
+        <p class="section-desc">履歴からダウンロードしたZIP、または手元のバックアップファイルをアップロードします。</p>
+
         <form method="POST" action="{{ url_for('import_backup') }}" enctype="multipart/form-data" class="import-form">
             <div class="form-group">
                 <label for="backup_file">バックアップファイル（.json または .zip）</label>
                 <input type="file" id="backup_file" name="backup_file" accept=".json,.zip" required>
-                <small>ZIP形式の場合、画像も自動で復元されます</small>
+                <small>ZIP形式の場合、画像も自動で復元されます。</small>
             </div>
-            
+
             <div class="form-group">
                 <label>インポートモード</label>
                 <div class="radio-group">
@@ -50,19 +74,19 @@
                         <input type="radio" name="import_mode" value="merge" checked>
                         <span class="radio-label">
                             <strong>追加（マージ）</strong>
-                            <small>既存データを保持し、新しいデータを追加</small>
+                            <small>既存データを保持し、新しいデータを追加します。</small>
                         </span>
                     </label>
                     <label class="radio-option">
                         <input type="radio" name="import_mode" value="replace">
                         <span class="radio-label">
                             <strong>置換（上書き）</strong>
-                            <small>※ 既存データを削除し、バックアップで置換</small>
+                            <small>既存データを削除し、バックアップ内容で置き換えます。</small>
                         </span>
                     </label>
                 </div>
             </div>
-            
+
             <button type="submit" class="btn btn-primary" onclick="return confirm('データをインポートしますか？')">
                 インポート実行
             </button>
@@ -70,37 +94,79 @@
     </div>
 </div>
 
-<!-- 注意事項 -->
+<div class="admin-section">
+    <div class="section-header-row">
+        <div>
+            <h2>バックアップ履歴</h2>
+            <p class="section-desc">サーバー側に保存された完全バックアップです。</p>
+        </div>
+    </div>
+
+    {% if backup_history %}
+    <div class="backup-history-table-wrap">
+        <table class="backup-history-table">
+            <thead>
+                <tr>
+                    <th>作成日時</th>
+                    <th>種別</th>
+                    <th>内容</th>
+                    <th>サイズ</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for backup in backup_history %}
+                <tr>
+                    <td>{{ backup.created_at|replace('T', ' ') }}</td>
+                    <td><span class="backup-type">{{ backup.trigger_label }}</span></td>
+                    <td>
+                        <strong>{{ backup.download_name }}</strong>
+                        <small>ユーザー {{ backup.user_count }} 件 / 商品 {{ backup.item_count }} 件 / 画像 {{ backup.image_count }} 件</small>
+                    </td>
+                    <td>{{ backup.size_label }}</td>
+                    <td>
+                        <a href="{{ backup.download_url }}" class="btn btn-secondary btn-sm">ダウンロード</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>まだサーバー側バックアップはありません。「今すぐバックアップ作成」から作成できます。</p>
+    </div>
+    {% endif %}
+</div>
+
 <div class="admin-section warning-section">
-    <h2>注意事項</h2>
+    <h2>復元と保管の注意</h2>
     <ul class="warning-list">
-        <li><strong>JSONバックアップ</strong>: データのみ（写真パスは保存されますが、ファイル自体は含まれません）</li>
-        <li><strong>ZIPバックアップ</strong>: データ＋画像ファイルを含む完全バックアップ（推奨）</li>
-        <li>「置換」モードでインポートすると、現在のデータがすべて削除されます</li>
-        <li>バックアップファイルは安全な場所に保管してください</li>
-        <li>定期的なバックアップを強くお勧めします（週1回以上）</li>
+        <li><strong>JSONバックアップ</strong>: データのみ保存します。写真パスは入りますが、画像ファイル自体は含みません。</li>
+        <li><strong>ZIPバックアップ</strong>: データと画像ファイルを含む完全バックアップです。</li>
+        <li>「置換」モードでインポートすると、現在のデータが削除されます。</li>
+        <li>Render Disk 上の履歴に加えて、重要な世代は外部ストレージにも保管してください。</li>
     </ul>
 </div>
 
-<!-- バックアップ履歴のヒント -->
 <div class="admin-section">
-    <h2>おすすめのバックアップ運用</h2>
+    <h2>Renderでの運用</h2>
     <div class="tip-grid">
         <div class="tip-card">
-            <h4>定期バックアップ</h4>
-            <p>週に1回以上、全データバックアップを取得</p>
+            <h4>アプリ内自動実行</h4>
+            <p>Webサービス起動中は毎日バックアップを作成します。</p>
         </div>
         <div class="tip-card">
-            <h4>複数世代保持</h4>
-            <p>最新3〜5世代のバックアップを保持</p>
+            <h4>Render Cron Job</h4>
+            <p>BACKUP_CRON_TOKEN を設定すると、Cron Job から保護付きURLを実行できます。</p>
         </div>
         <div class="tip-card">
-            <h4>クラウド保存</h4>
-            <p>Google DriveやDropboxなどに保存</p>
+            <h4>外部ストレージ</h4>
+            <p>長期保管はGoogle Drive、S3などへの退避を推奨します。</p>
         </div>
         <div class="tip-card">
-            <h4>変更前バックアップ</h4>
-            <p>大きな変更前には必ずバックアップ</p>
+            <h4>復元方法</h4>
+            <p>履歴からZIPをダウンロードし、この画面の復元フォームにアップロードします。</p>
         </div>
     </div>
 </div>

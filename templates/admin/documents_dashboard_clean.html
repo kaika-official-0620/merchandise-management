@@ -13,6 +13,8 @@
 .doc-table tr[data-detail-url]{cursor:pointer}.doc-table tr[data-detail-url]:hover td{background:#f8fbff}
 .doc-mini-link{color:#2563eb;text-decoration:none;font-weight:700}.doc-mini-link:hover{text-decoration:underline}
 .doc-note{margin:.45rem 0 0;color:#64748b;font-size:.88rem;line-height:1.7}
+.doc-item-cell{display:grid;grid-template-columns:52px minmax(0,1fr);gap:.55rem;align-items:center}
+.doc-item-thumb{width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc}
 .empty-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b}
 @media(max-width:768px){
   .doc-clean,.doc-panel,.doc-head,.doc-table-wrap{min-width:0;max-width:100%}
@@ -29,6 +31,8 @@
   .doc-table td{padding:.4rem 0;border:0;word-break:break-word}
   .doc-table td+td{border-top:1px solid #f1f5f9}
   .doc-table .btn{width:100%;justify-content:center}
+  .doc-item-cell{grid-template-columns:44px minmax(0,1fr)}
+  .doc-item-thumb{width:44px;height:44px}
 }
 </style>
 <div class="doc-clean">
@@ -56,24 +60,14 @@
   </section>
   <section class="doc-panel">
     <h2>開花用書類作成</h2>
-    <p class="doc-note">開花商品や店舗買取など、既存ユーザーとは別扱いの書類を作成します。ユーザー商品は混ぜず、必要な書類だけを選んで作成してください。</p>
+    <p class="doc-note">開花商品だけで作成します。ユーザー商品は混ぜません。</p>
     <div class="doc-stage-grid">
-      <a class="quick-card" href="{{ url_for('admin_mitsumori_add') }}">
-        <div class="stage-card-head"><span class="stage-no">1</span><strong>開花商品用 業者向け見積依頼書作成</strong></div>
-        <p>開花商品一覧の商品を確認し、業者向けの見積依頼書を作成・PDF出力します。</p>
+      {% for card in kaika_document_cards|default([]) %}
+      <a class="quick-card" href="{{ card.url }}">
+        <div class="stage-card-head"><span class="stage-no">{{ card.step }}</span><strong>{{ card.title }}</strong></div>
+        <p>{{ card.description }}</p>
       </a>
-      <a class="quick-card" href="{{ url_for('admin_vendor_documents') }}">
-        <div class="stage-card-head"><span class="stage-no">2</span><strong>開花商品用 業者関連書類登録</strong></div>
-        <p>業者から戻ったPDF・画像を登録し、商品と金額を手動で紐づけます。</p>
-      </a>
-      <a class="quick-card" href="{{ url_for('admin_mitsumori_add') }}">
-        <div class="stage-card-head"><span class="stage-no">3</span><strong>開花用 見積依頼書作成</strong></div>
-        <p>店舗買取などの個人顧客情報を手入力して、見積依頼書を作成します。</p>
-      </a>
-      <a class="quick-card" href="{{ url_for('admin_kaitori_shoudaku_add') }}">
-        <div class="stage-card-head"><span class="stage-no">4</span><strong>開花買取承諾書作成</strong></div>
-        <p>開花側で扱う買取承諾書を作成し、PDFで確認できます。</p>
-      </a>
+      {% endfor %}
     </div>
   </section>
   {% else %}
@@ -154,7 +148,7 @@
     {% if request_rows %}
     <div class="doc-table-wrap">
       <table class="doc-table">
-        <thead><tr><th>受付番号</th><th>受付日</th><th>ユーザーID</th><th>クライアント</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
+        <thead><tr><th>受付番号</th><th>受付日</th><th>ユーザーID</th><th>クライアント</th><th>申請内容</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in request_rows %}
           <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
@@ -162,9 +156,17 @@
             <td>{{ row.created_date_label or '-' }}</td>
             <td>{{ row.client_number or row.user_id or '-' }}</td>
             <td>{{ row.client_name or row.user_name or row.username or '-' }}</td>
+            <td>{{ row.service_name or row.service_type or '-' }}</td>
             <td>
-              {{ row.product_name or row.item_summary or row.item_names or '-' }}
-              {% if row.item_detail_url %}<br><a class="doc-mini-link" href="{{ row.item_detail_url }}">商品詳細を見る</a>{% endif %}
+              <div class="{% if row.item_image_url %}doc-item-cell{% else %}doc-item-plain{% endif %}">
+                {% if row.item_image_url %}
+                <img class="doc-item-thumb" src="{{ row.item_image_url }}" alt="">
+                {% endif %}
+                <div>
+                  {{ row.product_name or row.item_summary or row.item_names or '-' }}
+                  {% if row.item_detail_url %}<br><a class="doc-mini-link" href="{{ row.item_detail_url }}">商品詳細を見る</a>{% endif %}
+                </div>
+              </div>
             </td>
             <td>{{ row.status_label or row.status or '-' }}</td>
             <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}商品処分申請一覧 - 株式会社 開花{% endblock %}
+{% set current_back_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 
 {% block content %}
 <style>
@@ -135,6 +136,62 @@
     gap: .4rem;
     color: #64748b;
     font-size: .82rem;
+}
+
+.client-summary-row {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: .45rem;
+    align-items: start;
+    color: #475569;
+    font-size: .86rem;
+    line-height: 1.6;
+}
+
+.client-summary-row strong {
+    color: #0f172a;
+    overflow-wrap: anywhere;
+}
+
+.client-summary-status {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    padding: .28rem .6rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: .78rem;
+    font-weight: 800;
+}
+
+.client-summary-status.pending {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.client-selected-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: .8rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: .85rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+}
+
+.client-selected-title {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.client-selected-meta {
+    color: #475569;
+    font-size: .86rem;
 }
 
 .requests-list {
@@ -558,7 +615,7 @@
         <div class="disposal-filter-grid">
             <div class="disposal-filter-field">
                 <label for="disposal-q">検索</label>
-                <input id="disposal-q" type="text" name="q" value="{{ filtered_q or '' }}" placeholder="クライアント名 / ユーザーID / 商品名">
+                <input id="disposal-q" type="text" name="q" value="{{ filtered_q or '' }}" placeholder="クライアント名 / ユーザーID / 商品名 / ステータス">
             </div>
             <div class="disposal-filter-field">
                 <label for="disposal-status">ステータス</label>
@@ -604,27 +661,43 @@
     </div>
     {% endif %}
 
-    {% if requests %}
+    {% if client_groups %}
     <section class="client-summary-panel">
         <h2>クライアント別</h2>
-        <p>未処理が埋もれないよう、同じクライアントの申請をまとめています。</p>
+        <p>未処理が埋もれないよう、申請日順でクライアント単位にまとめています。</p>
         <div class="client-summary-grid">
-            {% for user_id, group in requests|groupby('user_id') %}
-            {% set first = group[0] %}
-            <a class="client-summary-card" href="{{ url_for('admin_disposal_requests', q=(first.display_name or first.username or first.user_id)) }}">
+            {% for group in client_groups %}
+            <a class="client-summary-card" href="{{ group.url }}">
                 <div class="client-summary-head">
-                    <span class="client-summary-name">{{ first.display_name or first.username or ('ID:' ~ first.user_id) }}</span>
-                    <span class="client-summary-count">{{ group|length }}</span>
+                    <span class="client-summary-name">{{ group.client_name }}</span>
+                    <span class="client-summary-count">{{ group.total_count }}</span>
                 </div>
-                <div class="client-summary-meta">
-                    <span>ユーザーID {{ first.user_id or '-' }}</span>
-                    <span>最終更新 {{ ((first.updated_at or first.requested_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.requested_at or first.created_at) else '-' }}</span>
-                    <span>{{ first.status_label }}</span>
-                </div>
+                <div class="client-summary-row"><span>クライアント名</span><strong>{{ group.client_name }}</strong></div>
+                <div class="client-summary-row"><span>ユーザーID</span><strong>{{ group.user_id }}</strong></div>
+                <div class="client-summary-row"><span>未処理件数</span><strong>{{ group.pending_count }}</strong></div>
+                <div class="client-summary-row"><span>最終更新日</span><strong>{{ group.last_updated }}</strong></div>
+                <span class="client-summary-status {% if group.pending_count %}pending{% endif %}">{{ group.status_label }}</span>
             </a>
             {% endfor %}
         </div>
     </section>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <div class="empty-state-text">該当するクライアントはありません</div>
+    </div>
+    {% endif %}
+
+    {% if selected_client_id %}
+    <div class="client-selected-bar">
+        <div>
+            <div class="client-selected-title">{{ selected_client.client_name if selected_client else '選択中のクライアント' }}</div>
+            <div class="client-selected-meta">ユーザーID {{ selected_client.user_id if selected_client else selected_client_id }} / 表示件数 {{ requests|length }}</div>
+        </div>
+        <a href="{{ list_back_url }}" class="btn btn-secondary">一覧へ戻る</a>
+    </div>
+
+    {% if requests %}
     <div class="requests-list">
         {% for req in requests %}
         <div class="request-card {{ req.status_stage }}">
@@ -700,7 +773,7 @@
                         {{ req.finish_action_label }}
                     </button>
                     {% endif %}
-                    <a href="{{ url_for('view_item', id=req.merchandise_id) }}" class="btn-process processing" style="text-decoration: none;">商品詳細</a>
+                    <a href="{{ url_for('view_item', id=req.merchandise_id, back_url=current_back_url) }}" class="btn-process processing" style="text-decoration: none;">商品詳細</a>
                     {% if req.allow_reject %}
                     <button class="btn-process rejected" onclick="openRejectModal({{ req.id }})">
                         却下
@@ -716,6 +789,7 @@
         <div class="empty-state-icon">📭</div>
         <div class="empty-state-text">商品処分申請はありません</div>
     </div>
+    {% endif %}
     {% endif %}
 </div>
 

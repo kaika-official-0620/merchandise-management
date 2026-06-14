@@ -2,17 +2,21 @@
 
 {% set has_source_request = source_request is defined and source_request %}
 {% set form_items = items if items else [] %}
+{% set is_kaika_scope = is_kaika_scope|default(false) %}
+{% set is_kaika_vendor_scope = is_kaika_vendor_scope|default(false) %}
+{% set is_kaika_estimate_scope = is_kaika_estimate_scope|default(false) %}
+{% set back_url = back_url|default(url_for('admin_documents_dashboard', group='vendor_outgoing'), true) %}
 
 {% block title %}{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %} - 管理画面{% endblock %}
 
 {% block content %}
 <div class="admin-header">
-    <h1>{% if mitsumori %}見積依頼書編集{% else %}見積依頼書作成{% endif %}</h1>
-    <a href="{{ url_for('admin_mitsumori_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    <h1>{% if is_kaika_vendor_scope %}開花商品用 業者向け見積依頼書作成{% elif is_kaika_estimate_scope %}開花用 見積依頼書作成{% elif mitsumori %}見積依頼書編集{% else %}業者向け見積依頼書作成{% endif %}</h1>
+    <a href="{{ back_url }}" class="btn btn-secondary">書類管理へ戻る</a>
 </div>
 
 <div class="form-info-box">
-    <p><strong>見積依頼書について:</strong> この画面では、開花から業者へ送る見積依頼書を作成します。保存時点では、まだユーザー向け買取明細書は作成されません。</p>
+    <p><strong>見積依頼書について:</strong> {% if is_kaika_scope %}開花商品だけを対象に作成します。ユーザー商品は混ぜません。{% else %}開花から業者へ送る見積依頼書を作成します。{% endif %}</p>
 </div>
 
 <form method="POST" class="mitsumori-form" id="admin-mitsumori-form">
@@ -22,7 +26,8 @@
     {% else %}
     <input type="hidden" name="source_service_type" value="normal">
     {% endif %}
-    <input type="hidden" name="target_user_id" value="{{ target_user_id or '' }}">
+    <input type="hidden" id="target_user_id" name="target_user_id" value="{{ target_user_id or '' }}">
+    <input type="hidden" name="scope" value="{{ scope|default('', true) }}">
 
     {% if has_source_request %}
     <div class="form-info-box source-info-box">
@@ -47,12 +52,43 @@
                 <label for="valid_until">有効期限</label>
                 <input type="date" id="valid_until" name="valid_until" value="{{ mitsumori.valid_until if mitsumori else default_valid_until|default('', true) }}" class="form-control">
             </div>
+            {% if not has_source_request and not is_kaika_scope %}
+            <div class="form-group">
+                <label for="client-select">クライアント名</label>
+                <select id="client-select" class="form-control">
+                    <option value="">選択してください</option>
+                    {% for client in clients|default([]) %}
+                    <option value="{{ client.id }}" data-user-id="{{ client.id }}" {% if target_user_id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="target-user-display">ユーザーID</label>
+                <input id="target-user-display" type="text" value="{{ target_user_id or '' }}" readonly class="form-control readonly">
+            </div>
+            {% endif %}
         </div>
     </div>
 
     <div class="form-section">
         <h3>宛先情報</h3>
         <div class="form-grid">
+            {% if vendors is defined and not is_kaika_estimate_scope %}
+            <div class="form-group full-width">
+                <label for="vendor_id">登録済み業者 *</label>
+                <select id="vendor_id" name="vendor_id" class="form-control" required>
+                    <option value="">{% if vendors %}選択してください{% else %}先に業者マスターへ登録してください{% endif %}</option>
+                    {% for vendor in vendors %}
+                    <option value="{{ vendor.id }}"
+                            data-name="{{ vendor.name or '' }}"
+                            data-contact="{{ vendor.contact_name or '' }}"
+                            data-address="{{ vendor.address or '' }}">
+                        {{ vendor.display_name or vendor.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <div class="form-group full-width">
                 <label for="company_name">会社名 *</label>
                 <input type="text" id="company_name" name="company_name" value="{{ mitsumori.company_name if mitsumori else company_name_default|default('', true) }}" required placeholder="株式会社○○" class="form-control">
@@ -82,9 +118,13 @@
         <div class="product-selector">
             <label>商品を追加</label>
             {% if not has_source_request %}
+            {% if is_kaika_scope %}
+            <span class="source-filter-note">開花商品一覧の商品だけ選択できます。</span>
+            {% else %}
             <input type="search" id="product-search-client" class="form-control product-filter-select" placeholder="クライアント名">
             <input type="search" id="product-search-user-id" class="form-control product-filter-select" placeholder="ユーザーID">
             <input type="search" id="product-search-name" class="form-control product-filter-select" placeholder="商品名">
+            {% endif %}
             {% else %}
             <span class="source-filter-note">この申請の査定待ち商品のみ選択できます。</span>
             {% endif %}
@@ -792,8 +832,9 @@
 
 <script>
 const hasSourceRequest = {{ 'true' if has_source_request else 'false' }};
+const isKaikaScope = {{ is_kaika_scope|tojson }};
 const sourceProducts = {{ source_request_products|default([], true)|tojson }};
-const targetUserId = {{ (target_user_id or 0)|int }};
+let targetUserId = {{ (target_user_id or 0)|int }};
 
 const itemsBody = document.getElementById('items-body');
 const productSelect = document.getElementById('product-select');
@@ -801,6 +842,12 @@ const productSearchClient = document.getElementById('product-search-client');
 const productSearchUserId = document.getElementById('product-search-user-id');
 const productSearchName = document.getElementById('product-search-name');
 const productSelectMeta = document.getElementById('product-select-meta');
+const productFilter = document.getElementById('product-filter');
+const soldDaysFilter = document.getElementById('sold-days-filter');
+const clientSelect = document.getElementById('client-select');
+const targetUserHidden = document.getElementById('target_user_id');
+const targetUserDisplay = document.getElementById('target-user-display');
+const vendorSelect = document.getElementById('vendor_id');
 const adminForm = document.getElementById('admin-mitsumori-form');
 const adminPreviewModal = document.getElementById('admin-document-preview-modal');
 const openAdminPreviewButton = document.getElementById('open-admin-preview-btn');
@@ -916,6 +963,7 @@ function normalizeSearchText(value) {
 
 function filterProductOptions(products) {
     if (hasSourceRequest) return products;
+    if (isKaikaScope) return products;
     const clientQuery = normalizeSearchText(productSearchClient?.value);
     const userIdQuery = normalizeSearchText(productSearchUserId?.value);
     const nameQuery = normalizeSearchText(productSearchName?.value);
@@ -959,6 +1007,11 @@ async function loadProducts() {
 
     const params = new URLSearchParams();
     params.set('exclude_used', '1');
+    if (isKaikaScope) {
+        params.set('scope', 'kaika');
+    } else {
+        params.set('scope', 'user');
+    }
     if (targetUserId) {
         params.set('user_id', String(targetUserId));
     }
@@ -979,6 +1032,35 @@ async function loadProducts() {
     if (!input) return;
     input.addEventListener('input', () => setProductOptions(cachedProducts));
 });
+
+if (clientSelect) {
+    clientSelect.addEventListener('change', () => {
+        targetUserId = Number(clientSelect.value || 0);
+        if (targetUserHidden) {
+            targetUserHidden.value = targetUserId ? String(targetUserId) : '';
+        }
+        if (targetUserDisplay) {
+            targetUserDisplay.value = targetUserId ? String(targetUserId) : '';
+        }
+        if (productSearchUserId) {
+            productSearchUserId.value = targetUserId ? String(targetUserId) : '';
+        }
+        loadProducts();
+    });
+}
+
+if (vendorSelect) {
+    vendorSelect.addEventListener('change', () => {
+        const option = vendorSelect.options[vendorSelect.selectedIndex];
+        if (!option || !option.value) return;
+        const companyName = document.getElementById('company_name');
+        const contactPerson = document.getElementById('contact_person');
+        const address = document.getElementById('address');
+        if (companyName && !companyName.value) companyName.value = option.dataset.name || '';
+        if (contactPerson && !contactPerson.value) contactPerson.value = option.dataset.contact || '';
+        if (address && !address.value) address.value = option.dataset.address || '';
+    });
+}
 
 function addSelectedProduct() {
     const option = productSelect.options[productSelect.selectedIndex];

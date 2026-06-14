@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}業者買取明細書{% if mode == 'edit' %}編集{% else %}作成{% endif %} - 株式会社 開花{% endblock %}
+{% set is_kaika_scope = is_kaika_scope|default(false) %}
+{% set doc_title = '開花買取承諾書' if is_kaika_scope else '業者買取明細書' %}
+{% block title %}{{ doc_title }}{% if mode == 'edit' %}編集{% else %}作成{% endif %} - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">業者買取明細書{% if mode == 'edit' %}編集{% else %}作成{% endif %}</h1>
+    <h1 class="page-title">{{ doc_title }}{% if mode == 'edit' %}編集{% else %}作成{% endif %}</h1>
     <div class="header-actions">
-        <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-secondary">書類管理へ戻る</a>
+        <a href="{{ back_url|default(url_for('admin_documents_dashboard', group='vendor_incoming'), true) }}" class="btn btn-secondary">書類管理へ戻る</a>
     </div>
 </div>
 
 <form method="POST" class="document-form" id="admin-kaitori-shoudaku-form" enctype="multipart/form-data">
+    <input type="hidden" name="scope" value="{{ scope|default('', true) }}">
     {% if source_request %}
     <input type="hidden" name="request_id" value="{{ source_request.id }}">
     <div class="form-section">
@@ -25,14 +28,14 @@
     {% endif %}
 
     <div class="form-section">
-        <h2>業者情報</h2>
+        <h2>{% if is_kaika_scope %}個人顧客情報{% else %}業者情報{% endif %}</h2>
         <div class="form-grid">
             <div class="form-group">
-                <label for="company_name">業者名 <span class="required">*</span></label>
+                <label for="company_name">{% if is_kaika_scope %}顧客名{% else %}業者名{% endif %} <span class="required">*</span></label>
                 <input type="text" id="company_name" name="company_name" value="{{ kaitori.company_name if kaitori else '' }}" required>
             </div>
             <div class="form-group">
-                <label for="contact_name">担当者名</label>
+                <label for="contact_name">{% if is_kaika_scope %}連絡先名{% else %}担当者名{% endif %}</label>
                 <input type="text" id="contact_name" name="contact_name" value="{{ kaitori.contact_name if kaitori else '' }}">
             </div>
         </div>
@@ -46,6 +49,7 @@
         </div>
     </div>
 
+    {% if not is_kaika_scope %}
     <div class="form-section">
         <h2>受領した回答ファイル</h2>
         <div class="form-group">
@@ -62,6 +66,7 @@
             {% endif %}
         </div>
     </div>
+    {% endif %}
 
     <div class="form-section">
         <h2>書類情報</h2>
@@ -86,7 +91,7 @@
     </div>
 
     <div class="form-section">
-        <h2>回答内容</h2>
+        <h2>{% if is_kaika_scope %}買取内容{% else %}回答内容{% endif %}</h2>
         <div id="items-container">
             {% if items %}
                 {% for item in items %}
@@ -176,7 +181,7 @@
     <div class="form-section preview-confirm-section">
         <div>
             <h2>書類プレビュー確認</h2>
-            <p>業者情報・受領ファイル・回答内容を確認してから登録します。登録後の詳細画面は確認専用です。</p>
+            <p>{% if is_kaika_scope %}顧客情報と買取内容を確認してから登録します。{% else %}業者情報・受領ファイル・回答内容を確認してから登録します。{% endif %}</p>
         </div>
         <button type="button" class="btn btn-info" id="open-admin-kaitori-preview-btn">プレビューを確認する</button>
     </div>
@@ -191,17 +196,17 @@
     <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="admin-kaitori-preview-title">
         <div class="document-preview-toolbar">
             <div>
-                <h3 id="admin-kaitori-preview-title">業者買取明細書プレビュー</h3>
+                <h3 id="admin-kaitori-preview-title">{{ doc_title }}プレビュー</h3>
                 <p>内容に問題がなければ登録を完了してください。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-admin-kaitori-preview>閉じる</button>
         </div>
         <div class="preview-sheet">
-            <div class="preview-title">業者買取明細書</div>
+            <div class="preview-title">{{ doc_title }}</div>
             <div class="preview-header">
                 <div>
                     <div class="preview-recipient" id="admin-preview-company-name">-</div>
-                    <p class="preview-muted">業者から受領した回答内容として登録します。</p>
+                    <p class="preview-muted">{% if is_kaika_scope %}開花用の買取承諾書として登録します。{% else %}業者から受領した回答内容として登録します。{% endif %}</p>
                 </div>
                 <div class="preview-meta">
                     <div>受領日: <strong id="admin-preview-issue-date">-</strong></div>
@@ -213,7 +218,9 @@
                 <div><strong>住所</strong><span id="admin-preview-company-address">-</span></div>
                 <div><strong>電話番号</strong><span id="admin-preview-company-phone">-</span></div>
                 <div><strong>振込情報</strong><span id="admin-preview-bank-info">-</span></div>
+                {% if not is_kaika_scope %}
                 <div><strong>受領ファイル</strong><span id="admin-preview-file">-</span></div>
+                {% endif %}
             </div>
             <div class="preview-total-box">
                 <span>合計金額</span>
@@ -566,7 +573,7 @@ function collectAdminKaitoriPreviewItems() {
 
 function renderAdminKaitoriPreview() {
     const totals = updateTotals();
-    adminKaitoriSetText('admin-preview-company-name', document.getElementById('company_name')?.value?.trim(), '業者名未入力');
+    adminKaitoriSetText('admin-preview-company-name', document.getElementById('company_name')?.value?.trim(), {{ ('顧客名未入力' if is_kaika_scope else '業者名未入力')|tojson }});
     adminKaitoriSetText('admin-preview-company-address', document.getElementById('company_address')?.value?.trim());
     adminKaitoriSetText('admin-preview-company-phone', document.getElementById('company_phone')?.value?.trim());
     adminKaitoriSetText('admin-preview-contact-name', document.getElementById('contact_name')?.value?.trim());

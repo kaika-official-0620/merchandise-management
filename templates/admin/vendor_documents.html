@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}業者関連書類 - 開花{% endblock %}
+{% block title %}{% if is_kaika_scope %}開花商品用 業者関連書類{% else %}業者関連書類{% endif %} - 開花{% endblock %}
 
 {% block content %}
 <style>
@@ -26,7 +26,13 @@
 @media(max-width:768px){
   .vendor-doc-header,.vendor-doc-card{padding:1rem;border-radius:10px}
   .vendor-doc-form{grid-template-columns:1fr}
-  .vendor-table{min-width:760px}
+  .vendor-table-wrap{overflow:visible}
+  .vendor-table,.vendor-table thead,.vendor-table tbody,.vendor-table tr,.vendor-table th,.vendor-table td{display:block;width:100%;min-width:0;box-sizing:border-box}
+  .vendor-table thead{display:none}
+  .vendor-table tbody{display:grid;gap:.75rem}
+  .vendor-table tr{padding:.85rem;border:1px solid #e2e8f0;border-radius:6px;background:#fff}
+  .vendor-table td{padding:.42rem 0;border:0;word-break:break-word}
+  .vendor-table td+td{border-top:1px solid #f1f5f9}
   .vendor-actions .btn{width:100%;justify-content:center}
 }
 </style>
@@ -34,19 +40,22 @@
 <div class="vendor-doc-page">
   <section class="vendor-doc-header">
     <div>
-      <h1>業者関連書類</h1>
-      <p>業者から届いたPDF・画像書類を、流し先業者・商品・金額・状態と紐づけて管理します。</p>
+      <h1>{% if is_kaika_scope %}開花商品用 業者関連書類{% else %}業者関連書類{% endif %}</h1>
+      <p>{% if is_kaika_scope %}開花商品だけに紐づけて、業者回答ファイルと金額を管理します。{% else %}業者から届いたPDF・画像書類を、流し先業者・商品・金額・状態と紐づけて管理します。{% endif %}</p>
     </div>
     <div class="vendor-actions">
-      <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-secondary">書類管理へ戻る</a>
+      <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming' if not is_kaika_scope else 'all') }}" class="btn btn-secondary">書類管理へ戻る</a>
       <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
+      {% if not is_kaika_scope %}
       <a href="{{ url_for('admin_documents_history', category='vendor') }}" class="btn btn-outline">履歴を見る</a>
+      {% endif %}
     </div>
   </section>
 
   <section class="vendor-doc-card">
     <h2>書類を登録</h2>
     <form method="POST" enctype="multipart/form-data" class="vendor-doc-form">
+      <input type="hidden" name="scope" value="{{ selected_scope|default('user_flow') }}">
       <div>
         <label for="vendor_id">流し先業者名</label>
         <select id="vendor_id" name="vendor_id" required>
@@ -56,24 +65,26 @@
           {% endfor %}
         </select>
       </div>
+      {% if not is_kaika_scope %}
       <div>
         <label for="user_id">関連クライアント</label>
-        <select id="user_id" name="user_id" onchange="location.href='{{ url_for('admin_vendor_documents') }}?user_id='+this.value+'&vendor_id='+document.getElementById('vendor_id').value">
+        <select id="user_id" name="user_id" onchange="location.href='{{ url_for('admin_vendor_documents') }}?user_id='+this.value+'&vendor_id='+document.getElementById('vendor_id').value+'&scope={{ selected_scope|default('user_flow') }}'">
           <option value="">選択してください</option>
           {% for client in clients %}
           <option value="{{ client.id }}" {% if selected_user_id == client.id %}selected{% endif %}>{{ client.name }}</option>
           {% endfor %}
         </select>
       </div>
+      {% endif %}
       <div>
-        <label for="item_id">対象商品</label>
+        <label for="item_id">{% if is_kaika_scope %}開花商品{% else %}対象商品{% endif %}</label>
         <select id="item_id" name="item_id">
           <option value="">未指定</option>
           {% for item in items %}
           <option value="{{ item.id }}">{{ item.label }}</option>
           {% endfor %}
         </select>
-        <p class="vendor-help">読み取り候補と一致しない場合は、ここで手動選択できます。</p>
+        <p class="vendor-help">{% if is_kaika_scope %}開花商品一覧の商品だけ選択できます。{% else %}読み取り候補と一致しない場合は、ここで手動選択できます。{% endif %}</p>
       </div>
       <div>
         <label for="status">状態</label>
@@ -91,7 +102,7 @@
       <div>
         <label for="extracted_item_name">書類内の商品名</label>
         <input id="extracted_item_name" name="extracted_item_name" placeholder="読み取れない場合は手入力">
-        <p class="vendor-help">PDF/画像から自動判定できた内容は参考扱いです。必ず確認して修正してください。</p>
+        <p class="vendor-help">OCR自動読み取りは現在未実装です。商品名・金額は手動で登録/補正してください。</p>
       </div>
       <div>
         <label for="vendor_amount">業者買取額</label>
@@ -133,7 +144,7 @@
           <tr>
             <th>登録日</th>
             <th>流し先業者</th>
-            <th>関連クライアント</th>
+            {% if not is_kaika_scope %}<th>関連クライアント</th>{% endif %}
             <th>対象商品</th>
             <th>業者買取額 / 顧客支払額</th>
             <th>差額 / 編集履歴</th>
@@ -147,7 +158,9 @@
           <tr data-detail-url="{{ doc.download_url }}">
             <td>{{ doc.registered_label }}</td>
             <td>{{ doc.vendor_display_name or '-' }}</td>
+            {% if not is_kaika_scope %}
             <td>{{ doc.client_name or '-' }}</td>
+            {% endif %}
             <td>{{ doc.item_name or '未指定' }}</td>
             <td>
               <div>業者買取額（参考金額） ¥{{ "{:,}".format(doc.vendor_amount or 0) }}</div>
@@ -166,7 +179,9 @@
             <td><span class="status-chip">{{ doc.status_label }}</span></td>
             <td class="vendor-actions">
               <a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ダウンロード</a>
+              {% if not is_kaika_scope %}
               <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-secondary btn-sm">顧客向け買取明細書へ</a>
+              {% endif %}
               <form method="POST" action="{{ doc.delete_url }}" onsubmit="return confirm('この業者関連書類を削除しますか？');" style="display:inline;">
                 <button type="submit" class="btn btn-danger btn-sm">削除</button>
               </form>

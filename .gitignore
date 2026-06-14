@@ -22,6 +22,10 @@ venv.bak/
 *.db
 *.sqlite3
 
+# Generated backups
+static/uploads/_system_backups/
+backups/
+
 # Logs
 *.log
 

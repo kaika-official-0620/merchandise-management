@@ -45,13 +45,13 @@
             <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_completion_requests') }}" class="priority-card {% if completion_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
-            <span class="priority-card__label">受取完了BOX</span>
+            <span class="priority-card__label">取引完了BOX</span>
             <strong class="priority-card__count">{{ completion_count }}件</strong>
             <span class="priority-card__note">{% if completion_count > 0 %}受取完了報告の確認があります{% else %}現在の未対応はありません{% endif %}</span>
             <span class="priority-card__open">BOXを開く</span>
         </a>
         <a href="{{ url_for('admin_sales_agency_requests', service_type='wholesale') }}" class="priority-card {% if wholesale_count > 0 %}priority-card--active{% else %}priority-card--idle{% endif %}">
-            <span class="priority-card__label">業者販売BOX</span>
+            <span class="priority-card__label">業者卸販売BOX</span>
             <strong class="priority-card__count">{{ wholesale_count }}件</strong>
             <span class="priority-card__note">{% if wholesale_count > 0 %}業者販売申請の確認があります{% else %}現在の未対応はありません{% endif %}</span>
             <span class="priority-card__open">BOXを開く</span>

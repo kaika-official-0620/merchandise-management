@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 
 ALLOWED_VENDOR_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
-HISTORY_CATEGORIES = [
+ADMIN_HISTORY_CATEGORIES = [
     ("client_incoming", "顧客からの書類受付", "顧客から届いた依頼書や確認書類"),
     ("vendor_estimate", "業者向け見積依頼書", "開花から業者へ送る見積依頼書"),
     ("vendor", "業者関連書類", "業者から届いたPDF・画像書類"),
@@ -21,8 +21,17 @@ HISTORY_CATEGORIES = [
     ("shikiriosho", "精算書", "月額利用料や作業費の精算書"),
     ("kaika_shoudaku", "開花買取承諾書", "開花が買い取る場合の承諾書"),
     ("user_shoudaku", "ユーザー買取承諾書", "ユーザーが作成した買取承諾書"),
-    ("keisan", "代行仕入れ計算書", "代行仕入れサービス側の計算書"),
+    ("keisan", "計算書", "代行仕入れサービス側の計算書"),
+    ("kaika_mitsumori", "開花用見積依頼書", "開花商品・個人顧客向けに作成した見積依頼書"),
 ]
+USER_HISTORY_CATEGORIES = [
+    ("client_incoming", "見積依頼書", "開花へ送付した見積依頼書"),
+    ("kaitori", "買取明細書", "開花から送付された買取明細書"),
+    ("shikiriosho", "精算書", "月額利用料や代行費用の精算書"),
+    ("keisan", "計算書", "代行仕入れサービスなどの計算書"),
+    ("user_shoudaku", "ユーザー買取承諾書", "ユーザーが作成した買取承諾書"),
+]
+HISTORY_CATEGORIES = ADMIN_HISTORY_CATEGORIES
 STATUS_LABELS = {
     "draft": "下書き",
     "in_progress": "作成中",
@@ -33,6 +42,8 @@ STATUS_LABELS = {
     "sent": "送付済み",
     "approved": "承認済み",
     "shared": "共有済み",
+    "rejected": "却下",
+    "processing": "処理中",
 }
 
 
@@ -130,6 +141,7 @@ def apply(module: Any) -> None:
                         item_id INTEGER REFERENCES merchandise(id),
                         related_document_id INTEGER,
                         source_request_id INTEGER,
+                        document_scope VARCHAR(40) DEFAULT 'user_flow',
                         title VARCHAR(200),
                         original_filename VARCHAR(255) NOT NULL,
                         stored_path TEXT NOT NULL,
@@ -191,6 +203,7 @@ def apply(module: Any) -> None:
                         item_id INTEGER,
                         related_document_id INTEGER,
                         source_request_id INTEGER,
+                        document_scope TEXT DEFAULT 'user_flow',
                         title TEXT,
                         original_filename TEXT NOT NULL,
                         stored_path TEXT NOT NULL,
@@ -247,6 +260,7 @@ def apply(module: Any) -> None:
                 "client_id": ("INTEGER REFERENCES users(id)", "INTEGER"),
                 "related_document_id": ("INTEGER", "INTEGER"),
                 "source_request_id": ("INTEGER", "INTEGER"),
+                "document_scope": ("VARCHAR(40) DEFAULT 'user_flow'", "TEXT DEFAULT 'user_flow'"),
                 "vendor_id": ("INTEGER REFERENCES vendors(id)", "INTEGER"),
                 "vendor_name": ("VARCHAR(200)", "TEXT"),
                 "extracted_item_name": ("VARCHAR(255)", "TEXT"),
@@ -335,6 +349,45 @@ def apply(module: Any) -> None:
         text = str(value)
         return text[:16].replace("T", " ") if len(text) >= 16 else text
 
+    def daily_sequence_for_request(row: dict[str, Any], base_date: datetime) -> int | None:
+        request_id = safe_int(row.get("source_request_id") or row.get("id"))
+        if request_id <= 0:
+            return None
+        conn, cur = open_cursor()
+        try:
+            if not table_exists(cur, "sales_agency_requests"):
+                return None
+            day_text = base_date.strftime("%Y-%m-%d")
+            ph = placeholder()
+            if DATABASE_URL:
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*) AS count
+                    FROM sales_agency_requests
+                    WHERE DATE(created_at) = DATE({ph})
+                      AND id <= {ph}
+                    """,
+                    (day_text, request_id),
+                )
+            else:
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*) AS count
+                    FROM sales_agency_requests
+                    WHERE date(created_at) = date({ph})
+                      AND id <= {ph}
+                    """,
+                    (day_text, request_id),
+                )
+            count_row = row_to_dict(cur.fetchone()) or {}
+            sequence = safe_int(count_row.get("count"), 0)
+            return sequence if sequence > 0 else None
+        except Exception:
+            return None
+        finally:
+            cur.close()
+            conn.close()
+
     def reception_number_for(row: dict[str, Any] | None) -> str:
         row = row or {}
         base_value = row.get("created_at") or row.get("registered_at") or row.get("issue_date") or get_jst_now()
@@ -348,7 +401,7 @@ def apply(module: Any) -> None:
                 base_date = datetime.fromisoformat(text[:19].replace("Z", "+00:00")).replace(tzinfo=None)
             except Exception:
                 base_date = get_jst_now()
-        sequence = safe_int(row.get("daily_sequence") or row.get("id"), 1)
+        sequence = safe_int(row.get("daily_sequence"), 0) or daily_sequence_for_request(row, base_date) or safe_int(row.get("id"), 1)
         return f"{base_date.strftime('%y%m%d')}{sequence % 1000:03d}"
 
     def status_label(status: Any) -> str:
@@ -356,7 +409,8 @@ def apply(module: Any) -> None:
 
     def category_cards(endpoint: str, selected: str | None = None, admin: bool = False) -> list[dict[str, Any]]:
         cards = []
-        for idx, (key, title, description) in enumerate(HISTORY_CATEGORIES, 1):
+        categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
+        for idx, (key, title, description) in enumerate(categories, 1):
             url_args = {"category": key}
             cards.append(
                 {
@@ -390,30 +444,42 @@ def apply(module: Any) -> None:
             cur.close()
             conn.close()
 
-    def load_item_options(user_id: int | None = None, limit: int = 300) -> list[dict[str, Any]]:
+    def load_item_options(user_id: int | None = None, limit: int = 300, scope: str = "user") -> list[dict[str, Any]]:
         conn, cur = open_cursor()
         try:
             ph = placeholder()
-            params: tuple[Any, ...] = ()
-            where_sql = ""
+            params: list[Any] = []
+            where_parts: list[str] = []
             if user_id:
-                where_sql = f"WHERE user_id = {ph}"
-                params = (user_id,)
+                where_parts.append(f"m.user_id = {ph}")
+                params.append(user_id)
+            if scope == "kaika":
+                scope_clause = "m.scope = 'admin'"
+                if table_exists(cur, "users"):
+                    scope_clause = f"({scope_clause} OR u.role IN ('admin', 'owner'))"
+                where_parts.append(scope_clause)
+            elif scope == "user":
+                where_parts.append("(m.scope IS NULL OR m.scope <> 'admin')")
+            where_sql = "WHERE " + " AND ".join(where_parts) if where_parts else ""
             cur.execute(
                 f"""
-                SELECT id, product_name, brand_name, user_id, kaika_product_code
-                FROM merchandise
+                SELECT m.id, m.product_name, m.brand_name, m.user_id, m.kaika_product_code,
+                       m.photo_path, m.purchase_price, m.listing_price,
+                       u.display_name AS owner_display_name, u.username AS owner_username
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
                 {where_sql}
-                ORDER BY created_at DESC, id DESC
+                ORDER BY m.created_at DESC, m.id DESC
                 LIMIT {int(limit)}
                 """,
-                params,
+                tuple(params),
             )
             items = rows_to_dicts(cur.fetchall())
             for item in items:
                 name = clean_text(item.get("product_name"), "")
                 code = clean_text(item.get("kaika_product_code"), "")
-                item["label"] = f"{name or '商品名未登録'}{(' / ' + code) if code else ''}"
+                owner = clean_text(item.get("owner_display_name"), "") or clean_text(item.get("owner_username"), "")
+                item["label"] = f"{name or '商品名未登録'}{(' / ' + code) if code else ''}{(' / ' + owner) if owner and scope != 'kaika' else ''}"
             return items
         finally:
             cur.close()
@@ -549,16 +615,24 @@ def apply(module: Any) -> None:
         file_size = os.path.getsize(absolute_path)
         return stored_path, original_filename, mime_type, file_size
 
-    def fetch_vendor_documents(user_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    def fetch_vendor_documents(user_id: int | None = None, limit: int = 200, scope: str = "user_flow") -> list[dict[str, Any]]:
         ensure_schema()
         conn, cur = open_cursor()
         try:
             ph = placeholder()
-            params: tuple[Any, ...] = ()
-            where = ""
+            params: list[Any] = []
+            where_parts: list[str] = []
             if user_id:
-                where = f"WHERE vd.user_id = {ph}"
-                params = (user_id,)
+                where_parts.append(f"vd.user_id = {ph}")
+                params.append(user_id)
+            if table_exists(cur, "vendor_documents") and column_exists(cur, "vendor_documents", "document_scope"):
+                if scope == "kaika":
+                    where_parts.append(f"COALESCE(vd.document_scope, 'user_flow') = {ph}")
+                    params.append("kaika")
+                elif scope == "user_flow":
+                    where_parts.append(f"COALESCE(vd.document_scope, 'user_flow') = {ph}")
+                    params.append("user_flow")
+            where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
             cur.execute(
                 f"""
                 SELECT vd.*,
@@ -616,12 +690,17 @@ def apply(module: Any) -> None:
             "shoudaku": "user_shoudaku",
             "user_kaitori_shoudaku": "user_shoudaku",
             "admin_kaitori_shoudaku": "kaika_shoudaku",
+            "user_keisan": "keisan",
+            "kaika_estimate": "kaika_mitsumori",
         }
         category = category_aliases.get(category, category)
+        if not admin and category not in {key for key, _title, _desc in USER_HISTORY_CATEGORIES}:
+            return []
         if category == "client_incoming":
             combined: list[dict[str, Any]] = []
             combined.extend(build_history_rows("client_mitsumori", admin=admin, user_id=user_id, limit=limit))
-            combined.extend(build_history_rows("user_shoudaku", admin=admin, user_id=user_id, limit=limit))
+            if admin:
+                combined.extend(build_history_rows("user_shoudaku", admin=admin, user_id=user_id, limit=limit))
             combined.sort(key=lambda row: str(row.get("issue_date") or ""), reverse=True)
             return combined[: int(limit)]
         if category == "vendor_estimate":
@@ -661,25 +740,41 @@ def apply(module: Any) -> None:
                     }
                 )
 
-            if category in {"client_mitsumori", "vendor_mitsumori"}:
-                where = "" if admin else f"WHERE user_id = {ph}"
-                params = () if admin else (params_user,)
-                if category == "vendor_mitsumori" and table_exists(cur, "user_mitsumori") and column_exists(cur, "user_mitsumori", "direction"):
-                    where = "WHERE direction = %s" if DATABASE_URL else "WHERE direction = ?"
-                    params = ("vendor_outgoing",)
-                    if not admin:
-                        where += f" AND user_id = {ph}"
-                        params = ("vendor_outgoing", params_user)
-                elif category == "client_mitsumori" and table_exists(cur, "user_mitsumori") and column_exists(cur, "user_mitsumori", "direction"):
-                    where = "WHERE COALESCE(direction, '') <> %s" if DATABASE_URL else "WHERE COALESCE(direction, '') <> ?"
-                    params = ("vendor_outgoing",)
-                    if not admin:
-                        where += f" AND user_id = {ph}"
-                        params = ("vendor_outgoing", params_user)
-                cur.execute(f"SELECT * FROM user_mitsumori {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
+            if category in {"client_mitsumori", "vendor_mitsumori", "kaika_mitsumori"}:
+                where_parts: list[str] = []
+                params_list: list[Any] = []
+                has_document_scope = table_exists(cur, "user_mitsumori") and column_exists(cur, "user_mitsumori", "document_scope")
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    params_list.append(params_user)
+                if category == "vendor_mitsumori":
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, '') = {ph}")
+                        params_list.append("vendor_outgoing")
+                    else:
+                        where_parts.append("document_no LIKE 'MT-%'")
+                elif category == "kaika_mitsumori":
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, '') IN ({ph}, {ph})")
+                        params_list.extend(["kaika_vendor_outgoing", "kaika_estimate"])
+                    else:
+                        where_parts.append("1 = 0")
+                else:
+                    if has_document_scope:
+                        where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
+                        params_list.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
+                    where_parts.append("COALESCE(document_no, '') NOT LIKE 'MT-%'")
+                where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+                cur.execute(f"SELECT * FROM user_mitsumori {where} ORDER BY created_at DESC LIMIT {int(limit)}", tuple(params_list))
                 for doc in rows_to_dicts(cur.fetchall()):
                     add_row(
-                        document_type="業者向け見積依頼書" if category == "vendor_mitsumori" else "見積依頼書",
+                        document_type=(
+                            "業者向け見積依頼書"
+                            if category == "vendor_mitsumori"
+                            else "開花用見積依頼書"
+                            if category == "kaika_mitsumori"
+                            else "見積依頼書"
+                        ),
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("customer_name") or doc.get("user_name") or (current_user.display_name if not admin else ""),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -730,7 +825,12 @@ def apply(module: Any) -> None:
                     )
             elif category == "kaika_shoudaku":
                 if table_exists(cur, "admin_kaitori_shoudaku"):
-                    cur.execute(f"SELECT * FROM admin_kaitori_shoudaku ORDER BY created_at DESC LIMIT {int(limit)}")
+                    where = ""
+                    params = ()
+                    if column_exists(cur, "admin_kaitori_shoudaku", "document_scope"):
+                        where = f"WHERE COALESCE(document_scope, {ph}) <> {ph}"
+                        params = ("kaika_shoudaku", "vendor_incoming")
+                    cur.execute(f"SELECT * FROM admin_kaitori_shoudaku {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
                     for doc in rows_to_dicts(cur.fetchall()):
                         add_row(
                             document_type="開花買取承諾書",
@@ -770,10 +870,16 @@ def apply(module: Any) -> None:
             elif category == "keisan":
                 where = "" if admin else f"WHERE user_id = {ph}"
                 params = () if admin else (params_user,)
+                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
+                    where += (" AND " if where else "WHERE ") + (
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        if DATABASE_URL
+                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                    )
                 cur.execute(f"SELECT * FROM user_keisan {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
                 for doc in rows_to_dicts(cur.fetchall()):
                     add_row(
-                        document_type="代行仕入れ計算書",
+                        document_type="計算書",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("customer_name") or doc.get("user_name") or (current_user.display_name if not admin else ""),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
@@ -783,8 +889,16 @@ def apply(module: Any) -> None:
                         source="user_keisan",
                     )
             elif category == "vendor":
-                where = "" if admin else f"WHERE vd.user_id = {ph} AND COALESCE(vd.status, '') IN ('shared', 'sent')"
-                params = () if admin else (params_user,)
+                where_parts = []
+                params_list = []
+                if table_exists(cur, "vendor_documents") and column_exists(cur, "vendor_documents", "document_scope"):
+                    where_parts.append(f"COALESCE(vd.document_scope, 'user_flow') = {ph}")
+                    params_list.append("user_flow")
+                if not admin:
+                    where_parts.append(f"vd.user_id = {ph}")
+                    where_parts.append("COALESCE(vd.status, '') IN ('shared', 'sent')")
+                    params_list.append(params_user)
+                where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
                 cur.execute(
                     f"""
                     SELECT vd.*, u.display_name AS client_display_name, u.username AS client_username,
@@ -796,7 +910,7 @@ def apply(module: Any) -> None:
                     ORDER BY vd.registered_at DESC, vd.id DESC
                     LIMIT {int(limit)}
                     """,
-                    params,
+                    tuple(params_list),
                 )
                 for doc in rows_to_dicts(cur.fetchall()):
                     add_row(
@@ -835,14 +949,16 @@ def apply(module: Any) -> None:
 
     def admin_vendor_documents():
         ensure_schema()
-        clients = load_clients()
+        selected_scope = (request.values.get("scope") or "user_flow").strip()
+        is_kaika_scope = selected_scope == "kaika"
+        clients = [] if is_kaika_scope else load_clients()
         vendors = load_vendors()
-        selected_user_id = request.values.get("user_id", type=int)
+        selected_user_id = None if is_kaika_scope else request.values.get("user_id", type=int)
         selected_vendor_id = request.values.get("vendor_id", type=int)
-        items = load_item_options(selected_user_id)
+        items = load_item_options(None if is_kaika_scope else selected_user_id, scope="kaika" if is_kaika_scope else "user")
         if request.method == "POST":
             try:
-                user_id = request.form.get("user_id", type=int)
+                user_id = None if is_kaika_scope else request.form.get("user_id", type=int)
                 vendor_id = request.form.get("vendor_id", type=int)
                 item_id = request.form.get("item_id", type=int)
                 related_document_id = request.form.get("related_document_id", type=int)
@@ -868,11 +984,11 @@ def apply(module: Any) -> None:
                     cur.execute(
                         f"""
                         INSERT INTO vendor_documents
-                        (user_id, client_id, item_id, related_document_id, source_request_id,
+                        (user_id, client_id, item_id, related_document_id, source_request_id, document_scope,
                          vendor_id, vendor_name, extracted_item_name, vendor_amount, customer_amount,
                          amount_difference, difference_rate, edited_by, edited_at, reception_number,
                          title, original_filename, stored_path, mime_type, file_size, status, notes, created_by, registered_at)
-                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                         """,
                         (
                             user_id,
@@ -880,6 +996,7 @@ def apply(module: Any) -> None:
                             item_id,
                             related_document_id,
                             source_request_id,
+                            "kaika" if is_kaika_scope else "user_flow",
                             vendor_id,
                             vendor_row.get("name"),
                             extracted_item_name,
@@ -906,11 +1023,11 @@ def apply(module: Any) -> None:
                     cur.close()
                     conn.close()
                 flash("業者関連書類を登録しました。", "success")
-                return redirect(url_for("admin_vendor_documents", user_id=user_id or "", vendor_id=vendor_id))
+                return redirect(url_for("admin_vendor_documents", user_id=user_id or "", vendor_id=vendor_id, scope="kaika" if is_kaika_scope else "user_flow"))
             except Exception as exc:
                 flash(str(exc), "error")
 
-        docs = fetch_vendor_documents(selected_user_id)
+        docs = fetch_vendor_documents(selected_user_id, scope="kaika" if is_kaika_scope else "user_flow")
         return render_template(
             "admin/vendor_documents.html",
             clients=clients,
@@ -919,6 +1036,8 @@ def apply(module: Any) -> None:
             documents=docs,
             selected_user_id=selected_user_id,
             selected_vendor_id=selected_vendor_id,
+            selected_scope="kaika" if is_kaika_scope else "user_flow",
+            is_kaika_scope=is_kaika_scope,
             allowed_extensions=", ".join(sorted(ALLOWED_VENDOR_EXTENSIONS)),
         )
 
@@ -1360,7 +1479,7 @@ def apply(module: Any) -> None:
         client_outgoing_rows = []
         if selected_group != "all":
             if selected_group == "vendor_incoming":
-                vendor_documents = fetch_vendor_documents()
+                vendor_documents = fetch_vendor_documents(scope="user_flow")
             elif selected_group == "client_outgoing":
                 client_outgoing_rows = build_history_rows("kaitori", admin=True, limit=120)
             else:
@@ -1372,7 +1491,18 @@ def apply(module: Any) -> None:
                         request_rows = []
                 except Exception:
                     request_rows = []
+                context_loader = getattr(module, "_load_sales_agency_request_context", None)
                 for row in request_rows:
+                    if callable(context_loader) and row.get("id"):
+                        try:
+                            detail_row, detail_items = context_loader(row.get("id"))
+                        except Exception:
+                            detail_row, detail_items = None, []
+                        if detail_row:
+                            for key in ("client_name", "user_name", "username", "service_name", "service_type", "status", "created_at"):
+                                if detail_row.get(key) and not row.get(key):
+                                    row[key] = detail_row.get(key)
+                            row["merchandise_items"] = detail_items or row.get("merchandise_items") or []
                     row["reception_number"] = row.get("reception_number") or reception_number_for(row)
                     row["client_number"] = row.get("client_number") or row.get("user_id") or row.get("client_id") or "-"
                     row["created_date_label"] = (
@@ -1381,6 +1511,8 @@ def apply(module: Any) -> None:
                         or format_datetime(row.get("submitted_at"))
                         or format_datetime(row.get("updated_at"))
                     )
+                    if row.get("id") and not row.get("detail_url"):
+                        row["detail_url"] = url_for("admin_sales_agency_request_detail", id=row.get("id"))
                     if not row.get("item_detail_url"):
                         item_candidates = row.get("merchandise_items") or row.get("items") or []
                         if isinstance(item_candidates, (list, tuple)) and item_candidates and isinstance(item_candidates[0], dict):
@@ -1393,10 +1525,56 @@ def apply(module: Any) -> None:
                                 row["item_detail_url"] = url_for("view_item", id=item_id)
                             except Exception:
                                 row["item_detail_url"] = None
+                        if first_item:
+                            item_names = [
+                                clean_text(item.get("product_name"), "")
+                                or clean_text(item.get("item_name"), "")
+                                or f"商品ID {item.get('id') or item.get('merchandise_id')}"
+                                for item in item_candidates
+                                if isinstance(item, dict)
+                            ]
+                            if item_names:
+                                row["item_summary"] = " / ".join(item_names[:3])
+                                if len(item_names) > 3:
+                                    row["item_summary"] += f" ほか{len(item_names) - 3}点"
+                            image_path = clean_text(first_item.get("photo_path"), "")
+                            if image_path and image_path != "-":
+                                try:
+                                    row["item_image_url"] = url_for("static", filename=image_path)
+                                except Exception:
+                                    row["item_image_url"] = None
+                    row["status_label"] = row.get("status_label") or getattr(module, "get_sales_agency_status_label", lambda status, **_kwargs: status)(row.get("status"), viewer="admin")
+        kaika_document_cards = [
+            {
+                "step": 1,
+                "title": "開花商品用 業者向け見積依頼書作成",
+                "description": "開花商品一覧の商品だけを選び、業者へ送る見積依頼書を作成します。",
+                "url": url_for("admin_mitsumori_add", scope="kaika_vendor"),
+            },
+            {
+                "step": 2,
+                "title": "開花商品用 業者関連書類登録",
+                "description": "開花商品だけに紐づけて、業者回答のPDF・画像と金額を登録します。",
+                "url": url_for("admin_vendor_documents", scope="kaika"),
+            },
+            {
+                "step": 3,
+                "title": "開花用 見積依頼書作成",
+                "description": "個人顧客情報を手入力し、開花用の見積依頼書を作成します。",
+                "url": url_for("admin_mitsumori_add", scope="kaika_estimate"),
+            },
+            {
+                "step": 4,
+                "title": "開花買取承諾書作成",
+                "description": "開花側で扱う買取承諾書を作成し、PDFで確認します。",
+                "url": url_for("admin_kaitori_shoudaku_add", scope="kaika"),
+            },
+        ]
         return render_template(
             "admin/documents_dashboard_clean.html",
             selected_group=selected_group,
             stage_cards=stage_cards,
+            kaika_document_cards=kaika_document_cards,
             request_rows=request_rows,
             vendor_documents=vendor_documents,
             client_outgoing_rows=client_outgoing_rows,
@@ -1405,7 +1583,7 @@ def apply(module: Any) -> None:
     def admin_documents_history_clean():
         ensure_schema()
         selected_category = (request.args.get("category") or request.args.get("doc_type") or "").strip()
-        category_keys = {key for key, _title, _desc in HISTORY_CATEGORIES}
+        category_keys = {key for key, _title, _desc in ADMIN_HISTORY_CATEGORIES}
         if selected_category in {"user_mitsumori", "mitsumori"}:
             selected_category = "client_incoming"
         elif selected_category in {"mitsumori_houjin", "admin_mitsumori"}:
@@ -1419,7 +1597,7 @@ def apply(module: Any) -> None:
         elif selected_category not in category_keys:
             selected_category = ""
         history_rows = build_history_rows(selected_category, admin=True) if selected_category else []
-        selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in HISTORY_CATEGORIES if k == selected_category), None)
+        selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in ADMIN_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
             "admin/documents_history_clean.html",
             category_cards=category_cards("admin_documents_history", selected_category, admin=True),
@@ -1439,11 +1617,11 @@ def apply(module: Any) -> None:
             "keisan": "keisan",
         }
         selected_category = tab_map.get(selected_category, selected_category)
-        category_keys = {key for key, _title, _desc in HISTORY_CATEGORIES}
+        category_keys = {key for key, _title, _desc in USER_HISTORY_CATEGORIES}
         if selected_category not in category_keys:
             selected_category = ""
         history_rows = build_history_rows(selected_category, admin=False, user_id=current_user.id) if selected_category else []
-        selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in HISTORY_CATEGORIES if k == selected_category), None)
+        selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in USER_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
             "documents_clean.html",
             category_cards=category_cards("documents", selected_category, admin=False),
@@ -1472,6 +1650,11 @@ def apply(module: Any) -> None:
     register("admin_documents_dashboard", "/admin/documents", admin_documents_dashboard_clean, ["GET"], admin=True)
     register("admin_documents_history", "/admin/documents/history", admin_documents_history_clean, ["GET"], admin=True)
     register("documents", "/documents", documents_clean, ["GET"], admin=False)
+
+    final_admin_mitsumori_add = getattr(module, "admin_mitsumori_add_from_documents", None)
+    if callable(final_admin_mitsumori_add):
+        app.view_functions["admin_mitsumori_add"] = final_admin_mitsumori_add
+        module.admin_mitsumori_add = final_admin_mitsumori_add
 
     module.admin_vendor_documents = admin_vendor_documents
     module.admin_vendors = admin_vendors

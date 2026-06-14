@@ -68,7 +68,7 @@
 
 .agency-filter-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr));
     gap: .75rem;
     align-items: end;
 }
@@ -93,6 +93,17 @@
     border-radius: 6px;
     padding: .68rem .75rem;
     font-size: .92rem;
+}
+
+.agency-filter-field select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: .68rem .75rem;
+    font-size: .92rem;
+    background: #fff;
 }
 
 .agency-filter-actions {
@@ -198,6 +209,61 @@
     gap: .4rem;
     color: #64748b;
     font-size: .82rem;
+}
+
+.client-summary-row {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: .45rem;
+    align-items: start;
+    color: #475569;
+    font-size: .86rem;
+    line-height: 1.6;
+}
+
+.client-summary-row strong {
+    color: #0f172a;
+    overflow-wrap: anywhere;
+}
+
+.client-summary-status {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    padding: .28rem .6rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: .78rem;
+    font-weight: 800;
+}
+
+.client-summary-status.pending {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.client-selected-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: .8rem;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: .85rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+}
+
+.client-selected-title {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.client-selected-meta {
+    color: #475569;
+    font-size: .86rem;
 }
 
 .requests-list {
@@ -732,23 +798,26 @@
 </div>
 
 <div class="sales-agency-container">
-    <div class="service-legend">
-        <span class="service-legend-item"><span class="legend-dot wholesale"></span>業者卸販売サービス</span>
-        <span class="service-legend-item"><span class="legend-dot auction"></span>業者オークション出品</span>
-        <span class="service-legend-item"><span class="legend-dot simultaneous"></span>同時出品サービス</span>
-    </div>
-
     <form class="agency-filter-panel" method="GET">
         {% if service_filter != 'all' %}
         <input type="hidden" name="service_type" value="{{ service_filter }}">
         {% endif %}
-        {% if status_filter != 'all' %}
-        <input type="hidden" name="status" value="{{ status_filter }}">
-        {% endif %}
         <div class="agency-filter-grid">
             <div class="agency-filter-field">
                 <label for="agency-q">検索</label>
-                <input id="agency-q" type="text" name="q" value="{{ q_filter or '' }}" placeholder="クライアント名 / ユーザーID / 商品名">
+                <input id="agency-q" type="text" name="q" value="{{ q_filter or '' }}" placeholder="クライアント名 / ユーザーID / 商品名 / ステータス">
+            </div>
+            <div class="agency-filter-field">
+                <label for="agency-status">ステータス</label>
+                <select id="agency-status" name="status">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>すべて</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>承認待ち</option>
+                    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>認証済み</option>
+                    <option value="appraising" {% if status_filter == 'appraising' %}selected{% endif %}>{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</option>
+                    <option value="inspecting" {% if status_filter == 'inspecting' %}selected{% endif %}>検品中</option>
+                    <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>処理完了</option>
+                    <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>却下申請</option>
+                </select>
             </div>
             <div class="agency-filter-field">
                 <label for="agency-date-from">開始日</label>
@@ -762,7 +831,7 @@
                 <label>&nbsp;</label>
                 <div class="agency-filter-actions" style="margin-top:0;">
                     <button type="submit" class="btn btn-primary">検索</button>
-                    <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status=status_filter if status_filter != 'all' else None) }}" class="btn btn-secondary">解除</a>
+                    <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None) }}" class="btn btn-secondary">解除</a>
                 </div>
             </div>
         </div>
@@ -795,37 +864,37 @@
         </div>
     </div>
 
-    {% if requests %}
+    {% if client_groups %}
     <section class="client-summary-panel">
         <h2>クライアント別</h2>
-        <p>未対応が埋もれないよう、同じクライアントの申請をまとめています。</p>
+        <p>未処理が埋もれないよう、申請日順でクライアント単位にまとめています。</p>
         <div class="client-summary-grid">
-            {% for client_key, group in requests|groupby('client_identifier') %}
-            {% set first = group[0] %}
-            <a class="client-summary-card" href="{{ first.detail_url }}">
+            {% for group in client_groups %}
+            <a class="client-summary-card" href="{{ group.url }}">
                 <div class="client-summary-head">
-                    <span class="client-summary-name">{{ first.client_name|clean_display('クライアント名未登録') }}</span>
-                    <span class="client-summary-count">{{ group|length }}</span>
+                    <span class="client-summary-name">{{ group.client_name|clean_display('クライアント名未登録') }}</span>
+                    <span class="client-summary-count">{{ group.total_count }}</span>
                 </div>
-                <div class="client-summary-meta">
-                    <span>{{ first.client_identifier|clean_display('識別情報未登録') }}</span>
-                    <span>最新 {{ ((first.updated_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.created_at) else '-' }}</span>
-                    <span>{{ first.status_label }}</span>
-                </div>
+                <div class="client-summary-row"><span>クライアント名</span><strong>{{ group.client_name|clean_display('クライアント名未登録') }}</strong></div>
+                <div class="client-summary-row"><span>ユーザーID</span><strong>{{ group.user_id }}</strong></div>
+                <div class="client-summary-row"><span>未処理件数</span><strong>{{ group.pending_count }}</strong></div>
+                <div class="client-summary-row"><span>最終更新日</span><strong>{{ group.last_updated }}</strong></div>
+                <span class="client-summary-status {% if group.pending_count %}pending{% endif %}">{{ group.status_label }}</span>
             </a>
             {% endfor %}
         </div>
     </section>
+    {% else %}
+    <div class="empty-state">該当するクライアントはありません。</div>
     {% endif %}
 
-    <div class="filter-tabs">
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'all' %}active{% endif %}">すべて</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='pending', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'pending' %}active{% endif %}">承認待ち</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='approved', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'approved' %}active{% endif %}">認証済み</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='appraising', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'appraising' %}active{% endif %}">{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='inspecting', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'inspecting' %}active{% endif %}">検品中</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='completed', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'completed' %}active{% endif %}">処理完了</a>
-        <a href="{{ url_for('admin_sales_agency_requests', service_type=service_filter if service_filter != 'all' else None, status='rejected', q=q_filter or None, date_from=date_from_filter or None, date_to=date_to_filter or None) }}" class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}">却下申請</a>
+    {% if selected_client_id %}
+    <div class="client-selected-bar">
+        <div>
+            <div class="client-selected-title">{{ selected_client.client_name|clean_display('選択中のクライアント') if selected_client else '選択中のクライアント' }}</div>
+            <div class="client-selected-meta">ユーザーID {{ selected_client.user_id if selected_client else selected_client_id }} / 表示件数 {{ requests|length }}</div>
+        </div>
+        <a href="{{ list_back_url }}" class="btn btn-secondary">一覧へ戻る</a>
     </div>
 
     {% if requests %}
@@ -1011,6 +1080,7 @@
     </div>
     {% else %}
     <div class="empty-state">該当する申請はありません。</div>
+    {% endif %}
     {% endif %}
 </div>
 

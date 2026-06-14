@@ -30,6 +30,11 @@
         </button>
         {% endif %}
         {% endif %}
+        {% if result_only_mode and not archive_view %}
+        <form action="{{ url_for('admin_proxy_service_mark_followup_complete', auction_id=auction_id) }}" method="POST" class="inline-form" onsubmit="return confirm('このサービス終了後対応を完了済みにして、代行仕入れ過去履歴へ移動しますか？未送付の計算書がある場合は、書類履歴で状態を確認してください。')">
+            <button type="submit" class="btn btn-secondary">管理者確認で完了済みにする</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
@@ -426,7 +431,7 @@
                         <form action="{{ url_for('admin_auction_keisan_submit', id=group.document_id) }}" method="POST" class="inline-form">
                             <input type="hidden" name="auction_id" value="{{ auction_id }}">
                             <input type="hidden" name="next" value="{{ current_page_path }}">
-                            <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('このクライアントへ計算書を送付しますか？')">計算書を送付</button>
+                            <button type="submit" class="btn btn-client-send btn-sm" onclick="return confirm('このクライアントへ計算書を送付しますか？')">このクライアントに送付</button>
                         </form>
                         {% endif %}
                         {% endif %}

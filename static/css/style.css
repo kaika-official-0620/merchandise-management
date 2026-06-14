@@ -1055,6 +1055,18 @@ body.sidebar-open {
     background: var(--border);
 }
 
+.btn-client-send {
+    background: #d97706;
+    color: #fff;
+    border: 1px solid #b45309;
+    box-shadow: 0 6px 14px rgba(217, 119, 6, 0.22);
+}
+
+.btn-client-send:hover {
+    background: #b45309;
+    color: #fff;
+}
+
 .btn-block {
     width: 100%;
 }
@@ -1880,6 +1892,61 @@ body.sidebar-open {
 /* ===================
    バックアップページ
    =================== */
+.backup-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.backup-page-header form {
+    flex-shrink: 0;
+}
+
+.page-lead {
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.backup-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.backup-status-card {
+    padding: 1.25rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.backup-status-card .status-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.backup-status-card strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 1.2rem;
+}
+
+.backup-status-card p,
+.backup-status-card small {
+    color: var(--text-secondary);
+}
+
+.backup-status-card .storage-path {
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+}
+
 .backup-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1925,6 +1992,60 @@ body.sidebar-open {
     color: var(--text-secondary);
     font-size: 0.875rem;
     margin-bottom: 1rem;
+}
+
+.section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.backup-history-table-wrap {
+    overflow-x: auto;
+}
+
+.backup-history-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.backup-history-table th,
+.backup-history-table td {
+    padding: 0.85rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.backup-history-table th {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.backup-history-table td strong,
+.backup-history-table td small {
+    display: block;
+}
+
+.backup-history-table td small {
+    margin-top: 0.3rem;
+    color: var(--text-secondary);
+}
+
+.backup-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: var(--radius-sm);
+    background: #e0f2fe;
+    color: #075985;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .import-form .form-group {
@@ -2013,6 +2134,10 @@ body.sidebar-open {
 }
 
 @media (max-width: 1200px) {
+    .backup-status-grid {
+        grid-template-columns: 1fr;
+    }
+
     .backup-grid {
         grid-template-columns: 1fr;
     }
@@ -2023,6 +2148,21 @@ body.sidebar-open {
 }
 
 @media (max-width: 768px) {
+    .backup-page-header,
+    .section-header-row {
+        flex-direction: column;
+    }
+
+    .backup-page-header form,
+    .backup-page-header .btn {
+        width: 100%;
+    }
+
+    .backup-status-card,
+    .backup-option {
+        padding: 1rem;
+    }
+
     .tip-grid {
         grid-template-columns: 1fr;
     }

@@ -194,7 +194,7 @@
                 {% endif %}
             </a>
             <a href="{{ url_for('admin_completion_requests') }}" class="{% if request.endpoint == 'admin_completion_requests' %}active{% endif %}">
-                <span class="menu-label">受取完了BOX</span>
+                <span class="menu-label">取引完了BOX</span>
                 {% if completion_report_count > 0 %}
                 <span class="menu-badge-inline">{{ completion_report_count }}</span>
                 {% endif %}

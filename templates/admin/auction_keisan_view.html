@@ -14,7 +14,7 @@
             {% if next_url %}
             <input type="hidden" name="next" value="{{ next_url }}">
             {% endif %}
-            <button type="submit" class="btn btn-success" onclick="return confirm('このクライアントへ計算書を送付しますか？送付後に対象商品がユーザー商品へ反映されます。')">このクライアントに送付</button>
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('このクライアントへ計算書を送付しますか？送付後に対象商品がユーザー商品へ反映されます。')">このクライアントに送付</button>
         </form>
         {% endif %}
     </div>
@@ -42,7 +42,7 @@
         </div>
         <div class="meta-item">
             <span class="meta-label">書類区分</span>
-            <span class="meta-value">代行仕入れ計算書</span>
+            <span class="meta-value">計算書</span>
         </div>
         <div class="meta-item">
             <span class="meta-label">支払方法</span>

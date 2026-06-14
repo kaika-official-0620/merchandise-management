@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}オークション計算書作成 - 株式会社 開花{% endblock %}
+{% block title %}計算書作成 - 株式会社 開花{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-secondary">← 書類管理へ戻る</a>
-    <h1>オークション計算書作成</h1>
+    <h1>計算書作成</h1>
 </div>
 
 <div class="form-container">
@@ -32,7 +32,7 @@
                 </div>
                 <div class="form-group">
                     <label for="subject">件名</label>
-                    <input type="text" id="subject" name="subject" value="{{ subject_default or 'オークション計算書' }}" placeholder="例: オークション販売計算書">
+                    <input type="text" id="subject" name="subject" value="{{ subject_default or '計算書' }}" placeholder="例: 計算書">
                 </div>
             </div>
         </div>
@@ -133,7 +133,7 @@
     <div class="document-preview-panel" role="dialog" aria-modal="true" aria-labelledby="auction-keisan-preview-title">
         <div class="document-preview-toolbar">
             <div>
-                <h3 id="auction-keisan-preview-title">オークション計算書プレビュー</h3>
+                <h3 id="auction-keisan-preview-title">計算書プレビュー</h3>
                 <p>内容に問題がなければ送信待機にしてください。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-auction-keisan-preview>閉じる</button>

@@ -17,6 +17,7 @@
     border-radius: 18px;
     padding: 1.3rem;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    min-width: 0;
 }
 
 .proxy-doc-header,
@@ -142,11 +143,14 @@
 
 .proxy-doc-table-wrap {
     overflow-x: auto;
+    max-width: 100%;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
 
 .proxy-doc-table {
     width: 100%;
-    min-width: 980px;
+    min-width: 1120px;
     border-collapse: collapse;
 }
 
@@ -356,12 +360,14 @@
             <table class="proxy-doc-table">
                 <thead>
                     <tr>
+                        <th>書類</th>
                         <th>計算書No.</th>
                         <th>クライアント</th>
                         <th>オークション</th>
                         <th>商品</th>
                         <th>金額</th>
                         <th>状態</th>
+                        <th>送付日</th>
                         <th>発行日</th>
                         <th>操作</th>
                     </tr>
@@ -369,10 +375,12 @@
                 <tbody>
                     {% for doc in history_rows %}
                     <tr>
+                        <td>{{ doc.document_type_label or '計算書' }}</td>
                         <td>{{ doc.document_no or '-' }}</td>
                         <td>
                             <strong>{{ doc.client_name }}</strong>
-                            <span class="proxy-doc-sub">ユーザーID: {{ doc.user_id }}</span>
+                            <span class="proxy-doc-sub">宛先: {{ doc.sent_to_display or doc.client_name }}</span>
+                            <span class="proxy-doc-sub">ユーザーID: {{ doc.user_id }}{% if doc.username %} / 会員番号: {{ doc.username }}{% endif %}</span>
                         </td>
                         <td>
                             <strong>{{ doc.auction_name_display }}</strong>
@@ -383,7 +391,15 @@
                             <span class="proxy-doc-sub">{{ doc.item_count }} 点</span>
                         </td>
                         <td>¥{{ "{:,}".format(doc.total_amount or 0) }}</td>
-                        <td><span class="status-chip status-{{ doc.status_class }}">{{ doc.status_label }}</span></td>
+                        <td>
+                            <span class="status-chip status-{{ doc.status_class }}">{{ doc.status_label }}</span>
+                            {% if doc.status == 'submitted' %}
+                            <span class="proxy-doc-sub">送付済み</span>
+                            {% else %}
+                            <span class="proxy-doc-sub">未送付</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ doc.sent_at_display }}</td>
                         <td>{{ doc.issue_date_display }}</td>
                         <td>
                             <div class="proxy-doc-actions">
@@ -395,7 +411,7 @@
                                 <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" class="inline-form">
                                     <input type="hidden" name="auction_id" value="{{ doc.proxy_service_auction_id }}">
                                     <input type="hidden" name="next" value="{{ current_page_path }}">
-                                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('この書類を送付しますか？')">書類を送付</button>
+                                    <button type="submit" class="btn btn-client-send btn-sm" onclick="return confirm('このクライアントへ計算書を送付しますか？')">このクライアントに送付</button>
                                 </form>
                                 {% endif %}
                                 {% if doc.status == 'submitted' %}

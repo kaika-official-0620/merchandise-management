@@ -352,6 +352,8 @@
                     {% endif %}
                     {% if not is_archive %}
                     <br>落札確定待ち {{ auction.pending_finalize_count or 0 }}件 / 書類未作成 {{ auction.pending_prepare_count or 0 }}件 / 送付待ち {{ auction.prepared_count or 0 }}件
+                    {% elif auction.is_manually_completed %}
+                    <br>管理者確認で完了済み: {{ auction.manual_completed_at_display }}
                     {% endif %}
                 </p>
             </div>

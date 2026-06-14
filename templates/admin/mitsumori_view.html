@@ -5,14 +5,17 @@
 {% block content %}
 {% include "admin/_document_detail_styles.html" %}
 {% set doc_no = mitsumori.document_no or '' %}
-{% set is_vendor_doc = doc_no[:3] == 'MT-' or mitsumori.document_scope == 'vendor_outgoing' %}
-{% set back_url = url_for('admin_documents_dashboard', group='vendor_outgoing' if is_vendor_doc else 'client_incoming') %}
+{% set doc_scope = mitsumori.document_scope or '' %}
+{% set is_vendor_doc = doc_no[:3] == 'MT-' or doc_scope in ['vendor_outgoing', 'kaika_vendor_outgoing'] %}
+{% set is_kaika_doc = doc_scope in ['kaika_vendor_outgoing', 'kaika_estimate'] %}
+{% set detail_title = '開花商品用 業者向け見積依頼書' if doc_scope == 'kaika_vendor_outgoing' else '開花用 見積依頼書' if doc_scope == 'kaika_estimate' else '業者向け依頼書' if is_vendor_doc else '見積依頼書' %}
+{% set back_url = url_for('admin_documents_history', category='kaika_mitsumori') if is_kaika_doc else url_for('admin_documents_dashboard', group='vendor_outgoing' if is_vendor_doc else 'client_incoming') %}
 
 <div class="admin-doc-page">
     <div class="admin-doc-toolbar">
         <div>
-            <h1>{{ '業者向け依頼書' if is_vendor_doc else '見積依頼書' }}</h1>
-            <p>{{ '開花から業者へ送付する見積依頼書です。' if is_vendor_doc else 'クライアントから届いた見積依頼書です。' }}</p>
+            <h1>{{ detail_title }}</h1>
+            <p>{% if is_kaika_doc %}開花用として作成した書類です。ユーザー側には表示されません。{% elif is_vendor_doc %}開花から業者へ送付する見積依頼書です。{% else %}クライアントから届いた見積依頼書です。{% endif %}</p>
         </div>
         <div class="admin-doc-actions">
             <a href="{{ back_url }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
@@ -23,8 +26,8 @@
     <article class="admin-doc-sheet">
         <header class="admin-doc-hero">
             <div>
-                <div class="admin-doc-kicker">{{ '開花から業者へ送付' if is_vendor_doc else 'クライアントから受付' }}</div>
-                <h2 class="admin-doc-title">{{ '業者向け依頼書' if is_vendor_doc else '見積依頼書' }}</h2>
+                <div class="admin-doc-kicker">{% if is_kaika_doc %}開花用書類{% elif is_vendor_doc %}開花から業者へ送付{% else %}クライアントから受付{% endif %}</div>
+                <h2 class="admin-doc-title">{{ detail_title }}</h2>
                 <p class="admin-doc-no">{{ mitsumori.document_no or '-' }}</p>
             </div>
             <div class="admin-doc-status">

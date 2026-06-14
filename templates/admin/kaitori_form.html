@@ -5,7 +5,7 @@
 {% block content %}
 <div class="admin-header">
     <h1>{% if kaitori %}買取明細書編集{% else %}買取明細書作成{% endif %}</h1>
-    <a href="{{ url_for('admin_kaitori_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+    <a href="{{ back_url|default(url_for('admin_documents_dashboard', group='client_outgoing'), true) }}" class="btn btn-secondary">書類管理へ戻る</a>
 </div>
 
 <form method="POST" class="kaitori-form" id="admin-client-kaitori-form" enctype="multipart/form-data">
@@ -240,7 +240,7 @@
     <div class="form-section preview-confirm-section">
         <div>
             <h3>書類プレビュー確認</h3>
-            <p>買取先・商品明細・添付状況を確認してから、完了として保存します。</p>
+            <p>買取先・商品明細・添付状況を確認してから、顧客へ送付する買取明細書として保存します。</p>
         </div>
         <button type="button" class="btn btn-info" id="open-client-kaitori-preview-btn">プレビューを確認する</button>
     </div>
@@ -256,7 +256,7 @@
         <div class="document-preview-toolbar">
             <div>
                 <h3 id="client-kaitori-preview-title">買取明細書プレビュー</h3>
-                <p>内容に問題がなければ完了として保存してください。</p>
+                <p>内容に問題がなければ、顧客へ送付する買取明細書として保存してください。</p>
             </div>
             <button type="button" class="btn btn-secondary" data-close-client-kaitori-preview>閉じる</button>
         </div>
@@ -301,7 +301,7 @@
         </div>
         <div class="document-preview-actions">
             <button type="button" class="btn btn-secondary" data-close-client-kaitori-preview>修正する</button>
-            <button type="button" class="btn btn-primary" id="submit-client-kaitori-preview-btn">完了として保存する</button>
+            <button type="button" class="btn btn-primary" id="submit-client-kaitori-preview-btn">顧客へ送付として保存する</button>
         </div>
     </div>
 </div>

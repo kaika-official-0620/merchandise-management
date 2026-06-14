@@ -2389,14 +2389,14 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="" {% if not filter_type %}selected{% endif %}>すべて</option>
-                    <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済みのみ</option>
-                    <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中のみ</option>
                     <option value="listed" {% if filter_type == 'listed' %}selected{% endif %}>出品中のみ</option>
-                    <option value="certified" {% if filter_type == 'certified' %}selected{% endif %}>認証済みのみ</option>
+                    <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中のみ</option>
                     <option value="agency" {% if filter_type == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
+                    <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定中のみ</option>
+                    <option value="certified" {% if filter_type == 'certified' %}selected{% endif %}>認証済みのみ</option>
+                    <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済みのみ</option>
                     <option value="shipping_pending" {% if filter_type == 'shipping_pending' %}selected{% endif %}>発送依頼中のみ</option>
                     <option value="completion_pending" {% if filter_type == 'completion_pending' %}selected{% endif %}>取引完了依頼中のみ</option>
-                    <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定中のみ</option>
                     <option value="unlisted" {% if filter_type == 'unlisted' %}selected{% endif %}>未出品のみ</option>
                 </select>
             </div>
@@ -2519,6 +2519,7 @@
                     data-sale-date="{{ item.sale_date or '' }}"
                     data-status-priority="{{ item.status_priority or 50 }}"
                     data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request %}completion_pending{% elif item.pending_shipping_request %}shipping_pending{% elif item.can_send_completion_report or item.approved_shipping_request %}transaction{% elif item.pending_sales_agency %}agency{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
                     data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td>
                         {% if item.all_photos and item.all_photos|length > 0 %}
@@ -2741,6 +2742,7 @@
             data-sale-date="{{ item.sale_date or '' }}"
             data-status-priority="{{ item.status_priority or 50 }}"
             data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.pending_completion_request %}completion_pending{% elif item.pending_shipping_request %}shipping_pending{% elif item.can_send_completion_report or item.approved_shipping_request %}transaction{% elif item.pending_sales_agency %}agency{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
             data-agency-approved="{% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}true{% else %}false{% endif %}"
             data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
             <div class="card-header {% if item.all_photos and item.all_photos|length > 1 %}has-multi-photos{% endif %}">
@@ -3017,6 +3019,36 @@
         document.getElementById('searchToggleBtn').classList.remove('active');
     }
 
+    function bindFilterControls() {
+        const filterIds = [
+            'tab-filter-id',
+            'tab-filter-name',
+            'tab-filter-brand',
+            'tab-filter-model',
+            'tab-filter-store',
+            'tab-filter-date',
+            'tab-filter-condition',
+            'tab-filter-status',
+            'tab-filter-purchase-min',
+            'tab-filter-purchase-max',
+            'tab-filter-sale-min',
+            'tab-filter-sale-max',
+            'tab-filter-profit-min',
+            'tab-filter-profit-max'
+        ];
+
+        filterIds.forEach(function (id) {
+            const control = document.getElementById(id);
+            if (!control) return;
+            const refresh = function () {
+                filterTable();
+                updateFilterCount();
+            };
+            control.addEventListener('input', refresh);
+            control.addEventListener('change', refresh);
+        });
+    }
+
     // フィルター数をカウント
     function updateFilterCount() {
         let count = 0;
@@ -3096,6 +3128,7 @@
             const store = element.dataset.store || '';
             const date = element.dataset.date || '';
             const status = element.dataset.status || '';
+            const statusTags = (element.dataset.statusTags || status).split(/\s+/).filter(Boolean);
             const purchasePrice = element.dataset.purchasePrice || '0';
             const salePrice = element.dataset.salePrice || '0';
             const profit = element.dataset.profit || '0';
@@ -3107,7 +3140,7 @@
             if (filterCondition && condition !== filterCondition) return false;
             if (filterStore && store !== filterStore) return false;
             if (filterDate && date !== filterDate) return false;
-            if (filterStatus && !statusMatchesFilter(status, filterStatus)) return false;
+            if (filterStatus && !statusMatchesFilter(status, filterStatus, statusTags)) return false;
 
             // 料金フィルター
             if (!checkPriceRange(purchasePrice, filterPurchaseMin, filterPurchaseMax)) return false;
@@ -3212,6 +3245,7 @@
 
     // スワイプイベントリスナー設定
     document.addEventListener('DOMContentLoaded', function () {
+        bindFilterControls();
         const mobileCards = document.getElementById('mobileCards');
 
         if (mobileCards) {
@@ -3293,9 +3327,11 @@
         return map[column] || 2;
     }
 
-    function statusMatchesFilter(status, filterStatus) {
+    function statusMatchesFilter(status, filterStatus, statusTags) {
+        const tags = Array.isArray(statusTags) && statusTags.length ? statusTags : [status];
         if (!filterStatus) return true;
         if (filterStatus === status) return true;
+        if (tags.includes(filterStatus)) return true;
         if (filterStatus === 'certified') return status === 'listed';
         if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
         if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}クライアント別代行仕入れ計算書 - 株式会社開花{% endblock %}
+{% block title %}クライアント別計算書 - 株式会社開花{% endblock %}
 
 {% block content %}
 <style>
@@ -213,7 +213,7 @@
 <div class="keisan-page">
     <div class="keisan-header">
         <div>
-            <h1>クライアント別代行仕入れ計算書</h1>
+            <h1>クライアント別計算書</h1>
             <p>終了した代行仕入れの結果をクライアント単位でまとめています。商品一覧への反映内容を確認しながら、一人ずつ送付できます。</p>
         </div>
         <div class="header-actions">
@@ -264,7 +264,7 @@
             <input type="hidden" name="auction_id" value="{{ auction_id }}">
             {% endif %}
             <input type="hidden" name="send_scope" value="all">
-            <button type="submit" class="btn btn-success" onclick="return confirm('送付準備完了の計算書をまとめて送付しますか？')">送付準備完了を一括送付</button>
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('送付準備完了の計算書をまとめて送付しますか？')">送付準備完了を一括送付</button>
         </form>
         {% endif %}
     </div>
@@ -327,7 +327,7 @@
                                     {% if auction_id %}
                                     <input type="hidden" name="auction_id" value="{{ auction_id }}">
                                     {% endif %}
-                                    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('宛先・商品・金額・PDF内容を確認済みですか？この計算書をクライアントへ送付し、商品反映を進めます。')">送付する</button>
+                                    <button type="submit" class="btn btn-client-send btn-sm" onclick="return confirm('宛先・商品・金額・PDF内容を確認済みですか？この計算書をクライアントへ送付し、商品反映を進めます。')">このクライアントに送付</button>
                                 </form>
                                 {% endif %}
                             </div>
@@ -345,7 +345,7 @@
         {% if stats.completed_count > 0 %}
         <div class="toolbar" style="margin-top: 1rem;">
             <span class="toolbar-note">チェックした計算書だけを一括送付できます。</span>
-            <button type="submit" class="btn btn-success" onclick="return confirm('選択した計算書を送付しますか？')">選択した計算書を送付</button>
+            <button type="submit" class="btn btn-client-send" onclick="return confirm('選択した計算書を送付しますか？')">選択した計算書を送付</button>
         </div>
         {% endif %}
     </form>

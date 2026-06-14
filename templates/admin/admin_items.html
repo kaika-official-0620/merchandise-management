@@ -199,15 +199,15 @@
 
     .data-table {
         width: 100%;
-        min-width: 1520px;
+        min-width: 1400px;
         border-collapse: collapse;
-        font-size: 1.04rem;
+        font-size: 0.9rem;
         border: 1px solid #d1d5db;
     }
 
     .data-table th {
         background: #f8fafc;
-        padding: 13px 11px;
+        padding: 12px 10px;
         text-align: left;
         font-weight: 600;
         color: #475569;
@@ -228,7 +228,7 @@
     }
 
     .data-table td {
-        padding: 12px 11px;
+        padding: 10px;
         border: 1px solid #d1d5db;
         vertical-align: middle;
     }
@@ -355,8 +355,8 @@
 
     /* サムネイル */
     .table-thumb {
-        width: 68px;
-        height: 68px;
+        width: 50px;
+        height: 50px;
         object-fit: cover;
         border-radius: 6px;
         cursor: pointer;
@@ -369,8 +369,8 @@
     }
 
     .no-thumb {
-        width: 68px;
-        height: 68px;
+        width: 50px;
+        height: 50px;
         background: #f1f5f9;
         border-radius: 6px;
         display: flex;
@@ -875,7 +875,7 @@
         }
 
         .admin-item-card.card-sold {
-            opacity: 0.7;
+            opacity: 1;
             background: #f8f8f8;
         }
 
@@ -905,10 +905,12 @@
 
         /* 正方形の画像 */
         .admin-card-photo {
+            position: relative;
             width: 100%;
             height: auto;
             aspect-ratio: 1 / 1;
             background: #f8f8f8;
+            overflow: hidden;
         }
 
         .admin-card-photo img {
@@ -917,6 +919,31 @@
             object-fit: cover;
             border-radius: 0;
             cursor: pointer;
+        }
+
+        .admin-item-card.card-sold .admin-card-photo img,
+        .admin-item-card.card-sold .card-photo-scroll img,
+        .admin-item-card.card-sold .admin-card-photo .no-photo {
+            opacity: 0.45;
+        }
+
+        .card-price-overlay {
+            position: absolute;
+            left: 4px;
+            bottom: 4px;
+            display: inline-flex;
+            max-width: calc(100% - 8px);
+            padding: 2px 5px;
+            border-radius: 5px;
+            color: #fff;
+            background: rgba(15, 23, 42, 0.82);
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            z-index: 6;
         }
 
         .admin-card-photo .no-photo {
@@ -981,7 +1008,7 @@
 
         .admin-card-title h3 {
             margin: 0;
-            font-size: 0.9rem;
+            font-size: 0.7rem;
             font-weight: 500;
             color: #1e293b;
             line-height: 1.3;
@@ -996,7 +1023,7 @@
         }
 
         .admin-card-body {
-            padding: 0 6px 6px;
+            display: none;
         }
 
         /* 価格のみコンパクト表示 */
@@ -1116,7 +1143,30 @@
 
         /* フッターを非表示 */
         .admin-card-footer {
-            display: none;
+            display: block;
+            margin-top: auto;
+            padding: 4px;
+            background: #fff;
+        }
+
+        .admin-card-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .admin-card-actions a[href*="/view/"] {
+            display: none !important;
+        }
+
+        .admin-card-actions .btn {
+            flex: 1;
+            min-height: 30px;
+            padding: 6px 4px;
+            border-radius: 5px;
+            font-size: 0.66rem;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: nowrap;
         }
 
         .btn-edit {
@@ -1209,12 +1259,12 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="">すべて</option>
-                    <option value="sold">売却済みのみ</option>
-                    <option value="transaction">取引中のみ</option>
                     <option value="listed">出品中のみ</option>
-                    <option value="certified">認証済みのみ</option>
+                    <option value="transaction">取引中のみ</option>
                     <option value="agency">業者依頼中のみ</option>
                     <option value="appraisal_pending">査定中のみ</option>
+                    <option value="certified">認証済みのみ</option>
+                    <option value="sold">売却済みのみ</option>
                     <option value="unlisted">未出品</option>
                 </select>
             </div>
@@ -1315,6 +1365,7 @@
                     data-updated-at="{{ item.updated_at or '' }}"
                     data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
                     data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+                    data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
                     data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}">
                     <td class="photo-cell">
                         {% if item.all_photos and item.all_photos|length > 0 %}
@@ -1383,8 +1434,14 @@
                     <td>
                         {% if item.is_sold or item.sale_date %}
                         <span class="status-badge sold">売却済み</span>
-                        {% elif item.is_shipped %}
+                        {% elif item.pending_completion_request %}
+                        <span class="status-badge pending-sale">取引完了確認中</span>
+                        {% elif item.pending_shipping_request %}
+                        <span class="status-badge pending-sale">発送依頼確認中</span>
+                        {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
                         <span class="status-badge pending-sale">取引中</span>
+                        {% elif item.pending_sales_agency %}
+                        <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中' }}</span>
                         {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
                         <span class="status-badge pending-sale">査定中</span>
                         {% elif item.is_listed %}
@@ -1428,6 +1485,7 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
+        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.listing_price or item.display_purchase_price or item.purchase_price or 0) %}
         <div class="admin-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}"
             data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}"
@@ -1436,6 +1494,7 @@
             data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
             data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
             data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
+            data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
             data-purchase-price="{{ item.display_purchase_price or 0 }}"
             data-sale-price="{{ item.display_sale_price or 0 }}"
             data-profit="{{ item.profit or 0 }}"
@@ -1459,6 +1518,7 @@
                     {% else %}
                     <div class="no-photo">-</div>
                     {% endif %}
+                    <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
                 </div>
                 <div class="admin-card-title">
                     <span class="admin-card-id">{{ item.kaika_product_code or '-' }}</span>
@@ -1471,8 +1531,14 @@
                 <div class="admin-card-status">
                     {% if item.is_sold or item.sale_date %}
                     <span class="status-badge sold">売却済み</span>
-                    {% elif item.is_shipped %}
+                    {% elif item.pending_completion_request %}
+                    <span class="status-badge pending-sale">取引完了確認中</span>
+                    {% elif item.pending_shipping_request %}
+                    <span class="status-badge pending-sale">発送依頼確認中</span>
+                    {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
                     <span class="status-badge pending-sale">取引中</span>
+                    {% elif item.pending_sales_agency %}
+                    <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中' }}</span>
                     {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
                     <span class="status-badge pending-sale">査定中</span>
                     {% elif item.is_listed %}
@@ -1525,6 +1591,10 @@
                 <div class="admin-card-actions">
                     <a href="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm">詳細</a>
                     <a href="{{ url_for('edit_item', id=item.id, back_url=current_back_url) }}" class="btn btn-sm btn-edit">編集</a>
+                    {% if item.can_delete %}
+                    <button type="button" class="btn btn-sm btn-danger"
+                        onclick="confirmDelete({{ item.id }}, '{{ item.product_name | e }}')">削除</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -1648,6 +1718,35 @@
         document.getElementById('searchToggleBtn').classList.remove('active');
     }
 
+    function bindFilterControls() {
+        const filterIds = [
+            'tab-filter-id',
+            'tab-filter-name',
+            'tab-filter-brand',
+            'tab-filter-model',
+            'tab-filter-owner',
+            'tab-filter-condition',
+            'tab-filter-status',
+            'tab-filter-purchase-min',
+            'tab-filter-purchase-max',
+            'tab-filter-sale-min',
+            'tab-filter-sale-max',
+            'tab-filter-profit-min',
+            'tab-filter-profit-max'
+        ];
+
+        filterIds.forEach(function (id) {
+            const control = document.getElementById(id);
+            if (!control) return;
+            const refresh = function () {
+                filterTable();
+                updateFilterCount();
+            };
+            control.addEventListener('input', refresh);
+            control.addEventListener('change', refresh);
+        });
+    }
+
     // フィルター数をカウント
     function updateFilterCount() {
         let count = 0;
@@ -1720,6 +1819,7 @@
             const owner = (row.dataset.owner || '').toLowerCase();
             const condition = row.dataset.condition || '';
             const status = row.dataset.status || '';
+            const statusTags = (row.dataset.statusTags || status).split(/\s+/).filter(Boolean);
             const saleType = (row.dataset.saleType || '').toLowerCase();
             const saleTypes = saleType ? saleType.split(',').map(v => v.trim()) : [];
             const saleDate = row.dataset.saleDate || '';
@@ -1734,10 +1834,10 @@
             if (filterModel && !model.includes(filterModel)) return false;
             if (filterOwner && !owner.includes(filterOwner)) return false;
             if (filterCondition && condition !== filterCondition) return false;
-            if (filterStatus && !statusMatchesFilter(status, filterStatus)) return false;
+            if (filterStatus && !statusMatchesFilter(status, filterStatus, statusTags)) return false;
             if (queryStatus === 'unsold') {
                 if (status === 'sold') return false;
-            } else if (queryStatus && !statusMatchesFilter(status, queryStatus)) {
+            } else if (queryStatus && !statusMatchesFilter(status, queryStatus, statusTags)) {
                 return false;
             }
             if (querySaleType && !saleTypes.includes(querySaleType)) return false;
@@ -1777,9 +1877,11 @@
         if (totalCountEl) totalCountEl.textContent = mobileVisibleCount || visibleCount;
     }
 
-    function statusMatchesFilter(status, filterStatus) {
+    function statusMatchesFilter(status, filterStatus, statusTags) {
+        const tags = Array.isArray(statusTags) && statusTags.length ? statusTags : [status];
         if (!filterStatus) return true;
         if (status === filterStatus) return true;
+        if (tags.includes(filterStatus)) return true;
         if (filterStatus === 'certified') return status === 'listed';
         if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
         if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';
@@ -2130,6 +2232,7 @@
 
     // スワイプカルーセルのインジケーター更新
     document.addEventListener('DOMContentLoaded', function () {
+        bindFilterControls();
         const query = new URLSearchParams(window.location.search);
         const queryStatus = query.get('status');
         const queryBrand = query.get('brand');
@@ -2145,6 +2248,8 @@
             filterTable();
             updateFilterCount();
         }
+
+        applySortOrder();
 
         const mobileCards = document.getElementById('mobileCards');
         const currentIndex = document.querySelector('.current-index');
@@ -2164,8 +2269,17 @@
             // 画像エリア内のクリックは伝搬を止める
             card.querySelectorAll('.admin-card-photo, .card-photo-scroll').forEach(function (photoArea) {
                 photoArea.addEventListener('click', function (e) {
+                    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                        const detailUrl = card.dataset.detailUrl || (card.querySelector('a[href*="/view/"]') || {}).href;
+                        if (detailUrl) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = detailUrl;
+                        }
+                        return;
+                    }
                     e.stopPropagation();
-                });
+                }, true);
             });
 
             // カード全体のクリックで詳細ページへ

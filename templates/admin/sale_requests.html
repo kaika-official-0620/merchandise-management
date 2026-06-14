@@ -219,6 +219,13 @@
 .client-summary-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; color: #0f172a; }
 .client-summary-count { flex: 0 0 auto; min-width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: #0f172a; color: #fff; font-weight: 800; }
 .client-summary-meta { display: flex; flex-wrap: wrap; gap: .4rem; color: #64748b; font-size: .82rem; }
+.client-summary-row { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .45rem; align-items: start; color: #475569; font-size: .86rem; line-height: 1.6; }
+.client-summary-row strong { color: #0f172a; overflow-wrap: anywhere; }
+.client-summary-status { display: inline-flex; width: fit-content; max-width: 100%; align-items: center; padding: .28rem .6rem; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: .78rem; font-weight: 800; }
+.client-summary-status.pending { background: #fff7ed; color: #c2410c; }
+.client-selected-bar { display: flex; justify-content: space-between; gap: .8rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; padding: .85rem 1rem; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; }
+.client-selected-title { color: #0f172a; font-weight: 800; }
+.client-selected-meta { color: #475569; font-size: .86rem; }
 .panel { padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
 .panel h2, .panel h3 { margin: 0 0 .35rem; color: #0f172a; }
 .panel p { margin: 0; color: #64748b; }
@@ -306,7 +313,7 @@
 
 <div class="sale-requests-page">
     <div class="stats-row">
-        <div class="stat-card"><div class="stat-label">表示件数</div><div class="stat-value">{{ current_requests|length }}</div></div>
+        <div class="stat-card"><div class="stat-label">表示クライアント</div><div class="stat-value">{{ client_groups|length }}</div></div>
         <div class="stat-card"><div class="stat-label">未対応</div><div class="stat-value">{{ box_counts.pending }}</div></div>
         <div class="stat-card"><div class="stat-label">承認済み</div><div class="stat-value">{{ box_counts.approved }}</div></div>
         <div class="stat-card"><div class="stat-label">差し戻し</div><div class="stat-value">{{ box_counts.rejected }}</div></div>
@@ -314,11 +321,11 @@
 
     <form method="GET" class="panel">
         <h3>履歴の絞り込み</h3>
-        <p>商品名、ブランド、申請者、商品ID、申請日で絞り込めます。</p>
+        <p>クライアント名、ユーザーID、商品名、ステータス、申請日で絞り込めます。</p>
         <div class="filter-grid">
             <div class="field">
                 <label for="sale-request-q">キーワード</label>
-                <input id="sale-request-q" type="text" name="q" value="{{ filter_values.q if filter_values else '' }}" placeholder="商品名 / ブランド / 申請者 / 商品ID">
+                <input id="sale-request-q" type="text" name="q" value="{{ filter_values.q if filter_values else '' }}" placeholder="クライアント名 / ユーザーID / 商品名 / ステータス">
             </div>
             <div class="field">
                 <label for="sale-request-status">ステータス</label>
@@ -344,27 +351,38 @@
         </div>
     </form>
 
-    {% if current_requests %}
+    {% if client_groups %}
     <section class="panel">
         <h3>クライアント別</h3>
-        <p>未処理を見落とさないよう、クライアント単位でまとめています。</p>
+        <p>未処理が埋もれないよう、更新日順でクライアント単位にまとめています。</p>
         <div class="client-summary-grid">
-            {% for client_id, group in current_requests|groupby('user_id') %}
-            {% set first = group[0] %}
-            <a class="client-summary-card" href="{{ url_for('admin_shipping_requests' if active_box == 'shipping' else 'admin_completion_requests', q=(first.display_name or first.username or first.user_id)) }}">
+            {% for group in client_groups %}
+            <a class="client-summary-card" href="{{ group.url }}">
                 <div class="client-summary-head">
-                    <span class="client-summary-name">{{ first.display_name or first.username or ('ID:' ~ first.user_id) }}</span>
-                    <span class="client-summary-count">{{ group|length }}</span>
+                    <span class="client-summary-name">{{ group.client_name }}</span>
+                    <span class="client-summary-count">{{ group.total_count }}</span>
                 </div>
-                <div class="client-summary-meta">
-                    <span>ユーザーID {{ first.user_id or '-' }}</span>
-                    <span>最終更新 {{ ((first.updated_at or first.requested_at or first.created_at)|string)[:16].replace('-', '/') if (first.updated_at or first.requested_at or first.created_at) else '-' }}</span>
-                </div>
+                <div class="client-summary-row"><span>クライアント名</span><strong>{{ group.client_name }}</strong></div>
+                <div class="client-summary-row"><span>ユーザーID</span><strong>{{ group.user_id }}</strong></div>
+                <div class="client-summary-row"><span>未処理件数</span><strong>{{ group.pending_count }}</strong></div>
+                <div class="client-summary-row"><span>最終更新日</span><strong>{{ group.last_updated }}</strong></div>
+                <span class="client-summary-status {% if group.pending_count %}pending{% endif %}">{{ group.status_label }}</span>
             </a>
             {% endfor %}
         </div>
     </section>
+    {% else %}
+    <div class="empty-state">該当するクライアントはありません。</div>
     {% endif %}
+
+    {% if selected_client_id %}
+    <div class="client-selected-bar">
+        <div>
+            <div class="client-selected-title">{{ selected_client.client_name if selected_client else '選択中のクライアント' }}</div>
+            <div class="client-selected-meta">ユーザーID {{ selected_client.user_id if selected_client else selected_client_id }} / 表示件数 {{ current_requests|length }}</div>
+        </div>
+        <a href="{{ list_back_url }}" class="btn btn-secondary">一覧へ戻る</a>
+    </div>
 
     <section class="panel">
         <h2>{{ '発送依頼BOX' if active_box == 'shipping' else '取引完了BOX' }}</h2>
@@ -388,6 +406,7 @@
         </div>
         {% endif %}
     </section>
+    {% endif %}
 </div>
 
 <div class="modal-overlay" id="approveModal">
