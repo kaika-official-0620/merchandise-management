@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, g, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 
 
@@ -746,6 +746,20 @@ def apply(module: Any) -> None:
             "kaika_estimate": "kaika_mitsumori",
         }
         category = category_aliases.get(category, category)
+        cache_key = "_kaika_admin_history_counts" if admin else "_kaika_user_history_counts"
+        loading_key = "_kaika_history_counts_loading"
+        if not getattr(g, loading_key, False):
+            cached_counts = getattr(g, cache_key, None)
+            if cached_counts is None:
+                setattr(g, loading_key, True)
+                try:
+                    categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
+                    cached_counts = count_history_rows_bulk([key for key, _title, _description in categories], admin=admin)
+                    setattr(g, cache_key, cached_counts)
+                finally:
+                    setattr(g, loading_key, False)
+            if category in cached_counts:
+                return safe_int(cached_counts.get(category))
         if not admin and category not in {key for key, _title, _desc in USER_HISTORY_CATEGORIES}:
             return 0
         if category == "client_incoming":
@@ -861,6 +875,131 @@ def apply(module: Any) -> None:
         except Exception:
             app.logger.warning("Failed to count history rows for %s", category, exc_info=True)
             return 0
+        finally:
+            cur.close()
+            conn.close()
+
+    def count_history_rows_bulk(category_keys: Iterable[str], admin: bool = False) -> dict[str, int]:
+        ensure_schema()
+        ensure_performance_indexes()
+        allowed_keys = {key for key, _title, _description in (ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES)}
+        requested = {key for key in category_keys if admin or key in allowed_keys}
+        if not requested:
+            return {}
+
+        ph = placeholder()
+        conn, cur = open_cursor()
+        statements: list[str] = []
+        params: list[Any] = []
+
+        def add_count(key: str, table_name: str, where_parts: list[str] | None = None, where_params: list[Any] | tuple[Any, ...] = ()) -> None:
+            if not table_exists(cur, table_name):
+                return
+            where_sql = "WHERE " + " AND ".join(where_parts or []) if where_parts else ""
+            statements.append(f"SELECT {ph} AS category, COUNT(*) AS count FROM {table_name} {where_sql}")
+            params.append(key)
+            params.extend(where_params)
+
+        try:
+            params_user = None if admin else current_user.id
+            needs_client = "client_incoming" in requested
+            needs_vendor_estimate = "vendor_estimate" in requested
+            has_mitsumori = table_exists(cur, "user_mitsumori")
+            has_mitsumori_scope = has_mitsumori and column_exists(cur, "user_mitsumori", "document_scope")
+
+            if has_mitsumori and needs_client:
+                where_parts: list[str] = []
+                where_params: list[Any] = []
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    where_params.append(params_user)
+                if has_mitsumori_scope:
+                    where_parts.append(f"COALESCE(document_scope, 'client_incoming') NOT IN ({ph}, {ph}, {ph})")
+                    where_params.extend(["vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"])
+                where_parts.append(f"COALESCE(document_no, '') NOT LIKE {ph}")
+                where_params.append("MT-%")
+                add_count("client_mitsumori", "user_mitsumori", where_parts, where_params)
+
+            if has_mitsumori and needs_vendor_estimate:
+                where_parts = []
+                where_params = []
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    where_params.append(params_user)
+                if has_mitsumori_scope:
+                    where_parts.append(f"COALESCE(document_scope, '') = {ph}")
+                    where_params.append("vendor_outgoing")
+                else:
+                    where_parts.append(f"document_no LIKE {ph}")
+                    where_params.append("MT-%")
+                add_count("vendor_mitsumori", "user_mitsumori", where_parts, where_params)
+
+            if has_mitsumori and "kaika_mitsumori" in requested:
+                where_parts = []
+                where_params = []
+                if has_mitsumori_scope:
+                    where_parts.append(f"COALESCE(document_scope, '') IN ({ph}, {ph})")
+                    where_params.extend(["kaika_vendor_outgoing", "kaika_estimate"])
+                else:
+                    where_parts.append("1 = 0")
+                add_count("kaika_mitsumori", "user_mitsumori", where_parts, where_params)
+
+            if "kaitori" in requested:
+                add_count("kaitori", "invoices", [] if admin else [f"sender_id = {ph}"], [] if admin else [params_user])
+
+            if "user_shoudaku" in requested or (admin and needs_client):
+                add_count("user_shoudaku", "user_kaitori_shoudaku", [] if admin else [f"user_id = {ph}"], [] if admin else [params_user])
+
+            if "kaika_shoudaku" in requested:
+                where_parts = []
+                where_params = []
+                if table_exists(cur, "admin_kaitori_shoudaku") and column_exists(cur, "admin_kaitori_shoudaku", "document_scope"):
+                    where_parts.append(f"COALESCE(document_scope, {ph}) <> {ph}")
+                    where_params.extend(["kaika_shoudaku", "vendor_incoming"])
+                add_count("kaika_shoudaku", "admin_kaitori_shoudaku", where_parts, where_params)
+
+            if "shikiriosho" in requested:
+                add_count("shikiriosho", "shikiriosho", [] if admin else [f"recipient_id = {ph}"], [] if admin else [params_user])
+
+            if "keisan" in requested:
+                where_parts = [] if admin else [f"user_id = {ph}"]
+                where_params = [] if admin else [params_user]
+                if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
+                    where_parts.append(
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        if DATABASE_URL
+                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                    )
+                add_count("keisan", "user_keisan", where_parts, where_params)
+
+            if "vendor" in requested:
+                where_parts = []
+                where_params = []
+                if table_exists(cur, "vendor_documents") and column_exists(cur, "vendor_documents", "document_scope"):
+                    where_parts.append(f"COALESCE(document_scope, 'user_flow') = {ph}")
+                    where_params.append("user_flow")
+                if not admin:
+                    where_parts.append(f"user_id = {ph}")
+                    where_parts.append("COALESCE(status, '') IN ('shared', 'sent')")
+                    where_params.append(params_user)
+                add_count("vendor", "vendor_documents", where_parts, where_params)
+
+            if "other" in requested:
+                add_count("other", "service_documents", [] if admin else [f"user_id = {ph}"], [] if admin else [params_user])
+
+            count_map = {key: 0 for key in requested}
+            if statements:
+                cur.execute(" UNION ALL ".join(statements), tuple(params))
+                for row in rows_to_dicts(cur.fetchall()):
+                    count_map[str(row.get("category"))] = safe_int(row.get("count"))
+            if "client_incoming" in requested:
+                count_map["client_incoming"] = count_map.get("client_mitsumori", 0) + (count_map.get("user_shoudaku", 0) if admin else 0)
+            if "vendor_estimate" in requested:
+                count_map["vendor_estimate"] = count_map.get("vendor_mitsumori", 0)
+            return {key: safe_int(count_map.get(key)) for key in requested}
+        except Exception:
+            app.logger.warning("Failed to count history rows in bulk", exc_info=True)
+            return {key: 0 for key in requested}
         finally:
             cur.close()
             conn.close()
