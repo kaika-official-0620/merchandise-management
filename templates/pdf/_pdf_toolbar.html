@@ -71,7 +71,7 @@
 
         .pdf-screen-toolbar-actions {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 6px;
         }
 
@@ -98,7 +98,8 @@
     <div class="pdf-screen-toolbar-inner">
         <div class="pdf-screen-toolbar-actions">
             <button type="button" class="pdf-screen-btn" onclick="goBackFromPdf()">戻る</button>
-            <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">保存 / 印刷</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">PDF保存</button>
+            <button type="button" class="pdf-screen-btn" onclick="window.print()">印刷</button>
         </div>
         <div class="pdf-screen-note">ブラウザの印刷画面でPDF保存できます。</div>
     </div>

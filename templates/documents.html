@@ -27,7 +27,7 @@
     <div class="doc-cards">
         {% for inv in invoices %}
         {% set status = inv.status or 'sent' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_invoice_view', id=inv.id) }}" tabindex="0" role="link">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_invoice_edit', id=inv.id) if inv.can_user_edit else url_for('user_invoice_view', id=inv.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ inv.invoice_no }}</span>
                 <span class="status-badge status-{{ status }}">
@@ -44,13 +44,13 @@
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(inv.total_amount or 0) }}</strong></div>
             </div>
             <div class="card-actions">
-                <a href="{{ url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">内容を見る</a>
-                {% if status == 'draft' %}
+                <a href="{{ url_for('user_invoice_edit', id=inv.id) if inv.can_user_edit else url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">内容を見る</a>
+                {% if inv.can_user_edit %}
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) }}" class="btn btn-secondary">編集</a>
                 <a href="{{ url_for('user_invoice_send', id=inv.id) }}" class="btn btn-success" onclick="return confirm('この買取明細書を送信しますか？')">送信</a>
                 {% endif %}
                 <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
-                {% if status in ['draft', 'in_progress'] %}
+                {% if inv.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>

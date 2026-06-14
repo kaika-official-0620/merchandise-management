@@ -149,6 +149,7 @@ def apply(module: Any) -> None:
                 ("idx_user_mitsumori_user_scope_created", "user_mitsumori", ("user_id", "document_scope", "created_at")),
                 ("idx_user_mitsumori_document_no", "user_mitsumori", ("document_no",)),
                 ("idx_invoices_sender_created", "invoices", ("sender_id", "created_at")),
+                ("idx_invoices_sender_source_status_created", "invoices", ("sender_id", "source_admin_kaitori_id", "status", "created_at")),
                 ("idx_invoices_created", "invoices", ("created_at",)),
                 ("idx_user_shoudaku_user_created", "user_kaitori_shoudaku", ("user_id", "created_at")),
                 ("idx_user_shoudaku_created", "user_kaitori_shoudaku", ("created_at",)),
@@ -466,22 +467,63 @@ def apply(module: Any) -> None:
     def status_label(status: Any) -> str:
         return STATUS_LABELS.get(str(status or "").strip(), str(status or "-"))
 
+    def is_history_draft_status(status: Any) -> bool:
+        checker = getattr(module, "is_deletable_document_status", None)
+        if callable(checker):
+            return bool(checker(status))
+        return str(status or "").strip() in {"draft", "in_progress", "作成中", "下書き"}
+
+    HISTORY_DRAFT_STATUSES = ("draft", "in_progress", "作成中", "下書き")
+
+    def invoice_user_visible_filter(cur, ph: str, user_id_value: Any) -> tuple[list[str], list[Any]]:
+        where_parts = [f"sender_id = {ph}"]
+        params: list[Any] = [user_id_value]
+        status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
+        if column_exists(cur, "invoices", "source_admin_kaitori_id"):
+            where_parts.append(
+                f"(COALESCE(source_admin_kaitori_id, 0) = 0 OR COALESCE(status, '') NOT IN ({status_placeholders}))"
+            )
+            params.extend(HISTORY_DRAFT_STATUSES)
+        if column_exists(cur, "invoices", "document_scope"):
+            where_parts.append(
+                f"(COALESCE(document_scope, '') <> {ph} OR COALESCE(status, '') NOT IN ({status_placeholders}))"
+            )
+            params.append("client_outgoing")
+            params.extend(HISTORY_DRAFT_STATUSES)
+        return where_parts, params
+
+    def is_user_created_invoice_history_row(row: dict[str, Any]) -> bool:
+        checker = getattr(module, "is_user_created_invoice_document", None)
+        if callable(checker):
+            return bool(checker(row))
+        return not row.get("source_admin_kaitori_id") and (row.get("document_scope") or "").strip() not in {"client_outgoing", "admin_kaitori"}
+
     def category_cards(endpoint: str, selected: str | None = None, admin: bool = False) -> list[dict[str, Any]]:
         cards = []
         categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
+        count_map = count_history_rows_bulk([key for key, _title, _description in categories], admin=admin)
+        def count_history_rows(card_key: str, admin: bool = False) -> int:
+            return safe_int(count_map.get(card_key))
         for idx, (key, title, description) in enumerate(categories, 1):
             url_args = {"category": key}
+            if endpoint == "admin_documents_history":
+                card_url = url_for("admin_documents_history_category", category=key)
+            elif endpoint == "documents":
+                card_url = url_for("documents_history_category", category=key)
+            else:
+                card_url = url_for(endpoint, **url_args)
             cards.append(
                 {
                     "key": key,
                     "step": idx,
                     "title": title,
                     "description": description,
-                    "url": url_for(endpoint, **url_args),
+                    "url": card_url,
                     "selected": selected == key,
                     "count_label": f"{count_history_rows(key, admin=admin)}件",
                 }
             )
+            cards[-1]["count_label"] = f"{safe_int(count_map.get(key))}件"
         return cards
 
     def load_clients() -> list[dict[str, Any]]:
@@ -819,8 +861,10 @@ def apply(module: Any) -> None:
                 return count_from("user_mitsumori", where_parts, params_list)
 
             if category == "kaitori":
-                where_parts = [] if admin else [f"sender_id = {ph}"]
-                params = [] if admin else [params_user]
+                where_parts: list[str] = []
+                params: list[Any] = []
+                if not admin:
+                    where_parts, params = invoice_user_visible_filter(cur, ph, params_user)
                 return count_from("invoices", where_parts, params)
 
             if category == "user_shoudaku":
@@ -945,7 +989,11 @@ def apply(module: Any) -> None:
                 add_count("kaika_mitsumori", "user_mitsumori", where_parts, where_params)
 
             if "kaitori" in requested:
-                add_count("kaitori", "invoices", [] if admin else [f"sender_id = {ph}"], [] if admin else [params_user])
+                if admin:
+                    add_count("kaitori", "invoices")
+                else:
+                    where_parts, where_params = invoice_user_visible_filter(cur, ph, params_user)
+                    add_count("kaitori", "invoices", where_parts, where_params)
 
             if "user_shoudaku" in requested or (admin and needs_client):
                 add_count("user_shoudaku", "user_kaitori_shoudaku", [] if admin else [f"user_id = {ph}"], [] if admin else [params_user])
@@ -1045,6 +1093,7 @@ def apply(module: Any) -> None:
                 status: Any = "",
                 detail_url: str | None = None,
                 download_url: str | None = None,
+                delete_url: str | None = None,
                 source: str = "",
                 can_delete: bool = False,
             ) -> None:
@@ -1059,6 +1108,7 @@ def apply(module: Any) -> None:
                         "status_label": status_label(status),
                         "detail_url": detail_url,
                         "download_url": download_url,
+                        "delete_url": delete_url,
                         "source": source,
                         "can_delete": can_delete,
                     }
@@ -1106,12 +1156,18 @@ def apply(module: Any) -> None:
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
                         total_amount=doc.get("total_amount") or 0,
                         status=doc.get("status"),
-                        detail_url=url_for("admin_user_mitsumori_view", id=doc["id"]) if admin and "admin_user_mitsumori_view" in app.view_functions else None,
+                        detail_url=url_for("admin_user_mitsumori_view", id=doc["id"]) if admin and "admin_user_mitsumori_view" in app.view_functions else url_for("user_mitsumori_view", id=doc["id"]),
+                        download_url=url_for("admin_mitsumori_pdf", id=doc["id"]) if admin and "admin_mitsumori_pdf" in app.view_functions else url_for("user_mitsumori_pdf", id=doc["id"]),
+                        delete_url=None if admin or not is_history_draft_status(doc.get("status")) else url_for("user_mitsumori_delete", id=doc["id"]),
                         source="user_mitsumori",
+                        can_delete=not admin and is_history_draft_status(doc.get("status")),
                     )
             elif category == "kaitori":
-                where = "" if admin else f"WHERE sender_id = {ph}"
-                params = () if admin else (params_user,)
+                where_parts: list[str] = []
+                params_list: list[Any] = []
+                if not admin:
+                    where_parts, params_list = invoice_user_visible_filter(cur, ph, params_user)
+                where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
                 cur.execute(
                     f"""
                     SELECT i.*, u.display_name AS client_display_name, u.username AS client_username
@@ -1121,18 +1177,22 @@ def apply(module: Any) -> None:
                     ORDER BY i.created_at DESC
                     LIMIT {int(limit)}
                     """,
-                    params,
+                    tuple(params_list),
                 )
                 for doc in rows_to_dicts(cur.fetchall()):
+                    can_user_delete = (not admin) and is_user_created_invoice_history_row(doc) and is_history_draft_status(doc.get("status"))
                     add_row(
                         document_type="買取明細書",
-                        document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
+                        document_no=doc.get("document_no") or doc.get("invoice_no") or f"ID:{doc.get('id')}",
                         client_name=doc.get("recipient_name") or doc.get("client_display_name") or doc.get("client_username"),
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
                         total_amount=doc.get("total_amount") or doc.get("subtotal") or 0,
                         status=doc.get("status"),
-                        detail_url=url_for("admin_kaitori_view", id=doc["id"]) if admin and "admin_kaitori_view" in app.view_functions else None,
+                        detail_url=url_for("admin_kaitori_view", id=doc["id"]) if admin and "admin_kaitori_view" in app.view_functions else (url_for("user_invoice_edit", id=doc["id"]) if can_user_delete else url_for("user_invoice_view", id=doc["id"])),
+                        download_url=url_for("admin_kaitori_pdf", id=doc["id"]) if admin and "admin_kaitori_pdf" in app.view_functions else url_for("invoice_pdf", id=doc["id"]),
+                        delete_url=url_for("user_invoice_delete", id=doc["id"]) if can_user_delete else None,
                         source="invoices",
+                        can_delete=can_user_delete,
                     )
             elif category == "user_shoudaku":
                 where = "" if admin else f"WHERE user_id = {ph}"
@@ -1146,8 +1206,11 @@ def apply(module: Any) -> None:
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
                         total_amount=doc.get("total_amount") or 0,
                         status=doc.get("status"),
-                        detail_url=url_for("admin_user_kaitori_shoudaku_view", id=doc["id"]) if admin and "admin_user_kaitori_shoudaku_view" in app.view_functions else None,
+                        detail_url=url_for("admin_user_kaitori_shoudaku_view", id=doc["id"]) if admin and "admin_user_kaitori_shoudaku_view" in app.view_functions else url_for("user_kaitori_shoudaku_view", id=doc["id"]),
+                        download_url=None if admin else url_for("user_kaitori_shoudaku_pdf", id=doc["id"]),
+                        delete_url=None if admin or not is_history_draft_status(doc.get("status")) else url_for("user_kaitori_shoudaku_delete", id=doc["id"]),
                         source="user_kaitori_shoudaku",
+                        can_delete=not admin and is_history_draft_status(doc.get("status")),
                     )
             elif category == "kaika_shoudaku":
                 if table_exists(cur, "admin_kaitori_shoudaku"):
@@ -1166,6 +1229,7 @@ def apply(module: Any) -> None:
                             total_amount=doc.get("total_amount") or 0,
                             status=doc.get("status"),
                             detail_url=url_for("admin_kaitori_shoudaku_view", id=doc["id"]) if admin and "admin_kaitori_shoudaku_view" in app.view_functions else None,
+                            download_url=url_for("admin_kaitori_shoudaku_pdf", id=doc["id"]) if admin and "admin_kaitori_shoudaku_pdf" in app.view_functions else None,
                             source="admin_kaitori_shoudaku",
                         )
             elif category == "shikiriosho":
@@ -1190,7 +1254,8 @@ def apply(module: Any) -> None:
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
                         total_amount=doc.get("total_amount") or 0,
                         status=doc.get("status"),
-                        detail_url=url_for("admin_shikiriosho_view", id=doc["id"]) if admin and "admin_shikiriosho_view" in app.view_functions else None,
+                        detail_url=url_for("admin_shikiriosho_view", id=doc["id"]) if admin and "admin_shikiriosho_view" in app.view_functions else url_for("user_shikiriosho_view", id=doc["id"]),
+                        download_url=url_for("shikiriosho_pdf", id=doc["id"]),
                         source="shikiriosho",
                     )
             elif category == "keisan":
@@ -1211,8 +1276,11 @@ def apply(module: Any) -> None:
                         issue_date=doc.get("issue_date") or doc.get("created_at"),
                         total_amount=doc.get("total_amount") or 0,
                         status=doc.get("status"),
-                        detail_url=url_for("admin_auction_keisan_view", id=doc["id"]) if admin and "admin_auction_keisan_view" in app.view_functions else None,
+                        detail_url=url_for("admin_auction_keisan_view", id=doc["id"]) if admin and "admin_auction_keisan_view" in app.view_functions else url_for("user_keisan_view", id=doc["id"]),
+                        download_url=url_for("admin_auction_keisan_pdf", id=doc["id"]) if admin and "admin_auction_keisan_pdf" in app.view_functions else url_for("user_keisan_pdf", id=doc["id"]),
+                        delete_url=None if admin or doc.get("is_admin_created") or not is_history_draft_status(doc.get("status")) else url_for("user_keisan_delete", id=doc["id"]),
                         source="user_keisan",
+                        can_delete=not admin and not doc.get("is_admin_created") and is_history_draft_status(doc.get("status")),
                     )
             elif category == "vendor":
                 where_parts = []
@@ -1946,23 +2014,53 @@ def apply(module: Any) -> None:
             client_outgoing_rows=client_outgoing_rows,
         )
 
+    def normalize_history_category(selected_category: str, *, admin: bool = False) -> str:
+        selected_category = (selected_category or "").strip()
+        tab_map = {
+            "kaitori": "kaitori",
+            "mitsumori": "client_incoming",
+            "shoudaku": "user_shoudaku",
+            "shikiri": "shikiriosho",
+            "keisan": "keisan",
+            "user_mitsumori": "client_incoming",
+            "invoice": "kaitori",
+            "user_kaitori_shoudaku": "user_shoudaku",
+        }
+        if admin:
+            tab_map.update(
+                {
+                    "mitsumori_houjin": "vendor_estimate",
+                    "admin_mitsumori": "vendor_estimate",
+                    "admin_kaitori_shoudaku": "kaika_shoudaku",
+                    "kaika_estimate": "kaika_mitsumori",
+                }
+            )
+        selected_category = tab_map.get(selected_category, selected_category)
+        categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
+        category_keys = {key for key, _title, _desc in categories}
+        if selected_category not in category_keys:
+            return ""
+        return selected_category
+
     def admin_documents_history_clean():
         ensure_schema()
-        selected_category = (request.args.get("category") or request.args.get("doc_type") or "").strip()
-        category_keys = {key for key, _title, _desc in ADMIN_HISTORY_CATEGORIES}
-        if selected_category in {"user_mitsumori", "mitsumori"}:
-            selected_category = "client_incoming"
-        elif selected_category in {"mitsumori_houjin", "admin_mitsumori"}:
-            selected_category = "vendor_estimate"
-        elif selected_category in {"invoice"}:
-            selected_category = "kaitori"
-        elif selected_category in {"user_kaitori_shoudaku", "shoudaku"}:
-            selected_category = "user_shoudaku"
-        elif selected_category in {"admin_kaitori_shoudaku"}:
-            selected_category = "kaika_shoudaku"
-        elif selected_category not in category_keys:
-            selected_category = ""
-        history_rows = build_history_rows(selected_category, admin=True) if selected_category else []
+        selected_category = normalize_history_category(request.args.get("category") or request.args.get("doc_type"), admin=True)
+        if selected_category:
+            return redirect(url_for("admin_documents_history_category", category=selected_category))
+        return render_template(
+            "admin/documents_history_clean.html",
+            category_cards=category_cards("admin_documents_history", "", admin=True),
+            selected_category="",
+            selected_meta=None,
+            history_rows=[],
+        )
+
+    def admin_documents_history_category(category: str):
+        ensure_schema()
+        selected_category = normalize_history_category(category, admin=True)
+        if not selected_category:
+            return redirect(url_for("admin_documents_history"))
+        history_rows = build_history_rows(selected_category, admin=True)
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in ADMIN_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
             "admin/documents_history_clean.html",
@@ -1974,18 +2072,22 @@ def apply(module: Any) -> None:
 
     def documents_clean():
         ensure_schema()
-        selected_category = (request.args.get("category") or request.args.get("tab") or "").strip()
-        tab_map = {
-            "kaitori": "kaitori",
-            "mitsumori": "client_incoming",
-            "shoudaku": "user_shoudaku",
-            "shikiri": "shikiriosho",
-            "keisan": "keisan",
-        }
-        selected_category = tab_map.get(selected_category, selected_category)
-        category_keys = {key for key, _title, _desc in USER_HISTORY_CATEGORIES}
-        if selected_category not in category_keys:
-            selected_category = ""
+        selected_category = normalize_history_category(request.args.get("category") or request.args.get("tab"), admin=False)
+        if selected_category:
+            return redirect(url_for("documents_history_category", category=selected_category))
+        return render_template(
+            "documents_clean.html",
+            category_cards=category_cards("documents", "", admin=False),
+            selected_category="",
+            selected_meta=None,
+            history_rows=[],
+        )
+
+    def documents_history_category(category: str):
+        ensure_schema()
+        selected_category = normalize_history_category(category, admin=False)
+        if not selected_category:
+            return redirect(url_for("documents"))
         history_rows = build_history_rows(selected_category, admin=False, user_id=current_user.id) if selected_category else []
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in USER_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
@@ -2015,7 +2117,9 @@ def apply(module: Any) -> None:
     register("admin_monthly_settlement_create", "/admin/monthly-settlements/create", admin_monthly_settlement_create, ["GET", "POST"], admin=True)
     register("admin_documents_dashboard", "/admin/documents", admin_documents_dashboard_clean, ["GET"], admin=True)
     register("admin_documents_history", "/admin/documents/history", admin_documents_history_clean, ["GET"], admin=True)
+    register("admin_documents_history_category", "/admin/documents/history/<category>", admin_documents_history_category, ["GET"], admin=True)
     register("documents", "/documents", documents_clean, ["GET"], admin=False)
+    register("documents_history_category", "/documents/history/<category>", documents_history_category, ["GET"], admin=False)
 
     final_admin_mitsumori_add = getattr(module, "admin_mitsumori_add_from_documents", None)
     if callable(final_admin_mitsumori_add):

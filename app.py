@@ -6606,7 +6606,28 @@ def is_valid_email_format(email):
 
 
 def is_deletable_document_status(status):
-    return (status or '').strip() in {'draft', 'in_progress'}
+    return (status or '').strip() in {'draft', 'in_progress', '作成中', '下書き'}
+
+
+def row_value(row, key, default=None):
+    if row is None:
+        return default
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except Exception:
+        return getattr(row, key, default)
+
+
+def is_user_created_invoice_document(invoice):
+    source_admin_id = row_value(invoice, 'source_admin_kaitori_id')
+    document_scope = (row_value(invoice, 'document_scope') or '').strip()
+    return not source_admin_id and document_scope not in {'client_outgoing', 'admin_kaitori'}
+
+
+def is_user_deletable_invoice_document(invoice):
+    return bool(invoice) and is_user_created_invoice_document(invoice) and is_deletable_document_status(row_value(invoice, 'status'))
 
 
 def parse_shipping_addresses(value, default_postal_code='', default_address=''):
@@ -8384,7 +8405,7 @@ def index():
         apply_inventory_display_metrics(item_dict, scope='user', fee_settings=fee_settings)
 
         def resolve_status_priority(row):
-            if row.get('sale_date'):
+            if row.get('sale_date') or row.get('is_sold'):
                 return 90
             if row.get('pending_sales_agency'):
                 return 5
@@ -8406,6 +8427,8 @@ def index():
 
         item_dict['status_priority'] = resolve_status_priority(item_dict)
         sales_agency_request = item_dict.get('sales_agency_request') or {}
+        sales_agency_service_type = (sales_agency_request.get('service_type') or '').strip()
+        sales_agency_status = (sales_agency_request.get('status') or '').strip()
         if item_dict.get('sale_date') or item_dict.get('is_sold'):
             item_dict['mobile_status_label'] = '売却済み'
         elif item_dict.get('pending_completion_request'):
@@ -8417,7 +8440,12 @@ def index():
         elif item_dict.get('approved_shipping_request'):
             item_dict['mobile_status_label'] = '発送準備中'
         elif item_dict.get('pending_sales_agency'):
-            item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '査定待ち'
+            if sales_agency_service_type == 'simultaneous':
+                item_dict['mobile_status_label'] = '同時出品中'
+            elif sales_agency_status in {'appraising', 'inspecting'} or item_dict.get('appraisal_status') in {'waiting', 'inspecting'}:
+                item_dict['mobile_status_label'] = '査定中'
+            else:
+                item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '業者依頼中'
         elif item_dict.get('appraisal_status') == 'inspecting':
             item_dict['mobile_status_label'] = '査定中'
         elif item_dict.get('appraisal_status') == 'waiting':
@@ -8460,17 +8488,21 @@ def index():
                     or row.get('shipment_marked')
                 )
             )
-        if status_key == 'listed':
+        sales_agency_request = row.get('sales_agency_request') or {}
+        sales_agency_service_type = (sales_agency_request.get('service_type') or '').strip()
+        if status_key in {'listed', 'selling'}:
             return not is_sold_item and bool(row.get('is_listed')) and not row.get('pending_sales_agency')
         if status_key == 'certified':
             return not is_sold_item and bool(row.get('is_listed')) and not row.get('pending_sales_agency')
         if status_key == 'agency':
             return not is_sold_item and bool(row.get('pending_sales_agency'))
+        if status_key == 'simultaneous':
+            return not is_sold_item and bool(row.get('pending_sales_agency')) and sales_agency_service_type == 'simultaneous'
         if status_key == 'shipping_pending':
             return not is_sold_item and bool(row.get('pending_shipping_request'))
         if status_key == 'completion_pending':
             return not is_sold_item and bool(row.get('pending_completion_request'))
-        if status_key == 'appraisal_pending':
+        if status_key in {'appraisal_pending', 'appraisal'}:
             return not is_sold_item and row.get('appraisal_status') in {'waiting', 'inspecting'}
         if status_key == 'unlisted':
             return not is_sold_item and not row.get('is_listed') and not row.get('pending_sales_agency')
@@ -8479,11 +8511,14 @@ def index():
     enriched_status_filters = {
         'transaction',
         'listed',
+        'selling',
         'certified',
         'agency',
+        'simultaneous',
         'shipping_pending',
         'completion_pending',
         'appraisal_pending',
+        'appraisal',
         'unlisted',
         'active',
     }
@@ -8518,7 +8553,7 @@ def index():
             return 0.0
 
     def sold_sort_rank(row):
-        return 1 if row.get('sale_date') else 0
+        return 1 if row.get('sale_date') or row.get('is_sold') else 0
 
     def item_sort_id(row):
         return int(row.get('id') or 0)
@@ -8591,7 +8626,7 @@ def index():
             -item_sort_id(row),
         ),
         'sold_newest': lambda row: (
-            0 if row.get('sale_date') else 1,
+            sold_sort_rank(row),
             -sort_timestamp(row.get('sale_date')),
             -item_sort_id(row),
         ),
@@ -26090,6 +26125,10 @@ def documents():
         """, (current_user.id,))
         shikiriosho_list = [dict(row) for row in cur.fetchall()]
     
+    for invoice in invoices:
+        invoice['can_user_delete'] = is_user_deletable_invoice_document(invoice)
+        invoice['can_user_edit'] = is_user_created_invoice_document(invoice) and is_deletable_document_status(invoice.get('status'))
+
     cur.close()
     conn.close()
     
@@ -26556,6 +26595,9 @@ def user_invoice_list():
         """, (current_user.id,))
     
     invoices = [dict(row) for row in cur.fetchall()]
+    for invoice in invoices:
+        invoice['can_user_delete'] = is_user_deletable_invoice_document(invoice)
+        invoice['can_user_edit'] = is_user_created_invoice_document(invoice) and is_deletable_document_status(invoice.get('status'))
     cur.close()
     conn.close()
     
@@ -26866,9 +26908,9 @@ def user_invoice_delete(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT status FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        cur.execute("SELECT status, document_scope, source_admin_kaitori_id FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
         invoice = cur.fetchone()
-        if invoice and is_deletable_document_status(invoice['status']):
+        if invoice and is_user_deletable_invoice_document(invoice):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
             cur.execute("DELETE FROM invoices WHERE id = %s", (id,))
             conn.commit()
@@ -26877,9 +26919,9 @@ def user_invoice_delete(id):
             flash('送信済みの買取明細書は削除できません', 'error')
     else:
         cur = conn.cursor()
-        cur.execute("SELECT status FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        cur.execute("SELECT status, document_scope, source_admin_kaitori_id FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
         invoice = cur.fetchone()
-        if invoice and is_deletable_document_status(invoice['status']):
+        if invoice and is_user_deletable_invoice_document(invoice):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
             cur.execute("DELETE FROM invoices WHERE id = ?", (id,))
             conn.commit()
@@ -27737,7 +27779,7 @@ def user_keisan_delete(id):
         keisan = cur.fetchone()
         if keisan and keisan.get('is_admin_created'):
             flash('管理者が発行した計算書は削除できません', 'error')
-        elif keisan and keisan['status'] == 'draft':
+        elif keisan and is_deletable_document_status(keisan['status']):
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = %s", (id,))
             conn.commit()
@@ -27752,7 +27794,7 @@ def user_keisan_delete(id):
             keisan = dict(keisan)
         if keisan and keisan.get('is_admin_created'):
             flash('管理者が発行した計算書は削除できません', 'error')
-        elif keisan and keisan['status'] == 'draft':
+        elif keisan and is_deletable_document_status(keisan['status']):
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = ?", (id,))
             conn.commit()
@@ -36259,6 +36301,11 @@ def build_inventory_status_tags(item):
         tags.append('transaction')
     if item.get('pending_sales_agency'):
         tags.append('agency')
+        sales_agency_request = item.get('sales_agency_request') or {}
+        if (sales_agency_request.get('service_type') or '').strip() == 'simultaneous':
+            tags.append('simultaneous')
+        if (sales_agency_request.get('status') or '').strip() in {'appraising', 'inspecting'}:
+            tags.append('appraisal_pending')
     if item.get('appraisal_status') in {'waiting', 'inspecting'}:
         tags.append('appraisal_pending')
     if item.get('is_listed') and not item.get('pending_sales_agency') and item.get('appraisal_status') not in {'waiting', 'inspecting'}:
@@ -36275,6 +36322,8 @@ def build_inventory_status_tags(item):
 
 def resolve_inventory_mobile_status_label(item):
     sales_agency_request = item.get('sales_agency_request') or {}
+    sales_agency_service_type = (sales_agency_request.get('service_type') or '').strip()
+    sales_agency_status = (sales_agency_request.get('status') or '').strip()
     if item.get('sale_date') or item.get('is_sold'):
         return '売却済み'
     if item.get('pending_completion_request'):
@@ -36286,6 +36335,10 @@ def resolve_inventory_mobile_status_label(item):
     if item.get('approved_shipping_request'):
         return '発送準備中'
     if item.get('pending_sales_agency'):
+        if sales_agency_service_type == 'simultaneous':
+            return '同時出品中'
+        if sales_agency_status in {'appraising', 'inspecting'} or item.get('appraisal_status') in {'waiting', 'inspecting'}:
+            return '査定中'
         return sales_agency_request.get('status_label') or '業者依頼中'
     if item.get('appraisal_status') == 'inspecting':
         return '査定中'

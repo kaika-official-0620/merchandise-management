@@ -1727,6 +1727,10 @@
             background: rgba(217, 119, 6, 0.92);
         }
 
+        .mobile-status-badge.listed {
+            background: rgba(22, 163, 74, 0.92);
+        }
+
         .mobile-status-badge.unlisted {
             background: rgba(71, 85, 105, 0.9);
         }
@@ -1771,6 +1775,22 @@
 
         .mobile-cards .sale-request-action-stack > :not(.js-sale-request-trigger) {
             display: none !important;
+        }
+
+        .mobile-cards .sale-request-action-stack.mobile-status-only > :not(.js-sale-request-trigger) {
+            display: inline-flex !important;
+            width: 100%;
+            min-height: 30px;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 4px;
+            border-radius: 5px;
+            font-size: 0.66rem;
+            font-weight: 800;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .mobile-cards .card-actions .js-sale-request-trigger {
@@ -2161,6 +2181,7 @@
         border-radius: 8px;
         font-size: 0.9rem;
         background: white;
+        min-width: 0;
     }
 
     /* スマホ用料金フィルター */
@@ -2360,6 +2381,8 @@
     <div class="filter-tab-content" id="filter-status-tab">
         <div class="filter-group">
             <a href="{{ url_for('index', summary_period=summary_period, sort=sort_mode) }}" class="filter-btn {% if not filter_type %}active{% endif %}">すべて</a>
+            <a href="{{ url_for('index', filter='active', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'active' %}active{% endif %}">出品中/販売中</a>
             <a href="{{ url_for('index', filter='sold', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'sold' %}active{% endif %}">売却済み</a>
             <a href="{{ url_for('index', filter='transaction', summary_period=summary_period, sort=sort_mode, search=search) }}"
@@ -2370,6 +2393,8 @@
                 class="filter-btn {% if filter_type == 'certified' %}active{% endif %}">認証済み</a>
             <a href="{{ url_for('index', filter='agency', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'agency' %}active{% endif %}">業者依頼中</a>
+            <a href="{{ url_for('index', filter='simultaneous', summary_period=summary_period, sort=sort_mode, search=search) }}"
+                class="filter-btn {% if filter_type == 'simultaneous' %}active{% endif %}">同時出品中</a>
             <a href="{{ url_for('index', filter='appraisal_pending', summary_period=summary_period, sort=sort_mode, search=search) }}"
                 class="filter-btn {% if filter_type == 'appraisal_pending' %}active{% endif %}">査定中</a>
             <a href="{{ url_for('index', filter='unsold', summary_period=summary_period, sort=sort_mode, search=search) }}"
@@ -2389,9 +2414,11 @@
                 <label>販売状況</label>
                 <select id="tab-filter-status">
                     <option value="" {% if not filter_type %}selected{% endif %}>すべて</option>
+                    <option value="active" {% if filter_type == 'active' %}selected{% endif %}>出品中/販売中</option>
                     <option value="listed" {% if filter_type == 'listed' %}selected{% endif %}>出品中のみ</option>
                     <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中のみ</option>
                     <option value="agency" {% if filter_type == 'agency' %}selected{% endif %}>業者依頼中のみ</option>
+                    <option value="simultaneous" {% if filter_type == 'simultaneous' %}selected{% endif %}>同時出品中のみ</option>
                     <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定中のみ</option>
                     <option value="certified" {% if filter_type == 'certified' %}selected{% endif %}>認証済みのみ</option>
                     <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済みのみ</option>
@@ -2718,7 +2745,24 @@
 <!-- スマホ用フィルター -->
 <div class="mobile-filter">
     <div class="mobile-search">
-        <input type="text" id="mobile-search" placeholder="商品名・ブランドで検索" onkeyup="mobileFilter()">
+        <input type="text" id="mobile-search" placeholder="商品名・ブランドで検索" oninput="mobileFilter()">
+    </div>
+    <div class="mobile-filter-buttons">
+        <select id="mobile-status-filter" onchange="applyMobileStatusFilter()">
+            <option value="" {% if not filter_type %}selected{% endif %}>すべて</option>
+            <option value="active" {% if filter_type == 'active' %}selected{% endif %}>出品中/販売中</option>
+            <option value="sold" {% if filter_type == 'sold' %}selected{% endif %}>売却済み</option>
+            <option value="transaction" {% if filter_type == 'transaction' %}selected{% endif %}>取引中</option>
+            <option value="appraisal_pending" {% if filter_type == 'appraisal_pending' %}selected{% endif %}>査定中</option>
+            <option value="certified" {% if filter_type == 'certified' %}selected{% endif %}>認証済み</option>
+            <option value="agency" {% if filter_type == 'agency' %}selected{% endif %}>業者依頼中</option>
+            <option value="simultaneous" {% if filter_type == 'simultaneous' %}selected{% endif %}>同時出品中</option>
+        </select>
+        <select id="mobile-sort-order" onchange="applyMobileSortOrder()">
+            {% for option in sort_options %}
+            <option value="{{ option.key }}" {% if sort_mode == option.key %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
     </div>
 </div>
 
@@ -2866,9 +2910,11 @@
                 {% if not (item.is_sold or item.sale_date) %}
                 {% if item.pending_sales_agency %}
                 {# 販売代行申請中の場合はステータスバッジ #}
-                <span class="badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}badge-agency{% else %}badge-waiting{% endif %}">
-                    {{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}
-                </span>
+                <div class="sale-request-action-stack mobile-status-only">
+                    <span class="sale-request-complete-badge {% if item.sales_agency_request and item.sales_agency_request.status in ['approved', 'appraising', 'inspecting', 'completed'] %}approved{% else %}shipping{% endif %}">
+                        {{ item.mobile_status_label or (item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中') }}
+                    </span>
+                </div>
                 {% elif item.pending_completion_request %}
                 <div class="sale-request-action-stack">
                     <span class="sale-request-complete-badge completion">取引完了報告送信済み</span>
@@ -3086,6 +3132,34 @@
         window.location.href = url.toString();
     }
 
+    function applyMobileStatusFilter() {
+        const mobileStatus = document.getElementById('mobile-status-filter');
+        const tabStatus = document.getElementById('tab-filter-status');
+        const value = mobileStatus ? mobileStatus.value : '';
+        if (tabStatus) tabStatus.value = value;
+
+        const url = new URL(window.location.href);
+        if (value) {
+            url.searchParams.set('filter', value);
+        } else {
+            url.searchParams.delete('filter');
+        }
+        window.location.href = url.toString();
+    }
+
+    function applyMobileSortOrder() {
+        const mobileSort = document.getElementById('mobile-sort-order');
+        if (!mobileSort) return;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('sort', mobileSort.value || 'priority');
+        const mobileStatus = document.getElementById('mobile-status-filter');
+        if (mobileStatus && mobileStatus.value) {
+            url.searchParams.set('filter', mobileStatus.value);
+        }
+        window.location.href = url.toString();
+    }
+
     // テーブルフィルター機能（PC・スマホ両対応）
     function filterTable() {
         // タブからフィルター値を取得
@@ -3097,6 +3171,10 @@
         const filterStore = document.getElementById('tab-filter-store')?.value || '';
         const filterDate = document.getElementById('tab-filter-date')?.value || '';
         const filterStatus = document.getElementById('tab-filter-status')?.value || '';
+        const mobileStatus = document.getElementById('mobile-status-filter');
+        if (mobileStatus && mobileStatus.value !== filterStatus) {
+            mobileStatus.value = filterStatus;
+        }
 
         // 料金フィルター
         const filterPurchaseMin = document.getElementById('tab-filter-purchase-min')?.value || '';
@@ -3174,11 +3252,13 @@
 
         const mobileCountEl = document.getElementById('filtered-count-mobile');
         if (mobileCountEl) mobileCountEl.textContent = mobileVisibleCount + '件表示';
+        updateSwipeIndicator();
     }
 
     // スマホ用フィルター機能
     function mobileFilter() {
         const searchText = (document.getElementById('mobile-search').value || '').toLowerCase();
+        const filterStatus = document.getElementById('mobile-status-filter')?.value || document.getElementById('tab-filter-status')?.value || '';
 
         const cards = document.querySelectorAll('.item-card');
         let visibleCount = 0;
@@ -3186,11 +3266,16 @@
         cards.forEach(card => {
             const name = (card.dataset.name || '').toLowerCase();
             const brand = (card.dataset.brand || '').toLowerCase();
+            const status = card.dataset.status || '';
+            const statusTags = (card.dataset.statusTags || status).split(/\s+/).filter(Boolean);
 
             let show = true;
 
             // テキスト検索（商品名とブランド名）
             if (searchText && !name.includes(searchText) && !brand.includes(searchText)) {
+                show = false;
+            }
+            if (show && filterStatus && !statusMatchesFilter(status, filterStatus, statusTags)) {
                 show = false;
             }
 
@@ -3280,6 +3365,12 @@
             if (!a.dataset.id) return 1;
             if (!b.dataset.id) return -1;
 
+            const aSold = a.dataset.status === 'sold' || (a.dataset.statusTags || '').split(/\s+/).includes('sold') || !!a.dataset.saleDate;
+            const bSold = b.dataset.status === 'sold' || (b.dataset.statusTags || '').split(/\s+/).includes('sold') || !!b.dataset.saleDate;
+            if (aSold !== bSold) {
+                return aSold ? 1 : -1;
+            }
+
             let aVal, bVal;
 
             switch (column) {
@@ -3332,9 +3423,12 @@
         if (!filterStatus) return true;
         if (filterStatus === status) return true;
         if (tags.includes(filterStatus)) return true;
+        if (filterStatus === 'active') return tags.includes('active') || status !== 'sold';
+        if (filterStatus === 'selling') return tags.includes('listed') || status === 'listed';
         if (filterStatus === 'certified') return status === 'listed';
-        if (filterStatus === 'agency') return status === 'agency' || status === 'appraisal_pending';
-        if (filterStatus === 'appraisal_pending') return status === 'appraisal_pending';
+        if (filterStatus === 'agency') return tags.includes('agency') || status === 'agency';
+        if (filterStatus === 'simultaneous') return tags.includes('simultaneous');
+        if (filterStatus === 'appraisal_pending' || filterStatus === 'appraisal') return tags.includes('appraisal_pending') || status === 'appraisal_pending';
         return false;
     }
 
