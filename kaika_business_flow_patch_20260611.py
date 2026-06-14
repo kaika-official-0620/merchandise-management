@@ -454,12 +454,12 @@ def apply(module: Any) -> None:
                 where_parts.append(f"m.user_id = {ph}")
                 params.append(user_id)
             if scope == "kaika":
-                scope_clause = "m.scope = 'admin'"
+                scope_clause = "COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin'"
                 if table_exists(cur, "users"):
-                    scope_clause = f"({scope_clause} OR u.role IN ('admin', 'owner'))"
+                    scope_clause = f"({scope_clause} AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner')))"
                 where_parts.append(scope_clause)
             elif scope == "user":
-                where_parts.append("(m.scope IS NULL OR m.scope <> 'admin')")
+                where_parts.append("(m.user_id IS NOT NULL AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
             where_sql = "WHERE " + " AND ".join(where_parts) if where_parts else ""
             cur.execute(
                 f"""
@@ -1438,6 +1438,53 @@ def apply(module: Any) -> None:
             monthly_fee=monthly_fee,
         )
 
+    def load_sales_agency_items_by_request(request_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        cleaned_ids = []
+        for raw_id in request_ids:
+            try:
+                request_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            if request_id > 0 and request_id not in cleaned_ids:
+                cleaned_ids.append(request_id)
+        if not cleaned_ids:
+            return {}
+        ph = placeholder()
+        marks = ",".join([ph] * len(cleaned_ids))
+        conn, cur = open_cursor()
+        try:
+            if not table_exists(cur, "sales_agency_request_items"):
+                return {}
+            cur.execute(
+                f"""
+                SELECT
+                    sari.request_id,
+                    COALESCE(m.id, sari.merchandise_id) AS id,
+                    sari.merchandise_id AS merchandise_id,
+                    COALESCE(m.product_name, '') AS product_name,
+                    COALESCE(m.brand_name, '') AS brand_name,
+                    COALESCE(m.photo_path, '') AS photo_path,
+                    COALESCE(m.kaika_product_code, '') AS kaika_product_code
+                FROM sales_agency_request_items sari
+                LEFT JOIN merchandise m ON sari.merchandise_id = m.id
+                WHERE sari.request_id IN ({marks})
+                ORDER BY sari.request_id, COALESCE(sari.merchandise_id, m.id) DESC
+                """,
+                tuple(cleaned_ids),
+            )
+            item_map: dict[int, list[dict[str, Any]]] = {}
+            for item in rows_to_dicts(cur.fetchall()):
+                request_id = safe_int(item.get("request_id"))
+                if not request_id:
+                    continue
+                if not item.get("product_name"):
+                    item["product_name"] = f"商品ID {item.get('merchandise_id') or item.get('id') or '-'}"
+                item_map.setdefault(request_id, []).append(item)
+            return item_map
+        finally:
+            cur.close()
+            conn.close()
+
     def admin_documents_dashboard_clean():
         ensure_schema()
         selected_group = (request.args.get("group") or "all").strip()
@@ -1493,18 +1540,11 @@ def apply(module: Any) -> None:
                         request_rows = []
                 except Exception:
                     request_rows = []
-                context_loader = getattr(module, "_load_sales_agency_request_context", None)
+                request_item_map = load_sales_agency_items_by_request([row.get("id") for row in request_rows])
                 for row in request_rows:
-                    if callable(context_loader) and row.get("id"):
-                        try:
-                            detail_row, detail_items = context_loader(row.get("id"))
-                        except Exception:
-                            detail_row, detail_items = None, []
-                        if detail_row:
-                            for key in ("client_name", "user_name", "username", "service_name", "service_type", "status", "created_at"):
-                                if detail_row.get(key) and not row.get(key):
-                                    row[key] = detail_row.get(key)
-                            row["merchandise_items"] = detail_items or row.get("merchandise_items") or []
+                    row_id = safe_int(row.get("id"))
+                    row["client_name"] = row.get("client_name") or row.get("user_name") or row.get("username") or f"ID:{row.get('user_id') or '-'}"
+                    row["merchandise_items"] = request_item_map.get(row_id, row.get("merchandise_items") or [])
                     row["reception_number"] = row.get("reception_number") or reception_number_for(row)
                     row["client_number"] = row.get("client_number") or row.get("user_id") or row.get("client_id") or "-"
                     row["created_date_label"] = (

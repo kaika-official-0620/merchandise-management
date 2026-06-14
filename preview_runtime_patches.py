@@ -318,6 +318,39 @@ def apply(module: Any) -> None:
             return request.form.get(name)
         return fallback
 
+    def generate_next_kaika_product_code(cur=None):
+        now = get_jst_now()
+        prefix = now.strftime("%y%m")
+        owns_cursor = cur is None
+        conn = None
+        if owns_cursor:
+            conn, cur = open_cursor()
+        placeholder = "%s" if DATABASE_URL else "?"
+        try:
+            cur.execute(
+                f"""
+                SELECT m.kaika_product_code
+                FROM merchandise m
+                LEFT JOIN users u ON m.user_id = u.id
+                WHERE m.kaika_product_code LIKE {placeholder}
+                  AND COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin'
+                  AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner'))
+                """,
+                (f"{prefix}-%",),
+            )
+            max_sequence = 0
+            for row in cur.fetchall():
+                code = (row.get("kaika_product_code") if isinstance(row, dict) else row[0]) or ""
+                code = str(code)
+                suffix = code.split("-", 1)[1] if code.startswith(f"{prefix}-") and "-" in code else ""
+                if suffix.isdigit():
+                    max_sequence = max(max_sequence, int(suffix))
+            return f"{prefix}-{max_sequence + 1:03d}"
+        finally:
+            if owns_cursor:
+                cur.close()
+                conn.close()
+
     def money_value(name, fallback=0):
         raw_value = request.form.get(name) if name in request.form else fallback
         if callable(parse_money_value):
@@ -2544,6 +2577,7 @@ def apply(module: Any) -> None:
 
                 id_document_path = save_uploaded_document(request.files.get("id_document"), "id")
                 consent_form_path = save_uploaded_document(request.files.get("consent_form"), "consent")
+                kaika_product_code_value = generate_next_kaika_product_code(cur) if mode == "admin" else None
 
                 columns = [
                     "user_id",
@@ -2585,7 +2619,7 @@ def apply(module: Any) -> None:
                     photo_path,
                     additional_photos_json,
                     request.form.get("product_name"),
-                    form_value("kaika_product_code") or None,
+                    kaika_product_code_value,
                     form_value("brand_name") or None,
                     form_value("model_number") or None,
                     form_value("item_condition") or None,
@@ -2647,6 +2681,7 @@ def apply(module: Any) -> None:
             default_user_id=request.args.get("user_id", ""),
             mode=mode,
             fee_settings=get_fee_settings(),
+            next_kaika_product_code=generate_next_kaika_product_code() if mode == "admin" else "",
         )
 
     sync_shared_master_settings()

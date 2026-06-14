@@ -6251,6 +6251,14 @@ def is_kaika_inventory_item(item_dict):
 
     return get_user_role_by_id(user_id) in ('owner', 'admin')
 
+def is_kaika_inventory_row(item_dict):
+    if not item_dict:
+        return False
+    owner_role = item_dict.get('owner_role') or item_dict.get('role')
+    if item_dict.get('user_id') in (None, ''):
+        return True
+    return owner_role in ('owner', 'admin')
+
 def format_sales_destination(destination, sale_type=''):
     text = (destination or '').strip()
     if text:
@@ -12942,6 +12950,7 @@ def add_item():
         conn = get_db()
         if DATABASE_URL:
             cur = conn.cursor()
+            kaika_product_code_value = generate_next_kaika_product_code(cur)
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name,
                     supplier_detail, id_document_path, consent_form_path,
@@ -12955,7 +12964,7 @@ def add_item():
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
-                request.form.get('kaika_product_code'),
+                kaika_product_code_value,
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -12986,6 +12995,7 @@ def add_item():
             ))
         else:
             cur = conn.cursor()
+            kaika_product_code_value = generate_next_kaika_product_code(cur)
             cur.execute('''
                 INSERT INTO merchandise (user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name, model_number, item_condition, store_name,
                     supplier_detail, id_document_path, consent_form_path,
@@ -12999,7 +13009,7 @@ def add_item():
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
-                request.form.get('kaika_product_code'),
+                kaika_product_code_value,
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -13034,7 +13044,13 @@ def add_item():
         flash('商品を登録しました', 'success')
         return redirect(url_for('index'))
     
-    return render_template('form.html', item=None, fee_settings=get_fee_settings(), is_kaika_scope=True)
+    return render_template(
+        'form.html',
+        item=None,
+        fee_settings=get_fee_settings(),
+        is_kaika_scope=True,
+        next_kaika_product_code=generate_next_kaika_product_code()
+    )
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -24075,8 +24091,9 @@ def admin_items():
             items = []
             for item in items_raw:
                 item_dict = dict(item)
+                owner_info = user_map.get(item_dict.get('user_id'))
                 creator_info = user_map.get(item_dict.get('created_by'))
-                user_info = creator_info or user_map.get(item_dict.get('user_id'))
+                user_info = owner_info or creator_info
                 if not user_info:
                     user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
@@ -24099,7 +24116,7 @@ def admin_items():
                     except:
                         pass
                 
-                if item_dict.get('scope') == 'admin' or ((item_dict.get('scope') is None or item_dict.get('scope') == '') and is_kaika_inventory_item(item_dict)):
+                if is_kaika_inventory_row(item_dict) and (item_dict.get('scope') in (None, '', 'admin')):
                     items.append(item_dict)
         else:
             conn.row_factory = sqlite3.Row
@@ -24137,8 +24154,9 @@ def admin_items():
             items = []
             for item in items_raw:
                 item_dict = dict(item)
+                owner_info = user_map.get(item_dict.get('user_id'))
                 creator_info = user_map.get(item_dict.get('created_by'))
-                user_info = creator_info or user_map.get(item_dict.get('user_id'))
+                user_info = owner_info or creator_info
                 if not user_info:
                     user_info = user_map.get(item_dict.get('updated_by'))
                 if user_info:
@@ -24161,7 +24179,7 @@ def admin_items():
                     except:
                         pass
                 
-                if item_dict.get('scope') == 'admin' or ((item_dict.get('scope') is None or item_dict.get('scope') == '') and is_kaika_inventory_item(item_dict)):
+                if is_kaika_inventory_row(item_dict) and (item_dict.get('scope') in (None, '', 'admin')):
                     items.append(item_dict)
         
         cur.close()
@@ -24598,6 +24616,41 @@ def admin_user_products():
         show_long_term_overview=show_long_term_overview,
     )
 
+def generate_next_kaika_product_code(cur=None):
+    now = get_jst_now()
+    prefix = now.strftime('%y%m')
+    owns_cursor = cur is None
+    conn = None
+    if owns_cursor:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+    placeholder = '%s' if DATABASE_URL else '?'
+    try:
+        cur.execute(f"""
+            SELECT m.kaika_product_code
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.kaika_product_code LIKE {placeholder}
+              AND COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin'
+              AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner'))
+        """, (f"{prefix}-%",))
+        max_sequence = 0
+        for row in cur.fetchall():
+            code = (row.get('kaika_product_code') if isinstance(row, dict) else row[0]) or ''
+            code = str(code)
+            suffix = code.split('-', 1)[1] if code.startswith(f"{prefix}-") and '-' in code else ''
+            if suffix.isdigit():
+                max_sequence = max(max_sequence, int(suffix))
+        return f"{prefix}-{max_sequence + 1:03d}"
+    finally:
+        if owns_cursor:
+            cur.close()
+            conn.close()
+
 @app.route('/admin/items/add', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -24716,6 +24769,7 @@ def admin_add_item():
         else:
             commission_value = parse_money_value(request.form.get('commission'), 0)
         target_scope = 'user' if form_mode == 'user' else 'admin'
+        kaika_product_code_value = generate_next_kaika_product_code(cur) if form_mode == 'admin' else None
         
         try:
             cur.execute(f'''
@@ -24733,7 +24787,7 @@ def admin_add_item():
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
-                request.form.get('kaika_product_code'),
+                kaika_product_code_value,
                 request.form.get('brand_name'),
                 request.form.get('model_number'),
                 request.form.get('item_condition'),
@@ -24798,7 +24852,15 @@ def admin_add_item():
     # URLパラメータからデフォルトのユーザーIDを取得
     default_user_id = request.args.get('user_id', '')
     
-    return render_template('admin/item_form.html', item=None, users=users, default_user_id=default_user_id, mode=mode, fee_settings=get_fee_settings())
+    return render_template(
+        'admin/item_form.html',
+        item=None,
+        users=users,
+        default_user_id=default_user_id,
+        mode=mode,
+        fee_settings=get_fee_settings(),
+        next_kaika_product_code=generate_next_kaika_product_code() if mode == 'admin' else ''
+    )
 
 @app.route('/admin/items/<int:id>/transfer', methods=['POST'])
 @login_required
@@ -28267,9 +28329,9 @@ def api_get_all_products():
             params.append(user_id)
 
         if scope == 'kaika':
-            where_conditions.append("(m.scope = 'admin' OR u.role IN ('admin', 'owner'))")
+            where_conditions.append("(COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin' AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner')))")
         elif scope == 'user':
-            where_conditions.append("(COALESCE(m.scope, '') <> 'admin' AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
+            where_conditions.append("(m.user_id IS NOT NULL AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
         
         if sold_only == '1':
             where_conditions.append("m.sale_date IS NOT NULL")
@@ -28291,7 +28353,8 @@ def api_get_all_products():
         
         if params:
             cur.execute(f"""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                SELECT m.id, m.product_name, m.brand_name, m.kaika_product_code, m.photo_path,
+                       m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
                        m.user_id,
@@ -28303,7 +28366,8 @@ def api_get_all_products():
             """, params)
         else:
             cur.execute(f"""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                SELECT m.id, m.product_name, m.brand_name, m.kaika_product_code, m.photo_path,
+                       m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
                        m.user_id,
@@ -28325,9 +28389,9 @@ def api_get_all_products():
             params.append(user_id)
 
         if scope == 'kaika':
-            where_conditions.append("(m.scope = 'admin' OR u.role IN ('admin', 'owner'))")
+            where_conditions.append("(COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin' AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner')))")
         elif scope == 'user':
-            where_conditions.append("(COALESCE(m.scope, '') <> 'admin' AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
+            where_conditions.append("(m.user_id IS NOT NULL AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))")
         
         if sold_only == '1':
             where_conditions.append("m.sale_date IS NOT NULL")
@@ -28349,7 +28413,8 @@ def api_get_all_products():
         
         if params:
             cur.execute(f"""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                SELECT m.id, m.product_name, m.brand_name, m.kaika_product_code, m.photo_path,
+                       m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
                        m.user_id,
@@ -28361,7 +28426,8 @@ def api_get_all_products():
             """, params)
         else:
             cur.execute(f"""
-                SELECT m.id, m.product_name, m.brand_name, m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
+                SELECT m.id, m.product_name, m.brand_name, m.kaika_product_code, m.photo_path,
+                       m.purchase_price, m.listing_price, m.sale_price, m.sale_date, m.is_shipped,
                        m.purchase_date, m.item_condition, m.commission, m.shipping_cost, m.sales_destination,
                        m.id_document_path, m.consent_form_path,
                        m.user_id,
@@ -40739,6 +40805,46 @@ def _update_sales_agency_request_link(request_id, assignments):
         conn.close()
 
 
+def _find_invalid_document_merchandise_ids(merchandise_ids, document_scope, target_user_id=None):
+    cleaned_ids = []
+    for raw_id in merchandise_ids or []:
+        try:
+            item_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if item_id > 0 and item_id not in cleaned_ids:
+            cleaned_ids.append(item_id)
+    if not cleaned_ids:
+        return []
+
+    conn, cur = _docs_open_cursor()
+    try:
+        marks = ", ".join([_docs_mark()] * len(cleaned_ids))
+        params = list(cleaned_ids)
+        if document_scope in {"kaika_vendor_outgoing", "kaika_estimate", "kaika_shoudaku"}:
+            scope_clause = "(COALESCE(NULLIF(m.scope, ''), 'admin') = 'admin' AND (m.user_id IS NULL OR COALESCE(u.role, '') IN ('admin', 'owner')))"
+        else:
+            scope_clause = "(m.user_id IS NOT NULL AND COALESCE(u.role, 'user') NOT IN ('admin', 'owner'))"
+            if target_user_id:
+                scope_clause += f" AND m.user_id = {_docs_mark()}"
+                params.append(target_user_id)
+        cur.execute(
+            f"""
+            SELECT m.id
+            FROM merchandise m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.id IN ({marks})
+              AND {scope_clause}
+            """,
+            tuple(params),
+        )
+        valid_ids = {int((_docs_row_to_dict(row) or {}).get("id")) for row in cur.fetchall()}
+        return [item_id for item_id in cleaned_ids if item_id not in valid_ids]
+    finally:
+        cur.close()
+        conn.close()
+
+
 @login_required
 @admin_required
 def admin_documents_dashboard_preview():
@@ -41105,6 +41211,14 @@ def admin_mitsumori_add_from_documents():
             )
         if not items_data:
             flash("商品を1件以上入力してください。", "error")
+            return redirect(request.url)
+        invalid_merchandise_ids = _find_invalid_document_merchandise_ids(
+            [item.get("merchandise_id") for item in items_data],
+            document_scope,
+            target_user_id,
+        )
+        if invalid_merchandise_ids:
+            flash("選択商品の所属が書類種別と一致しません。商品一覧を再選択してください。", "error")
             return redirect(request.url)
         conn, cur = _docs_open_cursor()
         try:

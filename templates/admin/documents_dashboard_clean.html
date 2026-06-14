@@ -10,7 +10,7 @@
 .stage-card:hover,.quick-card:hover{border-color:#93c5fd;box-shadow:0 14px 28px rgba(37,99,235,.12)}
 .stage-card-head{display:flex;gap:.7rem;align-items:center}.stage-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
 .doc-actions{display:flex;gap:.65rem;flex-wrap:wrap}.doc-table-wrap{overflow-x:auto}.doc-table{width:100%;border-collapse:collapse;min-width:900px}.doc-table th,.doc-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.doc-table th{background:#f8fafc;color:#475569;font-size:.84rem}
-.doc-table tr[data-detail-url]{cursor:pointer}.doc-table tr[data-detail-url]:hover td{background:#f8fbff}
+.doc-table tr[data-detail-url]{cursor:pointer}.doc-table tr[data-detail-url]:hover td,.doc-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
 .doc-mini-link{color:#2563eb;text-decoration:none;font-weight:700}.doc-mini-link:hover{text-decoration:underline}
 .doc-note{margin:.45rem 0 0;color:#64748b;font-size:.88rem;line-height:1.7}
 .doc-item-cell{display:grid;grid-template-columns:52px minmax(0,1fr);gap:.55rem;align-items:center}
@@ -86,10 +86,8 @@
       <div class="doc-actions">
         <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">ステップ一覧へ戻る</a>
         {% if selected_group == 'vendor_outgoing' %}
-        <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
         <a href="{{ url_for('admin_mitsumori_add') }}" class="btn btn-primary">業者向け見積依頼書を作成</a>
         {% elif selected_group == 'vendor_incoming' %}
-        <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
         <a href="{{ url_for('admin_vendor_documents') }}" class="btn btn-primary">業者書類を登録</a>
         {% elif selected_group == 'client_outgoing' %}
         <a href="{{ url_for('admin_kaitori_add') }}" class="btn btn-primary">買取明細書を作成</a>
@@ -106,7 +104,7 @@
         <thead><tr><th>登録日</th><th>流し先業者</th><th>関連クライアント</th><th>対象商品</th><th>書類</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for doc in vendor_documents %}
-          <tr data-detail-url="{{ doc.download_url }}">
+          <tr data-detail-url="{{ doc.download_url }}" tabindex="0" role="link">
             <td>{{ doc.registered_label }}</td>
             <td>{{ doc.vendor_display_name or '-' }}</td>
             <td>{{ doc.client_name or '-' }}</td>
@@ -132,7 +130,7 @@
         <thead><tr><th>書類種別</th><th>No.</th><th>クライアント</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in client_outgoing_rows %}
-          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
+          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
             <td>{{ row.document_type }}</td><td>{{ row.document_no }}</td><td>{{ row.client_name }}</td><td>{{ row.issue_date }}</td>
             <td>¥{{ "{:,}".format(row.total_amount or 0) }}</td><td>{{ row.status_label }}</td>
             <td>{% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}</td>
@@ -151,7 +149,7 @@
         <thead><tr><th>受付番号</th><th>受付日</th><th>ユーザーID</th><th>クライアント</th><th>申請内容</th><th>対象商品</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
         {% for row in request_rows %}
-          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}"{% endif %}>
+          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
             <td>{{ row.reception_number or row.id or '-' }}</td>
             <td>{{ row.created_date_label or '-' }}</td>
             <td>{{ row.client_number or row.user_id or '-' }}</td>
@@ -180,13 +178,4 @@
   {% endif %}
   {% endif %}
 </div>
-<script>
-document.querySelectorAll('.doc-table tr[data-detail-url]').forEach(function(row){
-  row.addEventListener('click', function(event){
-    if (event.target.closest('a, button, input, select, textarea, form, label')) return;
-    const url = row.dataset.detailUrl;
-    if (url) window.location.href = url;
-  });
-});
-</script>
 {% endblock %}

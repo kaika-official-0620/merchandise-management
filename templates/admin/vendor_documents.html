@@ -19,7 +19,7 @@
 .vendor-table th,.vendor-table td{padding:.75rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .vendor-table th{background:#f8fafc;color:#475569;font-size:.84rem}
 .vendor-table tr[data-detail-url]{cursor:pointer}
-.vendor-table tr[data-detail-url]:hover td{background:#f8fbff}
+.vendor-table tr[data-detail-url]:hover td,.vendor-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
 .status-chip{display:inline-flex;border-radius:999px;padding:.28rem .65rem;background:#e0f2fe;color:#0369a1;font-weight:800;font-size:.78rem;white-space:nowrap}
 .vendor-help{margin:.45rem 0 0;color:#64748b;font-size:.85rem;line-height:1.65}
 .empty-box{border:1px dashed #cbd5e1;border-radius:12px;padding:1.4rem;text-align:center;color:#64748b;background:#f8fafc}
@@ -155,7 +155,7 @@
         </thead>
         <tbody>
           {% for doc in documents %}
-          <tr data-detail-url="{{ doc.download_url }}">
+          <tr data-detail-url="{{ doc.download_url }}" tabindex="0" role="link">
             <td>{{ doc.registered_label }}</td>
             <td>{{ doc.vendor_display_name or '-' }}</td>
             {% if not is_kaika_scope %}
@@ -196,13 +196,4 @@
     {% endif %}
   </section>
 </div>
-<script>
-document.querySelectorAll('.vendor-table tr[data-detail-url]').forEach(function(row){
-  row.addEventListener('click', function(event){
-    if (event.target.closest('a, button, input, select, textarea, form, label')) return;
-    const url = row.dataset.detailUrl;
-    if (url) window.location.href = url;
-  });
-});
-</script>
 {% endblock %}

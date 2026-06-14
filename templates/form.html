@@ -474,10 +474,14 @@ input:disabled, select:disabled, textarea:disabled {
             </div>
             
             <div class="form-group">
-                <label for="kaika_product_code">開花商品番号</label>
-                <input type="text" id="kaika_product_code" name="kaika_product_code" 
-                       value="{{ item.kaika_product_code if item else '' }}" placeholder="開花独自の管理番号"
-                       {% if basic_readonly %}disabled{% endif %}>
+                <label for="kaika_product_code">開花管理番号</label>
+                <input type="text" id="kaika_product_code" name="kaika_product_code"
+                       value="{{ item.kaika_product_code if item else next_kaika_product_code|default('', true) }}"
+                       placeholder="年月+連番で自動採番"
+                       {% if basic_readonly or not item %}readonly{% endif %}>
+                {% if not item %}
+                <small class="form-help">登録時に年月+連番（例: 2606-001）で自動採番します。</small>
+                {% endif %}
             </div>
             
             <div class="form-group">

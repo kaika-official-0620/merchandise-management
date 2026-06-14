@@ -2403,6 +2403,33 @@
             window.setInterval(refreshAnnouncements, 60000);
         })();
     </script>
+    <script>
+        document.addEventListener('click', function (event) {
+            const target = event.target.closest('[data-detail-url]');
+            if (!target || event.target.closest('a, button, input, select, textarea, form, label')) {
+                return;
+            }
+            const url = target.dataset.detailUrl;
+            if (url) {
+                window.location.assign(url);
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (!['Enter', ' '].includes(event.key)) {
+                return;
+            }
+            const target = event.target.closest('[data-detail-url]');
+            if (!target || event.target.closest('a, button, input, select, textarea, form, label')) {
+                return;
+            }
+            const url = target.dataset.detailUrl;
+            if (url) {
+                event.preventDefault();
+                window.location.assign(url);
+            }
+        });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

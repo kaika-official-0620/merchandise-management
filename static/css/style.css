@@ -950,6 +950,8 @@ body.sidebar-open {
     border-radius: var(--radius);
     border: 1px solid var(--border);
     margin-bottom: 1.5rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .form-section h2 {
@@ -972,6 +974,26 @@ body.sidebar-open {
     margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.table-responsive {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.items-table,
+.preview-items-table {
+    max-width: 100%;
+}
+
+.document-preview-panel,
+.document-preview-dialog,
+.preview-sheet {
+    max-width: 100%;
+    min-width: 0;
 }
 
 .result-field .calculated-value {

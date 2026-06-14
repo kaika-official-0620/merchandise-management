@@ -120,6 +120,7 @@
             {% if not has_source_request %}
             {% if is_kaika_scope %}
             <span class="source-filter-note">開花商品一覧の商品だけ選択できます。</span>
+            <input type="search" id="product-search-name" class="form-control product-filter-select" placeholder="商品名・管理番号・ブランド">
             {% else %}
             <input type="search" id="product-search-client" class="form-control product-filter-select" placeholder="クライアント名">
             <input type="search" id="product-search-user-id" class="form-control product-filter-select" placeholder="ユーザーID">
@@ -297,7 +298,8 @@
 
 <style>
 .mitsumori-form {
-    max-width: 1080px;
+    width: min(1280px, 100%);
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -386,7 +388,8 @@
 }
 
 .product-filter-select {
-    max-width: 180px;
+    flex: 1 1 180px;
+    max-width: 260px;
 }
 
 .product-select-box {
@@ -405,10 +408,24 @@
     margin-bottom: 10px;
     color: #475569;
     font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.product-select-meta img {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
 }
 
 .items-table {
     width: 100%;
+    min-width: 760px;
     border-collapse: collapse;
 }
 
@@ -483,7 +500,7 @@
     position: relative;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    width: min(1040px, calc(100vw - 32px));
+    width: min(1120px, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     margin: 16px auto;
     overflow: hidden;
@@ -939,12 +956,15 @@ function getExistingMerchandiseIds() {
 }
 
 function setProductMeta(option) {
+    productSelectMeta.innerHTML = '';
     if (!option || !option.value) {
-        productSelectMeta.textContent = '';
         return;
     }
 
     const pieces = [];
+    if (option.dataset.kaikaProductCode) {
+        pieces.push(`管理番号: ${option.dataset.kaikaProductCode}`);
+    }
     if (option.dataset.brandName) {
         pieces.push(`ブランド: ${option.dataset.brandName}`);
     }
@@ -954,7 +974,15 @@ function setProductMeta(option) {
     if (option.dataset.appraisalStatusLabel) {
         pieces.push(`状態: ${option.dataset.appraisalStatusLabel}`);
     }
-    productSelectMeta.textContent = pieces.join(' / ');
+    if (option.dataset.photoUrl) {
+        const image = document.createElement('img');
+        image.src = option.dataset.photoUrl;
+        image.alt = '';
+        productSelectMeta.appendChild(image);
+    }
+    const text = document.createElement('span');
+    text.textContent = pieces.join(' / ');
+    productSelectMeta.appendChild(text);
 }
 
 function normalizeSearchText(value) {
@@ -963,16 +991,15 @@ function normalizeSearchText(value) {
 
 function filterProductOptions(products) {
     if (hasSourceRequest) return products;
-    if (isKaikaScope) return products;
     const clientQuery = normalizeSearchText(productSearchClient?.value);
     const userIdQuery = normalizeSearchText(productSearchUserId?.value);
     const nameQuery = normalizeSearchText(productSearchName?.value);
     return products.filter((product) => {
         const clientName = normalizeSearchText(product.user_name || product.owner_name || '');
         const userId = normalizeSearchText(product.user_id || '');
-        const productName = normalizeSearchText(`${product.product_name || ''} ${product.brand_name || ''}`);
-        if (clientQuery && !clientName.includes(clientQuery)) return false;
-        if (userIdQuery && !userId.includes(userIdQuery)) return false;
+        const productName = normalizeSearchText(`${product.product_name || ''} ${product.brand_name || ''} ${product.kaika_product_code || ''}`);
+        if (!isKaikaScope && clientQuery && !clientName.includes(clientQuery)) return false;
+        if (!isKaikaScope && userIdQuery && !userId.includes(userIdQuery)) return false;
         if (nameQuery && !productName.includes(nameQuery)) return false;
         return true;
     });
@@ -984,19 +1011,31 @@ function setProductOptions(products) {
     productSelect.innerHTML = '<option value="">-- 商品を選択 --</option>';
     filterProductOptions(products).forEach((product) => {
         const option = document.createElement('option');
+        const code = product.kaika_product_code || '';
+        const labelParts = [product.product_name || `商品ID ${product.id}`];
+        if (product.brand_name) labelParts.push(product.brand_name);
+        if (code) labelParts.push(`管理番号 ${code}`);
         option.value = product.id;
-        option.textContent = product.brand_name
-            ? `${product.product_name || '商品'} / ${product.brand_name}`
-            : (product.product_name || `商品ID ${product.id}`);
+        option.textContent = labelParts.join(' / ');
         option.dataset.productName = product.product_name || '';
         option.dataset.brandName = product.brand_name || '';
+        option.dataset.kaikaProductCode = code;
         option.dataset.unitPrice = product.purchase_price || product.listing_price || 0;
         option.dataset.appraisalStatusLabel = product.appraisal_status_label || '';
         option.dataset.userName = product.user_name || '';
         option.dataset.userId = product.user_id || '';
+        option.dataset.photoUrl = resolveProductPhotoUrl(product.photo_path || '');
         productSelect.appendChild(option);
     });
     setProductMeta(productSelect.options[productSelect.selectedIndex]);
+}
+
+function resolveProductPhotoUrl(path) {
+    const value = String(path || '').replace(/\\/g, '/').trim();
+    if (!value) return '';
+    if (/^https?:\/\//.test(value)) return value;
+    const normalized = value.replace(/^\/+/, '').replace(/^static\//, '');
+    return `/static/${normalized}`;
 }
 
 async function loadProducts() {

@@ -22,8 +22,6 @@
     'admin_vendor_documents',
     'admin_vendor_document_download',
     'admin_vendor_document_delete',
-    'admin_vendors',
-    'admin_vendor_edit',
     'admin_monthly_fee_settings',
     'admin_monthly_settlements',
     'admin_monthly_settlement_create',
@@ -58,8 +56,6 @@
     'admin_vendor_documents',
     'admin_vendor_document_download',
     'admin_vendor_document_delete',
-    'admin_vendors',
-    'admin_vendor_edit',
     'admin_monthly_fee_settings',
     'admin_monthly_settlements',
     'admin_monthly_settlement_create',
@@ -110,6 +106,8 @@
 {% set settings_endpoints = [
     'admin_master_settings',
     'user_master_settings',
+    'admin_vendors',
+    'admin_vendor_edit',
     'admin_announcements',
     'admin_stripe_dashboard',
     'admin_backup'
@@ -268,6 +266,7 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">共通設定</div>
             <a href="{{ url_for('admin_master_settings') }}" class="{% if request.endpoint in ['admin_master_settings', 'user_master_settings'] %}active{% endif %}">マスター設定</a>
+            <a href="{{ url_for('admin_vendors') }}" class="{% if request.endpoint in ['admin_vendors', 'admin_vendor_edit'] %}active{% endif %}">業者マスター</a>
             <a href="{{ url_for('admin_announcements') }}" class="{% if request.endpoint == 'admin_announcements' %}active{% endif %}">お知らせ</a>
             {% if current_user.is_owner() %}
             <a href="{{ url_for('admin_line_dashboard_v2') }}" class="{% if 'line' in request.endpoint %}active{% endif %}">LINE連携</a>

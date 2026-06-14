@@ -270,10 +270,15 @@
                 <small class="form-help">登録後は管理画面と商品詳細から確認できます。</small>
             </div>
 
+            {% if mode == 'user' %}
+            <input type="hidden" id="kaika_product_code" name="kaika_product_code" value="">
+            {% else %}
             <div class="form-group">
-                <label for="kaika_product_code">開花商品番号</label>
-                <input type="text" id="kaika_product_code" name="kaika_product_code" placeholder="開花独自の管理番号">
+                <label for="kaika_product_code">開花管理番号</label>
+                <input type="text" id="kaika_product_code" name="kaika_product_code" value="{{ next_kaika_product_code|default('', true) }}" readonly class="readonly" placeholder="自動採番">
+                <small class="form-help">登録時に年月+連番（例: 2606-001）で自動採番します。</small>
             </div>
+            {% endif %}
             
             <div class="form-group">
                 <label for="brand_name">ブランド名</label>

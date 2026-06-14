@@ -18,6 +18,8 @@
 .vendor-table{width:100%;border-collapse:collapse;min-width:760px}
 .vendor-table th,.vendor-table td{padding:.7rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .vendor-table th{background:#f8fafc;color:#475569;font-size:.82rem}
+.vendor-table tr[data-detail-url]{cursor:pointer}
+.vendor-table tr[data-detail-url]:hover td,.vendor-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
 .empty-box{border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;padding:1.2rem;text-align:center}
 @media(max-width:768px){.vendors-panel{padding:.9rem}.vendor-form{grid-template-columns:1fr}.vendor-actions .btn{width:100%;justify-content:center}.vendor-table{min-width:680px}}
 </style>
@@ -76,7 +78,7 @@
         <thead><tr><th>業者名</th><th>担当者</th><th>電話</th><th>メール</th><th>住所</th><th>操作</th></tr></thead>
         <tbody>
         {% for vendor in vendors %}
-          <tr data-detail-url="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}">
+          <tr data-detail-url="{{ url_for('admin_vendor_edit', vendor_id=vendor.id) }}" tabindex="0" role="link">
             <td><strong>{{ vendor.name }}</strong></td>
             <td>{{ vendor.contact_name or '-' }}</td>
             <td>{{ vendor.phone or '-' }}</td>

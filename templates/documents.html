@@ -27,7 +27,7 @@
     <div class="doc-cards">
         {% for inv in invoices %}
         {% set status = inv.status or 'sent' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_invoice_view', id=inv.id) }}">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_invoice_view', id=inv.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ inv.invoice_no }}</span>
                 <span class="status-badge status-{{ status }}">
@@ -75,7 +75,7 @@
     <div class="doc-cards">
         {% for doc in user_mitsumori_list %}
         {% set status = doc.status or 'completed' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_mitsumori_view', id=doc.id) }}">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_mitsumori_view', id=doc.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
@@ -123,7 +123,7 @@
     <div class="doc-cards">
         {% for doc in user_kaitori_shoudaku_list %}
         {% set status = doc.status or 'completed' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
@@ -163,7 +163,7 @@
     <div class="doc-cards">
         {% for doc in shikiriosho_list %}
         {% set status = doc.status or 'sent' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_shikiriosho_view', id=doc.id) }}">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_shikiriosho_view', id=doc.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-sent">送付済み</span>
@@ -196,7 +196,7 @@
     <div class="doc-cards">
         {% for doc in user_keisan_list %}
         {% set status = doc.status or 'sent' %}
-        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_keisan_view', id=doc.id) }}">
+        <article class="doc-card status-{{ status }}" data-detail-url="{{ url_for('user_keisan_view', id=doc.id) }}" tabindex="0" role="link">
             <div class="card-header">
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
@@ -317,6 +317,16 @@
     border-radius: 16px;
     background: #ffffff;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.doc-card:hover,
+.doc-card:focus-visible {
+    border-color: #93c5fd;
+    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
+    outline: none;
+    transform: translateY(-1px);
 }
 
 .doc-card.status-completed,
