@@ -15325,6 +15325,11 @@ def delete_user(id):
         cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = %s", (id,))
         cur.execute("DELETE FROM service_documents WHERE user_id = %s", (id,))
         cur.execute("""
+            DELETE FROM invoice_items
+            WHERE invoice_id IN (SELECT id FROM invoices WHERE sender_id = %s)
+        """, (id,))
+        cur.execute("DELETE FROM invoices WHERE sender_id = %s", (id,))
+        cur.execute("""
             DELETE FROM user_mitsumori_items
             WHERE mitsumori_id IN (SELECT id FROM user_mitsumori WHERE user_id = %s)
                OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
@@ -15390,6 +15395,11 @@ def delete_user(id):
         cur.execute("DELETE FROM proxy_service_users WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM service_documents WHERE user_id = ?", (id,))
+        cur.execute("""
+            DELETE FROM invoice_items
+            WHERE invoice_id IN (SELECT id FROM invoices WHERE sender_id = ?)
+        """, (id,))
+        cur.execute("DELETE FROM invoices WHERE sender_id = ?", (id,))
         cur.execute("""
             DELETE FROM user_mitsumori_items
             WHERE mitsumori_id IN (SELECT id FROM user_mitsumori WHERE user_id = ?)
