@@ -32559,10 +32559,22 @@ def process_disposal_request(request_id):
             flash('申請が見つかりません', 'error')
             return redirect(redirect_target)
         
-        normalized_action = normalize_long_term_request_action(
-            request_info.get('disposal_type'),
-            action,
-            sale_date=request_info.get('sale_date')
+        direct_long_term_actions = {
+            'auction_listing',
+            'auction_sold',
+            'shipping_preparing',
+            'shipping_sent',
+            'liquidation_processing',
+            'liquidation_completed',
+        }
+        normalized_action = (
+            action
+            if action in direct_long_term_actions
+            else normalize_long_term_request_action(
+                request_info.get('disposal_type'),
+                action,
+                sale_date=request_info.get('sale_date')
+            )
         )
         current_status = resolve_long_term_request_status(
             request_info.get('disposal_type'),
@@ -32596,7 +32608,12 @@ def process_disposal_request(request_id):
             flash('現在の状態では差し戻しできません', 'error')
             return redirect(redirect_target)
 
-        if normalized_action != 'rejected' and allowed_actions and normalized_action not in allowed_actions:
+        if (
+            normalized_action != 'rejected'
+            and allowed_actions
+            and normalized_action not in allowed_actions
+            and action not in direct_long_term_actions
+        ):
             flash('現在の状態ではその操作はできません', 'error')
             return redirect(redirect_target)
         if DATABASE_URL:
