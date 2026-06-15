@@ -32616,18 +32616,25 @@ def process_disposal_request(request_id):
         ):
             flash('現在の状態ではその操作はできません', 'error')
             return redirect(redirect_target)
+        stored_status = normalized_action
+        if request_info.get('disposal_type') == 'liquidation':
+            if normalized_action == 'liquidation_processing':
+                stored_status = 'processing'
+            elif normalized_action == 'liquidation_completed':
+                stored_status = 'completed'
+
         if DATABASE_URL:
             cur.execute("""
                 UPDATE item_disposal_requests 
                 SET status = %s, admin_note = %s, processed_at = CURRENT_TIMESTAMP, processed_by = %s
                 WHERE id = %s
-            """, (normalized_action, admin_note, current_user.id, request_id))
+            """, (stored_status, admin_note, current_user.id, request_id))
         else:
             cur.execute("""
                 UPDATE item_disposal_requests 
                 SET status = ?, admin_note = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?
                 WHERE id = ?
-            """, (normalized_action, admin_note, current_user.id, request_id))
+            """, (stored_status, admin_note, current_user.id, request_id))
         
         merchandise_id = request_info.get('merchandise_id')
         if normalized_action in LONG_TERM_FINAL_STATUSES - {'closed'}:
