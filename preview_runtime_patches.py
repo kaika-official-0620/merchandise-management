@@ -1142,6 +1142,57 @@ def apply(module: Any) -> None:
                 if table_exists(table_name):
                     cur.execute(sql, params)
 
+            def sale_request_image_paths(row):
+                if isinstance(row, dict):
+                    qr_image_path = row.get("qr_image_path")
+                    qr_image_path2 = row.get("qr_image_path2")
+                    additional_image_paths = row.get("additional_image_paths")
+                else:
+                    qr_image_path = row[0] if len(row) > 0 else None
+                    qr_image_path2 = row[1] if len(row) > 1 else None
+                    additional_image_paths = row[2] if len(row) > 2 else None
+                paths = [qr_image_path, qr_image_path2]
+                if additional_image_paths:
+                    try:
+                        parsed_paths = json.loads(additional_image_paths) if isinstance(additional_image_paths, str) else additional_image_paths
+                    except (TypeError, ValueError):
+                        parsed_paths = []
+                    if isinstance(parsed_paths, list):
+                        paths.extend(parsed_paths)
+                return [path for path in paths if path]
+
+            def delete_static_upload_file(relative_path):
+                if not relative_path:
+                    return
+                normalized_path = str(relative_path).replace("\\", "/").lstrip("/")
+                if not normalized_path.startswith("uploads/"):
+                    return
+                static_upload_root = os.path.abspath(app.static_folder)
+                file_path = os.path.abspath(os.path.join(static_upload_root, normalized_path))
+                try:
+                    if os.path.commonpath([static_upload_root, file_path]) != static_upload_root:
+                        return
+                except ValueError:
+                    return
+                try:
+                    os.remove(file_path)
+                except FileNotFoundError:
+                    pass
+
+            if table_exists("sale_requests"):
+                cur.execute(
+                    f"""
+                    SELECT qr_image_path, qr_image_path2, additional_image_paths
+                    FROM sale_requests
+                    WHERE user_id = {placeholder}
+                       OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                    """,
+                    (id, id),
+                )
+                for sale_request_row in cur.fetchall():
+                    for upload_path in sale_request_image_paths(sale_request_row):
+                        delete_static_upload_file(upload_path)
+
             if table_exists("client_monthly_fee_settings"):
                 cur.execute(f"DELETE FROM client_monthly_fee_settings WHERE user_id = {placeholder}", (id,))
             run_if_table(

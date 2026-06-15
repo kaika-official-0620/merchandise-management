@@ -6048,26 +6048,70 @@ def delete_static_upload_file(relative_path):
 def cleanup_sale_request_uploads_for_item(cur, item_id):
     if DATABASE_URL:
         cur.execute(
-            "SELECT qr_image_path, qr_image_path2 FROM sale_requests WHERE merchandise_id = %s",
+            "SELECT qr_image_path, qr_image_path2, additional_image_paths FROM sale_requests WHERE merchandise_id = %s",
             (item_id,),
         )
     else:
         cur.execute(
-            "SELECT qr_image_path, qr_image_path2 FROM sale_requests WHERE merchandise_id = ?",
+            "SELECT qr_image_path, qr_image_path2, additional_image_paths FROM sale_requests WHERE merchandise_id = ?",
             (item_id,),
         )
     for row in cur.fetchall():
         if isinstance(row, dict):
             qr_image_path = row.get('qr_image_path')
             qr_image_path2 = row.get('qr_image_path2')
+            additional_image_paths = row.get('additional_image_paths')
         elif hasattr(row, 'keys'):
             qr_image_path = row['qr_image_path']
             qr_image_path2 = row['qr_image_path2']
+            additional_image_paths = row['additional_image_paths']
         else:
             qr_image_path = row[0] if len(row) > 0 else None
             qr_image_path2 = row[1] if len(row) > 1 else None
+            additional_image_paths = row[2] if len(row) > 2 else None
         delete_static_upload_file(qr_image_path)
         delete_static_upload_file(qr_image_path2)
+        for additional_path in parse_sale_request_additional_images(additional_image_paths):
+            delete_static_upload_file(additional_path)
+
+def cleanup_sale_request_uploads_for_user(cur, user_id):
+    if DATABASE_URL:
+        cur.execute(
+            """
+            SELECT qr_image_path, qr_image_path2, additional_image_paths
+            FROM sale_requests
+            WHERE user_id = %s
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+            """,
+            (user_id, user_id),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT qr_image_path, qr_image_path2, additional_image_paths
+            FROM sale_requests
+            WHERE user_id = ?
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+            """,
+            (user_id, user_id),
+        )
+    for row in cur.fetchall():
+        if isinstance(row, dict):
+            qr_image_path = row.get('qr_image_path')
+            qr_image_path2 = row.get('qr_image_path2')
+            additional_image_paths = row.get('additional_image_paths')
+        elif hasattr(row, 'keys'):
+            qr_image_path = row['qr_image_path']
+            qr_image_path2 = row['qr_image_path2']
+            additional_image_paths = row['additional_image_paths']
+        else:
+            qr_image_path = row[0] if len(row) > 0 else None
+            qr_image_path2 = row[1] if len(row) > 1 else None
+            additional_image_paths = row[2] if len(row) > 2 else None
+        delete_static_upload_file(qr_image_path)
+        delete_static_upload_file(qr_image_path2)
+        for additional_path in parse_sale_request_additional_images(additional_image_paths):
+            delete_static_upload_file(additional_path)
 
 def calculate_profit_rate(profit, purchase_price):
     """利益率を計算（利益 ÷ 仕入れ金額 × 100）"""
@@ -15205,6 +15249,7 @@ def delete_user(id):
     if DATABASE_URL:
         cur = conn.cursor()
         ensure_proxy_service_auction_user_table(conn, cur)
+        cleanup_sale_request_uploads_for_user(cur, id)
         cur.execute("""
             DELETE FROM sale_request_events
             WHERE sale_request_id IN (
@@ -15270,6 +15315,7 @@ def delete_user(id):
     else:
         cur = conn.cursor()
         ensure_proxy_service_auction_user_table(conn, cur)
+        cleanup_sale_request_uploads_for_user(cur, id)
         cur.execute("""
             DELETE FROM sale_request_events
             WHERE sale_request_id IN (
