@@ -3,6 +3,7 @@
 {% block title %}書類一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="page-header">
     <h1>書類一覧</h1>
     <p class="page-subtitle">作成する書類を選び、下書き保存中の書類を続きから編集できます。完了した書類は書類履歴へ移動します。</p>
@@ -55,6 +56,7 @@
                     <div class="draft-document-actions">
                         <a href="{{ url_for('user_invoice_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
                         <form method="POST" action="{{ url_for('user_invoice_delete', id=doc.id) }}" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                            <input type="hidden" name="next" value="{{ current_return_url }}">
                             <button type="submit" class="btn btn-danger">削除</button>
                         </form>
                     </div>
@@ -83,6 +85,7 @@
                     <div class="draft-document-actions">
                         <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
                         <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                            <input type="hidden" name="next" value="{{ current_return_url }}">
                             <button type="submit" class="btn btn-danger">削除</button>
                         </form>
                     </div>
@@ -111,6 +114,7 @@
                     <div class="draft-document-actions">
                         <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
                         <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=doc.id) }}" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+                            <input type="hidden" name="next" value="{{ current_return_url }}">
                             <button type="submit" class="btn btn-danger">削除</button>
                         </form>
                     </div>
@@ -139,6 +143,7 @@
                     <div class="draft-document-actions">
                         <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
                         <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" onsubmit="return confirm('この計算書を削除しますか？')">
+                            <input type="hidden" name="next" value="{{ current_return_url }}">
                             <button type="submit" class="btn btn-danger">削除</button>
                         </form>
                     </div>

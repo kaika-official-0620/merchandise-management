@@ -2304,7 +2304,7 @@ body.sidebar-open {
         --mobile-header-safe-top: max(env(safe-area-inset-top, 0px), 10px);
         --mobile-header-row-height: 58px;
         --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
-        --mobile-drawer-top: calc(var(--mobile-header-height) + 6px);
+        --mobile-drawer-top: var(--mobile-header-height);
     }
 
     html,
@@ -2409,17 +2409,19 @@ body.sidebar-open {
         height: calc(100dvh - var(--mobile-drawer-top));
         max-height: calc(100dvh - var(--mobile-drawer-top));
         max-width: min(280px, 86vw);
-        padding-top: 0.45rem;
+        padding-top: 0;
     }
 
     .sidebar-header {
         flex: 0 0 auto;
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
     }
 
     .sidebar-nav {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 0.5rem 0 max(1rem, env(safe-area-inset-bottom, 0px));
+        padding: 0.25rem 0 max(1rem, env(safe-area-inset-bottom, 0px));
     }
     
     .page-actions {

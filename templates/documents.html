@@ -3,6 +3,7 @@
 {% block title %}書類履歴 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="page-header">
     <h1>書類履歴</h1>
     <p class="page-subtitle">作成完了・送付済みの書類だけを種類ごとに確認できます。作成中の見積依頼書と買取承諾書は「書類一覧」に残ります。</p>
@@ -52,6 +53,7 @@
                 <a href="{{ url_for('invoice_pdf', id=inv.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if inv.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
                 {% endif %}
@@ -102,6 +104,7 @@
                 <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if doc.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
                 {% endif %}
@@ -152,6 +155,7 @@
                 <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if doc.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
                 {% endif %}
@@ -233,6 +237,7 @@
                 <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
                 {% if doc.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
                 {% endif %}

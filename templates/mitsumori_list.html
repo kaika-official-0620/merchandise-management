@@ -3,6 +3,7 @@
 {% block title %}見積り依頼書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="mitsumori-list-page">
     <div class="page-header">
         <div>
@@ -60,6 +61,7 @@
                 {% endif %}
                 {% if status in ['draft', 'in_progress'] %}
                 <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積り依頼書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
                 {% endif %}

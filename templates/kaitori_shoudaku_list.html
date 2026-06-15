@@ -3,6 +3,7 @@
 {% block title %}作成中の買取承諾書 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="page-header">
     <div>
         <h1 class="page-title">作成中の買取承諾書</h1>
@@ -41,6 +42,7 @@
                     <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">内容を見る</a>
                     {% if status in ['draft', 'in_progress'] %}
                     <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('削除してもよろしいですか？')">
+                        <input type="hidden" name="next" value="{{ current_return_url }}">
                         <button type="submit" class="btn btn-sm btn-delete">削除</button>
                     </form>
                     {% endif %}

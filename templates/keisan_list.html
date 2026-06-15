@@ -3,6 +3,7 @@
 {% block title %}計算書一覧 - 物販管理システム{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="page-header">
     <h1>計算書一覧</h1>
     <p class="page-note">月額システム利用料と撮影梱包発送代行手数料は、管理側の確認後に自動送信されます。</p>
@@ -48,6 +49,7 @@
                     {% endif %}
                     {% if doc.can_user_delete %}
                         <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+                            <input type="hidden" name="next" value="{{ current_return_url }}">
                             <button type="submit" class="btn btn-sm btn-danger">削除</button>
                         </form>
                     {% endif %}

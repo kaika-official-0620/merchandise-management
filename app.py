@@ -3055,6 +3055,44 @@ def get_item_back_url(fallback):
     return fallback
 
 
+def get_document_delete_redirect_url(fallback):
+    candidates = [
+        request.form.get('next', ''),
+        request.args.get('next', ''),
+        request.form.get('return_to', ''),
+        request.args.get('return_to', ''),
+        request.form.get('back_url', ''),
+        request.args.get('back_url', ''),
+        request.referrer or '',
+    ]
+
+    blocked_prefixes = (
+        '/invoices/delete/',
+        '/mitsumori/delete/',
+        '/keisan/delete/',
+        '/invoices/view/',
+        '/mitsumori/view/',
+        '/keisan/view/',
+    )
+
+    for candidate in candidates:
+        target = resolve_internal_back_url(candidate, '')
+        if not target:
+            continue
+        target_path = urlparse(target).path or '/'
+        if target_path == request.path:
+            continue
+        if target_path.startswith(blocked_prefixes):
+            continue
+        if target_path.startswith('/kaitori-shoudaku/') and (
+            target_path.endswith('/delete') or target_path.count('/') == 2
+        ):
+            continue
+        return target
+
+    return fallback
+
+
 def normalize_month_period(start_month='', end_month='', preset='', default_to_current=False):
     today = date.today()
     current_month = today.strftime('%Y-%m')
@@ -27386,7 +27424,7 @@ def user_invoice_delete(id):
     
     cur.close()
     conn.close()
-    return redirect(url_for('user_invoice_list'))
+    return redirect(get_document_delete_redirect_url(url_for('user_document_list')))
 
 @app.route('/invoices/send/<int:id>')
 @login_required
@@ -27850,7 +27888,7 @@ def user_mitsumori_delete(id):
     
     cur.close()
     conn.close()
-    return redirect(url_for('documents'))
+    return redirect(get_document_delete_redirect_url(url_for('user_document_list')))
 
 # ===================
 # ユーザー向け計算書
@@ -28272,7 +28310,7 @@ def user_keisan_delete(id):
     
     cur.close()
     conn.close()
-    return redirect(url_for('documents'))
+    return redirect(get_document_delete_redirect_url(url_for('user_document_list')))
 
 # ===================
 # 買取明細書（管理者用）
@@ -34982,6 +35020,7 @@ def user_kaitori_shoudaku_view(id):
         else:
             items = []
     else:
+        cur = conn.cursor()
         cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
         row = cur.fetchone()
         if row:
@@ -35175,7 +35214,7 @@ def user_kaitori_shoudaku_delete(id):
     cur.close()
     conn.close()
 
-    return redirect(url_for('user_kaitori_shoudaku_list'))
+    return redirect(get_document_delete_redirect_url(url_for('user_document_list')))
 
 @app.route('/kaitori-shoudaku/<int:id>/pdf')
 @login_required

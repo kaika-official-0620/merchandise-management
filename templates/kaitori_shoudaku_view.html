@@ -13,6 +13,7 @@
         <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-export" target="_blank">PDF</a>
         {% if kaitori.can_user_delete %}
         <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+            <input type="hidden" name="next" value="{{ url_for('user_document_list') }}">
             <button type="submit" class="btn btn-danger">削除</button>
         </form>
         {% endif %}

@@ -3,6 +3,7 @@
 {% block title %}買取明細書一覧 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 {% if current_user.is_admin() %}
 <div class="page-actions">
     <a href="{{ url_for('user_invoice_add') }}" class="btn btn-primary">+ 新規作成</a>
@@ -48,6 +49,7 @@
             {% endif %}
             {% if inv.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_invoice_delete', id=inv.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                    <input type="hidden" name="next" value="{{ current_return_url }}">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
             {% else %}

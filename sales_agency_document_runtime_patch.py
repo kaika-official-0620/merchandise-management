@@ -1739,6 +1739,12 @@ def apply(module: Any) -> None:
             conn.close()
         return render_template("kaitori_shoudaku_list.html", kaitori_list=kaitori_list)
 
+    def document_delete_redirect(fallback: str):
+        helper = getattr(module, "get_document_delete_redirect_url", None)
+        if callable(helper):
+            return redirect(helper(fallback))
+        return redirect(fallback)
+
     def user_invoice_edit_v2(id: int):
         invoice = (load_invoice_for_user(id) or [None])[0]
         if is_admin_generated_invoice(invoice):
@@ -1750,7 +1756,7 @@ def apply(module: Any) -> None:
         invoice = (load_invoice_for_user(id) or [None])[0]
         if is_admin_generated_invoice(invoice):
             flash("開花側で作成した買取明細書は削除できません。", "error")
-            return redirect(url_for("user_invoice_list"))
+            return document_delete_redirect(url_for("user_document_list"))
         return originals["user_invoice_delete"](id)
 
     def user_invoice_send_v2(id: int):
@@ -1778,7 +1784,7 @@ def apply(module: Any) -> None:
         mitsumori = (load_mitsumori_for_user(id) or [None])[0]
         if mitsumori and not is_visible_user_scope(mitsumori, "client_incoming"):
             flash("この見積り依頼書は削除できません。", "error")
-            return redirect(url_for("user_mitsumori_list"))
+            return document_delete_redirect(url_for("user_document_list"))
         return originals["user_mitsumori_delete"](id)
 
     def user_kaitori_shoudaku_view_v2(id: int):
@@ -1799,7 +1805,7 @@ def apply(module: Any) -> None:
         kaitori = (load_kaitori_request_for_user(id) or [None])[0]
         if kaitori and not is_visible_user_scope(kaitori, "client_incoming"):
             flash("この買取依頼書は削除できません。", "error")
-            return redirect(url_for("user_kaitori_shoudaku_list"))
+            return document_delete_redirect(url_for("user_document_list"))
         return originals["user_kaitori_shoudaku_delete"](id)
 
     def admin_kaitori_view_v2(id: int):
