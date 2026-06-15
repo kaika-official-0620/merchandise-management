@@ -488,7 +488,7 @@ def apply(module: Any) -> None:
             where_parts.append(
                 f"(COALESCE(document_scope, '') <> {ph} OR COALESCE(status, '') NOT IN ({status_placeholders}))"
             )
-            params.append("client_outgoing")
+            params.append("admin_kaitori")
             params.extend(HISTORY_DRAFT_STATUSES)
         return where_parts, params
 
@@ -496,7 +496,30 @@ def apply(module: Any) -> None:
         checker = getattr(module, "is_user_created_invoice_document", None)
         if callable(checker):
             return bool(checker(row))
-        return not row.get("source_admin_kaitori_id") and (row.get("document_scope") or "").strip() not in {"client_outgoing", "admin_kaitori"}
+        document_no = str(row.get("invoice_no") or row.get("document_no") or "").strip().upper()
+        return not row.get("source_admin_kaitori_id") and (row.get("document_scope") or "").strip() != "admin_kaitori" and not document_no.startswith("KT-")
+
+    def is_user_deletable_mitsumori_history_row(row: dict[str, Any]) -> bool:
+        checker = getattr(module, "is_user_deletable_mitsumori_document", None)
+        if callable(checker):
+            return bool(checker(row))
+        document_scope = (row.get("document_scope") or "client_incoming").strip()
+        document_no = str(row.get("document_no") or "").strip().upper()
+        return (
+            is_history_draft_status(row.get("status"))
+            and not row.get("created_by_admin_id")
+            and document_scope not in {"vendor_outgoing", "kaika_vendor_outgoing", "kaika_estimate"}
+            and not document_no.startswith(("MT-", "KM-"))
+        )
+
+    def is_user_deletable_keisan_history_row(row: dict[str, Any]) -> bool:
+        checker = getattr(module, "is_user_deletable_keisan_document", None)
+        if callable(checker):
+            return bool(checker(row))
+        admin_flag = row.get("is_admin_created")
+        if isinstance(admin_flag, str):
+            admin_flag = admin_flag.strip().lower() in {"1", "true", "t", "yes", "on"}
+        return not admin_flag and is_history_draft_status(row.get("status"))
 
     def category_cards(endpoint: str, selected: str | None = None, admin: bool = False) -> list[dict[str, Any]]:
         cards = []
@@ -802,7 +825,8 @@ def apply(module: Any) -> None:
                     setattr(g, loading_key, False)
             if category in cached_counts:
                 return safe_int(cached_counts.get(category))
-        if not admin and category not in {key for key, _title, _desc in USER_HISTORY_CATEGORIES}:
+        user_allowed_categories = {key for key, _title, _desc in USER_HISTORY_CATEGORIES} | {"client_mitsumori"}
+        if not admin and category not in user_allowed_categories:
             return 0
         if category == "client_incoming":
             total = count_history_rows("client_mitsumori", admin=admin)
@@ -1066,7 +1090,8 @@ def apply(module: Any) -> None:
             "kaika_estimate": "kaika_mitsumori",
         }
         category = category_aliases.get(category, category)
-        if not admin and category not in {key for key, _title, _desc in USER_HISTORY_CATEGORIES}:
+        user_allowed_categories = {key for key, _title, _desc in USER_HISTORY_CATEGORIES} | {"client_mitsumori"}
+        if not admin and category not in user_allowed_categories:
             return []
         if category == "client_incoming":
             combined: list[dict[str, Any]] = []
@@ -1143,6 +1168,7 @@ def apply(module: Any) -> None:
                 where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
                 cur.execute(f"SELECT * FROM user_mitsumori {where} ORDER BY created_at DESC LIMIT {int(limit)}", tuple(params_list))
                 for doc in rows_to_dicts(cur.fetchall()):
+                    can_user_delete = (not admin) and is_user_deletable_mitsumori_history_row(doc)
                     add_row(
                         document_type=(
                             "業者向け見積依頼書"
@@ -1158,9 +1184,9 @@ def apply(module: Any) -> None:
                         status=doc.get("status"),
                         detail_url=url_for("admin_user_mitsumori_view", id=doc["id"]) if admin and "admin_user_mitsumori_view" in app.view_functions else url_for("user_mitsumori_view", id=doc["id"]),
                         download_url=url_for("admin_mitsumori_pdf", id=doc["id"]) if admin and "admin_mitsumori_pdf" in app.view_functions else url_for("user_mitsumori_pdf", id=doc["id"]),
-                        delete_url=None if admin or not is_history_draft_status(doc.get("status")) else url_for("user_mitsumori_delete", id=doc["id"]),
+                        delete_url=url_for("user_mitsumori_delete", id=doc["id"]) if can_user_delete else None,
                         source="user_mitsumori",
-                        can_delete=not admin and is_history_draft_status(doc.get("status")),
+                        can_delete=can_user_delete,
                     )
             elif category == "kaitori":
                 where_parts: list[str] = []
@@ -1269,6 +1295,7 @@ def apply(module: Any) -> None:
                     )
                 cur.execute(f"SELECT * FROM user_keisan {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
                 for doc in rows_to_dicts(cur.fetchall()):
+                    can_user_delete = (not admin) and is_user_deletable_keisan_history_row(doc)
                     add_row(
                         document_type="計算書",
                         document_no=doc.get("document_no") or f"ID:{doc.get('id')}",
@@ -1278,9 +1305,9 @@ def apply(module: Any) -> None:
                         status=doc.get("status"),
                         detail_url=url_for("admin_auction_keisan_view", id=doc["id"]) if admin and "admin_auction_keisan_view" in app.view_functions else url_for("user_keisan_view", id=doc["id"]),
                         download_url=url_for("admin_auction_keisan_pdf", id=doc["id"]) if admin and "admin_auction_keisan_pdf" in app.view_functions else url_for("user_keisan_pdf", id=doc["id"]),
-                        delete_url=None if admin or doc.get("is_admin_created") or not is_history_draft_status(doc.get("status")) else url_for("user_keisan_delete", id=doc["id"]),
+                        delete_url=url_for("user_keisan_delete", id=doc["id"]) if can_user_delete else None,
                         source="user_keisan",
-                        can_delete=not admin and not doc.get("is_admin_created") and is_history_draft_status(doc.get("status")),
+                        can_delete=can_user_delete,
                     )
             elif category == "vendor":
                 where_parts = []

@@ -6,8 +6,13 @@
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 書類履歴へ戻る</a>
     <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-    {% if keisan.status == 'draft' and not keisan.is_admin_created %}
+    {% if keisan.can_user_edit %}
     <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
+    {% endif %}
+    {% if keisan.can_user_delete %}
+    <form method="POST" action="{{ url_for('user_keisan_delete', id=keisan.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+        <button type="submit" class="btn btn-danger">削除</button>
+    </form>
     {% endif %}
 </div>
 
@@ -111,6 +116,12 @@
 .btn-primary { background: #10b981; }
 .btn-secondary { background: #64748b; }
 .btn-pdf { background: #dc3545; }
+.btn-danger { background: #dc3545; }
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
+}
 
 .keisan-sheet {
     max-width: 960px;

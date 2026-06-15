@@ -6761,7 +6761,8 @@ def is_valid_email_format(email):
 
 
 def is_deletable_document_status(status):
-    return (status or '').strip() in {'draft', 'in_progress', '作成中', '下書き'}
+    normalized = (status or 'draft').strip()
+    return normalized in {'draft', 'in_progress', '作成中', '下書き'}
 
 
 def row_value(row, key, default=None):
@@ -6775,14 +6776,53 @@ def row_value(row, key, default=None):
         return getattr(row, key, default)
 
 
+def is_truthy_document_flag(value):
+    if isinstance(value, str):
+        return value.strip().lower() in {'1', 'true', 't', 'yes', 'on'}
+    return bool(value)
+
+
+def document_no_has_prefix(document, *prefixes):
+    document_no = str(row_value(document, 'document_no') or row_value(document, 'invoice_no') or '').strip().upper()
+    return any(document_no.startswith(prefix.upper()) for prefix in prefixes)
+
+
 def is_user_created_invoice_document(invoice):
-    source_admin_id = row_value(invoice, 'source_admin_kaitori_id')
     document_scope = (row_value(invoice, 'document_scope') or '').strip()
-    return not source_admin_id and document_scope not in {'client_outgoing', 'admin_kaitori'}
+    if is_truthy_document_flag(row_value(invoice, 'source_admin_kaitori_id')):
+        return False
+    if document_scope == 'admin_kaitori':
+        return False
+    if document_no_has_prefix(invoice, 'KT-'):
+        return False
+    return True
 
 
 def is_user_deletable_invoice_document(invoice):
     return bool(invoice) and is_user_created_invoice_document(invoice) and is_deletable_document_status(row_value(invoice, 'status'))
+
+
+def is_user_created_mitsumori_document(mitsumori):
+    document_scope = (row_value(mitsumori, 'document_scope') or 'client_incoming').strip()
+    if is_truthy_document_flag(row_value(mitsumori, 'created_by_admin_id')):
+        return False
+    if document_scope in {'vendor_outgoing', 'kaika_vendor_outgoing', 'kaika_estimate'}:
+        return False
+    if document_no_has_prefix(mitsumori, 'MT-', 'KM-'):
+        return False
+    return True
+
+
+def is_user_deletable_mitsumori_document(mitsumori):
+    return bool(mitsumori) and is_user_created_mitsumori_document(mitsumori) and is_deletable_document_status(row_value(mitsumori, 'status'))
+
+
+def is_user_deletable_keisan_document(keisan):
+    return (
+        bool(keisan)
+        and not is_truthy_document_flag(row_value(keisan, 'is_admin_created'))
+        and is_deletable_document_status(row_value(keisan, 'status'))
+    )
 
 
 def parse_shipping_addresses(value, default_postal_code='', default_address=''):
@@ -26397,7 +26437,6 @@ def documents():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = %s
-              AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -26405,7 +26444,6 @@ def documents():
         cur.execute("""
             SELECT * FROM user_kaitori_shoudaku
             WHERE user_id = %s
-              AND COALESCE(status, 'draft') <> 'draft'
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_kaitori_shoudaku_list = [dict(row) for row in cur.fetchall()]
@@ -26440,7 +26478,6 @@ def documents():
         cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = ?
-              AND COALESCE(status, 'draft') NOT IN ('draft', 'in_progress')
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_mitsumori_list = [dict(row) for row in cur.fetchall()]
@@ -26448,7 +26485,6 @@ def documents():
         cur.execute("""
             SELECT * FROM user_kaitori_shoudaku
             WHERE user_id = ?
-              AND COALESCE(status, 'draft') <> 'draft'
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_kaitori_shoudaku_list = [dict(row) for row in cur.fetchall()]
@@ -26475,6 +26511,18 @@ def documents():
         invoice['can_user_delete'] = is_user_deletable_invoice_document(invoice)
         invoice['can_user_edit'] = is_user_created_invoice_document(invoice) and is_deletable_document_status(invoice.get('status'))
 
+    for doc in user_mitsumori_list:
+        doc['can_user_delete'] = is_user_deletable_mitsumori_document(doc)
+        doc['can_user_edit'] = doc['can_user_delete']
+
+    for doc in user_kaitori_shoudaku_list:
+        doc['can_user_delete'] = is_deletable_document_status(doc.get('status'))
+        doc['can_user_edit'] = doc['can_user_delete']
+
+    for doc in user_keisan_list:
+        doc['can_user_delete'] = is_user_deletable_keisan_document(doc)
+        doc['can_user_edit'] = doc['can_user_delete']
+
     cur.close()
     conn.close()
     
@@ -26496,46 +26544,94 @@ def user_document_list():
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
+            SELECT * FROM invoices
+            WHERE sender_id = %s
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_invoice_list = [
+            dict(row) for row in cur.fetchall()
+            if is_user_deletable_invoice_document(row)
+        ]
+
+        cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = %s
               AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
-        draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
+        draft_mitsumori_list = [
+            dict(row) for row in cur.fetchall()
+            if is_user_deletable_mitsumori_document(row)
+        ]
 
         cur.execute("""
             SELECT * FROM user_kaitori_shoudaku
             WHERE user_id = %s
-              AND COALESCE(status, 'draft') = 'draft'
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_kaitori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_keisan
+            WHERE user_id = %s
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+              AND COALESCE(is_admin_created, FALSE) = FALSE
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_keisan_list = [dict(row) for row in cur.fetchall()]
     else:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
+            SELECT * FROM invoices
+            WHERE sender_id = ?
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_invoice_list = [
+            dict(row) for row in cur.fetchall()
+            if is_user_deletable_invoice_document(row)
+        ]
+
+        cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = ?
               AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
-        draft_mitsumori_list = [dict(row) for row in cur.fetchall()]
+        draft_mitsumori_list = [
+            dict(row) for row in cur.fetchall()
+            if is_user_deletable_mitsumori_document(row)
+        ]
 
         cur.execute("""
             SELECT * FROM user_kaitori_shoudaku
             WHERE user_id = ?
-              AND COALESCE(status, 'draft') = 'draft'
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_kaitori_list = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("""
+            SELECT * FROM user_keisan
+            WHERE user_id = ?
+              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+              AND COALESCE(is_admin_created, 0) = 0
+            ORDER BY updated_at DESC, created_at DESC
+        """, (current_user.id,))
+        draft_keisan_list = [dict(row) for row in cur.fetchall()]
 
     cur.close()
     conn.close()
 
     return render_template(
         'document_list.html',
+        draft_invoice_list=draft_invoice_list,
         draft_mitsumori_list=draft_mitsumori_list,
         draft_kaitori_list=draft_kaitori_list,
+        draft_keisan_list=draft_keisan_list,
     )
 
 @app.route('/service-document/create', methods=['POST'])
@@ -27020,12 +27116,12 @@ def user_invoice_add():
                 INSERT INTO invoices 
                 (invoice_no, sender_id, issue_date, payment_due_date, recipient_name, postal_number,
                  subtotal, tax_amount_8, tax_amount_10, total_amount, 
-                 service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 service_type, commission_rate, commission_amount, bank_info, notes, status, document_scope)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name, postal_number,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
-                  service_type, commission_rate, commission_amount, bank_info, notes, status))
+                  service_type, commission_rate, commission_amount, bank_info, notes, status, 'user_created'))
             invoice_id = cur.fetchone()['id']
             
             for item in items:
@@ -27041,11 +27137,11 @@ def user_invoice_add():
                 INSERT INTO invoices 
                 (invoice_no, sender_id, issue_date, payment_due_date, recipient_name, postal_number,
                  subtotal, tax_amount_8, tax_amount_10, total_amount,
-                 service_type, commission_rate, commission_amount, bank_info, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 service_type, commission_rate, commission_amount, bank_info, notes, status, document_scope)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (invoice_no, current_user.id, issue_date, payment_due_date, recipient_name, postal_number,
                   subtotal, tax_amount_8, tax_amount_10, total_amount,
-                  service_type, commission_rate, commission_amount, bank_info, notes, status))
+                  service_type, commission_rate, commission_amount, bank_info, notes, status, 'user_created'))
             invoice_id = cur.lastrowid
             
             for item in items:
@@ -27245,6 +27341,9 @@ def user_invoice_view(id):
         flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('user_invoice_list'))
     
+    invoice['can_user_delete'] = is_user_deletable_invoice_document(invoice)
+    invoice['can_user_edit'] = is_user_created_invoice_document(invoice) and is_deletable_document_status(invoice.get('status'))
+
     return render_template('invoice_view.html', invoice=invoice, items=items)
 
 @app.route('/invoices/delete/<int:id>', methods=['GET', 'POST'])
@@ -27254,7 +27353,7 @@ def user_invoice_delete(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT status, document_scope, source_admin_kaitori_id FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
+        cur.execute("SELECT status, invoice_no, document_scope, source_admin_kaitori_id FROM invoices WHERE id = %s AND sender_id = %s", (id, current_user.id))
         invoice = cur.fetchone()
         if invoice and is_user_deletable_invoice_document(invoice):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = %s", (id,))
@@ -27265,7 +27364,7 @@ def user_invoice_delete(id):
             flash('送信済みの買取明細書は削除できません', 'error')
     else:
         cur = conn.cursor()
-        cur.execute("SELECT status, document_scope, source_admin_kaitori_id FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
+        cur.execute("SELECT status, invoice_no, document_scope, source_admin_kaitori_id FROM invoices WHERE id = ? AND sender_id = ?", (id, current_user.id))
         invoice = cur.fetchone()
         if invoice and is_user_deletable_invoice_document(invoice):
             cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (id,))
@@ -27333,7 +27432,10 @@ def user_mitsumori_list():
             for key in ['created_at', 'updated_at', 'issue_date', 'valid_until']:
                 if item.get(key) and hasattr(item[key], 'strftime'):
                     item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
-            mitsumori_list.append(item)
+            item['can_user_delete'] = is_user_deletable_mitsumori_document(item)
+            item['can_user_edit'] = item['can_user_delete']
+            if item['can_user_delete']:
+                mitsumori_list.append(item)
         cur.close()
         conn.close()
     except Exception as e:
@@ -27515,7 +27617,7 @@ def user_mitsumori_edit(id):
         flash('見積依頼書が見つかりません', 'error')
         return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
-    if mitsumori['status'] != 'draft':
+    if not is_user_deletable_mitsumori_document(mitsumori):
         flash('完了済みの見積依頼書は編集できません', 'error')
         return redirect(url_for('documents', tab='mitsumori') + '#document-history-tabs')
     
@@ -27660,6 +27762,9 @@ def user_mitsumori_view(id):
         flash('見積依頼書が見つかりません', 'error')
         return redirect(url_for('documents'))
     
+    mitsumori['can_user_delete'] = is_user_deletable_mitsumori_document(mitsumori)
+    mitsumori['can_user_edit'] = mitsumori['can_user_delete']
+
     return render_template('mitsumori_view.html', mitsumori=mitsumori, items=items)
 
 @app.route('/mitsumori/pdf/<int:id>')
@@ -27710,9 +27815,9 @@ def user_mitsumori_delete(id):
     
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT status FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
         mitsumori = cur.fetchone()
-        if mitsumori and is_deletable_document_status(mitsumori['status']):
+        if mitsumori and is_user_deletable_mitsumori_document(mitsumori):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = %s", (id,))
             cur.execute("DELETE FROM user_mitsumori WHERE id = %s", (id,))
             conn.commit()
@@ -27721,9 +27826,11 @@ def user_mitsumori_delete(id):
             flash('完了済みの見積依頼書は削除できません', 'error')
     else:
         cur = conn.cursor()
-        cur.execute("SELECT status FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+        cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
         mitsumori = cur.fetchone()
-        if mitsumori and is_deletable_document_status(mitsumori['status']):
+        if mitsumori:
+            mitsumori = dict(mitsumori)
+        if mitsumori and is_user_deletable_mitsumori_document(mitsumori):
             cur.execute("DELETE FROM user_mitsumori_items WHERE mitsumori_id = ?", (id,))
             cur.execute("DELETE FROM user_mitsumori WHERE id = ?", (id,))
             conn.commit()
@@ -27777,6 +27884,8 @@ def user_keisan_list():
             for key in ['created_at', 'updated_at', 'issue_date']:
                 if item.get(key) and hasattr(item[key], 'strftime'):
                     item[key] = item[key].strftime('%Y-%m-%d %H:%M:%S') if key.endswith('_at') else item[key].strftime('%Y-%m-%d')
+            item['can_user_delete'] = is_user_deletable_keisan_document(item)
+            item['can_user_edit'] = item['can_user_delete']
             keisan_list.append(item)
         cur.close()
         conn.close()
@@ -27921,11 +28030,11 @@ def user_keisan_edit(id):
         return redirect(url_for('documents'))
     
     # 管理者作成の計算書は編集不可
-    if keisan.get('is_admin_created'):
+    if is_truthy_document_flag(keisan.get('is_admin_created')):
         flash('管理者が発行した計算書は編集できません。閲覧とPDF出力のみ可能です。', 'error')
         return redirect(url_for('user_keisan_view', id=id))
     
-    if keisan['status'] != 'draft':
+    if not is_deletable_document_status(keisan.get('status')):
         flash('完了済みの計算書は編集できません', 'error')
         return redirect(url_for('documents'))
     
@@ -28053,6 +28162,9 @@ def user_keisan_view(id):
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('documents'))
     
+    keisan['can_user_delete'] = is_user_deletable_keisan_document(keisan)
+    keisan['can_user_edit'] = keisan['can_user_delete']
+
     return render_template('keisan_view.html', keisan=keisan, items=items)
 
 @app.route('/keisan/pdf/<int:id>')
@@ -28113,7 +28225,7 @@ def user_keisan_pdf(id):
     html_content = render_template('pdf/keisan_pdf.html', keisan=keisan, items=items)
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
-@app.route('/keisan/delete/<int:id>')
+@app.route('/keisan/delete/<int:id>', methods=['GET', 'POST'])
 @login_required
 def user_keisan_delete(id):
     """計算書削除（ユーザー用）"""
@@ -28123,13 +28235,13 @@ def user_keisan_delete(id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT status, is_admin_created FROM user_keisan WHERE id = %s AND user_id = %s", (id, current_user.id))
         keisan = cur.fetchone()
-        if keisan and keisan.get('is_admin_created'):
-            flash('管理者が発行した計算書は削除できません', 'error')
-        elif keisan and is_deletable_document_status(keisan['status']):
+        if is_user_deletable_keisan_document(keisan):
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = %s", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = %s", (id,))
             conn.commit()
             flash('計算書を削除しました', 'success')
+        elif keisan and is_truthy_document_flag(keisan.get('is_admin_created')):
+            flash('管理者が発行した計算書は削除できません', 'error')
         else:
             flash('完了済みの計算書は削除できません', 'error')
     else:
@@ -28138,13 +28250,13 @@ def user_keisan_delete(id):
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
-        if keisan and keisan.get('is_admin_created'):
-            flash('管理者が発行した計算書は削除できません', 'error')
-        elif keisan and is_deletable_document_status(keisan['status']):
+        if is_user_deletable_keisan_document(keisan):
             cur.execute("DELETE FROM user_keisan_items WHERE keisan_id = ?", (id,))
             cur.execute("DELETE FROM user_keisan WHERE id = ?", (id,))
             conn.commit()
             flash('計算書を削除しました', 'success')
+        elif keisan and is_truthy_document_flag(keisan.get('is_admin_created')):
+            flash('管理者が発行した計算書は削除できません', 'error')
         else:
             flash('完了済みの計算書は削除できません', 'error')
     
@@ -34705,7 +34817,7 @@ def user_kaitori_shoudaku_list():
             cur.execute('''
                 SELECT * FROM user_kaitori_shoudaku 
                 WHERE user_id = %s 
-                  AND COALESCE(status, 'draft') = 'draft'
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY updated_at DESC, created_at DESC
             ''', (current_user.id,))
             rows = cur.fetchall()
@@ -34715,7 +34827,7 @@ def user_kaitori_shoudaku_list():
             cur.execute('''
                 SELECT * FROM user_kaitori_shoudaku 
                 WHERE user_id = ? 
-                  AND COALESCE(status, 'draft') = 'draft'
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
                 ORDER BY updated_at DESC, created_at DESC
             ''', (current_user.id,))
             rows = cur.fetchall()
@@ -34877,6 +34989,9 @@ def user_kaitori_shoudaku_view(id):
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('user_kaitori_shoudaku_list'))
     
+    kaitori['can_user_delete'] = is_deletable_document_status(kaitori.get('status'))
+    kaitori['can_user_edit'] = kaitori['can_user_delete']
+
     return render_template('kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
 
 @app.route('/kaitori-shoudaku/<int:id>/edit', methods=['GET', 'POST'])
@@ -34906,7 +35021,7 @@ def user_kaitori_shoudaku_edit(id):
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('user_kaitori_shoudaku_list'))
 
-    if (kaitori.get('status') or 'draft') != 'draft':
+    if not is_deletable_document_status(kaitori.get('status')):
         cur.close()
         conn.close()
         flash('完了済みの買取承諾書は編集できません', 'error')

@@ -14,10 +14,15 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ url_for('documents') }}" class="doc-btn doc-btn-secondary">書類履歴へ戻る</a>
-            {% if status == 'draft' %}
+            {% if mitsumori.can_user_edit %}
             <a href="{{ url_for('user_mitsumori_edit', id=mitsumori.id) }}" class="doc-btn doc-btn-success">編集する</a>
             {% endif %}
             <a href="{{ url_for('user_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF</a>
+            {% if mitsumori.can_user_delete %}
+            <form method="POST" action="{{ url_for('user_mitsumori_delete', id=mitsumori.id) }}" style="margin: 0;" onsubmit="return confirm('この見積依頼書を削除しますか？')">
+                <button type="submit" class="doc-btn doc-btn-danger">削除</button>
+            </form>
+            {% endif %}
         </div>
     </div>
 
@@ -31,6 +36,7 @@
             <div class="admin-doc-status">
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
                     {% elif status in ['completed', 'submitted', 'sent'] %}作成済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し

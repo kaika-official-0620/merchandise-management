@@ -40,6 +40,34 @@
     <div class="draft-document-columns">
         <div class="draft-document-column">
             <div class="draft-document-column__header">
+                <h3>買取明細書</h3>
+                <span>{{ draft_invoice_list|length }}件</span>
+            </div>
+            {% if draft_invoice_list %}
+            <div class="draft-document-list">
+                {% for doc in draft_invoice_list %}
+                <article class="draft-document-row">
+                    <div>
+                        <strong>{{ doc.recipient_name or '買取明細書' }}</strong>
+                        <span>{{ doc.invoice_no }}</span>
+                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
+                    </div>
+                    <div class="draft-document-actions">
+                        <a href="{{ url_for('user_invoice_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                        <form method="POST" action="{{ url_for('user_invoice_delete', id=doc.id) }}" onsubmit="return confirm('この買取明細書を削除しますか？')">
+                            <button type="submit" class="btn btn-danger">削除</button>
+                        </form>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-mini">作成中の買取明細書はありません。</div>
+            {% endif %}
+        </div>
+
+        <div class="draft-document-column">
+            <div class="draft-document-column__header">
                 <h3>見積依頼書</h3>
                 <span>{{ draft_mitsumori_list|length }}件</span>
             </div>
@@ -80,12 +108,45 @@
                         <span>{{ doc.document_no }}</span>
                         <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
                     </div>
-                    <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                    <div class="draft-document-actions">
+                        <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                        <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=doc.id) }}" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+                            <button type="submit" class="btn btn-danger">削除</button>
+                        </form>
+                    </div>
                 </article>
                 {% endfor %}
             </div>
             {% else %}
             <div class="empty-mini">作成中の買取承諾書はありません。</div>
+            {% endif %}
+        </div>
+
+        <div class="draft-document-column">
+            <div class="draft-document-column__header">
+                <h3>計算書</h3>
+                <span>{{ draft_keisan_list|length }}件</span>
+            </div>
+            {% if draft_keisan_list %}
+            <div class="draft-document-list">
+                {% for doc in draft_keisan_list %}
+                <article class="draft-document-row">
+                    <div>
+                        <strong>{{ doc.subject or '計算書' }}</strong>
+                        <span>{{ doc.document_no }}</span>
+                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
+                    </div>
+                    <div class="draft-document-actions">
+                        <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
+                        <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" onsubmit="return confirm('この計算書を削除しますか？')">
+                            <button type="submit" class="btn btn-danger">削除</button>
+                        </form>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-mini">作成中の計算書はありません。</div>
             {% endif %}
         </div>
     </div>
@@ -131,7 +192,7 @@
 .document-create-grid,
 .draft-document-columns {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 1rem;
     margin-top: 1rem;
 }

@@ -17,6 +17,7 @@
             <span class="invoice-no">{{ inv.invoice_no }}</span>
             <span class="status-badge status-{{ inv.status }}">
                 {% if inv.status == 'draft' %}下書き
+                {% elif inv.status == 'in_progress' %}作成中
                 {% elif inv.status == 'sent' %}送信済
                 {% elif inv.status == 'approved' %}承認済
                 {% elif inv.status == 'rejected' %}却下
@@ -98,7 +99,8 @@
     box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
 
-.invoice-card.status-draft {
+.invoice-card.status-draft,
+.invoice-card.status-in_progress {
     border-left: 4px solid #ffc107;
 }
 
@@ -137,7 +139,8 @@
     font-weight: 500;
 }
 
-.status-badge.status-draft {
+.status-badge.status-draft,
+.status-badge.status-in_progress {
     background: #fff3cd;
     color: #856404;
 }

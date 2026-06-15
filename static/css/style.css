@@ -2304,6 +2304,7 @@ body.sidebar-open {
         --mobile-header-safe-top: max(env(safe-area-inset-top, 0px), 10px);
         --mobile-header-row-height: 58px;
         --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
+        --mobile-drawer-top: calc(var(--mobile-header-height) + 6px);
     }
 
     html,
@@ -2404,7 +2405,21 @@ body.sidebar-open {
     }
 
     .sidebar {
+        top: var(--mobile-drawer-top);
+        height: calc(100dvh - var(--mobile-drawer-top));
+        max-height: calc(100dvh - var(--mobile-drawer-top));
         max-width: min(280px, 86vw);
+        padding-top: 0.45rem;
+    }
+
+    .sidebar-header {
+        flex: 0 0 auto;
+    }
+
+    .sidebar-nav {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 0.5rem 0 max(1rem, env(safe-area-inset-bottom, 0px));
     }
     
     .page-actions {

@@ -35,12 +35,14 @@
                 <td>{{ kaitori.customer_name }}</td>
                 <td>{{ kaitori.issue_date }}</td>
                 <td>¥{{ "{:,}".format(kaitori.total_amount or 0) }}</td>
-                <td><span class="badge badge-secondary">下書き</span></td>
+                <td><span class="badge badge-secondary">{% if status == 'in_progress' %}作成中{% else %}下書き{% endif %}</span></td>
                 <td class="actions-cell">
                     <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-sm btn-edit">編集</a>
                     <a href="{{ url_for('user_kaitori_shoudaku_view', id=kaitori.id) }}" class="btn btn-sm btn-secondary">内容を見る</a>
                     {% if status in ['draft', 'in_progress'] %}
-                    <a href="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="btn btn-sm btn-delete" onclick="return confirm('削除してもよろしいですか？')">削除</a>
+                    <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('削除してもよろしいですか？')">
+                        <button type="submit" class="btn btn-sm btn-delete">削除</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
@@ -74,6 +76,11 @@
 
 .actions-cell {
     justify-content: flex-start;
+}
+
+.inline-delete-form {
+    margin: 0;
+    display: inline-flex;
 }
 
 .table-container {

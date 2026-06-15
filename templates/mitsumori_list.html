@@ -24,6 +24,7 @@
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
                     {% elif status in ['completed', 'submitted', 'sent'] %}作成済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
@@ -54,7 +55,7 @@
             </div>
             <div class="doc-card-actions">
                 <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">詳細を見る</a>
-                {% if status == 'draft' %}
+                {% if status in ['draft', 'in_progress'] %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
                 {% if status in ['draft', 'in_progress'] %}
@@ -146,7 +147,8 @@
     white-space: nowrap;
 }
 
-.status-badge.status-draft {
+.status-badge.status-draft,
+.status-badge.status-in_progress {
     background: #fef3c7;
     color: #92400e;
 }

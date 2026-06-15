@@ -80,6 +80,8 @@
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'completed' %}作成済み
+                    {% elif status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
                     {% elif status == 'submitted' or status == 'sent' %}送付済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
@@ -94,11 +96,11 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
-                {% if status == 'draft' %}
+                {% if doc.can_user_edit %}
                 <a href="{{ url_for('user_mitsumori_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                 {% endif %}
                 <a href="{{ url_for('user_mitsumori_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
-                {% if status in ['draft', 'in_progress'] %}
+                {% if doc.can_user_delete %}
                 <form method="POST" action="{{ url_for('user_mitsumori_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この見積依頼書を削除しますか？')">
                     <button type="submit" class="btn btn-danger">削除</button>
                 </form>
@@ -128,6 +130,8 @@
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'completed' %}作成済み
+                    {% elif status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
                     {% elif status == 'sent' or status == 'submitted' %}送付済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
@@ -142,7 +146,15 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_kaitori_shoudaku_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if doc.can_user_edit %}
+                <a href="{{ url_for('user_kaitori_shoudaku_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
                 <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if doc.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% endfor %}
@@ -201,6 +213,7 @@
                 <span class="doc-no">{{ doc.document_no }}</span>
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'draft' %}下書き
+                    {% elif status == 'in_progress' %}作成中
                     {% elif status == 'submitted' or status == 'sent' %}送付済み
                     {% elif status == 'completed' %}完了
                     {% else %}{{ status }}{% endif %}
@@ -214,7 +227,15 @@
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_keisan_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
+                {% if doc.can_user_edit %}
+                <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
+                {% endif %}
                 <a href="{{ url_for('user_keisan_pdf', id=doc.id) }}" class="btn btn-secondary" target="_blank" rel="noopener">PDF</a>
+                {% if doc.can_user_delete %}
+                <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
+                    <button type="submit" class="btn btn-danger">削除</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% endfor %}
@@ -336,7 +357,8 @@
     border-left-color: #10b981;
 }
 
-.doc-card.status-draft {
+.doc-card.status-draft,
+.doc-card.status-in_progress {
     border-left-color: #f59e0b;
 }
 
@@ -384,7 +406,8 @@
     white-space: nowrap;
 }
 
-.status-badge.status-draft {
+.status-badge.status-draft,
+.status-badge.status-in_progress {
     background: #fef3c7;
     color: #92400e;
 }
