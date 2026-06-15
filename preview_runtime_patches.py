@@ -1117,8 +1117,123 @@ def apply(module: Any) -> None:
                 cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,))
                 return cur.fetchone() is not None
 
+            def column_exists(table_name, column_name):
+                if not table_exists(table_name):
+                    return False
+                if DATABASE_URL:
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.columns
+                            WHERE table_schema = current_schema()
+                              AND table_name = %s
+                              AND column_name = %s
+                        ) AS exists
+                        """,
+                        (table_name, column_name),
+                    )
+                    row = cur.fetchone()
+                    return bool(row.get("exists") if isinstance(row, dict) else row[0])
+                cur.execute(f"PRAGMA table_info({table_name})")
+                return any((row.get("name") if isinstance(row, dict) else row[1]) == column_name for row in cur.fetchall())
+
+            def run_if_table(table_name, sql, params=()):
+                if table_exists(table_name):
+                    cur.execute(sql, params)
+
             if table_exists("client_monthly_fee_settings"):
                 cur.execute(f"DELETE FROM client_monthly_fee_settings WHERE user_id = {placeholder}", (id,))
+            run_if_table(
+                "sale_request_events",
+                f"""
+                DELETE FROM sale_request_events
+                WHERE actor_user_id = {placeholder}
+                   OR sale_request_id IN (
+                       SELECT id FROM sale_requests
+                       WHERE user_id = {placeholder}
+                          OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                   )
+                """,
+                (id, id, id),
+            )
+            run_if_table(
+                "sale_requests",
+                f"""
+                DELETE FROM sale_requests
+                WHERE user_id = {placeholder}
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                """,
+                (id, id),
+            )
+            run_if_table(
+                "sales_agency_request_items",
+                f"""
+                DELETE FROM sales_agency_request_items
+                WHERE request_id IN (
+                    SELECT id FROM sales_agency_requests WHERE user_id = {placeholder}
+                )
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                """,
+                (id, id),
+            )
+            run_if_table("sales_agency_requests", f"DELETE FROM sales_agency_requests WHERE user_id = {placeholder}", (id,))
+            run_if_table(
+                "item_disposal_requests",
+                f"""
+                DELETE FROM item_disposal_requests
+                WHERE user_id = {placeholder}
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                """,
+                (id, id),
+            )
+            run_if_table(
+                "proxy_service_bids",
+                f"""
+                DELETE FROM proxy_service_bids
+                WHERE user_id = {placeholder}
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                """,
+                (id, id),
+            )
+            run_if_table("proxy_service_users", f"DELETE FROM proxy_service_users WHERE user_id = {placeholder}", (id,))
+            run_if_table("proxy_service_auction_users", f"DELETE FROM proxy_service_auction_users WHERE user_id = {placeholder}", (id,))
+            run_if_table("service_documents", f"DELETE FROM service_documents WHERE user_id = {placeholder}", (id,))
+            run_if_table(
+                "user_mitsumori_items",
+                f"""
+                DELETE FROM user_mitsumori_items
+                WHERE mitsumori_id IN (SELECT id FROM user_mitsumori WHERE user_id = {placeholder})
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                """,
+                (id, id),
+            )
+            run_if_table("user_mitsumori", f"DELETE FROM user_mitsumori WHERE user_id = {placeholder}", (id,))
+            if table_exists("user_keisan_items"):
+                keisan_item_conditions = [
+                    f"keisan_id IN (SELECT id FROM user_keisan WHERE user_id = {placeholder})",
+                    f"merchandise_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})",
+                ]
+                keisan_item_params = [id, id]
+                if column_exists("user_keisan_items", "proxy_source_item_id"):
+                    keisan_item_conditions.append(
+                        f"proxy_source_item_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})"
+                    )
+                    keisan_item_params.append(id)
+                cur.execute(
+                    f"DELETE FROM user_keisan_items WHERE {' OR '.join(keisan_item_conditions)}",
+                    tuple(keisan_item_params),
+                )
+            run_if_table("user_keisan", f"DELETE FROM user_keisan WHERE user_id = {placeholder}", (id,))
+            if table_exists("merchandise") and column_exists("merchandise", "proxy_parent_item_id"):
+                cur.execute(
+                    f"""
+                    UPDATE merchandise
+                    SET proxy_parent_item_id = NULL
+                    WHERE proxy_parent_item_id IN (SELECT id FROM merchandise WHERE user_id = {placeholder})
+                    """,
+                    (id,),
+                )
             cur.execute(
                 f"""
                 DELETE FROM user_kaitori_shoudaku_items
