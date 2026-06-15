@@ -15204,6 +15204,59 @@ def delete_user(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor()
+        ensure_proxy_service_auction_user_table(conn, cur)
+        cur.execute("""
+            DELETE FROM sale_request_events
+            WHERE sale_request_id IN (
+                SELECT id FROM sale_requests
+                WHERE user_id = %s
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+            )
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM sale_requests
+            WHERE user_id = %s
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM sales_agency_request_items
+            WHERE request_id IN (
+                SELECT id FROM sales_agency_requests WHERE user_id = %s
+            )
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id))
+        cur.execute("DELETE FROM sales_agency_requests WHERE user_id = %s", (id,))
+        cur.execute("""
+            DELETE FROM item_disposal_requests
+            WHERE user_id = %s
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM proxy_service_bids
+            WHERE user_id = %s
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id))
+        cur.execute("DELETE FROM proxy_service_users WHERE user_id = %s", (id,))
+        cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = %s", (id,))
+        cur.execute("DELETE FROM service_documents WHERE user_id = %s", (id,))
+        cur.execute("""
+            DELETE FROM user_mitsumori_items
+            WHERE mitsumori_id IN (SELECT id FROM user_mitsumori WHERE user_id = %s)
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id))
+        cur.execute("DELETE FROM user_mitsumori WHERE user_id = %s", (id,))
+        cur.execute("""
+            DELETE FROM user_keisan_items
+            WHERE keisan_id IN (SELECT id FROM user_keisan WHERE user_id = %s)
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+               OR proxy_source_item_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id, id, id))
+        cur.execute("DELETE FROM user_keisan WHERE user_id = %s", (id,))
+        cur.execute("""
+            UPDATE merchandise
+            SET proxy_parent_item_id = NULL
+            WHERE proxy_parent_item_id IN (SELECT id FROM merchandise WHERE user_id = %s)
+        """, (id,))
         cur.execute("""
             DELETE FROM user_kaitori_shoudaku_items
             WHERE kaitori_shoudaku_id IN (
@@ -15216,6 +15269,59 @@ def delete_user(id):
         cur.execute("DELETE FROM users WHERE id = %s", (id,))
     else:
         cur = conn.cursor()
+        ensure_proxy_service_auction_user_table(conn, cur)
+        cur.execute("""
+            DELETE FROM sale_request_events
+            WHERE sale_request_id IN (
+                SELECT id FROM sale_requests
+                WHERE user_id = ?
+                   OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+            )
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM sale_requests
+            WHERE user_id = ?
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM sales_agency_request_items
+            WHERE request_id IN (
+                SELECT id FROM sales_agency_requests WHERE user_id = ?
+            )
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id))
+        cur.execute("DELETE FROM sales_agency_requests WHERE user_id = ?", (id,))
+        cur.execute("""
+            DELETE FROM item_disposal_requests
+            WHERE user_id = ?
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id))
+        cur.execute("""
+            DELETE FROM proxy_service_bids
+            WHERE user_id = ?
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id))
+        cur.execute("DELETE FROM proxy_service_users WHERE user_id = ?", (id,))
+        cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = ?", (id,))
+        cur.execute("DELETE FROM service_documents WHERE user_id = ?", (id,))
+        cur.execute("""
+            DELETE FROM user_mitsumori_items
+            WHERE mitsumori_id IN (SELECT id FROM user_mitsumori WHERE user_id = ?)
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id))
+        cur.execute("DELETE FROM user_mitsumori WHERE user_id = ?", (id,))
+        cur.execute("""
+            DELETE FROM user_keisan_items
+            WHERE keisan_id IN (SELECT id FROM user_keisan WHERE user_id = ?)
+               OR merchandise_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+               OR proxy_source_item_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id, id, id))
+        cur.execute("DELETE FROM user_keisan WHERE user_id = ?", (id,))
+        cur.execute("""
+            UPDATE merchandise
+            SET proxy_parent_item_id = NULL
+            WHERE proxy_parent_item_id IN (SELECT id FROM merchandise WHERE user_id = ?)
+        """, (id,))
         cur.execute("""
             DELETE FROM user_kaitori_shoudaku_items
             WHERE kaitori_shoudaku_id IN (
