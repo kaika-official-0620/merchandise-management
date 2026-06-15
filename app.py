@@ -39965,7 +39965,9 @@ def admin_sales_agency_process(id):
             sale_type_guard = ""
             if merchandise_sale_type_exists:
                 sale_type_guard = f" AND (sale_type IS NULL OR sale_type LIKE {placeholder} OR sale_type = {placeholder})"
-                update_params.extend(['sales_agency_%', build_sales_agency_sale_type(req.get('service_type'))])
+                sale_type_guard_params = ['sales_agency_%', build_sales_agency_sale_type(req.get('service_type'))]
+            else:
+                sale_type_guard_params = []
             cur.execute(
                 f'''
                 UPDATE merchandise
@@ -39976,7 +39978,7 @@ def admin_sales_agency_process(id):
                     WHERE request_id = {placeholder}
                 ){sale_type_guard}
                 ''',
-                tuple(update_params + [id]),
+                tuple(update_params + [id] + sale_type_guard_params),
             )
 
         cur.execute(f'SELECT * FROM users WHERE id = {placeholder}', (req['user_id'],))
