@@ -2862,8 +2862,9 @@ def apply(module: Any) -> None:
     if "admin_documents_dashboard" not in app.view_functions:
         app.view_functions["admin_documents_dashboard"] = login_required(admin_documents_dashboard_v2)
     app.view_functions["sales_agency_my_requests"] = login_required(sales_agency_my_requests_v2)
-    app.view_functions["admin_sales_agency_requests"] = login_required(admin_sales_agency_requests_v3)
-    app.view_functions["admin_sales_agency_process"] = login_required(admin_sales_agency_process_v3)
+    # Keep the canonical app.py sales-agency admin routes active. The legacy
+    # preview overrides do not include client grouping, cancel handling, inspect,
+    # or completion sale-price reflection.
     app.view_functions["admin_mitsumori_add"] = login_required(admin_mitsumori_add_v3)
     app.view_functions["admin_users"] = login_required(admin_users_clients_view)
     app.view_functions["admin_add_user"] = login_required(admin_add_client_view)
