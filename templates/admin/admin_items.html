@@ -349,6 +349,11 @@
         color: #94a3b8;
     }
 
+    .data-table tbody tr.row-sold .table-thumb,
+    .data-table tbody tr.row-sold .no-thumb {
+        opacity: 0.45;
+    }
+
     .data-table tbody tr.row-sold:hover {
         background: #f1f1f1;
     }
@@ -1026,6 +1031,34 @@
             display: none;
         }
 
+        .admin-item-card.card-sold .admin-card-body {
+            display: block;
+            padding: 0 6px 6px;
+        }
+
+        .admin-item-card.card-sold .admin-card-info-grid {
+            display: block;
+        }
+
+        .admin-item-card.card-sold .admin-card-info-item {
+            display: none;
+        }
+
+        .admin-item-card.card-sold .admin-card-info-item:last-child {
+            display: flex;
+            gap: 2px;
+            margin-top: 2px;
+        }
+
+        .admin-item-card.card-sold .admin-card-info-item:last-child .admin-card-info-label {
+            font-size: 0.6rem;
+        }
+
+        .admin-item-card.card-sold .admin-card-info-item:last-child .admin-card-info-value {
+            font-size: 0.72rem;
+            line-height: 1.25;
+        }
+
         /* 価格のみコンパクト表示 */
         .admin-card-info-grid {
             display: grid;
@@ -1275,7 +1308,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>仕入れ額</label>
+                <label>仕入価格</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1287,7 +1320,7 @@
                 <input type="number" id="tab-filter-sale-max" placeholder="以下">
             </div>
             <div class="filter-item">
-                <label>最終利益</label>
+                <label>利益額</label>
                 <input type="number" id="tab-filter-profit-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-profit-max" placeholder="以下">
@@ -1337,12 +1370,12 @@
                     <th class="owner-col">登録者</th>
                     <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">仕入日</th>
-                    <th class="sortable" data-sort="purchase_price">仕入れ額</th>
+                    <th class="sortable" data-sort="purchase_price">仕入価格</th>
                     <th class="sortable fee-col" data-sort="commission_total">手数料</th>
                     <th class="shipping-col">送料</th>
-                    <th class="sortable" data-sort="sale_price">売上</th>
+                    <th class="sortable" data-sort="sale_price">売却価格</th>
                     <th class="sortable" data-sort="sales_destination">販売先</th>
-                    <th class="sortable" data-sort="profit">最終利益</th>
+                    <th class="sortable" data-sort="profit">利益額</th>
                     <th>販売状況</th>
                     <th style="width: 100px;">操作</th>
                 </tr>
@@ -1398,7 +1431,7 @@
                     </td>
                     <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.purchase_date or '-' }}</td>
-                    <td class="amount">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
+                    <td class="amount">仕入 ¥{{ "{:,}".format(item.display_purchase_price or 0) }}</td>
                     <td class="amount fee-col">
                         {% if item.is_sold or item.sale_date or item.display_fee_total %}
                         <details class="fee-breakdown">
@@ -1406,7 +1439,7 @@
                             <div class="fee-breakdown-body">
                                 {% for fee_detail in item.fee_breakdown_details or [] %}
                                 {% if not fee_detail.startswith('送料:') %}
-                                <div class="fee-detail-line">{{ fee_detail }}</div>
+                                <div class="fee-detail-line">{{ fee_detail|replace('卸' ~ '価格', '仕入価格') }}</div>
                                 {% endif %}
                                 {% endfor %}
                             </div>
@@ -1420,7 +1453,7 @@
                     </td>
                     <td class="amount">
                         {% if item.is_sold or item.sale_date %}
-                        ¥{{ "{:,}".format(item.display_sale_price or 0) }}
+                        売却 ¥{{ "{:,}".format(item.display_sale_price or 0) }}
                         {% else %}-{% endif %}
                     </td>
                     <td>{{ item.sales_destination_display if (item.is_sold or item.sale_date) else '-' }}</td>
@@ -1485,7 +1518,8 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.listing_price or item.display_purchase_price or item.purchase_price or 0) %}
+        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.display_purchase_price or item.purchase_price or 0) %}
+        {% set mobile_price_label = '売却' if (item.is_sold or item.sale_date) else '仕入' %}
         <div class="admin-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-detail-url="{{ url_for('view_item', id=item.id, back_url=current_back_url) }}"
             data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}"
@@ -1518,7 +1552,7 @@
                     {% else %}
                     <div class="no-photo">-</div>
                     {% endif %}
-                    <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
+                    <div class="card-price-overlay">{{ mobile_price_label }} ¥{{ "{:,}".format(mobile_price|int) }}</div>
                 </div>
                 <div class="admin-card-title">
                     <span class="admin-card-id">{{ item.kaika_product_code or '-' }}</span>
@@ -1531,29 +1565,16 @@
                 <div class="admin-card-status">
                     {% if item.is_sold or item.sale_date %}
                     <span class="status-badge sold">売却済み</span>
-                    {% elif item.pending_completion_request %}
-                    <span class="status-badge pending-sale">取引完了確認中</span>
-                    {% elif item.pending_shipping_request %}
-                    <span class="status-badge pending-sale">発送依頼確認中</span>
-                    {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
-                    <span class="status-badge pending-sale">取引中</span>
-                    {% elif item.pending_sales_agency %}
-                    <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中' }}</span>
-                    {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
-                    <span class="status-badge pending-sale">査定中</span>
-                    {% elif item.is_listed %}
-                    <span class="status-badge listed">出品中</span>
-                    {% else %}
-                    <span class="status-badge unlisted">未出品</span>
                     {% endif %}
                 </div>
             </div>
             <div class="admin-card-body">
                 <div class="admin-card-info-grid">
                     <div class="admin-card-info-item">
-                        <span class="admin-card-info-label">仕入れ額</span>
-                        <span class="admin-card-info-value">¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
+                        <span class="admin-card-info-label">仕入価格</span>
+                        <span class="admin-card-info-value">仕入 ¥{{ "{:,}".format(item.display_purchase_price or 0) }}</span>
                     </div>
+                    {% if item.is_sold or item.sale_date %}
                     <div class="admin-card-info-item">
                         <span class="admin-card-info-label">手数料</span>
                         <span class="admin-card-info-value">
@@ -1571,7 +1592,7 @@
                         </span>
                     </div>
                     <div class="admin-card-info-item">
-                        <span class="admin-card-info-label">売上</span>
+                        <span class="admin-card-info-label">売却価格</span>
                         <span class="admin-card-info-value">{% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.display_sale_price or
                             0) }}{% else %}-{% endif %}</span>
                     </div>
@@ -1580,11 +1601,12 @@
                         <span class="admin-card-info-value">{{ item.sales_destination_display if (item.is_sold or item.sale_date) else '-' }}</span>
                     </div>
                     <div class="admin-card-info-item">
-                        <span class="admin-card-info-label">最終利益</span>
+                        <span class="admin-card-info-label">利益額</span>
                         <span class="admin-card-info-value {% if item.is_sold or item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
-                            {% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.profit or 0) }}{% else %}-{% endif %}
+                            ¥{{ "{:,}".format(item.profit or 0) }}{% if item.profit_rate %} ({{ item.profit_rate }}%){% endif %}
                         </span>
                     </div>
+                    {% endif %}
                 </div>
             </div>
             <div class="admin-card-footer">

@@ -525,6 +525,12 @@
                         {% if 'reject' in req.available_actions %}
                         <button type="button" class="btn btn-reject" onclick="processRequest('{{ req.id }}', 'reject')">却下申請にする</button>
                         {% endif %}
+                        {% if 'cancel_approve' in req.available_actions %}
+                        <button type="button" class="btn btn-approve" onclick="processRequest('{{ req.id }}', 'cancel_approve')">キャンセルを承認</button>
+                        {% endif %}
+                        {% if 'reject_cancel' in req.available_actions %}
+                        <button type="button" class="btn btn-reject" onclick="processRequest('{{ req.id }}', 'reject_cancel')">キャンセルを却下</button>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -568,6 +574,8 @@ function processRequest(requestId, action) {
         inspect: '検品中',
         complete: '処理完了',
         reject: '却下申請',
+        cancel_approve: 'キャンセル承認',
+        reject_cancel: 'キャンセル却下',
         revert_pending: '承認待ち',
         revert_approved: '認証済み',
         revert_appraising: '{{ "出品準備中" if req.service_type == "simultaneous" else "査定中" }}',

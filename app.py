@@ -1930,6 +1930,93 @@ def normalize_proxy_service_price_value(value):
     return max(0, normalized)
 
 
+def get_proxy_service_bid_unit(current_price):
+    current_price = normalize_proxy_service_price_value(current_price)
+    return 1000 if current_price >= 10000 else 500
+
+
+def get_proxy_service_next_bid_amount(current_price):
+    current_price = normalize_proxy_service_price_value(current_price)
+    if current_price < 10000:
+        next_bid = ((current_price // 500) + 1) * 500
+        return min(next_bid, 10000)
+    return ((current_price // 1000) + 1) * 1000
+
+
+def get_proxy_service_bid_step_for_amount(amount):
+    amount = normalize_proxy_service_price_value(amount)
+    return 1000 if amount >= 10000 else 500
+
+
+def is_proxy_service_valid_bid_amount(bid_amount):
+    bid_amount = normalize_proxy_service_price_value(bid_amount)
+    if bid_amount <= 0:
+        return False
+    if bid_amount < 10000:
+        return bid_amount % 500 == 0
+    return bid_amount % 1000 == 0
+
+
+def get_proxy_service_bid_rule(current_price):
+    current_price = normalize_proxy_service_price_value(current_price)
+    minimum_bid = get_proxy_service_next_bid_amount(current_price)
+    bid_unit = get_proxy_service_bid_unit(current_price)
+    return {
+        'current_price': current_price,
+        'bid_unit': bid_unit,
+        'minimum_bid': minimum_bid,
+    }
+
+
+def parse_proxy_service_bid_amount(value):
+    if isinstance(value, bool):
+        raise ValueError
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError
+        return int(value)
+
+    if isinstance(value, Decimal):
+        if value != value.to_integral_value():
+            raise ValueError
+        return int(value)
+
+    if isinstance(value, str):
+        stripped = value.strip().replace(',', '')
+        if not re.fullmatch(r'\d+', stripped):
+            raise ValueError
+        return int(stripped)
+
+    return int(value)
+
+
+def validate_proxy_service_bid_amount(bid_amount, current_price):
+    bid_amount = normalize_proxy_service_price_value(bid_amount)
+    rule = get_proxy_service_bid_rule(current_price)
+    minimum_bid = rule['minimum_bid']
+    bid_unit = rule['bid_unit']
+    current_price = rule['current_price']
+
+    if bid_amount < minimum_bid:
+        return False, (
+            f'現在価格は¥{current_price:,}です。'
+            f'入札額は¥{minimum_bid:,}以上（{bid_unit:,}円単位）で入力してください。'
+        ), rule
+
+    if bid_amount % bid_unit != 0:
+        return False, (
+            f'現在価格は¥{current_price:,}です。'
+            f'入札額は¥{minimum_bid:,}以上で、'
+            f'{bid_unit:,}円単位で入力してください。'
+        ), rule
+
+    return True, '', rule
+
+
 def extract_proxy_service_price_input(data, key):
     if data is None:
         return False, 0
@@ -2122,6 +2209,8 @@ def annotate_proxy_service_items(items, settings, now=None, current_user_id=None
         purchase_price = normalize_proxy_service_price_value(item.get('purchase_price'))
         listing_price = normalize_proxy_service_price_value(item.get('listing_price'))
         max_price = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
+        current_bid_price = normalize_proxy_service_price_value(highest_bid if highest_bid is not None else listing_price)
+        bid_rule = get_proxy_service_bid_rule(current_bid_price)
         winner_user_id = item.get('highest_bid_user_id')
         winner_name = item.get('highest_bidder')
         is_sold = bool(item.get('sale_date'))
@@ -2213,6 +2302,9 @@ def annotate_proxy_service_items(items, settings, now=None, current_user_id=None
         item['price_label'] = '販売価格' if sale_mode == 'fixed' else '開始価格'
         item['proxy_auction_max_price'] = max_price
         item['has_proxy_auction_max_price'] = bool(max_price > 0 and sale_mode == 'auction')
+        item['current_bid_price'] = bid_rule['current_price']
+        item['minimum_bid_amount'] = bid_rule['minimum_bid']
+        item['bid_unit'] = bid_rule['bid_unit']
         item['is_buyout_sale'] = is_buyout_sale
         item['sold_message'] = '最高価格に到達したため売り切れました' if is_buyout_sale else '売り切れました'
         item['winner_user_id'] = winner_user_id
@@ -2339,6 +2431,9 @@ def build_proxy_service_live_snapshot(items, auction_state):
             'highest_bidder': item.get('highest_bidder') or '',
             'result_price': normalize_proxy_service_price_value(item.get('result_price')),
             'bid_count': int(item.get('bid_count') or 0),
+            'current_bid_price': normalize_proxy_service_price_value(item.get('current_bid_price')),
+            'minimum_bid_amount': normalize_proxy_service_price_value(item.get('minimum_bid_amount')),
+            'bid_unit': normalize_proxy_service_price_value(item.get('bid_unit')),
             'status_label': item.get('status_label') or '',
             'ended_method_label': item.get('ended_method_label') or '',
         })
@@ -4076,6 +4171,7 @@ if DATABASE_URL:
                 user_note TEXT,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
+                additional_image_paths TEXT,
                 status VARCHAR(20) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -4087,6 +4183,10 @@ if DATABASE_URL:
         # qr_image_path2カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS qr_image_path2 TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS additional_image_paths TEXT")
         except:
             pass
         
@@ -5137,6 +5237,7 @@ else:
                 user_note TEXT,
                 qr_image_path TEXT,
                 qr_image_path2 TEXT,
+                additional_image_paths TEXT,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP,
@@ -5148,6 +5249,10 @@ else:
         # qr_image_path2カラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN qr_image_path2 TEXT")
+        except:
+            pass
+        try:
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN additional_image_paths TEXT")
         except:
             pass
         
@@ -5894,11 +5999,13 @@ def ensure_sale_request_financial_columns(conn):
         if DATABASE_URL:
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
             cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS user_note TEXT")
+            cur.execute("ALTER TABLE sale_requests ADD COLUMN IF NOT EXISTS additional_image_paths TEXT")
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS other_cost INTEGER DEFAULT 0")
         else:
             for sql in (
                 "ALTER TABLE sale_requests ADD COLUMN other_cost INTEGER DEFAULT 0",
                 "ALTER TABLE sale_requests ADD COLUMN user_note TEXT",
+                "ALTER TABLE sale_requests ADD COLUMN additional_image_paths TEXT",
                 "ALTER TABLE merchandise ADD COLUMN other_cost INTEGER DEFAULT 0",
             ):
                 try:
@@ -5985,6 +6092,10 @@ SALE_TYPE_LABELS = {
     'auction': 'オークション販売',
     'live_commerce': 'ライブコマース',
     'proxy_service': '代行仕入れ',
+    'long_term_disposal': '長期保存: 処分済み',
+    'long_term_auction': '長期保存: オークション等',
+    'long_term_inventory_return': '長期保存: 在庫受け取り済み',
+    'long_term_other': '長期保存: その他処理',
 }
 
 def normalize_kaika_sale_type(sale_type):
@@ -8248,6 +8359,7 @@ def index():
     # 売却関連申請を取得
     pending_shipping_requests = {}
     pending_completion_requests = {}
+    rejected_completion_requests = {}
     approved_shipping_requests = {}
     shipped_shipping_requests = {}
     try:
@@ -8263,12 +8375,15 @@ def index():
             request_type = normalize_sale_request_type(req_dict.get('request_type'))
             req_dict['request_type'] = request_type
             req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+            req_dict['additional_image_paths_list'] = parse_sale_request_additional_images(req_dict.get('additional_image_paths'))
             merchandise_id = req_dict['merchandise_id']
             if req_dict.get('status') == 'pending':
                 if request_type == 'completion_report':
                     pending_completion_requests.setdefault(merchandise_id, req_dict)
                 else:
                     pending_shipping_requests.setdefault(merchandise_id, req_dict)
+            elif req_dict.get('status') == 'rejected' and request_type == 'completion_report':
+                rejected_completion_requests.setdefault(merchandise_id, req_dict)
             elif req_dict.get('status') == 'approved' and request_type == 'shipping_request':
                 approved_shipping_requests.setdefault(merchandise_id, req_dict)
                 if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
@@ -8288,7 +8403,7 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
                   AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         else:
@@ -8297,7 +8412,7 @@ def index():
                 SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
-                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+                WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
                   AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
             """)
         for req in cur3.fetchall():
@@ -8313,6 +8428,17 @@ def index():
         conn3.close()
     except Exception as e:
         print(f"Error fetching sales agency requests: {e}", flush=True)
+
+    long_term_result_items = {}
+    try:
+        item_ids_for_long_term = [dict(item).get('id') for item in items if dict(item).get('id')]
+        long_term_result_items = load_long_term_request_map_for_items(
+            item_ids_for_long_term,
+            include_final=True,
+            include_rejected=False,
+        )
+    except Exception as e:
+        print(f"Error fetching long-term result requests: {e}", flush=True)
     
     # アイテムに計算フィールド追加
     fee_settings = get_fee_settings()
@@ -8340,6 +8466,7 @@ def index():
         item_id = item_dict.get('id')
         shipping_request = pending_shipping_requests.get(item_id)
         completion_request = pending_completion_requests.get(item_id)
+        rejected_completion_request = rejected_completion_requests.get(item_id)
         approved_shipping_request = approved_shipping_requests.get(item_id)
         shipped_shipping_request = shipped_shipping_requests.get(item_id)
 
@@ -8347,23 +8474,39 @@ def index():
         item_dict['shipping_request'] = shipping_request
         item_dict['pending_completion_request'] = completion_request is not None
         item_dict['completion_request'] = completion_request
+        item_dict['rejected_completion_request'] = rejected_completion_request
+        item_dict['completion_resend_requested'] = bool(rejected_completion_request and not completion_request)
         item_dict['approved_shipping_request'] = approved_shipping_request
         item_dict['shipped_shipping_request'] = shipped_shipping_request
         item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
         item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
-        item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
+        item_dict['can_send_completion_report'] = (
+            item_dict['shipping_request_approved']
+            and not item_dict.get('sale_date')
+            and not item_dict.get('pending_completion_request')
+            and not item_dict.get('completion_resend_requested')
+        )
+        warning_info = None
+        if item_dict['can_send_completion_report']:
+            warning_info = get_completion_report_warning_info(approved_shipping_request or shipped_shipping_request)
+        item_dict['completion_report_warning'] = warning_info
+        item_dict['completion_report_overdue'] = bool(warning_info)
 
         # 既存テンプレート互換
         item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
-        item_dict['sale_request'] = completion_request or shipping_request
+        item_dict['sale_request'] = completion_request or rejected_completion_request or shipping_request
         
         # 販売代行サービス申請中かどうかを判定
         if item_id in sales_agency_items:
             item_dict['pending_sales_agency'] = True
             item_dict['sales_agency_request'] = sales_agency_items[item_id]
+            item_dict['can_send_completion_report'] = False
+            item_dict['completion_report_warning'] = None
+            item_dict['completion_report_overdue'] = False
         else:
             item_dict['pending_sales_agency'] = False
             item_dict['sales_agency_request'] = None
+        apply_long_term_result_state(item_dict, long_term_result_items.get(item_id))
         
         # 削除可能かどうかを判定（オーナーは常に削除可能、管理者は1日以内のみ削除可能）
         if current_user.is_owner():
@@ -8409,10 +8552,14 @@ def index():
                 return 90
             if row.get('pending_sales_agency'):
                 return 5
+            if row.get('completion_resend_requested'):
+                return 7
             if row.get('pending_completion_request'):
                 return 8
             if row.get('pending_shipping_request'):
                 return 10
+            if row.get('completion_report_overdue'):
+                return 18
             if not row.get('is_listed'):
                 return 12
             if row.get('can_send_completion_report'):
@@ -8441,7 +8588,7 @@ def index():
             item_dict['mobile_status_label'] = '発送準備中'
         elif item_dict.get('pending_sales_agency'):
             if sales_agency_service_type == 'simultaneous':
-                item_dict['mobile_status_label'] = '同時出品中'
+                item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '業者依頼中'
             elif sales_agency_status in {'appraising', 'inspecting'} or item_dict.get('appraisal_status') in {'waiting', 'inspecting'}:
                 item_dict['mobile_status_label'] = '査定中'
             else:
@@ -8454,6 +8601,7 @@ def index():
             item_dict['mobile_status_label'] = '認証済み'
         else:
             item_dict['mobile_status_label'] = '発送依頼を送る'
+        item_dict['mobile_status_label'] = resolve_inventory_mobile_status_label(item_dict)
         item_dict['status_tags'] = build_inventory_status_tags(item_dict)
         
         # 全画像リスト（メイン + 追加）
@@ -8469,6 +8617,12 @@ def index():
         
         processed_items.append(item_dict)
 
+    completion_overdue_items = [
+        item
+        for item in processed_items
+        if item.get('completion_report_warning')
+    ]
+
     def matches_inventory_status(row, status_key):
         if not status_key:
             return True
@@ -8482,7 +8636,9 @@ def index():
                 not is_sold_item
                 and (
                     row.get('pending_completion_request')
+                    or row.get('completion_resend_requested')
                     or row.get('pending_shipping_request')
+                    or row.get('completion_report_overdue')
                     or row.get('can_send_completion_report')
                     or row.get('approved_shipping_request')
                     or row.get('shipment_marked')
@@ -8664,6 +8820,7 @@ def index():
                          filter_type=filter_type, search=search, announcements=announcements,
                          is_shared_view=is_shared_view, all_users=all_users,
                          proxy_service_info=proxy_service_info,
+                         completion_overdue_items=completion_overdue_items,
                          summary_period=summary_period,
                          summary_period_options=summary_period_options,
                          sort_mode=sort_mode,
@@ -13640,7 +13797,7 @@ def view_item(id):
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = %s
                       AND sar.user_id = %s
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
@@ -13652,7 +13809,7 @@ def view_item(id):
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = ?
                       AND sar.user_id = ?
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
@@ -13667,6 +13824,7 @@ def view_item(id):
                     viewer='client',
                     service_type=request_dict.get('service_type'),
                 )
+                request_dict['can_request_cancel'] = request_dict.get('status') == 'pending'
                 item_dict['pending_sales_agency'] = True
                 item_dict['sales_agency_request'] = request_dict
         except Exception as e:
@@ -13695,6 +13853,7 @@ def view_item(id):
         )
 
     enrich_item_sale_request_state(item_dict, include_all_users=current_user.is_admin() or current_user.is_owner())
+    attach_long_term_request_state(item_dict)
 
     if current_user.is_admin() or current_user.is_owner():
         actor_ids = [actor_id for actor_id in [item_dict.get('created_by'), item_dict.get('updated_by')] if actor_id]
@@ -20162,10 +20321,10 @@ def proxy_service_bid():
         return jsonify({'success': False, 'error': '必須項目が入力されていません'}), 400
     
     try:
-        bid_amount = int(bid_amount)
+        bid_amount = parse_proxy_service_bid_amount(bid_amount)
         if bid_amount <= 0:
             return jsonify({'success': False, 'error': '有効な金額を入力してください'}), 400
-    except ValueError:
+    except (TypeError, ValueError):
         return jsonify({'success': False, 'error': '有効な金額を入力してください'}), 400
     
     conn = get_db()
@@ -20233,17 +20392,24 @@ def proxy_service_bid():
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = %s ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        min_bid = highest['bid_amount'] + 1 if highest else (item['listing_price'] or 0)
+        current_bid_price = highest['bid_amount'] if highest else item.get('listing_price')
+        is_valid_bid, bid_error, bid_rule = validate_proxy_service_bid_amount(bid_amount, current_bid_price)
         max_price = normalize_proxy_service_price_value(item.get('proxy_auction_max_price'))
         if max_price and highest and highest['bid_amount'] >= max_price:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は最高価格に到達したため売り切れました'}), 400
         
-        if bid_amount < min_bid:
+        if not is_valid_bid:
             cur.close()
             conn.close()
-            return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+            return jsonify({
+                'success': False,
+                'error': bid_error,
+                'current_price': bid_rule['current_price'],
+                'minimum_bid': bid_rule['minimum_bid'],
+                'bid_unit': bid_rule['bid_unit'],
+            }), 400
 
         accepted_bid_amount = max_price if max_price and bid_amount >= max_price else bid_amount
         budget_required = accepted_bid_amount if max_price and bid_amount >= max_price else bid_amount
@@ -20342,17 +20508,24 @@ def proxy_service_bid():
         # 現在の最高入札を確認
         cur.execute("SELECT bid_amount FROM proxy_service_bids WHERE merchandise_id = ? ORDER BY bid_amount DESC LIMIT 1", (merchandise_id,))
         highest = cur.fetchone()
-        min_bid = highest[0] + 1 if highest else (item_dict.get('listing_price') or 0)
+        current_bid_price = highest[0] if highest else item_dict.get('listing_price')
+        is_valid_bid, bid_error, bid_rule = validate_proxy_service_bid_amount(bid_amount, current_bid_price)
         max_price = normalize_proxy_service_price_value(item_dict.get('proxy_auction_max_price'))
         if max_price and highest and highest[0] >= max_price:
             cur.close()
             conn.close()
             return jsonify({'success': False, 'error': 'この商品は最高価格に到達したため売り切れました'}), 400
         
-        if bid_amount < min_bid:
+        if not is_valid_bid:
             cur.close()
             conn.close()
-            return jsonify({'success': False, 'error': f'入札額は¥{min_bid:,}以上にしてください'}), 400
+            return jsonify({
+                'success': False,
+                'error': bid_error,
+                'current_price': bid_rule['current_price'],
+                'minimum_bid': bid_rule['minimum_bid'],
+                'bid_unit': bid_rule['bid_unit'],
+            }), 400
 
         accepted_bid_amount = max_price if max_price and bid_amount >= max_price else bid_amount
         budget_required = accepted_bid_amount if max_price and bid_amount >= max_price else bid_amount
@@ -20400,12 +20573,16 @@ def proxy_service_bid():
     conn.commit()
     cur.close()
     conn.close()
+    next_bid_rule = get_proxy_service_bid_rule(accepted_bid_amount)
     
     return jsonify({
         'success': True, 
         'message': '入札が完了しました',
         'bid_amount': accepted_bid_amount,
         'bidder_name': bidder_name,
+        'current_price': next_bid_rule['current_price'],
+        'minimum_bid': next_bid_rule['minimum_bid'],
+        'bid_unit': next_bid_rule['bid_unit'],
         'item_sold': item_sold,
         'sold_message': '最高価格に到達したため売り切れました' if item_sold else ''
     })
@@ -24238,6 +24415,10 @@ def admin_items():
         sales_agency_request = sales_agency_items.get(item.get('id'))
         item['pending_sales_agency'] = sales_agency_request is not None
         item['sales_agency_request'] = sales_agency_request
+        if item['pending_sales_agency']:
+            item['can_send_completion_report'] = False
+            item['completion_report_warning'] = None
+            item['completion_report_overdue'] = False
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
         if item.get('sale_date'):
@@ -24549,6 +24730,11 @@ def admin_user_products():
     item_ids = [item.get('id') for item in items if item.get('id')]
     sale_request_state_maps = load_sale_request_state_maps(item_ids)
     sales_agency_items = load_sales_agency_item_map(item_ids, viewer='client')
+    long_term_result_items = load_long_term_request_map_for_items(
+        item_ids,
+        include_final=True,
+        include_rejected=False,
+    )
     for item in items:
         if item.get('photo_path'):
             item['photo_path'] = item['photo_path'].replace('\\', '/')
@@ -24556,6 +24742,11 @@ def admin_user_products():
         sales_agency_request = sales_agency_items.get(item.get('id'))
         item['pending_sales_agency'] = sales_agency_request is not None
         item['sales_agency_request'] = sales_agency_request
+        if item['pending_sales_agency']:
+            item['can_send_completion_report'] = False
+            item['completion_report_warning'] = None
+            item['completion_report_overdue'] = False
+        apply_long_term_result_state(item, long_term_result_items.get(item.get('id')))
         apply_inventory_display_metrics(item, scope='user', fee_settings=fee_settings)
         if item.get('sale_date'):
             sale_price = item.get('sale_price', 0) or 0
@@ -24636,6 +24827,9 @@ def admin_user_products():
         item['finish_action'] = action_context['finish_action']
         item['finish_action_label'] = action_context['finish_action_label']
         item['finish_confirm_message'] = action_context['finish_confirm_message']
+        item['other_action'] = action_context['other_action']
+        item['other_action_label'] = action_context['other_action_label']
+        item['other_confirm_message'] = action_context['other_confirm_message']
         item['can_notify_owner'] = bool(item.get('owner_line_user_id')) or preview_mode
     
     return render_template(
@@ -31587,7 +31781,7 @@ def long_term_items():
             )
             item['disposal_status'] = status_context['status_value']
             item['disposal_status_stage'] = status_context['status_stage']
-            item['disposal_status_label'] = status_context['status_label']
+            item['disposal_status_label'] = get_long_term_user_status_label(status_context)
             item['disposal_type_label'] = LONG_TERM_DISPOSAL_TYPE_LABELS.get(item.get('disposal_type'), '')
         except Exception as e:
             print(f"[ERROR] Date calculation error for item {item.get('id')}: {e}", flush=True)
@@ -31666,12 +31860,16 @@ def submit_long_term_disposal_request():
                 if DATABASE_URL:
                     cur.execute("""
                         SELECT id FROM item_disposal_requests 
-                        WHERE merchandise_id = %s AND status = 'pending' AND reason = 'long_term'
+                        WHERE merchandise_id = %s
+                          AND reason = 'long_term'
+                          AND COALESCE(status, 'pending') IN ('pending', 'processing', 'auction_listing', 'shipping_preparing', 'liquidation_processing')
                     """, (merchandise_id,))
                 else:
                     cur.execute("""
                         SELECT id FROM item_disposal_requests 
-                        WHERE merchandise_id = ? AND status = 'pending' AND reason = 'long_term'
+                        WHERE merchandise_id = ?
+                          AND reason = 'long_term'
+                          AND COALESCE(status, 'pending') IN ('pending', 'processing', 'auction_listing', 'shipping_preparing', 'liquidation_processing')
                     """, (merchandise_id,))
                 
                 existing = cur.fetchone()
@@ -32100,7 +32298,16 @@ def admin_disposal_requests():
         req['finish_action'] = action_context['finish_action']
         req['finish_action_label'] = action_context['finish_action_label']
         req['finish_confirm_message'] = action_context['finish_confirm_message']
+        req['other_action'] = action_context['other_action']
+        req['other_action_label'] = action_context['other_action_label']
+        req['other_confirm_message'] = action_context['other_confirm_message']
         req['allow_reject'] = action_context['allow_reject']
+
+    if filtered_reason == 'long_term':
+        requests = [
+            req for req in requests
+            if not is_long_term_final_status(req.get('status_value'))
+        ]
 
     requests.sort(
         key=lambda req: (
@@ -32170,7 +32377,7 @@ def process_disposal_request(request_id):
             from psycopg2.extras import RealDictCursor
             cur_dict = conn.cursor(cursor_factory=RealDictCursor)
             cur_dict.execute("""
-                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date
+                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date, m.notes
                 FROM item_disposal_requests dr
                 JOIN merchandise m ON m.id = dr.merchandise_id
                 WHERE dr.id = %s
@@ -32179,7 +32386,7 @@ def process_disposal_request(request_id):
             cur_dict.close()
         else:
             cur.execute("""
-                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date
+                SELECT dr.merchandise_id, dr.status, dr.disposal_type, m.sale_date, m.notes
                 FROM item_disposal_requests dr
                 JOIN merchandise m ON m.id = dr.merchandise_id
                 WHERE dr.id = ?
@@ -32191,6 +32398,7 @@ def process_disposal_request(request_id):
                     'status': row[1],
                     'disposal_type': row[2],
                     'sale_date': row[3],
+                    'notes': row[4],
                 }
             else:
                 request_info = None
@@ -32218,6 +32426,7 @@ def process_disposal_request(request_id):
             action_context.get('primary_action'),
             action_context.get('secondary_action'),
             action_context.get('finish_action'),
+            action_context.get('other_action'),
         }
         if action_context.get('allow_reject'):
             allowed_actions.add('rejected')
@@ -32252,31 +32461,74 @@ def process_disposal_request(request_id):
             """, (normalized_action, admin_note, current_user.id, request_id))
         
         merchandise_id = request_info.get('merchandise_id')
-        if normalized_action in ('shipping_sent', 'liquidation_completed'):
+        if normalized_action in LONG_TERM_FINAL_STATUSES - {'closed'}:
+            result_label = get_long_term_result_label(normalized_action)
+            result_sale_type = LONG_TERM_RESULT_SALE_TYPES.get(normalized_action, 'long_term_other')
+            result_note = append_long_term_note(request_info.get('notes'), result_label, admin_note)
             if DATABASE_URL:
-                cur.execute("""
-                    UPDATE merchandise 
-                    SET sale_date = %s,
-                        sale_type = %s
-                    WHERE id = %s 
-                      AND sale_date IS NULL
-                """, (
-                    now.date(),
-                    'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
-                    merchandise_id,
-                ))
+                if normalized_action == 'liquidation_completed':
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_date = %s,
+                            sale_price = 0,
+                            shipping_cost = 0,
+                            commission = 0,
+                            other_cost = 0,
+                            sale_type = %s,
+                            sales_destination = %s,
+                            notes = %s
+                        WHERE id = %s
+                    """, (now.date(), result_sale_type, '長期保存処分', result_note, merchandise_id))
+                elif normalized_action == 'auction_sold':
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_type = %s,
+                            sales_destination = CASE
+                                WHEN COALESCE(sales_destination, '') = '' THEN %s
+                                ELSE sales_destination
+                            END,
+                            notes = %s
+                        WHERE id = %s
+                    """, (result_sale_type, '長期保存: オークション等', result_note, merchandise_id))
+                else:
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_type = %s,
+                            notes = %s
+                        WHERE id = %s
+                    """, (result_sale_type, result_note, merchandise_id))
             else:
-                cur.execute("""
-                    UPDATE merchandise 
-                    SET sale_date = ?,
-                        sale_type = ?
-                    WHERE id = ? 
-                      AND sale_date IS NULL
-                """, (
-                    now.strftime('%Y-%m-%d'),
-                    'shipping_return' if normalized_action == 'shipping_sent' else 'disposal',
-                    merchandise_id,
-                ))
+                if normalized_action == 'liquidation_completed':
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_date = ?,
+                            sale_price = 0,
+                            shipping_cost = 0,
+                            commission = 0,
+                            other_cost = 0,
+                            sale_type = ?,
+                            sales_destination = ?,
+                            notes = ?
+                        WHERE id = ?
+                    """, (now.strftime('%Y-%m-%d'), result_sale_type, '長期保存処分', result_note, merchandise_id))
+                elif normalized_action == 'auction_sold':
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_type = ?,
+                            sales_destination = CASE
+                                WHEN COALESCE(sales_destination, '') = '' THEN ?
+                                ELSE sales_destination
+                            END,
+                            notes = ?
+                        WHERE id = ?
+                    """, (result_sale_type, '長期保存: オークション等', result_note, merchandise_id))
+                else:
+                    cur.execute("""
+                        UPDATE merchandise
+                        SET sale_type = ?,
+                            notes = ?
+                        WHERE id = ?
+                    """, (result_sale_type, result_note, merchandise_id))
         
         conn.commit()
 
@@ -32422,7 +32674,7 @@ LONG_TERM_AUTO_TRANSFER_DAYS = 150
 LONG_TERM_DISPOSAL_TYPE_LABELS = {
     'auction': 'オークション販売',
     'liquidation': '在庫処分',
-    'shipping': '返却（郵送）',
+    'shipping': '在庫受け取り',
 }
 
 LONG_TERM_REQUEST_STATUS_LABELS = {
@@ -32437,6 +32689,7 @@ LONG_TERM_REQUEST_STATUS_LABELS = {
     'shipping_sent': '郵送済み',
     'liquidation_processing': '処分対応中',
     'liquidation_completed': '処分完了',
+    'other_completed': '処理完了',
 }
 
 LONG_TERM_REQUEST_TYPE_STATUS_LABELS = {
@@ -32448,6 +32701,7 @@ LONG_TERM_REQUEST_TYPE_STATUS_LABELS = {
         'rejected': '差し戻し',
         'auction_listing': 'オークション販売中',
         'auction_sold': 'オークション販売済み',
+        'other_completed': '処理完了',
     },
     'shipping': {
         'pending': '返却申請受付',
@@ -32457,6 +32711,7 @@ LONG_TERM_REQUEST_TYPE_STATUS_LABELS = {
         'rejected': '差し戻し',
         'shipping_preparing': '郵送準備中',
         'shipping_sent': '郵送済み',
+        'other_completed': '処理完了',
     },
     'liquidation': {
         'pending': '処分申請受付',
@@ -32466,6 +32721,7 @@ LONG_TERM_REQUEST_TYPE_STATUS_LABELS = {
         'rejected': '差し戻し',
         'liquidation_processing': '処分対応中',
         'liquidation_completed': '処分完了',
+        'other_completed': '処理完了',
     },
 }
 
@@ -32481,6 +32737,30 @@ LONG_TERM_REQUEST_STAGE_BY_STATUS = {
     'shipping_sent': 'completed',
     'liquidation_processing': 'processing',
     'liquidation_completed': 'completed',
+    'other_completed': 'completed',
+}
+
+LONG_TERM_FINAL_STATUSES = {
+    'auction_sold',
+    'shipping_sent',
+    'liquidation_completed',
+    'other_completed',
+    'closed',
+}
+
+LONG_TERM_RESULT_LABELS = {
+    'auction_sold': 'オークション等販売済み',
+    'shipping_sent': '在庫受け取り済み',
+    'liquidation_completed': '処分済み',
+    'other_completed': '処理完了',
+    'closed': '処理完了',
+}
+
+LONG_TERM_RESULT_SALE_TYPES = {
+    'auction_sold': 'long_term_auction',
+    'shipping_sent': 'long_term_inventory_return',
+    'liquidation_completed': 'long_term_disposal',
+    'other_completed': 'long_term_other',
 }
 
 LONG_TERM_REQUEST_NEXT_ACTION_LABELS = {
@@ -32490,6 +32770,7 @@ LONG_TERM_REQUEST_NEXT_ACTION_LABELS = {
         'auction_sold': '販売結果を確認後に終了してください',
         'closed': '長期保存対応は終了しています',
         'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+        'other_completed': '対応完了済みです',
     },
     'shipping': {
         'pending': '返送先を確認して郵送準備中へ進めてください',
@@ -32497,6 +32778,7 @@ LONG_TERM_REQUEST_NEXT_ACTION_LABELS = {
         'shipping_sent': '発送確認後に終了してください',
         'closed': '長期保存対応は終了しています',
         'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+        'other_completed': '対応完了済みです',
     },
     'liquidation': {
         'pending': '処分対象を確認して処分対応中へ進めてください',
@@ -32504,6 +32786,7 @@ LONG_TERM_REQUEST_NEXT_ACTION_LABELS = {
         'liquidation_completed': '処分内容を確認後に終了してください',
         'closed': '長期保存対応は終了しています',
         'rejected': '差し戻し理由を確認してお客様へ再案内してください',
+        'other_completed': '対応完了済みです',
     },
 }
 
@@ -32514,6 +32797,7 @@ LONG_TERM_REQUEST_ACTION_NAME_LABELS = {
     'shipping_sent': '郵送済み',
     'liquidation_processing': '処分対応中',
     'liquidation_completed': '処分完了',
+    'other_completed': 'その他処理完了',
     'closed': '終了',
     'rejected': '差し戻し',
 }
@@ -32522,15 +32806,16 @@ def resolve_long_term_request_status(disposal_type, status, sale_date=None):
     normalized_type = disposal_type or ''
     normalized_status = (status or 'pending').strip() if isinstance(status, str) else (status or 'pending')
 
+    if normalized_status == 'other_completed':
+        return 'other_completed'
+
     if normalized_status == 'closed':
         return 'closed'
 
     if normalized_type == 'auction':
-        if sale_date and normalized_status != 'rejected':
-            return 'auction_sold'
         if normalized_status == 'processing':
             return 'auction_listing'
-        if normalized_status == 'completed':
+        if normalized_status in ('completed', 'auction_sold'):
             return 'auction_sold'
     elif normalized_type == 'shipping':
         if normalized_status == 'processing':
@@ -32544,6 +32829,62 @@ def resolve_long_term_request_status(disposal_type, status, sale_date=None):
             return 'liquidation_completed'
 
     return normalized_status or 'pending'
+
+def is_long_term_final_status(status):
+    return status in LONG_TERM_FINAL_STATUSES
+
+def get_long_term_result_label(status):
+    return LONG_TERM_RESULT_LABELS.get(status, LONG_TERM_REQUEST_STATUS_LABELS.get(status, '処理完了'))
+
+def get_long_term_user_status_label(status_context):
+    status_value = status_context.get('status_value')
+    status_stage = status_context.get('status_stage')
+    if status_stage == 'pending' and status_value:
+        return '申請中'
+    if status_stage == 'processing':
+        return '対応中'
+    if status_value in LONG_TERM_FINAL_STATUSES:
+        return get_long_term_result_label(status_value)
+    return status_context.get('status_label') or '未申請'
+
+def append_long_term_note(existing_note, result_label, admin_note=None):
+    existing = (existing_note or '').strip()
+    line = f"[長期保存] {get_jst_now().strftime('%Y/%m/%d')} {result_label}"
+    if admin_note:
+        line = f"{line} / 管理者メモ: {admin_note.strip()}"
+    return f"{existing}\n{line}".strip() if existing else line
+
+def apply_long_term_result_state(item, request_info):
+    item['long_term_result_status'] = None
+    item['long_term_result_label'] = ''
+    item['long_term_result_type_label'] = ''
+    item['long_term_result_note'] = ''
+    item['long_term_status_label'] = ''
+    item['long_term_status_stage'] = ''
+    if not request_info:
+        return item
+
+    resolved_status = resolve_long_term_request_status(
+        request_info.get('disposal_type'),
+        request_info.get('status'),
+        sale_date=item.get('sale_date')
+    )
+    if not is_long_term_final_status(resolved_status):
+        status_context = get_long_term_request_status_context(
+            request_info.get('disposal_type'),
+            request_info.get('status'),
+            sale_date=item.get('sale_date')
+        )
+        if status_context['status_stage'] in ('pending', 'processing'):
+            item['long_term_status_label'] = get_long_term_user_status_label(status_context)
+            item['long_term_status_stage'] = status_context['status_stage']
+        return item
+
+    item['long_term_result_status'] = resolved_status
+    item['long_term_result_label'] = get_long_term_result_label(resolved_status)
+    item['long_term_result_type_label'] = LONG_TERM_DISPOSAL_TYPE_LABELS.get(request_info.get('disposal_type'), 'その他処理')
+    item['long_term_result_note'] = request_info.get('admin_note') or ''
+    return item
 
 def get_long_term_request_status_context(disposal_type, status, sale_date=None):
     if not disposal_type and not status:
@@ -32563,7 +32904,7 @@ def get_long_term_request_status_context(disposal_type, status, sale_date=None):
         '申請内容を確認して次の対応を進めてください'
     )
 
-    if resolved_status in {'auction_sold', 'shipping_sent', 'liquidation_completed', 'closed'}:
+    if resolved_status in LONG_TERM_FINAL_STATUSES:
         next_action_label = '対応完了済みです'
 
     return {
@@ -32587,13 +32928,24 @@ def get_long_term_request_action_context(disposal_type, status, sale_date=None):
         'finish_action': None,
         'finish_action_label': None,
         'finish_confirm_message': None,
+        'other_action': None,
+        'other_action_label': None,
+        'other_confirm_message': None,
         'allow_reject': resolved_status in ('pending', 'auction_listing', 'shipping_preparing', 'liquidation_processing'),
     }
+
+    if resolved_status not in LONG_TERM_FINAL_STATUSES and resolved_status != 'rejected':
+        context['other_action'] = 'other_completed'
+        context['other_action_label'] = 'その他処理で完了'
+        context['other_confirm_message'] = 'この申請をその他処理として完了しますか？'
 
     if disposal_type == 'auction':
         if sale_date:
             context['show_sale_entry'] = True
             context['sale_entry_label'] = '販売結果を確認'
+            context['secondary_action'] = 'auction_sold'
+            context['secondary_action_label'] = '処理完了にする'
+            context['secondary_confirm_message'] = '販売結果を確認し、この長期保存申請を処理完了にしますか？'
             context['allow_reject'] = False
             return context
         if resolved_status == 'pending':
@@ -32653,6 +33005,9 @@ def normalize_long_term_request_action(disposal_type, action, sale_date=None):
 
     if requested_action == 'rejected':
         return 'rejected'
+
+    if requested_action in ('other', 'other_completed'):
+        return 'other_completed'
 
     if disposal_type == 'auction':
         if requested_action in ('processing', 'auction_listing'):
@@ -32752,9 +33107,7 @@ def should_display_long_term_item(item, request_info=None):
             request_info.get('status'),
             sale_date=sale_date
         )
-        if resolved_status == 'closed':
-            return False
-        if sale_date and resolved_status not in ('auction_sold', 'shipping_sent', 'liquidation_completed', 'completed'):
+        if is_long_term_final_status(resolved_status):
             return False
         return True
 
@@ -32763,9 +33116,13 @@ def should_display_long_term_item(item, request_info=None):
 def get_visible_long_term_items(conn, user_id=None, user_ids=None):
     """一覧表示対象の長期保存商品と申請マップを返す。"""
     items = fetch_long_term_candidate_items(conn, user_id=user_id, user_ids=user_ids)
-    request_map = get_long_term_request_map(conn, [item['id'] for item in items]) if items else {}
-    visible_items = [item for item in items if should_display_long_term_item(item, request_map.get(item.get('id')))]
-    return visible_items, request_map
+    if not items:
+        return [], {}
+    merchandise_ids = [item['id'] for item in items]
+    all_request_map = get_long_term_request_map(conn, merchandise_ids, include_final=True, include_rejected=True)
+    active_request_map = get_long_term_request_map(conn, merchandise_ids)
+    visible_items = [item for item in items if should_display_long_term_item(item, all_request_map.get(item.get('id')))]
+    return visible_items, active_request_map
 
 def normalize_date_value(value):
     """datetime/date/ISO文字列をdate型へそろえる"""
@@ -32904,7 +33261,7 @@ def get_internal_redirect_target(raw_url, default, allowed_prefixes=None):
 
     return urlunsplit(('', '', path, parsed.query, ''))
 
-def get_long_term_request_map(conn, merchandise_ids):
+def get_long_term_request_map(conn, merchandise_ids, include_final=False, include_rejected=False):
     if not merchandise_ids:
         return {}
 
@@ -32918,7 +33275,6 @@ def get_long_term_request_map(conn, merchandise_ids):
                    shipping_name, shipping_phone, admin_note, created_at, processed_at
             FROM item_disposal_requests
             WHERE reason = 'long_term'
-              AND COALESCE(status, '') NOT IN ('rejected', 'closed')
               AND merchandise_id IN ({placeholders})
             ORDER BY merchandise_id ASC,
                      created_at DESC,
@@ -32934,7 +33290,6 @@ def get_long_term_request_map(conn, merchandise_ids):
                    shipping_name, shipping_phone, admin_note, created_at, processed_at
             FROM item_disposal_requests
             WHERE reason = 'long_term'
-              AND COALESCE(status, '') NOT IN ('rejected', 'closed')
               AND merchandise_id IN ({placeholders})
             ORDER BY merchandise_id ASC,
                      datetime(created_at) DESC,
@@ -32947,6 +33302,12 @@ def get_long_term_request_map(conn, merchandise_ids):
     cur.close()
 
     for row in rows:
+        status = (row.get('status') or '').strip()
+        resolved_status = resolve_long_term_request_status(row.get('disposal_type'), status)
+        if status == 'rejected' and not include_rejected:
+            continue
+        if is_long_term_final_status(resolved_status) and not include_final:
+            continue
         merchandise_id = row.get('merchandise_id')
         if merchandise_id not in request_map:
             request_map[merchandise_id] = row
@@ -35541,7 +35902,7 @@ def get_admin_sidebar_counts():
         cur.execute("""
             SELECT service_type, COUNT(*)
             FROM sales_agency_requests
-            WHERE status = 'pending'
+            WHERE status IN ('pending', 'cancel_requested')
             GROUP BY service_type
         """)
         agency_counts = {}
@@ -35744,7 +36105,24 @@ def get_sale_request_messages(request_type):
     return SALE_REQUEST_TYPES[normalize_sale_request_type(request_type)]
 
 
-def save_sale_request_images(qr_image, qr_image2, existing_request=None):
+SALE_REQUEST_COMPLETION_WARNING_DAYS = 10
+
+
+def parse_sale_request_additional_images(value):
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(path).replace('\\', '/') for path in value if str(path or '').strip()]
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(path).replace('\\', '/') for path in parsed if str(path or '').strip()]
+
+
+def save_sale_request_images(qr_image, qr_image2, existing_request=None, additional_images=None):
     upload_folder = os.path.join(app.root_path, 'static', 'uploads', 'qr')
     os.makedirs(upload_folder, exist_ok=True)
 
@@ -35764,18 +36142,29 @@ def save_sale_request_images(qr_image, qr_image2, existing_request=None):
         qr_image2.save(os.path.join(upload_folder, filename2))
         qr_image_path2 = 'uploads/qr/' + filename2
 
-    return qr_image_path, qr_image_path2
+    additional_paths = parse_sale_request_additional_images(
+        existing_request.get('additional_image_paths') if existing_request else None
+    )
+    for extra_image in additional_images or []:
+        if not extra_image or not getattr(extra_image, 'filename', ''):
+            continue
+        filename = secure_filename(extra_image.filename)
+        timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S_%f_')
+        filename = timestamp + filename
+        extra_image.save(os.path.join(upload_folder, filename))
+        additional_paths.append('uploads/qr/' + filename)
+
+    return qr_image_path, qr_image_path2, additional_paths
 
 
-def validate_sale_request_payload(request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2):
+def validate_sale_request_payload(request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, additional_image_paths=None):
     request_type = normalize_sale_request_type(request_type)
+    additional_image_paths = additional_image_paths or []
 
     if request_type == 'shipping_request':
-        if not qr_image_path or not qr_image_path2:
-            return '発送依頼では画像を2枚登録してください'
         return None
 
-    if not qr_image_path:
+    if not (qr_image_path or qr_image_path2 or additional_image_paths):
         return '取引完了報告では完了画面の画像を1枚以上登録してください'
     return None
 
@@ -35804,6 +36193,30 @@ def has_approved_shipping_request(cur, item_id):
     return cur.fetchone() is not None
 
 # 未処理の売却申請件数を取得
+def has_active_sales_agency_request(cur, item_id):
+    if DATABASE_URL:
+        cur.execute("""
+            SELECT sar.id
+            FROM sales_agency_request_items sari
+            JOIN sales_agency_requests sar ON sari.request_id = sar.id
+            WHERE sari.merchandise_id = %s
+              AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
+              AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
+            LIMIT 1
+        """, (item_id,))
+    else:
+        cur.execute("""
+            SELECT sar.id
+            FROM sales_agency_request_items sari
+            JOIN sales_agency_requests sar ON sari.request_id = sar.id
+            WHERE sari.merchandise_id = ?
+              AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
+              AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
+            LIMIT 1
+        """, (item_id,))
+    return cur.fetchone() is not None
+
+
 def get_pending_sale_request_count():
     return int(get_admin_sidebar_counts().get('pending_sale_request_count') or 0)
 
@@ -36050,6 +36463,26 @@ def get_shipment_status_label(status):
     return labels.get(status, '')
 
 
+def get_completion_report_warning_info(approved_shipping_request):
+    if not approved_shipping_request:
+        return None
+    base_datetime = parse_box_datetime(
+        approved_shipping_request.get('shipment_marked_at')
+        or approved_shipping_request.get('processed_at')
+        or approved_shipping_request.get('created_at')
+    )
+    if not base_datetime:
+        return None
+    elapsed_days = (get_jst_now().date() - base_datetime.date()).days
+    if elapsed_days < SALE_REQUEST_COMPLETION_WARNING_DAYS:
+        return None
+    return {
+        'days': elapsed_days,
+        'since': base_datetime.strftime('%Y/%m/%d'),
+        'message': f'発送依頼の処理から{elapsed_days}日経過しています。取引完了報告のスクリーンショットを送信してください。',
+    }
+
+
 def has_shipped_sale_request(cur, item_id):
     if DATABASE_URL:
         cur.execute("""
@@ -36087,11 +36520,15 @@ def enrich_item_sale_request_state(item_dict, include_all_users=False):
     item_dict['shipping_request'] = None
     item_dict['pending_completion_request'] = False
     item_dict['completion_request'] = None
+    item_dict['rejected_completion_request'] = None
+    item_dict['completion_resend_requested'] = False
     item_dict['approved_shipping_request'] = None
     item_dict['shipped_shipping_request'] = None
     item_dict['shipping_request_approved'] = bool(item_dict.get('is_shipped'))
     item_dict['shipment_marked'] = bool(item_dict.get('is_shipped'))
     item_dict['can_send_completion_report'] = bool(item_dict.get('is_shipped')) and not item_dict.get('sale_date')
+    item_dict['completion_report_overdue'] = False
+    item_dict['completion_report_warning'] = None
     item_dict['pending_sale_request'] = False
     item_dict['sale_request'] = None
     item_dict['mobile_status_label'] = '売却済み' if (item_dict.get('sale_date') or item_dict.get('is_sold')) else '発送依頼を送る'
@@ -36136,6 +36573,7 @@ def enrich_item_sale_request_state(item_dict, include_all_users=False):
 
     pending_shipping_request = None
     pending_completion_request = None
+    rejected_completion_request = None
     approved_shipping_request = None
     shipped_shipping_request = None
 
@@ -36143,6 +36581,7 @@ def enrich_item_sale_request_state(item_dict, include_all_users=False):
         request_type = normalize_sale_request_type(req_dict.get('request_type'))
         req_dict['request_type'] = request_type
         req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+        req_dict['additional_image_paths_list'] = parse_sale_request_additional_images(req_dict.get('additional_image_paths'))
         status = req_dict.get('status')
 
         if status == 'pending':
@@ -36154,32 +36593,67 @@ def enrich_item_sale_request_state(item_dict, include_all_users=False):
             approved_shipping_request = req_dict
             if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
                 shipped_shipping_request = req_dict
+        elif status == 'rejected' and request_type == 'completion_report' and rejected_completion_request is None:
+            rejected_completion_request = req_dict
 
     item_dict['pending_shipping_request'] = pending_shipping_request is not None
     item_dict['shipping_request'] = pending_shipping_request
     item_dict['pending_completion_request'] = pending_completion_request is not None
     item_dict['completion_request'] = pending_completion_request
+    item_dict['rejected_completion_request'] = rejected_completion_request
+    item_dict['completion_resend_requested'] = bool(rejected_completion_request and not pending_completion_request)
     item_dict['approved_shipping_request'] = approved_shipping_request
     item_dict['shipped_shipping_request'] = shipped_shipping_request
     item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
     item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
-    item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
+    item_dict['can_send_completion_report'] = (
+        item_dict['shipping_request_approved']
+        and not item_dict.get('sale_date')
+        and not item_dict.get('pending_completion_request')
+        and not item_dict.get('completion_resend_requested')
+    )
+    warning_info = None
+    if (
+        item_dict['shipping_request_approved']
+        and not item_dict.get('sale_date')
+        and not item_dict.get('pending_completion_request')
+        and not item_dict.get('completion_resend_requested')
+    ):
+        warning_info = get_completion_report_warning_info(approved_shipping_request or shipped_shipping_request)
+    item_dict['completion_report_warning'] = warning_info
+    item_dict['completion_report_overdue'] = bool(warning_info)
+    if item_dict.get('pending_sales_agency'):
+        item_dict['can_send_completion_report'] = False
+        item_dict['completion_report_warning'] = None
+        item_dict['completion_report_overdue'] = False
     item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
-    item_dict['sale_request'] = pending_completion_request or pending_shipping_request
+    item_dict['sale_request'] = pending_completion_request or rejected_completion_request or pending_shipping_request
 
     sales_agency_request = item_dict.get('sales_agency_request') or {}
+    sales_agency_service_type = (sales_agency_request.get('service_type') or '').strip()
+    sales_agency_status = (sales_agency_request.get('status') or '').strip()
     if item_dict.get('sale_date') or item_dict.get('is_sold'):
         item_dict['mobile_status_label'] = '売却済み'
+    elif item_dict.get('pending_sales_agency'):
+        item_dict['can_send_completion_report'] = False
+        item_dict['completion_report_warning'] = None
+        item_dict['completion_report_overdue'] = False
+        if sales_agency_service_type == 'simultaneous':
+            item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or ('同時出品申請済み' if sales_agency_status == 'pending' else '業者依頼中')
+        elif sales_agency_status in {'appraising', 'inspecting'} or item_dict.get('appraisal_status') in {'waiting', 'inspecting'}:
+            item_dict['mobile_status_label'] = '査定中'
+        else:
+            item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '業者依頼中'
     elif item_dict.get('pending_completion_request'):
-        item_dict['mobile_status_label'] = '取引完了報告確認中'
+        item_dict['mobile_status_label'] = '確認待ち'
+    elif item_dict.get('completion_resend_requested'):
+        item_dict['mobile_status_label'] = '再送依頼'
     elif item_dict.get('pending_shipping_request'):
-        item_dict['mobile_status_label'] = '発送依頼確認中'
+        item_dict['mobile_status_label'] = '発送依頼中'
     elif item_dict.get('can_send_completion_report'):
         item_dict['mobile_status_label'] = '取引完了報告を送る'
     elif item_dict.get('approved_shipping_request'):
-        item_dict['mobile_status_label'] = '発送準備中'
-    elif item_dict.get('pending_sales_agency'):
-        item_dict['mobile_status_label'] = sales_agency_request.get('status_label') or '査定待ち'
+        item_dict['mobile_status_label'] = '取引完了報告を送る'
     elif item_dict.get('appraisal_status') == 'inspecting':
         item_dict['mobile_status_label'] = '査定中'
     elif item_dict.get('appraisal_status') == 'waiting':
@@ -36196,6 +36670,7 @@ def load_sale_request_state_maps(merchandise_ids=None):
     state_maps = {
         'pending_shipping_requests': {},
         'pending_completion_requests': {},
+        'rejected_completion_requests': {},
         'approved_shipping_requests': {},
         'shipped_shipping_requests': {},
     }
@@ -36232,6 +36707,7 @@ def load_sale_request_state_maps(merchandise_ids=None):
             request_type = normalize_sale_request_type(req_dict.get('request_type'))
             req_dict['request_type'] = request_type
             req_dict['request_type_label'] = get_sale_request_type_label(request_type)
+            req_dict['additional_image_paths_list'] = parse_sale_request_additional_images(req_dict.get('additional_image_paths'))
             merchandise_id = req_dict.get('merchandise_id')
             status = req_dict.get('status')
 
@@ -36244,6 +36720,8 @@ def load_sale_request_state_maps(merchandise_ids=None):
                 state_maps['approved_shipping_requests'].setdefault(merchandise_id, req_dict)
                 if normalize_shipment_status(req_dict.get('shipment_status')) == 'shipped' or req_dict.get('shipment_marked_at'):
                     state_maps['shipped_shipping_requests'].setdefault(merchandise_id, req_dict)
+            elif status == 'rejected' and request_type == 'completion_report':
+                state_maps['rejected_completion_requests'].setdefault(merchandise_id, req_dict)
 
         cur.close()
     except Exception as e:
@@ -36262,6 +36740,7 @@ def apply_sale_request_state_from_maps(item_dict, state_maps):
     item_id = item_dict.get('id')
     shipping_request = state_maps.get('pending_shipping_requests', {}).get(item_id)
     completion_request = state_maps.get('pending_completion_requests', {}).get(item_id)
+    rejected_completion_request = state_maps.get('rejected_completion_requests', {}).get(item_id)
     approved_shipping_request = state_maps.get('approved_shipping_requests', {}).get(item_id)
     shipped_shipping_request = state_maps.get('shipped_shipping_requests', {}).get(item_id)
 
@@ -36269,13 +36748,25 @@ def apply_sale_request_state_from_maps(item_dict, state_maps):
     item_dict['shipping_request'] = shipping_request
     item_dict['pending_completion_request'] = completion_request is not None
     item_dict['completion_request'] = completion_request
+    item_dict['rejected_completion_request'] = rejected_completion_request
+    item_dict['completion_resend_requested'] = bool(rejected_completion_request and not completion_request)
     item_dict['approved_shipping_request'] = approved_shipping_request
     item_dict['shipped_shipping_request'] = shipped_shipping_request
     item_dict['shipping_request_approved'] = bool(approved_shipping_request) or bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
     item_dict['shipment_marked'] = bool(shipped_shipping_request) or bool(item_dict.get('is_shipped'))
-    item_dict['can_send_completion_report'] = item_dict['shipment_marked'] and not item_dict.get('sale_date')
+    item_dict['can_send_completion_report'] = (
+        item_dict['shipping_request_approved']
+        and not item_dict.get('sale_date')
+        and not item_dict.get('pending_completion_request')
+        and not item_dict.get('completion_resend_requested')
+    )
+    warning_info = None
+    if item_dict['can_send_completion_report']:
+        warning_info = get_completion_report_warning_info(approved_shipping_request or shipped_shipping_request)
+    item_dict['completion_report_warning'] = warning_info
+    item_dict['completion_report_overdue'] = bool(warning_info)
     item_dict['pending_sale_request'] = item_dict['pending_shipping_request'] or item_dict['pending_completion_request']
-    item_dict['sale_request'] = completion_request or shipping_request
+    item_dict['sale_request'] = completion_request or rejected_completion_request or shipping_request
     return item_dict
 
 
@@ -36288,10 +36779,15 @@ def build_inventory_status_tags(item):
     tags.append('active')
     if item.get('pending_completion_request'):
         tags.append('completion_pending')
+    if item.get('completion_resend_requested'):
+        tags.append('completion_resend')
+    if item.get('completion_report_overdue'):
+        tags.append('completion_overdue')
     if item.get('pending_shipping_request'):
         tags.append('shipping_pending')
     if (
         item.get('pending_completion_request')
+        or item.get('completion_resend_requested')
         or item.get('pending_shipping_request')
         or item.get('can_send_completion_report')
         or item.get('approved_shipping_request')
@@ -36326,20 +36822,22 @@ def resolve_inventory_mobile_status_label(item):
     sales_agency_status = (sales_agency_request.get('status') or '').strip()
     if item.get('sale_date') or item.get('is_sold'):
         return '売却済み'
-    if item.get('pending_completion_request'):
-        return '取引完了報告確認中'
-    if item.get('pending_shipping_request'):
-        return '発送依頼確認中'
-    if item.get('can_send_completion_report'):
-        return '取引完了報告を送る'
-    if item.get('approved_shipping_request'):
-        return '発送準備中'
     if item.get('pending_sales_agency'):
         if sales_agency_service_type == 'simultaneous':
-            return '同時出品中'
+            return sales_agency_request.get('status_label') or ('同時出品申請済み' if sales_agency_status == 'pending' else '業者依頼中')
         if sales_agency_status in {'appraising', 'inspecting'} or item.get('appraisal_status') in {'waiting', 'inspecting'}:
             return '査定中'
         return sales_agency_request.get('status_label') or '業者依頼中'
+    if item.get('pending_completion_request'):
+        return '確認待ち'
+    if item.get('completion_resend_requested'):
+        return '再送依頼'
+    if item.get('pending_shipping_request'):
+        return '発送依頼中'
+    if item.get('can_send_completion_report'):
+        return '取引完了報告を送る'
+    if item.get('approved_shipping_request'):
+        return '取引完了報告を送る'
     if item.get('appraisal_status') == 'inspecting':
         return '査定中'
     if item.get('appraisal_status') == 'waiting':
@@ -36537,8 +37035,10 @@ def submit_sale_request(item_id):
     commission = request.form.get('commission', type=int)
     other_cost = request.form.get('other_cost', type=int)
     user_note = (request.form.get('user_note') or '').strip()
-    qr_image = request.files.get('qr_image')
+    qr_image_files = [file for file in request.files.getlist('qr_image') if file and file.filename]
+    qr_image = qr_image_files[0] if qr_image_files else request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
+    additional_images = qr_image_files[1:] + [file for file in request.files.getlist('additional_images') if file and file.filename]
 
     if request_type == 'shipping_request':
         sale_price = 0
@@ -36547,10 +37047,10 @@ def submit_sale_request(item_id):
         other_cost = 0
         user_note = ''
     else:
-        sale_price = sale_price or 0
-        shipping_cost = shipping_cost or 0
-        commission = commission or 0
-        other_cost = max(other_cost or 0, 0)
+        sale_price = 0
+        shipping_cost = 0
+        commission = 0
+        other_cost = 0
     
     conn = None
     try:
@@ -36583,7 +37083,13 @@ def submit_sale_request(item_id):
             conn.close()
             return redirect(url_for('index'))
 
-        if request_type == 'completion_report' and not (item_dict.get('is_shipped') or has_shipped_sale_request(cur, item_id)):
+        if request_type == 'completion_report' and has_active_sales_agency_request(cur, item_id):
+            flash('業者系申請中の商品は取引完了報告の対象外です。', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
+
+        if request_type == 'completion_report' and not has_approved_shipping_request(cur, item_id):
             flash('先に発送依頼の承認を受けてから、取引完了報告を送信してください', 'error')
             cur.close()
             conn.close()
@@ -36612,8 +37118,18 @@ def submit_sale_request(item_id):
             cur.close()
             conn.close()
             return redirect(url_for('index'))
+
+        if request_type == 'shipping_request' and has_approved_shipping_request(cur, item_id):
+            flash('この商品は既に発送依頼が承認済みです。', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('index'))
         
-        qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2)
+        qr_image_path, qr_image_path2, additional_image_paths = save_sale_request_images(
+            qr_image,
+            qr_image2,
+            additional_images=additional_images,
+        )
         validation_error = validate_sale_request_payload(
             request_type,
             sale_price,
@@ -36621,6 +37137,7 @@ def submit_sale_request(item_id):
             commission,
             qr_image_path,
             qr_image_path2,
+            additional_image_paths,
         )
         if validation_error:
             flash(validation_error, 'error')
@@ -36633,24 +37150,26 @@ def submit_sale_request(item_id):
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    other_cost, user_note, qr_image_path, qr_image_path2, status, shipment_status
+                    other_cost, user_note, qr_image_path, qr_image_path2, additional_image_paths, status, shipment_status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
             ''', (
                 item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
                 other_cost, user_note, qr_image_path, qr_image_path2,
+                json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
                 'pending_review' if request_type == 'shipping_request' else None
             ))
         else:
             cur.execute('''
                 INSERT INTO sale_requests (
                     merchandise_id, user_id, request_type, sale_price, shipping_cost, commission,
-                    other_cost, user_note, qr_image_path, qr_image_path2, status, shipment_status
+                    other_cost, user_note, qr_image_path, qr_image_path2, additional_image_paths, status, shipment_status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
             ''', (
                 item_id, current_user.id, request_type, sale_price, shipping_cost, commission,
                 other_cost, user_note, qr_image_path, qr_image_path2,
+                json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
                 'pending_review' if request_type == 'shipping_request' else None
             ))
 
@@ -36766,11 +37285,29 @@ def load_admin_sale_requests_data():
 
         request_ids = [req.get('id') for req in requests_list if req.get('id')]
         events_map = load_sale_request_events(conn, request_ids)
+        completion_reported_item_ids = {
+            req.get('merchandise_id')
+            for req in requests_list
+            if normalize_sale_request_type(req.get('request_type')) == 'completion_report'
+            and req.get('status') in {'pending', 'approved'}
+        }
+        rejected_completion_item_ids = {
+            req.get('merchandise_id')
+            for req in requests_list
+            if normalize_sale_request_type(req.get('request_type')) == 'completion_report'
+            and req.get('status') == 'rejected'
+        }
 
         for req in requests_list:
             req['request_type'] = normalize_sale_request_type(req.get('request_type'))
             req['request_type_label'] = get_sale_request_type_label(req['request_type'])
             req['commission'] = req.get('commission') or 0
+            req['additional_image_paths_list'] = parse_sale_request_additional_images(req.get('additional_image_paths'))
+            req['attachment_count'] = len([
+                path
+                for path in [req.get('qr_image_path'), req.get('qr_image_path2'), *req['additional_image_paths_list']]
+                if path
+            ])
             shipment_status = normalize_shipment_status(req.get('shipment_status'))
             if req['request_type'] == 'shipping_request' and not shipment_status:
                 if req.get('status') == 'pending':
@@ -36794,6 +37331,15 @@ def load_admin_sale_requests_data():
                 and req.get('shipment_status') == 'shipped'
                 and not req.get('sale_date')
             )
+            req['completion_report_warning'] = None
+            if (
+                req['request_type'] == 'shipping_request'
+                and req.get('status') == 'approved'
+                and req.get('merchandise_id') not in completion_reported_item_ids
+                and req.get('merchandise_id') not in rejected_completion_item_ids
+                and not req.get('sale_date')
+            ):
+                req['completion_report_warning'] = get_completion_report_warning_info(req)
 
         shipping_requests = [req for req in requests_list if req.get('request_type') == 'shipping_request']
         completion_requests = [req for req in requests_list if req.get('request_type') == 'completion_report']
@@ -37430,8 +37976,10 @@ def edit_sale_request(request_id):
     commission = request.form.get('commission', type=int)
     other_cost = request.form.get('other_cost', type=int)
     user_note = (request.form.get('user_note') or '').strip()
-    qr_image = request.files.get('qr_image')
+    qr_image_files = [file for file in request.files.getlist('qr_image') if file and file.filename]
+    qr_image = qr_image_files[0] if qr_image_files else request.files.get('qr_image')
     qr_image2 = request.files.get('qr_image2')
+    additional_images = qr_image_files[1:] + [file for file in request.files.getlist('additional_images') if file and file.filename]
     
     conn = None
     try:
@@ -37468,15 +38016,19 @@ def edit_sale_request(request_id):
             other_cost = 0
             user_note = ''
         else:
-            sale_price = sale_price if sale_price is not None else (sale_request_dict.get('sale_price') or 0)
-            shipping_cost = shipping_cost if shipping_cost is not None else (sale_request_dict.get('shipping_cost') or 0)
-            commission = commission if commission is not None else (sale_request_dict.get('commission') or 0)
-            other_cost = other_cost if other_cost is not None else (sale_request_dict.get('other_cost') or 0)
-            other_cost = max(other_cost or 0, 0)
+            sale_price = 0
+            shipping_cost = 0
+            commission = 0
+            other_cost = 0
             if not user_note:
                 user_note = sale_request_dict.get('user_note') or ''
 
-        qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2, sale_request_dict)
+        qr_image_path, qr_image_path2, additional_image_paths = save_sale_request_images(
+            qr_image,
+            qr_image2,
+            sale_request_dict,
+            additional_images=additional_images,
+        )
         validation_error = validate_sale_request_payload(
             request_type,
             sale_price,
@@ -37484,6 +38036,7 @@ def edit_sale_request(request_id):
             commission,
             qr_image_path,
             qr_image_path2,
+            additional_image_paths,
         )
         if validation_error:
             flash(validation_error, 'error')
@@ -37496,16 +38049,26 @@ def edit_sale_request(request_id):
             cur.execute('''
                 UPDATE sale_requests 
                 SET sale_price = %s, shipping_cost = %s, commission = %s, other_cost = %s, user_note = %s,
-                    qr_image_path = %s, qr_image_path2 = %s
+                    qr_image_path = %s, qr_image_path2 = %s, additional_image_paths = %s
                 WHERE id = %s
-            ''', (sale_price, shipping_cost, commission, other_cost, user_note, qr_image_path, qr_image_path2, request_id))
+            ''', (
+                sale_price, shipping_cost, commission, other_cost, user_note,
+                qr_image_path, qr_image_path2,
+                json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
+                request_id,
+            ))
         else:
             cur.execute('''
                 UPDATE sale_requests 
                 SET sale_price = ?, shipping_cost = ?, commission = ?, other_cost = ?, user_note = ?,
-                    qr_image_path = ?, qr_image_path2 = ?
+                    qr_image_path = ?, qr_image_path2 = ?, additional_image_paths = ?
                 WHERE id = ?
-            ''', (sale_price, shipping_cost, commission, other_cost, user_note, qr_image_path, qr_image_path2, request_id))
+            ''', (
+                sale_price, shipping_cost, commission, other_cost, user_note,
+                qr_image_path, qr_image_path2,
+                json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
+                request_id,
+            ))
 
         record_sale_request_event(
             conn,
@@ -37592,6 +38155,8 @@ SALES_AGENCY_STATUS = {
     'appraising': '査定中',
     'inspecting': '検品中',
     'completed': '処理完了',
+    'cancel_requested': 'キャンセル申請中',
+    'cancelled': 'キャンセル済み',
     'rejected': '却下申請'
 }
 
@@ -37601,6 +38166,8 @@ SALES_AGENCY_STATUS_CLIENT = {
     'appraising': '査定中',
     'inspecting': '検品中',
     'completed': '売却済み',
+    'cancel_requested': 'キャンセル申請中',
+    'cancelled': 'キャンセル済み',
     'rejected': '却下申請'
 }
 
@@ -37609,6 +38176,8 @@ SALES_AGENCY_ACTION_LABELS = {
     'appraising': '査定中',
     'inspect': '検品中',
     'complete': '処理完了',
+    'cancel_approve': 'キャンセル承認',
+    'reject_cancel': 'キャンセル却下',
     'reject': '却下申請'
 }
 
@@ -37617,6 +38186,8 @@ SALES_AGENCY_ACTION_TO_STATUS = {
     'appraising': 'appraising',
     'inspect': 'inspecting',
     'complete': 'completed',
+    'cancel_approve': 'cancelled',
+    'reject_cancel': 'pending',
     'reject': 'rejected',
     'revert_pending': 'pending',
     'revert_approved': 'approved',
@@ -37628,7 +38199,8 @@ SALES_AGENCY_AVAILABLE_ACTIONS = {
     'pending': ['approve', 'reject'],
     'approved': ['appraising', 'reject'],
     'appraising': ['inspect', 'reject'],
-    'inspecting': ['complete', 'reject']
+    'inspecting': ['complete', 'reject'],
+    'cancel_requested': ['cancel_approve', 'reject_cancel']
 }
 
 SALES_AGENCY_ROLLBACK_ACTIONS = {
@@ -37636,6 +38208,7 @@ SALES_AGENCY_ROLLBACK_ACTIONS = {
     'appraising': ['revert_approved'],
     'inspecting': ['revert_appraising'],
     'completed': ['revert_inspecting'],
+    'cancelled': ['revert_pending'],
     'rejected': ['revert_pending'],
 }
 
@@ -37644,6 +38217,8 @@ SALES_AGENCY_ACTION_LABELS = {
     'appraising': '査定中',
     'inspect': '検品中',
     'complete': '処理完了',
+    'cancel_approve': 'キャンセル承認',
+    'reject_cancel': 'キャンセル却下',
     'reject': '却下申請',
     'revert_pending': '承認待ちへ戻す',
     'revert_approved': '認証済みへ戻す',
@@ -37752,6 +38327,19 @@ def sales_agency_format_datetime(value):
 def get_sales_agency_status_label(status, viewer='admin', service_type=None):
     normalized_status = (status or '').strip()
     normalized_service = (service_type or '').strip()
+    if viewer == 'client':
+        if normalized_status == 'pending':
+            return {
+                'wholesale': '業者卸販売申請済み',
+                'auction': '業者オークション申請済み',
+                'simultaneous': '同時出品申請済み',
+            }.get(normalized_service, '業者依頼中')
+        if normalized_status == 'approved':
+            return '業者依頼中'
+        if normalized_status in {'appraising', 'inspecting'}:
+            return '査定中'
+        if normalized_status == 'completed':
+            return '処理完了'
     if normalized_service == 'simultaneous' and normalized_status == 'appraising':
         return '出品準備中'
     status_map = SALES_AGENCY_STATUS_CLIENT if viewer == 'client' else SALES_AGENCY_STATUS
@@ -37781,7 +38369,7 @@ def load_sales_agency_item_map(merchandise_ids=None, viewer='client'):
             SELECT sari.merchandise_id, sar.id as request_id, sar.service_type, sar.status, sar.created_at
             FROM sales_agency_request_items sari
             JOIN sales_agency_requests sar ON sari.request_id = sar.id
-            WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed')
+            WHERE sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
               AND sar.service_type IN ('wholesale', 'simultaneous', 'auction')
         """
         params = []
@@ -37803,6 +38391,7 @@ def load_sales_agency_item_map(merchandise_ids=None, viewer='client'):
                 viewer=viewer,
                 service_type=req_dict.get('service_type'),
             )
+            req_dict['can_request_cancel'] = req_dict.get('status') == 'pending'
             request_map[merchandise_id] = req_dict
         cur.close()
     except Exception as e:
@@ -37815,6 +38404,96 @@ def load_sales_agency_item_map(merchandise_ids=None, viewer='client'):
                 pass
 
     return request_map
+
+def attach_long_term_request_state(item):
+    item['long_term_request'] = None
+    item['long_term_result_status'] = None
+    item['long_term_result_label'] = ''
+    item['long_term_result_type_label'] = ''
+    item['long_term_result_note'] = ''
+
+    item_id = item.get('id')
+    if not item_id:
+        return item
+
+    conn = None
+    try:
+        conn = get_db()
+        request_info = get_long_term_request_map(
+            conn,
+            [item_id],
+            include_final=True,
+            include_rejected=True,
+        ).get(item_id)
+    except Exception as e:
+        print(f"Error fetching long-term request state: {e}", flush=True)
+        request_info = None
+    finally:
+        if conn:
+            conn.close()
+
+    if not request_info:
+        return item
+
+    status_context = get_long_term_request_status_context(
+        request_info.get('disposal_type'),
+        request_info.get('status'),
+        sale_date=item.get('sale_date')
+    )
+    action_context = get_long_term_request_action_context(
+        request_info.get('disposal_type'),
+        request_info.get('status'),
+        sale_date=item.get('sale_date')
+    )
+    status_label = status_context['status_label']
+    if status_context['status_value'] in LONG_TERM_FINAL_STATUSES:
+        status_label = get_long_term_result_label(status_context['status_value'])
+    elif not (current_user.is_admin() or current_user.is_owner()):
+        status_label = get_long_term_user_status_label(status_context)
+
+    item['long_term_request'] = {
+        'id': request_info.get('id'),
+        'type': request_info.get('disposal_type'),
+        'type_label': LONG_TERM_DISPOSAL_TYPE_LABELS.get(request_info.get('disposal_type'), 'その他処理'),
+        'status': status_context['status_value'],
+        'status_label': status_label,
+        'status_stage': status_context['status_stage'],
+        'next_action_label': status_context['next_action_label'],
+        'requested_at_display': format_optional_datetime(request_info.get('created_at')),
+        'processed_at_display': format_optional_datetime(request_info.get('processed_at'), fallback=''),
+        'shipping_name': request_info.get('shipping_name'),
+        'shipping_phone': request_info.get('shipping_phone'),
+        'shipping_address': request_info.get('shipping_address'),
+        'admin_note': request_info.get('admin_note'),
+        'show_sale_entry': action_context['show_sale_entry'],
+        'sale_entry_label': action_context['sale_entry_label'],
+        'finish_action': action_context['finish_action'],
+        'finish_action_label': action_context['finish_action_label'],
+        'finish_confirm_message': action_context['finish_confirm_message'],
+        'other_action': action_context['other_action'],
+        'other_action_label': action_context['other_action_label'],
+        'other_confirm_message': action_context['other_confirm_message'],
+    }
+    return apply_long_term_result_state(item, request_info)
+
+def load_long_term_request_map_for_items(merchandise_ids, include_final=False, include_rejected=False):
+    if not merchandise_ids:
+        return {}
+    conn = None
+    try:
+        conn = get_db()
+        return get_long_term_request_map(
+            conn,
+            merchandise_ids,
+            include_final=include_final,
+            include_rejected=include_rejected,
+        )
+    except Exception as e:
+        print(f"Error loading long-term request map: {e}", flush=True)
+        return {}
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_sales_agency_appraisal_label(status):
@@ -38153,6 +38832,7 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         request_row['pending_appraisal_count'] = waiting_count
         request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
         request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
+        request_row['can_request_cancel'] = request_row.get('status') == 'pending'
         request_row['merchandise_items'] = merchandise_items
         request_row['created_mitsumori_id'] = request_row.get('created_mitsumori_id')
         request_row['created_invoice_id'] = request_row.get('created_invoice_id')
@@ -38333,6 +39013,77 @@ def sales_agency_my_requests():
     )
 
 
+@app.route('/sales-agency/cancel-request/<int:request_id>', methods=['POST'])
+@login_required
+def sales_agency_cancel_request(request_id):
+    next_url = request.form.get('next') or request.referrer or url_for('sales_agency_my_requests')
+    if not str(next_url).startswith('/'):
+        next_url = url_for('sales_agency_my_requests')
+    cancel_note = (request.form.get('cancel_note') or '').strip()
+    conn = None
+    try:
+        conn, cur = sales_agency_open_cursor()
+        placeholder = sales_agency_placeholder()
+        cur.execute(
+            f'''
+            SELECT *
+            FROM sales_agency_requests
+            WHERE id = {placeholder}
+              AND user_id = {placeholder}
+              AND service_type IN ('wholesale', 'simultaneous', 'auction')
+            ''',
+            (request_id, current_user.id),
+        )
+        req = sales_agency_row_to_dict(cur.fetchone())
+        if not req:
+            cur.close()
+            conn.close()
+            flash('申請が見つかりません。', 'error')
+            return redirect(next_url)
+        if req.get('status') != 'pending':
+            cur.close()
+            conn.close()
+            flash('対応中または処理完了の申請はキャンセル申請できません。', 'error')
+            return redirect(next_url)
+
+        note_parts = []
+        if req.get('admin_note'):
+            note_parts.append(str(req.get('admin_note')))
+        note_parts.append(f"ユーザーからキャンセル申請: {cancel_note or '理由なし'}")
+        cur.execute(
+            f'''
+            UPDATE sales_agency_requests
+            SET status = {placeholder},
+                admin_note = {placeholder},
+                processed_at = {placeholder},
+                processed_by = {placeholder}
+            WHERE id = {placeholder}
+            ''',
+            (
+                'cancel_requested',
+                '\n'.join(note_parts),
+                get_jst_now() if DATABASE_URL else get_jst_now().strftime('%Y-%m-%d %H:%M:%S'),
+                current_user.id,
+                request_id,
+            ),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('キャンセル申請を送信しました。対応状況によってはキャンセルできない場合があります。', 'success')
+    except Exception as e:
+        print(f"[ERROR] sales_agency_cancel_request: {e}", flush=True)
+        traceback.print_exc()
+        if conn:
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:
+                pass
+        flash('キャンセル申請の送信に失敗しました。', 'error')
+    return redirect(next_url)
+
+
 def fetch_sales_agency_request_list_summaries(service_filter='all', status_filter='all', date_from_filter='', date_to_filter=''):
     _ensure_sales_agency_document_columns()
     ensure_admin_documents_performance_indexes()
@@ -38408,6 +39159,7 @@ def fetch_sales_agency_request_list_summaries(service_filter='all', status_filte
             {where_clause}
             ORDER BY CASE sar.status
                 WHEN 'pending' THEN 0
+                WHEN 'cancel_requested' THEN 1
                 WHEN 'approved' THEN 1
                 WHEN 'appraising' THEN 2
                 WHEN 'inspecting' THEN 3
@@ -38563,6 +39315,7 @@ def fetch_sales_agency_request_list_summaries(service_filter='all', status_filte
         request_row['pending_appraisal_count'] = waiting_count
         request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
         request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
+        request_row['can_request_cancel'] = request_row.get('status') == 'pending'
         request_row['merchandise_items'] = merchandise_items
         request_row['active_item_count'] = active_count
         request_row['canceled_item_count'] = canceled_count
@@ -38862,6 +39615,10 @@ def admin_sales_agency_process(id):
         now = get_jst_now()
         processed_value = now if DATABASE_URL else now.strftime('%Y-%m-%d %H:%M:%S')
         sales_agency_fee_settings = get_fee_settings() if new_status == 'completed' else None
+        request_item_status_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'item_status')
+        request_item_cancel_reason_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'cancel_reason')
+        request_item_canceled_at_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_at')
+        request_item_canceled_by_exists = sales_agency_column_exists(cur, 'sales_agency_request_items', 'canceled_by')
 
         cur.execute(
             f'''
@@ -38882,6 +39639,8 @@ def admin_sales_agency_process(id):
                 'appraising': 'waiting',
                 'inspecting': 'inspecting',
                 'completed': 'completed',
+                'cancel_requested': 'waiting',
+                'cancelled': 'none',
                 'rejected': 'none',
             }.get(new_status)
 
@@ -38913,13 +39672,46 @@ def admin_sales_agency_process(id):
         merchandise_sale_price_exists = sales_agency_column_exists(cur, 'merchandise', 'sale_price')
         merchandise_commission_exists = sales_agency_column_exists(cur, 'merchandise', 'commission')
         merchandise_sales_destination_exists = sales_agency_column_exists(cur, 'merchandise', 'sales_destination')
+        if new_status == 'cancelled' and request_item_status_exists:
+            set_clauses = [f"item_status = {placeholder}"]
+            update_params = ['cancelled']
+            if request_item_cancel_reason_exists:
+                set_clauses.append(f"cancel_reason = {placeholder}")
+                update_params.append(admin_note)
+            if request_item_canceled_at_exists:
+                set_clauses.append(f"canceled_at = {placeholder}")
+                update_params.append(processed_value)
+            if request_item_canceled_by_exists:
+                set_clauses.append(f"canceled_by = {placeholder}")
+                update_params.append(current_user.id)
+            cur.execute(
+                f'''
+                UPDATE sales_agency_request_items
+                SET {', '.join(set_clauses)}
+                WHERE request_id = {placeholder}
+                ''',
+                tuple(update_params + [id]),
+            )
+        elif action == 'reject_cancel' and request_item_status_exists:
+            cur.execute(
+                f'''
+                UPDATE sales_agency_request_items
+                SET item_status = {placeholder}
+                WHERE request_id = {placeholder}
+                  AND COALESCE(item_status, 'active') != 'cancelled'
+                ''',
+                ('active', id),
+            )
+
         if new_status == 'completed' and merchandise_sale_date_exists:
+            active_item_condition = "AND COALESCE(sari.item_status, 'active') != 'cancelled'" if request_item_status_exists else ""
             cur.execute(
                 f'''
                 SELECT m.id, m.product_name, m.sale_date
                 FROM sales_agency_request_items sari
                 JOIN merchandise m ON sari.merchandise_id = m.id
                 WHERE sari.request_id = {placeholder}
+                  {active_item_condition}
                 ORDER BY m.id
                 ''',
                 (id,),
@@ -42586,6 +43378,7 @@ def fetch_sales_agency_request_details(request_id, viewer='admin'):
         request_row['pending_appraisal_count'] = waiting_count
         request_row['available_actions'] = SALES_AGENCY_AVAILABLE_ACTIONS.get(request_row.get('status'), [])
         request_row['rollback_actions'] = SALES_AGENCY_ROLLBACK_ACTIONS.get(request_row.get('status'), [])
+        request_row['can_request_cancel'] = request_row.get('status') == 'pending'
         request_row['merchandise_items'] = merchandise_items
         request_row['active_item_count'] = active_count
         request_row['canceled_item_count'] = canceled_count

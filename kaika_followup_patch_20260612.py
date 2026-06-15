@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime
 from typing import Any
@@ -29,6 +30,8 @@ def apply(module: Any) -> None:
     save_sale_request_images = module.save_sale_request_images
     validate_sale_request_payload = module.validate_sale_request_payload
     has_shipped_sale_request = module.has_shipped_sale_request
+    has_approved_shipping_request = getattr(module, "has_approved_shipping_request", has_shipped_sale_request)
+    has_active_sales_agency_request = getattr(module, "has_active_sales_agency_request", lambda *_args, **_kwargs: False)
     record_sale_request_event = module.record_sale_request_event
     notify_admins_of_sale_request = getattr(module, "notify_admins_of_sale_request", lambda *_args, **_kwargs: None)
     notify_sale_request_user_status = getattr(module, "notify_sale_request_user_status", lambda *_args, **_kwargs: None)
@@ -101,6 +104,7 @@ def apply(module: Any) -> None:
         try:
             add_column_if_missing(cur, "sale_requests", "other_cost", "INTEGER DEFAULT 0", "INTEGER DEFAULT 0")
             add_column_if_missing(cur, "sale_requests", "user_note", "TEXT", "TEXT")
+            add_column_if_missing(cur, "sale_requests", "additional_image_paths", "TEXT", "TEXT")
             add_column_if_missing(cur, "merchandise", "created_by", "INTEGER REFERENCES users(id)", "INTEGER")
             add_column_if_missing(cur, "merchandise", "other_cost", "INTEGER DEFAULT 0", "INTEGER DEFAULT 0")
             conn.commit()
@@ -325,20 +329,16 @@ def apply(module: Any) -> None:
         commission = request.form.get("commission", type=int)
         other_cost = request.form.get("other_cost", type=int)
         user_note = (request.form.get("user_note") or "").strip()
-        qr_image = request.files.get("qr_image")
+        qr_image_files = [file for file in request.files.getlist("qr_image") if file and file.filename]
+        qr_image = qr_image_files[0] if qr_image_files else request.files.get("qr_image")
         qr_image2 = request.files.get("qr_image2")
+        additional_images = qr_image_files[1:] + [file for file in request.files.getlist("additional_images") if file and file.filename]
 
         if request_type == "shipping_request":
             sale_price = shipping_cost = commission = other_cost = 0
             user_note = ""
         else:
-            sale_price = safe_int(sale_price)
-            shipping_cost = safe_int(shipping_cost)
-            commission = safe_int(commission)
-            other_cost = safe_int(other_cost)
-            if sale_price <= 0:
-                flash("取引完了報告では実際の売上金額を入力してください。", "error")
-                return redirect(url_for("index"))
+            sale_price = shipping_cost = commission = other_cost = 0
 
         conn = None
         try:
@@ -360,7 +360,13 @@ def apply(module: Any) -> None:
                 conn.close()
                 return redirect(url_for("index"))
 
-            if request_type == "completion_report" and not (item.get("is_shipped") or has_shipped_sale_request(cur, item_id)):
+            if request_type == "completion_report" and has_active_sales_agency_request(cur, item_id):
+                flash("業者系申請中の商品は取引完了報告の対象外です。", "error")
+                cur.close()
+                conn.close()
+                return redirect(url_for("index"))
+
+            if request_type == "completion_report" and not has_approved_shipping_request(cur, item_id):
                 flash("先に発送依頼の承認を受けてから、取引完了報告を送信してください。", "error")
                 cur.close()
                 conn.close()
@@ -383,9 +389,19 @@ def apply(module: Any) -> None:
                 conn.close()
                 return redirect(url_for("index"))
 
-            qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2)
+            if request_type == "shipping_request" and has_approved_shipping_request(cur, item_id):
+                flash("この商品は既に発送依頼が承認済みです。", "error")
+                cur.close()
+                conn.close()
+                return redirect(url_for("index"))
+
+            qr_image_path, qr_image_path2, additional_image_paths = save_sale_request_images(
+                qr_image,
+                qr_image2,
+                additional_images=additional_images,
+            )
             validation_error = validate_sale_request_payload(
-                request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2
+                request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, additional_image_paths
             )
             if validation_error:
                 flash(validation_error, "error")
@@ -398,14 +414,16 @@ def apply(module: Any) -> None:
                     """
                     INSERT INTO sale_requests (
                         merchandise_id, user_id, request_type, sale_price, shipping_cost, commission, other_cost,
-                        qr_image_path, qr_image_path2, user_note, status, shipment_status
+                        qr_image_path, qr_image_path2, additional_image_paths, user_note, status, shipment_status
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
                     RETURNING id
                     """,
                     (
                         item_id, current_user.id, request_type, sale_price, shipping_cost, commission, other_cost,
-                        qr_image_path, qr_image_path2, user_note,
+                        qr_image_path, qr_image_path2,
+                        json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
+                        user_note,
                         "pending_review" if request_type == "shipping_request" else None,
                     ),
                 )
@@ -416,13 +434,15 @@ def apply(module: Any) -> None:
                     """
                     INSERT INTO sale_requests (
                         merchandise_id, user_id, request_type, sale_price, shipping_cost, commission, other_cost,
-                        qr_image_path, qr_image_path2, user_note, status, shipment_status
+                        qr_image_path, qr_image_path2, additional_image_paths, user_note, status, shipment_status
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
                     """,
                     (
                         item_id, current_user.id, request_type, sale_price, shipping_cost, commission, other_cost,
-                        qr_image_path, qr_image_path2, user_note,
+                        qr_image_path, qr_image_path2,
+                        json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
+                        user_note,
                         "pending_review" if request_type == "shipping_request" else None,
                     ),
                 )
@@ -454,8 +474,10 @@ def apply(module: Any) -> None:
         commission = request.form.get("commission", type=int)
         other_cost = request.form.get("other_cost", type=int)
         user_note = (request.form.get("user_note") or "").strip()
-        qr_image = request.files.get("qr_image")
+        qr_image_files = [file for file in request.files.getlist("qr_image") if file and file.filename]
+        qr_image = qr_image_files[0] if qr_image_files else request.files.get("qr_image")
         qr_image2 = request.files.get("qr_image2")
+        additional_images = qr_image_files[1:] + [file for file in request.files.getlist("additional_images") if file and file.filename]
 
         conn = None
         try:
@@ -476,19 +498,18 @@ def apply(module: Any) -> None:
                 sale_price = shipping_cost = commission = other_cost = 0
                 user_note = ""
             else:
-                sale_price = safe_int(sale_price if sale_price is not None else sale_request.get("sale_price"))
-                shipping_cost = safe_int(shipping_cost if shipping_cost is not None else sale_request.get("shipping_cost"))
-                commission = safe_int(commission if commission is not None else sale_request.get("commission"))
-                other_cost = safe_int(other_cost if other_cost is not None else sale_request.get("other_cost"))
-                if sale_price <= 0:
-                    flash("取引完了報告では実際の売上金額を入力してください。", "error")
-                    cur.close()
-                    conn.close()
-                    return redirect(url_for("index"))
+                sale_price = shipping_cost = commission = other_cost = 0
+                if not user_note:
+                    user_note = sale_request.get("user_note") or ""
 
-            qr_image_path, qr_image_path2 = save_sale_request_images(qr_image, qr_image2, sale_request)
+            qr_image_path, qr_image_path2, additional_image_paths = save_sale_request_images(
+                qr_image,
+                qr_image2,
+                sale_request,
+                additional_images=additional_images,
+            )
             validation_error = validate_sale_request_payload(
-                request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2
+                request_type, sale_price, shipping_cost, commission, qr_image_path, qr_image_path2, additional_image_paths
             )
             if validation_error:
                 flash(validation_error, "error")
@@ -501,10 +522,21 @@ def apply(module: Any) -> None:
                 UPDATE sale_requests
                 SET sale_price = {placeholder()}, shipping_cost = {placeholder()}, commission = {placeholder()},
                     other_cost = {placeholder()}, user_note = {placeholder()},
-                    qr_image_path = {placeholder()}, qr_image_path2 = {placeholder()}
+                    qr_image_path = {placeholder()}, qr_image_path2 = {placeholder()},
+                    additional_image_paths = {placeholder()}
                 WHERE id = {placeholder()}
                 """,
-                (sale_price, shipping_cost, commission, other_cost, user_note, qr_image_path, qr_image_path2, request_id),
+                (
+                    sale_price,
+                    shipping_cost,
+                    commission,
+                    other_cost,
+                    user_note,
+                    qr_image_path,
+                    qr_image_path2,
+                    json.dumps(additional_image_paths, ensure_ascii=False) if additional_image_paths else None,
+                    request_id,
+                ),
             )
             record_sale_request_event(conn, request_id, "updated", actor_user_id=current_user.id,
                                       note=get_sale_request_type_label(request_type))

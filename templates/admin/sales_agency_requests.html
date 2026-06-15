@@ -374,6 +374,16 @@
     color: #047857;
 }
 
+.status-badge.cancel_requested {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.status-badge.cancelled {
+    background: #f1f5f9;
+    color: #475569;
+}
+
 .status-badge.rejected {
     background: #fee2e2;
     color: #dc2626;
@@ -958,12 +968,14 @@
                     </div>
                     {% set timeline_statuses = [
                         ('pending', '承認待ち'),
+                        ('cancel_requested', 'キャンセル申請中'),
                         ('approved', '認証済み'),
                         ('appraising', '出品準備中' if req.service_type == 'simultaneous' else '査定中'),
                         ('inspecting', '検品中'),
-                        ('completed', '処理完了')
+                        ('completed', '処理完了'),
+                        ('cancelled', 'キャンセル済み')
                     ] %}
-                    {% set current_index = {'pending': 0, 'approved': 1, 'appraising': 2, 'inspecting': 3, 'completed': 4, 'rejected': -1}.get(req.status, -1) %}
+                    {% set current_index = {'pending': 0, 'cancel_requested': 1, 'approved': 2, 'appraising': 3, 'inspecting': 4, 'completed': 5, 'cancelled': 6, 'rejected': -1}.get(req.status, -1) %}
                     <div class="request-progress" id="progress-{{ req.id }}" data-status="{{ req.status }}">
                         {% for timeline_key, timeline_label in timeline_statuses %}
                         {% set timeline_index = loop.index0 %}
@@ -1068,6 +1080,12 @@
                             {% if 'reject' in req.available_actions %}
                             <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject')">却下申請</button>
                             {% endif %}
+                            {% if 'cancel_approve' in req.available_actions %}
+                            <button type="button" class="btn btn-approve" onclick="processRequest({{ req.id }}, 'cancel_approve')">キャンセルを承認</button>
+                            {% endif %}
+                            {% if 'reject_cancel' in req.available_actions %}
+                            <button type="button" class="btn btn-reject" onclick="processRequest({{ req.id }}, 'reject_cancel')">キャンセルを却下</button>
+                            {% endif %}
                         {% else %}
                         <span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>
                         {% endif %}
@@ -1090,7 +1108,9 @@ const salesAgencyActionLabels = {
     appraising: '査定中',
     inspect: '検品中',
     complete: '処理完了',
-    reject: '却下申請'
+    reject: '却下申請',
+    cancel_approve: 'キャンセル承認',
+    reject_cancel: 'キャンセル却下'
 };
 
 function getSalesAgencyRequestServiceType(requestId) {
@@ -1110,10 +1130,12 @@ const salesAgencyActionButtons = {
     appraising: { label: '査定中にする', className: 'btn btn-primary' },
     inspect: { label: '検品中にする', className: 'btn btn-primary' },
     complete: { label: '処理完了にする', className: 'btn btn-approve' },
-    reject: { label: '却下申請', className: 'btn btn-reject' }
+    reject: { label: '却下申請', className: 'btn btn-reject' },
+    cancel_approve: { label: 'キャンセルを承認', className: 'btn btn-approve' },
+    reject_cancel: { label: 'キャンセルを却下', className: 'btn btn-reject' }
 };
 
-const progressStatusOrder = ['pending', 'approved', 'appraising', 'inspecting', 'completed'];
+const progressStatusOrder = ['pending', 'cancel_requested', 'approved', 'appraising', 'inspecting', 'completed', 'cancelled'];
 
 function escapeHtml(value) {
     return String(value || '')

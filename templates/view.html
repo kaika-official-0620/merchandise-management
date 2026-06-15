@@ -2,6 +2,11 @@
 {% block title %}{{ item.product_name|clean_display('商品名未登録') }} - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% set detail_is_user_product = (item.scope == 'user') or not (current_user.is_admin() or current_user.is_owner()) or ((item.wholesale_price or 0) and item.user_id and item.user_id != current_user.id) %}
+{% set detail_purchase_price = (item.wholesale_price or item.purchase_price or 0) if detail_is_user_product else (item.display_purchase_price or item.purchase_price or 0) %}
+{% set detail_sale_price = item.display_sale_price or item.sale_price or 0 %}
+{% set detail_profit = detail_sale_price - detail_purchase_price - (item.shipping_cost or 0) - (item.commission or 0) - (item.other_cost or 0) %}
+{% set detail_profit_rate = ((detail_profit / detail_purchase_price * 100)|round(1)) if detail_purchase_price else 0 %}
 <style>
 .condition-badge {
     display: inline-block;
@@ -214,6 +219,26 @@
     background: #f1f5f9;
     border-color: #e2e8f0;
     color: #475569;
+}
+
+.detail-action-note {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(100%, 520px);
+    min-height: 40px;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.85rem;
+    line-height: 1.35;
+}
+
+.detail-action-note.warning {
+    border-color: #facc15;
+    background: #fefce8;
+    color: #713f12;
 }
 
 .detail-action-btn.shipping {
@@ -882,10 +907,11 @@
 </div>
 
 {% set is_admin_view = current_user.is_admin() or current_user.is_owner() %}
+{% set detail_status_label = item.long_term_result_label or (item.long_term_request.status_label if item.long_term_request else '') or item.mobile_status_label or '状態未設定' %}
 <section class="item-detail-action-panel">
     <div class="item-detail-action-summary">
         <span class="item-detail-action-label">現在の状態</span>
-        <strong class="item-detail-action-status">{{ item.mobile_status_label or '状態未設定' }}</strong>
+        <strong class="item-detail-action-status">{{ detail_status_label }}</strong>
     </div>
     <div class="item-detail-action-buttons">
         {% if is_admin_view %}
@@ -897,31 +923,37 @@
             <span class="detail-action-state">発送済み</span>
             {% elif item.is_sold or item.sale_date %}
             <span class="detail-action-state">売却済み</span>
+            {% elif item.long_term_result_label %}
+            <span class="detail-action-state">{{ item.long_term_result_label }}</span>
+            {% elif item.long_term_request %}
+            <span class="detail-action-state">{{ item.long_term_request.status_label }}</span>
             {% else %}
             <span class="detail-action-state">管理者編集は上部の編集から行えます</span>
             {% endif %}
         {% else %}
             {% if item.is_sold or item.sale_date %}
             <span class="detail-action-state">売却済み</span>
+            {% elif item.long_term_result_label %}
+            <span class="detail-action-state">{{ item.long_term_result_label }}</span>
+            {% elif item.long_term_request %}
+            <span class="detail-action-state">{{ item.long_term_request.status_label }}</span>
             {% elif item.pending_sales_agency %}
             <span class="detail-action-state">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '申請中' }}</span>
-            {% elif item.pending_completion_request %}
-            <span class="detail-action-state">取引完了報告送信済み</span>
+            {% elif item.completion_resend_requested %}
+            <span class="detail-action-state">再送依頼</span>
+            {% if item.rejected_completion_request and item.rejected_completion_request.admin_note %}
+            <span class="detail-action-note">{{ item.rejected_completion_request.admin_note }}</span>
+            {% endif %}
             <button type="button"
-                class="detail-action-btn edit-request js-sale-request-trigger"
-                data-action="edit"
-                data-request-id="{{ item.completion_request.id }}"
-                data-request-type="completion_report"
+                class="detail-action-btn completion js-sale-request-trigger"
+                data-action="create-completion"
+                data-item-id="{{ item.id }}"
                 data-product-name="{{ item.product_name or '' }}"
-                data-sale-price="{{ item.completion_request.sale_price or 0 }}"
-                data-shipping-cost="{{ item.completion_request.shipping_cost or 0 }}"
-                data-commission="{{ item.completion_request.commission or 0 }}"
-                data-other-cost="{{ item.completion_request.other_cost or 0 }}"
-                data-user-note="{{ item.completion_request.user_note or '' }}"
-                data-qr-image-path="{{ item.completion_request.qr_image_path or '' }}"
-                data-qr-image-path2="{{ item.completion_request.qr_image_path2 or '' }}">
-                取引完了報告を修正
+                data-listing-price="{{ item.listing_price or 0 }}">
+                再送する
             </button>
+            {% elif item.pending_completion_request %}
+            <span class="detail-action-state">確認待ち</span>
             {% elif item.can_send_completion_report %}
             <button type="button"
                 class="detail-action-btn completion js-sale-request-trigger"
@@ -929,25 +961,15 @@
                 data-item-id="{{ item.id }}"
                 data-product-name="{{ item.product_name or '' }}"
                 data-listing-price="{{ item.listing_price or 0 }}">
-                取引完了報告
+                取引完了報告を送る
             </button>
+            {% if item.completion_report_warning %}
+            <span class="detail-action-note warning">{{ item.completion_report_warning.message }}</span>
+            {% endif %}
             {% elif item.approved_shipping_request %}
-            <span class="detail-action-state">発送準備中</span>
+            <span class="detail-action-state">発送依頼送付済み</span>
             {% elif item.pending_shipping_request %}
-            <span class="detail-action-state">発送依頼送信済み</span>
-            <button type="button"
-                class="detail-action-btn edit-request js-sale-request-trigger"
-                data-action="edit"
-                data-request-id="{{ item.shipping_request.id }}"
-                data-request-type="shipping_request"
-                data-product-name="{{ item.product_name or '' }}"
-                data-sale-price="0"
-                data-shipping-cost="0"
-                data-commission="0"
-                data-qr-image-path="{{ item.shipping_request.qr_image_path or '' }}"
-                data-qr-image-path2="{{ item.shipping_request.qr_image_path2 or '' }}">
-                発送依頼を修正
-            </button>
+            <span class="detail-action-state">発送依頼中</span>
             {% else %}
             <button type="button"
                 class="detail-action-btn shipping js-sale-request-trigger"
@@ -972,6 +994,19 @@
         <span class="request-pill type">{{ item.sales_agency_request.service_name }}</span>
         <span class="request-pill status">{{ item.sales_agency_request.status_label }}</span>
     </p>
+    <p>対応状況によってはキャンセルできない場合があります。</p>
+    {% if item.sales_agency_request.can_request_cancel %}
+    <form method="POST" action="{{ url_for('sales_agency_cancel_request', request_id=item.sales_agency_request.request_id) }}" class="sales-agency-detail-form">
+        <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+        <label>
+            キャンセル理由（任意）
+            <input type="text" name="cancel_note" placeholder="理由があれば入力してください">
+        </label>
+        <button type="submit" class="btn btn-secondary">キャンセル申請</button>
+    </form>
+    {% else %}
+    <p>対応中または処理完了のため、この画面からキャンセル申請はできません。</p>
+    {% endif %}
     {% else %}
     <p>この商品の詳細を確認したまま、業者卸販売・同時出品・業者オークション出品の申請ができます。</p>
     <form method="POST" action="{{ url_for('sales_agency_apply') }}" class="sales-agency-detail-form">
@@ -1041,17 +1076,19 @@
         <div class="detail-section">
             <h3>基本情報</h3>
             <dl class="detail-list">
-                <dt>管理No</dt>
-                <dd>{{ item.id }}</dd>
+                <dt>仕入価格</dt>
+                <dd>仕入 ¥{{ "{:,}".format(detail_purchase_price|int) }}</dd>
+                <dt>商品名</dt>
+                <dd>{{ item.product_name|clean_display('商品名未登録') }}</dd>
                 {% if current_user.is_admin() or current_user.is_owner() %}
                 <dt>登録者</dt>
                 <dd>{{ item.created_by_name or '既存データ' }}</dd>
                 <dt>最終更新者</dt>
                 <dd>{{ item.updated_by_name or '-' }}</dd>
                 {% endif %}
-                <dt>仕入日</dt>
-                <dd>{{ item.purchase_date or '-' }}</dd>
-                <dt>開花商品番号</dt>
+                <dt>登録日</dt>
+                <dd>{{ (item.created_at|string)[:10] if item.created_at else (item.purchase_date or '-') }}</dd>
+                <dt>開花管理番号</dt>
                 <dd>{{ item.kaika_product_code or '-' }}</dd>
                 <dt>ブランド</dt>
                 <dd>
@@ -1113,8 +1150,6 @@
                     {% else %}-{% endif %}
                 </dd>
                 {% endif %}
-                <dt>仕入額</dt>
-                <dd>¥{{ "{:,}".format(item.purchase_price or 0) }}</dd>
                 <dt>支払方法</dt>
                 <dd>{{ item.payment_method|clean_display('-') }}</dd>
                 <dt>メモ</dt>
@@ -1172,99 +1207,42 @@
                     <button type="submit" class="btn btn-secondary" onclick='return confirm({{ item.long_term_request.finish_confirm_message|default("", true)|tojson }})'>{{ item.long_term_request.finish_action_label }}</button>
                 </form>
                 {% endif %}
+                {% if item.long_term_request.other_action %}
+                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.long_term_request.id) }}" style="display:inline-flex; margin: 0;">
+                    <input type="hidden" name="action" value="{{ item.long_term_request.other_action }}">
+                    <button type="submit" class="btn btn-secondary" onclick='return confirm({{ item.long_term_request.other_confirm_message|default("", true)|tojson }})'>{{ item.long_term_request.other_action_label }}</button>
+                </form>
+                {% endif %}
                 <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-secondary">申請一覧で確認</a>
             </div>
             {% endif %}
         </div>
         {% endif %}
         
-        <div class="detail-section">
-            <h3>出品情報</h3>
-            <dl class="detail-list">
-                <dt>ステータス</dt>
-                <dd>
-                    {% if item.is_sold or item.sale_date %}
-                    <span class="badge badge-sold">売却済み</span>
-                    {% elif item.appraisal_status == 'waiting' %}
-                    <span class="badge badge-pending">査定待ち</span>
-                    {% elif item.is_listed %}
-                    <span class="badge badge-listed">出品中</span>
-                    {% else %}
-                    <span class="badge badge-pending">未出品</span>
-                    {% endif %}
-                </dd>
-                <dt>出品日</dt>
-                <dd>{{ item.listing_date or '-' }}</dd>
-                <dt>出品価格</dt>
-                <dd>
-                    <span class="copy-value-wrapper">
-                        ¥{{ "{:,}".format(item.listing_price or 0) }}
-                        {% if item.listing_price and item.listing_price > 0 %}
-                        <button class="copy-btn" onclick="copyToClipboard('{{ item.listing_price }}', this)">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                            コピー
-                        </button>
-                        {% endif %}
-                    </span>
-                </dd>
-                <dt>想定送料</dt>
-                <dd>¥{{ "{:,}".format(item.expected_shipping or 0) }}</dd>
-                <dt>想定手数料</dt>
-                <dd>¥{{ "{:,}".format(item.expected_commission or 0) }}</dd>
-                {% if not (item.is_sold or item.sale_date) and item.expected_profit is defined %}
-                <dt>想定利益</dt>
-                <dd class="{% if item.expected_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                    ¥{{ "{:,}".format(item.expected_profit) }}
-                </dd>
-                {% endif %}
-            </dl>
-        </div>
-        
         {% if item.is_sold or item.sale_date %}
         <div class="detail-section">
             <h3>売却情報</h3>
             <dl class="detail-list">
+                <dt>売却価格</dt>
+                <dd>売却 ¥{{ "{:,}".format(detail_sale_price|int) }}</dd>
                 <dt>売却日</dt>
                 <dd>{{ item.sale_date }}</dd>
-                <dt>販売タイプ</dt>
-                <dd>
-                    {% set sale_types = (item.sale_type or 'normal').split(',') %}
-                    {% set type_names = [] %}
-                    {% for st in sale_types %}
-                        {% if st == 'photo_packing' %}{% set _ = type_names.append('撮影梱包等代行') %}
-                        {% elif st == 'wholesale' %}{% set _ = type_names.append('業者販売') %}
-                        {% elif st == 'multi_listing' %}{% set _ = type_names.append('ライブコマース') %}
-                        {% elif st == 'live_commerce' %}{% set _ = type_names.append('ライブコマース') %}
-                        {% elif st == 'auction' %}{% set _ = type_names.append('オークション販売') %}
-                        {% elif st == 'normal' %}{% set _ = type_names.append('通常販売') %}
-                        {% endif %}
-                    {% endfor %}
-                    {{ type_names|join(' + ') }}
-                </dd>
-                <dt>売上金</dt>
-                <dd>¥{{ "{:,}".format(item.sale_price or 0) }}</dd>
+                <dt>販売先/販売方法</dt>
+                <dd>{{ item.sales_destination_display|clean_display('-') }}{% if item.sale_type_summary and item.sale_type_summary != '-' %} / {{ item.sale_type_summary }}{% endif %}</dd>
                 <dt>送料</dt>
                 <dd>¥{{ "{:,}".format(item.shipping_cost or 0) }}</dd>
-                    <dt>販売先</dt>
-                <dd>{{ item.sales_destination|clean_display('-') }}</dd>
                 <dt>手数料</dt>
                 <dd>¥{{ "{:,}".format(item.commission or 0) }}</dd>
                 <dt>その他費用</dt>
                 <dd>¥{{ "{:,}".format(item.other_cost or 0) }}</dd>
-                <dt>発送状態</dt>
-                <dd>
-                    {% if item.is_shipped %}
-                    <span class="badge badge-shipped">発送済み</span>
-                    {% else %}
-                    <span class="badge badge-pending">未発送</span>
-                    {% endif %}
-                </dd>
-                <dt>利益</dt>
-                <dd class="{% if item.profit > 0 %}profit-positive{% else %}profit-negative{% endif %}" style="font-weight: bold; font-size: 1.2em;">
-                    ¥{{ "{:,}".format(item.profit) }}
+                <dt>利益額</dt>
+                <dd class="{% if detail_profit > 0 %}profit-positive{% else %}profit-negative{% endif %}" style="font-weight: bold; font-size: 1.2em;">
+                    ¥{{ "{:,}".format(detail_profit|int) }}
                 </dd>
                 <dt>利益率</dt>
-                <dd>{{ item.profit_rate }}%</dd>
+                <dd>{{ detail_profit_rate }}%</dd>
+                <dt>備考</dt>
+                <dd style="white-space: pre-wrap;">{{ item.notes|clean_display('-') }}</dd>
             </dl>
         </div>
         {% endif %}
@@ -1443,7 +1421,7 @@ document.addEventListener('keydown', function(e) {
             <input type="hidden" id="saleRequestType" name="request_type" value="shipping_request">
             <div class="sale-request-body">
                 <div class="sale-request-product" id="saleRequestProductName"></div>
-                <p class="sale-request-help" id="saleRequestHelp">発送依頼では、売れた商品が分かる画像と発送用QRコード画像を送ってください。</p>
+                <p class="sale-request-help" id="saleRequestHelp">発送依頼を送信します。画像がある場合は任意で添付できます。</p>
                 <div class="sale-request-inline-message" id="saleRequestInlineMessage"></div>
                 <div class="sale-request-form">
                     <div class="form-group" id="saleRequestPriceGroup" style="display: none;">
@@ -1484,7 +1462,7 @@ document.addEventListener('keydown', function(e) {
                         </div>
                         <input type="file" id="saleRequestQrImage2" name="qr_image2" accept="image/*" style="display:none;">
                     </div>
-                    <p class="form-hint" id="saleRequestImageHint">発送依頼では2枚とも必須です。</p>
+                    <p class="form-hint" id="saleRequestImageHint">発送依頼の画像添付は任意です。</p>
                 </div>
             </div>
             <div class="sale-request-footer">
@@ -1555,7 +1533,7 @@ document.addEventListener('keydown', function(e) {
                         </div>
                         <input type="file" id="editRequestQrImage2" name="qr_image2" accept="image/*" style="display:none;">
                     </div>
-                    <p class="form-hint" id="editRequestImageHint">発送依頼では2枚とも必須です。</p>
+                    <p class="form-hint" id="editRequestImageHint">発送依頼の画像添付は任意です。</p>
                 </div>
             </div>
             <div class="sale-request-footer">
@@ -1573,24 +1551,27 @@ const detailSaleRequestModeConfig = {
         editTitle: '発送依頼の修正',
         submit: '発送依頼を送信',
         editSubmit: '発送依頼を保存',
-        help: '発送依頼では、売れた商品が分かる画像と発送用QRコード画像を送ってください。',
-        image1: '売れた商品が分かる画像',
-        image2: '発送用QRコード画像',
-        imageHint: '発送依頼では2枚とも必須です。',
-        requireSecondImage: true,
-        showFinancials: false
+        help: '発送依頼を送信します。画像がある場合は任意で添付できます。',
+        image1: '添付画像',
+        image2: '追加画像',
+        imageHint: '発送依頼の画像添付は任意です。',
+        requireSecondImage: false,
+        primaryRequired: false,
+        showFinancials: false,
+        showUserNote: false
     },
     completion_report: {
         title: '取引完了報告を送る',
         editTitle: '取引完了報告の修正',
         submit: '取引完了報告を送信',
         editSubmit: '取引完了報告を保存',
-        help: '売上・送料・手数料が確認できる取引完了画面の画像を送ってください。',
+        help: '取引完了画面の画像を送ってください。売上・送料・手数料は開花側で確認します。',
         image1: '取引完了画面',
         image2: '補足画像（任意）',
-        imageHint: '取引完了画面のスクリーンショットを送ってください。',
+        imageHint: '取引完了画面のスクリーンショットを1枚以上選択してください。複数枚選択できます。',
         requireSecondImage: false,
-        showFinancials: true
+        showFinancials: false,
+        showUserNote: true
     }
 };
 
@@ -1634,6 +1615,12 @@ function applyDetailSaleRequestMode(prefix, requestType) {
     document.getElementById(prefix + 'ImageLabel1').textContent = config.image1;
     document.getElementById(prefix + 'ImageLabel2').textContent = config.image2;
     document.getElementById(prefix + 'ImageHint').textContent = config.imageHint;
+    const primaryImageInput = document.getElementById(prefix + 'QrImage');
+    const secondImageInput = document.getElementById(prefix + 'QrImage2');
+    primaryImageInput.multiple = requestType === 'completion_report';
+    primaryImageInput.required = requestType === 'completion_report';
+    secondImageInput.multiple = false;
+    secondImageInput.required = !!config.requireSecondImage;
     const secondGroup = document.getElementById(prefix + 'QrImage2').closest('.form-group');
     secondGroup.style.display = '';
     ['Price', 'Shipping', 'Commission', 'OtherCost'].forEach((fieldName) => {
@@ -1652,9 +1639,9 @@ function applyDetailSaleRequestMode(prefix, requestType) {
     const noteGroup = document.getElementById(prefix + 'UserNoteGroup');
     const noteInput = document.getElementById(prefix + 'UserNote');
     if (noteGroup && noteInput) {
-        noteGroup.style.display = config.showFinancials ? '' : 'none';
-        noteInput.disabled = !config.showFinancials;
-        if (!config.showFinancials) noteInput.value = '';
+        noteGroup.style.display = config.showUserNote ? '' : 'none';
+        noteInput.disabled = !config.showUserNote;
+        if (!config.showUserNote) noteInput.value = '';
     }
     setDetailSaleRequestMessage(prefix, '');
 }
@@ -1667,10 +1654,6 @@ function validateDetailSaleRequest(prefix) {
     const current2 = document.getElementById(prefix === 'editRequest' ? 'editCurrentImage2' : '');
     const hasImage1 = !!(input1 && input1.files && input1.files.length) || !!(current1 && current1.dataset.hasImage === 'true');
     const hasImage2 = !!(input2 && input2.files && input2.files.length) || !!(current2 && current2.dataset.hasImage === 'true');
-    if (requestType === 'shipping_request' && (!hasImage1 || !hasImage2)) {
-        setDetailSaleRequestMessage(prefix, '発送依頼では画像を2枚選択してください。');
-        return false;
-    }
     if (requestType === 'completion_report' && !hasImage1) {
         setDetailSaleRequestMessage(prefix, '取引完了報告では画像を1枚以上選択してください。');
         return false;
@@ -1792,7 +1775,7 @@ function setupDetailFileUpload(inputId, areaId, textId, nameId) {
         if (this.files && this.files[0]) {
             area.classList.add('has-file');
             text.textContent = '選択済み';
-            name.textContent = this.files[0].name;
+            name.textContent = Array.from(this.files).map(file => file.name).join(' / ');
         } else {
             area.classList.remove('has-file');
             name.textContent = '';

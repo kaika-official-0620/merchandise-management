@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
     <title>{% block title %}株式会社 開花{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -1438,7 +1438,7 @@
         position: fixed;
         top: 0;
         left: 0;
-        width: 36px;
+        width: 14px;
         height: 100vh;
         z-index: 895;
         background: transparent;
@@ -1463,7 +1463,9 @@
             cursor: auto;
         }
         .sidebar-edge-trigger {
-            width: 42px;
+            display: none;
+            width: 0;
+            pointer-events: none;
         }
     }
     </style>
@@ -1601,8 +1603,23 @@
             if (!edgeTrigger) {
                 return;
             }
+            const mobileEdgeQuery = window.matchMedia('(max-width: 768px)');
+            const edgeActivationPx = 14;
+
+            function getEdgeClientX(event) {
+                if (event.touches && event.touches.length) {
+                    return event.touches[0].clientX;
+                }
+                if (event.changedTouches && event.changedTouches.length) {
+                    return event.changedTouches[0].clientX;
+                }
+                return typeof event.clientX === 'number' ? event.clientX : 0;
+            }
 
             function openFromEdge(event) {
+                if (mobileEdgeQuery.matches || getEdgeClientX(event) > edgeActivationPx) {
+                    return;
+                }
                 const active = document.activeElement;
                 if (active && active.matches && active.matches('input, textarea, select, [contenteditable="true"]')) {
                     return;
@@ -1618,6 +1635,25 @@
             });
             edgeTrigger.addEventListener('click', openFromEdge);
             edgeTrigger.addEventListener('touchstart', openFromEdge, { passive: false });
+
+            document.addEventListener('click', function(event) {
+                openFromEdge(event);
+            }, true);
+
+            document.addEventListener('mousemove', function(event) {
+                if (!window.matchMedia('(hover: hover)').matches) {
+                    return;
+                }
+                openFromEdge(event);
+            });
+        })();
+
+        (function setupViewportStability() {
+            document.addEventListener('gesturechange', function(event) {
+                if (event.scale && event.scale < 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
         })();
 
         (function setupDetailUrlClickTargets() {

@@ -71,7 +71,7 @@
                 {% if req.request_type == 'shipping_request' %}
                 <div class="info-box">
                     <div class="label">添付枚数</div>
-                    <div class="value">{{ (1 if req.qr_image_path else 0) + (1 if req.qr_image_path2 else 0) }}枚</div>
+                    <div class="value">{{ req.attachment_count or 0 }}枚</div>
                 </div>
                 <div class="info-box">
                     <div class="label">内容</div>
@@ -103,7 +103,11 @@
                 {% endif %}
             </div>
 
-            {% if req.qr_image_path or req.qr_image_path2 %}
+            {% if req.completion_report_warning %}
+            <div class="completion-warning">{{ req.completion_report_warning.message }}</div>
+            {% endif %}
+
+            {% if req.qr_image_path or req.qr_image_path2 or req.additional_image_paths_list %}
             <div class="attachments">
                 {% if req.qr_image_path %}
                 <a href="{{ url_for('static', filename=req.qr_image_path) }}" class="attachment" target="_blank" rel="noopener">
@@ -115,6 +119,11 @@
                     <img src="{{ url_for('static', filename=req.qr_image_path2) }}" alt="添付画像2" loading="lazy" decoding="async">
                 </a>
                 {% endif %}
+                {% for image_path in req.additional_image_paths_list %}
+                <a href="{{ url_for('static', filename=image_path) }}" class="attachment" target="_blank" rel="noopener">
+                    <img src="{{ url_for('static', filename=image_path) }}" alt="添付画像{{ loop.index + 2 }}" loading="lazy" decoding="async">
+                </a>
+                {% endfor %}
             </div>
             {% endif %}
 
@@ -256,6 +265,7 @@
 .chip.shipment.approved_waiting_shipment { background: #e0f2fe; color: #075985; }
 .chip.shipment.shipped { background: #dcfce7; color: #166534; }
 .chip.shipment.rejected { background: #fee2e2; color: #991b1b; }
+.completion-warning { margin-top: .9rem; padding: .75rem .85rem; border: 1px solid #facc15; border-radius: 8px; background: #fefce8; color: #713f12; font-weight: 700; }
 .request-card-date { color: #64748b; font-size: .85rem; }
 .request-card-body { display: grid; grid-template-columns: 120px minmax(0, 1fr) 160px; gap: 1rem; padding: 1rem; }
 .product-photo img, .attachment img { width: 100%; height: 100%; object-fit: cover; }

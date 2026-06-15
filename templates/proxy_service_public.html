@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
     <title>{{ settings.page_title or 'オークション' }} - 株式会社 開花</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -11,12 +11,29 @@
             padding: 0;
             box-sizing: border-box;
         }
+
+        html {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+        }
         
         body {
             font-family: 'Noto Sans JP', sans-serif;
             background: #f8fafc;
             color: #1e293b;
             line-height: 1.6;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+        }
+
+        img,
+        video,
+        iframe {
+            max-width: 100%;
         }
         
         .header {
@@ -418,6 +435,29 @@
             text-align: center;
             color: #94a3b8;
             font-size: 0.9rem;
+        }
+
+        .bid-rule {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 0.65rem 0.75rem;
+            margin-bottom: 0.75rem;
+            color: #1d4ed8;
+            font-size: 0.85rem;
+        }
+
+        .bid-rule strong {
+            color: #1e40af;
+            font-size: 0.95rem;
+        }
+
+        .bid-rule small {
+            color: #475569;
+            line-height: 1.4;
         }
         
         .bid-form {
@@ -1148,14 +1188,17 @@
                     <div class="bid-disabled">受付終了</div>
                     {% endif %}
                     
+                    {% if auction_state.is_open and not item.is_sold %}
+                    <div class="bid-rule" id="bid-rule-{{ item.id }}">
+                        <strong>最低入札額: ¥{{ "{:,}".format(item.minimum_bid_amount or 0) }}</strong>
+                        <small>現在価格 ¥{{ "{:,}".format(item.current_bid_price or 0) }} / {{ "{:,}".format(item.bid_unit or 0) }}円単位</small>
+                    </div>
+                    {% endif %}
+
                     {% if auction_state.is_open and not item.is_sold and current_user.is_authenticated and current_user.can_participate_auction() and can_participate_current_auction %}
-                    <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})">
+                    <form class="bid-form" onsubmit="submitBid(event, {{ item.id }})" novalidate>
                         <div class="bid-row">
-                            {% if item.highest_bid %}
-                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.highest_bid + 1 }}" id="amount-{{ item.id }}">
-                            {% else %}
-                            <input type="number" name="bid_amount" placeholder="入札額（円）" required min="{{ item.listing_price or 0 }}" id="amount-{{ item.id }}">
-                            {% endif %}
+                            <input type="number" name="bid_amount" placeholder="¥{{ '{:,}'.format(item.minimum_bid_amount or 0) }}以上" required min="{{ item.minimum_bid_amount or 0 }}" step="{{ item.bid_unit or 1 }}" inputmode="numeric" id="amount-{{ item.id }}" data-current-price="{{ item.current_bid_price or 0 }}" data-minimum-bid="{{ item.minimum_bid_amount or 0 }}" data-bid-unit="{{ item.bid_unit or 1 }}">
                             <button type="submit" class="btn-bid">入札する</button>
                         </div>
                         <div class="bid-error" id="error-{{ item.id }}" style="display:none;"></div>
@@ -1308,6 +1351,80 @@
         if (e.key === 'ArrowRight') nextImage();
     });
     
+    function getBidUnit(currentPrice) {
+        return Number(currentPrice) >= 10000 ? 1000 : 500;
+    }
+
+    function getNextMinimumBid(currentPrice) {
+        const normalizedPrice = Math.max(0, Number(currentPrice) || 0);
+        if (normalizedPrice < 10000) {
+            return Math.min((Math.floor(normalizedPrice / 500) + 1) * 500, 10000);
+        }
+        return (Math.floor(normalizedPrice / 1000) + 1) * 1000;
+    }
+
+    function isValidBidAmount(amount, bidUnit) {
+        if (!Number.isInteger(amount) || amount <= 0) {
+            return false;
+        }
+        const unit = Math.max(1, Number(bidUnit) || 1);
+        return amount % unit === 0;
+    }
+
+    function formatYen(amount) {
+        return '¥' + (Number(amount) || 0).toLocaleString();
+    }
+
+    function showBidError(errorDiv, message) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+
+    function updateBidRule(itemId, currentPrice, minimumBid, bidUnit) {
+        const normalizedCurrent = Math.max(0, Number(currentPrice) || 0);
+        const normalizedMinimum = Math.max(0, Number(minimumBid) || getNextMinimumBid(normalizedCurrent));
+        const normalizedUnit = Math.max(1, Number(bidUnit) || getBidUnit(normalizedCurrent));
+        const ruleDiv = document.getElementById('bid-rule-' + itemId);
+        const amountInput = document.getElementById('amount-' + itemId);
+
+        if (ruleDiv) {
+            ruleDiv.innerHTML = `
+                <strong>最低入札額: ${formatYen(normalizedMinimum)}</strong>
+                <small>現在価格 ${formatYen(normalizedCurrent)} / ${normalizedUnit.toLocaleString()}円単位</small>
+            `;
+        }
+
+        if (amountInput) {
+            amountInput.min = String(normalizedMinimum);
+            amountInput.step = String(normalizedUnit);
+            amountInput.placeholder = `${formatYen(normalizedMinimum)}以上`;
+            amountInput.dataset.currentPrice = String(normalizedCurrent);
+            amountInput.dataset.minimumBid = String(normalizedMinimum);
+            amountInput.dataset.bidUnit = String(normalizedUnit);
+        }
+    }
+
+    function getBidInputError(amountInput) {
+        const amount = Number(amountInput.value);
+        const minimumBid = Number(amountInput.dataset.minimumBid || amountInput.min || 0);
+        const bidUnit = Number(amountInput.dataset.bidUnit || amountInput.step || 1);
+        const currentPrice = Number(amountInput.dataset.currentPrice || 0);
+
+        if (!Number.isInteger(amount) || amount <= 0) {
+            return '有効な入札額を円単位で入力してください。';
+        }
+
+        if (amount < minimumBid) {
+            return `現在価格は${formatYen(currentPrice)}です。入札額は${formatYen(minimumBid)}以上（${bidUnit.toLocaleString()}円単位）で入力してください。`;
+        }
+
+        if (!isValidBidAmount(amount, bidUnit)) {
+            return `現在価格は${formatYen(currentPrice)}です。${formatYen(minimumBid)}以上、${bidUnit.toLocaleString()}円単位で入力してください。`;
+        }
+
+        return '';
+    }
+
     // 入札処理
     function submitBid(event, itemId) {
         event.preventDefault();
@@ -1318,6 +1435,13 @@
         const submitBtn = form.querySelector('button[type="submit"]');
         
         errorDiv.style.display = 'none';
+        const inputError = getBidInputError(amountInput);
+        if (inputError) {
+            showBidError(errorDiv, inputError);
+            return;
+        }
+
+        const bidAmount = Number(amountInput.value);
         submitBtn.disabled = true;
         submitBtn.textContent = '処理中...';
         
@@ -1328,7 +1452,7 @@
             },
             body: JSON.stringify({
                 merchandise_id: itemId,
-                bid_amount: parseInt(amountInput.value)
+                bid_amount: bidAmount
             })
         })
         .then(response => response.json())
@@ -1358,13 +1482,15 @@
                 }
                 
                 // 最低入札額を更新
-                amountInput.min = data.bid_amount + 1;
+                updateBidRule(itemId, data.bid_amount, data.minimum_bid, data.bid_unit);
                 amountInput.value = '';
                 
                 alert('入札が完了しました！');
             } else {
-                errorDiv.textContent = data.error;
-                errorDiv.style.display = 'block';
+                if (data.minimum_bid && data.bid_unit) {
+                    updateBidRule(itemId, data.current_price || 0, data.minimum_bid, data.bid_unit);
+                }
+                showBidError(errorDiv, data.error || '入札できませんでした。金額を確認してください。');
             }
         })
         .catch(err => {
@@ -1495,6 +1621,13 @@
     setInterval(updateCountdown, 1000);
     {% endif %}
     startLiveStatusPolling();
+    </script>
+    <script>
+    document.addEventListener('gesturechange', function(event) {
+        if (event.scale && event.scale < 1) {
+            event.preventDefault();
+        }
+    }, { passive: false });
     </script>
 </body>
 </html>

@@ -553,6 +553,11 @@
         color: #94a3b8;
     }
 
+    .data-table tbody tr.row-sold .table-thumb,
+    .data-table tbody tr.row-sold .no-thumb {
+        opacity: 0.45;
+    }
+
     .data-table tbody tr.row-sold:hover {
         background: #f1f1f1;
     }
@@ -1628,7 +1633,7 @@
     <div class="filter-tab-content" id="filter-price">
         <div class="filter-group">
             <div class="filter-item">
-                <label>卸価格</label>
+                <label>仕入価格</label>
                 <input type="number" id="tab-filter-purchase-min" placeholder="以上">
                 <span>〜</span>
                 <input type="number" id="tab-filter-purchase-max" placeholder="以下">
@@ -1694,9 +1699,7 @@
                     <th class="updater-col">最終更新者</th>
                     <th class="sortable" data-sort="purchase_date">{{ '登録日' if long_term_only else '仕入日' }}</th>
                     <th class="sortable" data-sort="days_since_purchase">保管日数</th>
-                    <th class="sortable" data-sort="purchase_price">卸価格</th>
-                    <th class="sortable" data-sort="listing_price">出品価格</th>
-                    <th class="sortable" data-sort="sale_price">売上</th>
+                    <th class="sortable" data-sort="purchase_price">価格</th>
                     <th class="sortable" data-sort="profit">利益</th>
                     <th>販売状況</th>
                     <th style="width: {{ '260px' if long_term_only else '100px' }};">{{ '長期保存対応' if long_term_only else '操作' }}</th>
@@ -1712,7 +1715,7 @@
                     data-sales-destination="{{ item.sales_destination or '' }}"
                     data-owner="{{ item.owner_display_name or item.owner_username or '' }}"
                     data-owner-id="{{ item.user_id or '' }}"
-                    data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}" data-purchase-price="{{ item.wholesale_price or 0 }}"
+                    data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}" data-purchase-price="{{ item.display_purchase_price or item.wholesale_price or item.purchase_price or 0 }}"
                     data-listing-price="{{ item.listing_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
                     data-profit="{{ item.profit or 0 }}"
                     data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
@@ -1764,16 +1767,12 @@
                     <td class="updater-col" title="{{ item.updated_by_name or '-' }}">{{ item.updated_by_name or '-' }}</td>
                     <td>{{ item.storage_started_at_display if long_term_only else item.purchase_date or '-' }}</td>
                     <td class="amount">{{ item.days_since_purchase or 0 }}日</td>
-                    <td class="amount">¥{{ "{:,}".format(item.wholesale_price or 0) }}</td>
-                    <td class="amount">
-                        {% if item.listing_price %}
-                        ¥{{ "{:,}".format(item.listing_price) }}
-                        {% else %}-{% endif %}
-                    </td>
                     <td class="amount">
                         {% if item.is_sold or item.sale_date %}
-                        ¥{{ "{:,}".format(item.sale_price or 0) }}
-                        {% else %}-{% endif %}
+                        売却 ¥{{ "{:,}".format(item.display_sale_price or item.sale_price or 0) }}
+                        {% else %}
+                        仕入 ¥{{ "{:,}".format(item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) }}
+                        {% endif %}
                     </td>
                     <td
                         class="amount {% if item.is_sold or item.sale_date %}{% if (item.profit or 0) > 0 %}positive{% else %}negative{% endif %}{% endif %}">
@@ -1785,14 +1784,20 @@
                     <td>
                         {% if item.is_sold or item.sale_date %}
                         <span class="status-badge sold">売却済み</span>
-                        {% elif item.pending_completion_request %}
-                        <span class="status-badge pending-sale">取引完了確認中</span>
-                        {% elif item.pending_shipping_request %}
-                        <span class="status-badge pending-sale">発送依頼確認中</span>
-                        {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
-                        <span class="status-badge listed">取引中</span>
+                        {% elif item.long_term_result_label %}
+                        <span class="status-badge listed">{{ item.long_term_result_label }}</span>
+                        {% elif item.long_term_status_label %}
+                        <span class="status-badge pending-sale">{{ item.long_term_status_label }}</span>
                         {% elif item.pending_sales_agency %}
-                        <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中' }}</span>
+                        <span class="status-badge pending-sale">{{ item.mobile_status_label or (item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中') }}</span>
+                        {% elif item.completion_resend_requested %}
+                        <span class="status-badge pending-sale">再送依頼</span>
+                        {% elif item.pending_completion_request %}
+                        <span class="status-badge pending-sale">確認待ち</span>
+                        {% elif item.pending_shipping_request %}
+                        <span class="status-badge pending-sale">発送依頼中</span>
+                        {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
+                        <span class="status-badge listed">{{ '取引完了報告を送る' if item.can_send_completion_report else '発送依頼送付済み' }}</span>
                         {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
                         <span class="status-badge listed">査定中</span>
                         {% elif item.is_listed %}
@@ -1835,6 +1840,12 @@
                                     <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
                                 </form>
                                 {% endif %}
+                                {% if item.other_action and item.disposal_request_id %}
+                                <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                                    <input type="hidden" name="action" value="{{ item.other_action }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.other_confirm_message|default("", true)|tojson }})'>{{ item.other_action_label }}</button>
+                                </form>
+                                {% endif %}
                                 <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>
                             </div>
                         </div>
@@ -1852,7 +1863,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ '18' if not long_term_only else '17' }}" style="text-align: center; padding: 40px; color: #94a3b8;">
+                    <td colspan="{{ '16' if not long_term_only else '15' }}" style="text-align: center; padding: 40px; color: #94a3b8;">
                         {% if long_term_only %}
                         {{ selected_owner_name ~ ' の長期保存商品はありません' if selected_owner_name else '長期保存商品はありません' }}
                         {% else %}
@@ -1878,7 +1889,8 @@
     </div>
     <div class="mobile-cards" id="mobileCards">
         {% for item in items %}
-        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.listing_price or item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) %}
+        {% set mobile_price = item.display_sale_price if (item.is_sold or item.sale_date) else (item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) %}
+        {% set mobile_price_label = '売却' if (item.is_sold or item.sale_date) else '仕入' %}
         <div class="user-item-card {% if item.is_sold or item.sale_date %}card-sold{% endif %}" data-id="{{ item.id }}"
             data-name="{{ item.product_name or '' }}" data-brand="{{ item.brand_name or '' }}"
             data-model="{{ item.model_number or '' }}" data-condition="{{ item.item_condition or '' }}"
@@ -1886,7 +1898,7 @@
             data-status-rank="{% if item.is_sold or item.sale_date %}90{% elif item.is_shipped %}20{% elif item.appraisal_status in ['waiting', 'inspecting'] %}25{% elif item.is_listed %}30{% else %}10{% endif %}"
             data-status="{% if item.is_sold or item.sale_date %}sold{% elif item.is_shipped %}transaction{% elif item.appraisal_status in ['waiting', 'inspecting'] %}appraisal_pending{% elif item.is_listed %}listed{% else %}unlisted{% endif %}"
             data-status-tags="{{ (item.status_tags or [])|join(' ') }}"
-            data-purchase-price="{{ item.wholesale_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
+            data-purchase-price="{{ item.display_purchase_price or item.wholesale_price or item.purchase_price or 0 }}" data-sale-price="{{ item.sale_price or 0 }}"
             data-profit="{{ item.profit or 0 }}" data-date="{{ item.storage_started_at_display if long_term_only else item.purchase_date or '' }}"
             data-days-since-purchase="{{ item.days_since_purchase or 0 }}"
             data-created-at="{{ item.created_at or '' }}"
@@ -1914,7 +1926,7 @@
                     {% else %}
                     <div class="no-photo">-</div>
                     {% endif %}
-                    <div class="card-price-overlay">¥{{ "{:,}".format(mobile_price|int) }}</div>
+                    <div class="card-price-overlay">{{ mobile_price_label }} ¥{{ "{:,}".format(mobile_price|int) }}</div>
                 </div>
                 <div class="user-card-title">
                     <span class="user-card-id">{{ item.kaika_product_code or '-' }}</span>
@@ -1930,20 +1942,10 @@
                 <div class="user-card-status">
                     {% if item.is_sold or item.sale_date %}
                     <span class="status-badge sold">売却済み</span>
-                    {% elif item.pending_completion_request %}
-                    <span class="status-badge pending-sale">取引完了確認中</span>
-                    {% elif item.pending_shipping_request %}
-                    <span class="status-badge pending-sale">発送依頼確認中</span>
-                    {% elif item.can_send_completion_report or item.approved_shipping_request or item.shipment_marked or item.is_shipped %}
-                    <span class="status-badge listed">取引中</span>
-                    {% elif item.pending_sales_agency %}
-                    <span class="status-badge pending-sale">{{ item.sales_agency_request.status_label if item.sales_agency_request and item.sales_agency_request.status_label else '業者依頼中' }}</span>
-                    {% elif item.appraisal_status in ['waiting', 'inspecting'] %}
-                    <span class="status-badge listed">査定中</span>
-                    {% elif item.is_listed %}
-                    <span class="status-badge listed">出品中</span>
-                    {% else %}
-                    <span class="status-badge unlisted">未出品</span>
+                    {% elif item.long_term_result_label %}
+                    <span class="status-badge listed">{{ item.long_term_result_label }}</span>
+                    {% elif item.long_term_status_label %}
+                    <span class="status-badge pending-sale">{{ item.long_term_status_label }}</span>
                     {% endif %}
                 </div>
             </div>
@@ -1956,18 +1958,14 @@
                 {% endif %}
                 <div class="user-card-info-grid">
                     <div class="user-card-info-item">
-                        <span class="user-card-info-label">卸価格</span>
-                        <span class="user-card-info-value">¥{{ "{:,}".format(item.wholesale_price or 0) }}</span>
-                    </div>
-                    <div class="user-card-info-item">
-                        <span class="user-card-info-label">出品</span>
-                        <span class="user-card-info-value">{% if item.listing_price %}¥{{
-                            "{:,}".format(item.listing_price) }}{% else %}-{% endif %}</span>
-                    </div>
-                    <div class="user-card-info-item">
-                        <span class="user-card-info-label">売上</span>
-                        <span class="user-card-info-value">{% if item.is_sold or item.sale_date %}¥{{ "{:,}".format(item.sale_price or
-                            0) }}{% else %}-{% endif %}</span>
+                        <span class="user-card-info-label">価格</span>
+                        <span class="user-card-info-value">
+                            {% if item.is_sold or item.sale_date %}
+                            売却 ¥{{ "{:,}".format(item.display_sale_price or item.sale_price or 0) }}
+                            {% else %}
+                            仕入 ¥{{ "{:,}".format(item.display_purchase_price or item.wholesale_price or item.purchase_price or 0) }}
+                            {% endif %}
+                        </span>
                     </div>
                 </div>
                 {% if long_term_only %}
@@ -2004,6 +2002,12 @@
                     <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
                         <input type="hidden" name="action" value="{{ item.finish_action }}">
                         <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.finish_confirm_message|default("", true)|tojson }})'>{{ item.finish_action_label }}</button>
+                    </form>
+                    {% endif %}
+                    {% if item.other_action and item.disposal_request_id %}
+                    <form method="POST" action="{{ url_for('process_disposal_request', request_id=item.disposal_request_id) }}" class="notify-form">
+                        <input type="hidden" name="action" value="{{ item.other_action }}">
+                        <button type="submit" class="btn btn-sm btn-secondary-link" onclick='return confirm({{ item.other_confirm_message|default("", true)|tojson }})'>{{ item.other_action_label }}</button>
                     </form>
                     {% endif %}
                     <a href="{{ url_for('admin_disposal_requests', reason='long_term', user_id=item.user_id, merchandise_id=item.id) }}" class="btn btn-sm btn-secondary-link">申請一覧</a>

@@ -303,6 +303,12 @@
                     {% elif settings.sale_mode == 'auction' %}
                     <div class="item-no-bid">入札なし</div>
                     {% endif %}
+                    {% if settings.sale_mode == 'auction' and not item.is_sold %}
+                    <div class="item-bid-rule">
+                        <strong>最低入札: ¥{{ "{:,}".format(item.minimum_bid_amount or 0) }}</strong>
+                        <span>現在価格 ¥{{ "{:,}".format(item.current_bid_price or 0) }} / {{ "{:,}".format(item.bid_unit or 0) }}円単位</span>
+                    </div>
+                    {% endif %}
                     <div class="item-max-price auction-only-field">
                         <div class="item-max-price-label">最高価格: <span id="max-price-display-{{ item.id }}">{% if item.has_proxy_auction_max_price %}¥{{ "{:,}".format(item.proxy_auction_max_price) }}{% else %}未設定{% endif %}</span></div>
                         <div class="item-max-price-editor">
@@ -512,6 +518,9 @@
                             ¥{{ "{:,}".format(item.result_price) }}
                             {% else %}
                             -
+                            {% endif %}
+                            {% if is_live_status_view and auction_state.sale_mode == 'auction' and not item.is_sold %}
+                            <div class="result-bid-rule">次回 ¥{{ "{:,}".format(item.minimum_bid_amount or 0) }} / {{ "{:,}".format(item.bid_unit or 0) }}円単位</div>
                             {% endif %}
                         </td>
                         <td>{{ item.bid_count or 0 }}件</td>
@@ -1396,6 +1405,13 @@ details[open] .client-document-toggle {
     color: #64748b;
 }
 
+.result-bid-rule {
+    margin-top: 0.25rem;
+    color: #2563eb;
+    font-size: 0.78rem;
+    white-space: normal;
+}
+
 .result-item-photo {
     width: 60px;
     height: 60px;
@@ -2008,6 +2024,29 @@ details[open] .client-document-toggle {
     font-size: 0.8rem;
     color: #94a3b8;
     margin-bottom: 0.25rem;
+}
+
+.proxy-item-card .item-bid-rule {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 0.35rem;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+}
+
+.proxy-item-card .item-bid-rule strong {
+    color: #1e40af;
+    font-size: 0.85rem;
+}
+
+.proxy-item-card .item-bid-rule span {
+    color: #475569;
+    line-height: 1.35;
 }
 
 .proxy-item-card .item-owner {

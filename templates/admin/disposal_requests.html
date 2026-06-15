@@ -773,6 +773,11 @@
                         {{ req.finish_action_label }}
                     </button>
                     {% endif %}
+                    {% if req.other_action %}
+                    <button class="btn-process completed" onclick='processRequest({{ req.id }}, {{ req.other_action|tojson }}, {{ req.other_confirm_message|default("", true)|tojson }})'>
+                        {{ req.other_action_label }}
+                    </button>
+                    {% endif %}
                     <a href="{{ url_for('view_item', id=req.merchandise_id, back_url=current_back_url) }}" class="btn-process processing" style="text-decoration: none;">商品詳細</a>
                     {% if req.allow_reject %}
                     <button class="btn-process rejected" onclick="openRejectModal({{ req.id }})">

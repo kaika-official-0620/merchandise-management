@@ -3,7 +3,21 @@
     display: grid;
     gap: 1.25rem;
     max-width: 1120px;
+    min-width: 0;
     margin: 0 auto;
+}
+
+.admin-doc-page,
+.admin-doc-sheet,
+.admin-doc-body,
+.admin-doc-info-grid,
+.admin-doc-card,
+.admin-doc-section,
+.admin-doc-notes,
+.admin-doc-dl,
+.table-scroll {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .admin-doc-toolbar,
@@ -204,6 +218,7 @@
     margin: 0;
     color: #0f172a;
     line-height: 1.7;
+    overflow-wrap: anywhere;
 }
 
 .admin-doc-total {
@@ -227,6 +242,8 @@
 
 .table-scroll {
     overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
     border: 1px solid #e2e8f0;
     border-radius: 14px;
 }

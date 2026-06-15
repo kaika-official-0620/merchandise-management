@@ -125,6 +125,16 @@
     color: #047857;
 }
 
+.status-badge.cancel_requested {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.status-badge.cancelled {
+    background: #f1f5f9;
+    color: #475569;
+}
+
 .status-badge.rejected {
     background: #fee2e2;
     color: #dc2626;
@@ -140,6 +150,30 @@
     padding: 1.1rem;
     display: grid;
     gap: 0.95rem;
+}
+
+.cancel-request-box {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.85rem;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #9a3412;
+}
+
+.cancel-request-box form {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.cancel-request-box input {
+    min-width: 220px;
+    flex: 1;
+    border: 1px solid #fdba74;
+    border-radius: 6px;
+    padding: 0.58rem 0.7rem;
 }
 
 .request-items {
@@ -311,6 +345,21 @@
             {% if req.status != 'pending' %}
             <div class="processed-info">
                 更新日 {{ req.processed_at[:16].replace('-', '/').replace('T', ' ') if req.processed_at else '-' }}
+            </div>
+            {% endif %}
+
+            {% if req.can_request_cancel %}
+            <div class="cancel-request-box">
+                <div>対応状況によってはキャンセルできない場合があります。</div>
+                <form method="POST" action="{{ url_for('sales_agency_cancel_request', request_id=req.id) }}">
+                    <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
+                    <input type="text" name="cancel_note" placeholder="キャンセル理由（任意）">
+                    <button type="submit" class="btn btn-secondary">キャンセル申請</button>
+                </form>
+            </div>
+            {% elif req.status in ['approved', 'appraising', 'inspecting', 'completed'] %}
+            <div class="cancel-request-box">
+                <div>対応状況によってはキャンセルできない場合があります。現在の状態ではキャンセル申請できません。</div>
             </div>
             {% endif %}
 
