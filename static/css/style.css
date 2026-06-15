@@ -29,6 +29,9 @@
     --radius-sm: 0;
     --radius: 0;
     --radius-lg: 0;
+    --mobile-header-safe-top: env(safe-area-inset-top, 0px);
+    --mobile-header-row-height: 58px;
+    --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
     
 }
 
@@ -2297,6 +2300,12 @@ body.sidebar-open {
 }
 
 @media (max-width: 768px) {
+    :root {
+        --mobile-header-safe-top: max(env(safe-area-inset-top, 0px), 10px);
+        --mobile-header-row-height: 58px;
+        --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
+    }
+
     html,
     body {
         width: 100%;
@@ -2309,12 +2318,13 @@ body.sidebar-open {
         padding: 0;
         max-width: 100vw;
         overflow-x: clip;
+        min-height: var(--mobile-header-height);
     }
     
     .nav-container {
-        padding: 0.5rem 0.75rem;
-        gap: 0.45rem;
-        min-height: 56px;
+        padding: calc(var(--mobile-header-safe-top) + 0.5rem) max(0.75rem, env(safe-area-inset-right, 0px)) 0.5rem max(0.75rem, env(safe-area-inset-left, 0px));
+        gap: 0.4rem;
+        min-height: var(--mobile-header-height);
         width: 100%;
         max-width: 100vw;
         overflow-x: clip;
@@ -2325,15 +2335,24 @@ body.sidebar-open {
     }
 
     .nav-logo-center {
+        top: calc(var(--mobile-header-safe-top) + 29px);
+        width: 44px;
+        height: 44px;
+    }
+
+    .hamburger-menu {
         width: 42px;
         height: 42px;
+        flex-basis: 42px;
+        padding: 8px;
     }
 
     .nav-right {
-        flex: 1 1 auto;
+        flex: 1 1 0;
         min-width: 0;
         margin-right: 0;
         justify-content: flex-end;
+        gap: 0.35rem;
     }
     
     .nav-brand a {
@@ -2343,14 +2362,14 @@ body.sidebar-open {
     .nav-user {
         gap: 0.25rem;
         min-width: 0;
-        flex: 0 0 50px;
+        flex: 0 1 clamp(54px, 17vw, 68px);
     }
     
     .user-menu-trigger {
         min-width: 0;
-        width: 50px;
-        max-width: 50px;
-        flex: 0 0 50px;
+        width: clamp(54px, 17vw, 68px);
+        max-width: 68px;
+        flex: 0 1 clamp(54px, 17vw, 68px);
         height: 42px;
         justify-content: center;
         padding: 0 0.3rem;
@@ -2376,11 +2395,12 @@ body.sidebar-open {
     }
 
     .nav-right .btn-sm {
-        min-width: 50px;
+        min-width: 52px;
         height: 42px;
         padding: 0 0.45rem;
         font-size: 0.72rem;
         font-weight: 700;
+        flex: 0 0 auto;
     }
 
     .sidebar {
@@ -2580,6 +2600,7 @@ body.sidebar-open {
         text-align: center;
         gap: 0.5rem;
         padding: 0.5rem 1rem;
+        top: var(--mobile-header-height);
     }
     
     .payment-warning-banner .warning-text {
