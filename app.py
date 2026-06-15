@@ -33161,6 +33161,17 @@ def normalize_long_term_request_action(disposal_type, action, sale_date=None):
     if requested_action in ('other', 'other_completed'):
         return 'other_completed'
 
+    canonical_actions = {
+        'auction_listing',
+        'auction_sold',
+        'shipping_preparing',
+        'shipping_sent',
+        'liquidation_processing',
+        'liquidation_completed',
+    }
+    if requested_action in canonical_actions:
+        return requested_action
+
     if disposal_type == 'auction':
         if requested_action in ('processing', 'auction_listing'):
             return 'auction_listing'
