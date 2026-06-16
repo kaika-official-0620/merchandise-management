@@ -9,11 +9,17 @@
     </div>
 </div>
 
+{% set inquiry_has_filter = is_inquiry_filtered|default(false)
+    or request.args.get('q')
+    or request.args.get('date')
+    or request.args.get('date_from')
+    or request.args.get('date_to') %}
+
 <form method="GET" class="inquiry-search-form">
     <input type="search" name="q" value="{{ search_filters.q if search_filters is defined else '' }}" placeholder="件名・本文・返信内容を検索">
     <input type="date" name="date" value="{{ search_filters.date if search_filters is defined and search_filters.date else (search_filters.date_from if search_filters is defined and search_filters.date_from == search_filters.date_to else '') }}" aria-label="日付">
     <button type="submit" class="btn btn-primary">検索</button>
-    {% if is_inquiry_filtered %}
+    {% if inquiry_has_filter %}
     <a href="{{ url_for('inquiry_list') }}" class="btn btn-secondary">検索解除</a>
     {% endif %}
 </form>
