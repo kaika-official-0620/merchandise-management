@@ -109,13 +109,18 @@
 .sales-agency-detail-form label {
     display: grid;
     gap: 0.25rem;
-    min-width: min(100%, 260px);
+    flex: 1 1 320px;
+    min-width: 0;
     color: #334155;
     font-size: 0.85rem;
     font-weight: 700;
 }
 
-.sales-agency-detail-form select {
+.sales-agency-detail-form select,
+.sales-agency-detail-form textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     min-height: 40px;
     padding: 0.5rem 0.7rem;
     border: 1px solid #cbd5e1;
@@ -123,6 +128,12 @@
     background: #ffffff;
     color: #0f172a;
     font-size: 0.95rem;
+    font: inherit;
+}
+
+.sales-agency-detail-form textarea {
+    min-height: 78px;
+    resize: vertical;
 }
 
 .sales-agency-status-note {
@@ -1000,7 +1011,7 @@
         <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
         <label>
             キャンセル理由（任意）
-            <input type="text" name="cancel_note" placeholder="理由があれば入力してください">
+            <textarea name="cancel_note" rows="3" placeholder="理由があれば入力してください"></textarea>
         </label>
         <button type="submit" class="btn btn-secondary">キャンセル申請</button>
     </form>

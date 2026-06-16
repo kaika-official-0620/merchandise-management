@@ -38,6 +38,7 @@
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #fff;
+    min-width: 0;
 }
 
 .announcement-filter label {
@@ -46,9 +47,14 @@
     color: #475569;
     font-size: 0.78rem;
     font-weight: 800;
+    min-width: min(100%, 170px);
 }
 
 .announcement-filter input[type="date"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 38px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -68,9 +74,9 @@
 .announcement-card {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.7rem;
+    gap: 0.55rem;
     align-items: center;
-    padding: 0.72rem 0.8rem;
+    padding: 0.56rem 0.65rem;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #ffffff;
@@ -90,8 +96,8 @@
 .announcement-card__link {
     min-width: 0;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.65rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.28rem;
     align-items: center;
     color: inherit;
     text-decoration: none;
@@ -102,10 +108,10 @@
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    min-height: 24px;
-    padding: 0.2rem 0.5rem;
+    min-height: 20px;
+    padding: 0.16rem 0.42rem;
     border-radius: 999px;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 800;
     white-space: nowrap;
 }
@@ -133,14 +139,14 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.38rem;
 }
 
 .announcement-card__title {
     margin: 0;
     min-width: 0;
     color: inherit;
-    font-size: 0.98rem;
+    font-size: 0.94rem;
     line-height: 1.35;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -149,7 +155,7 @@
 
 .announcement-card__date {
     color: #94a3b8;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     white-space: nowrap;
 }
 
@@ -160,13 +166,13 @@
 }
 
 .announcement-card__delete {
-    min-height: 32px;
-    padding: 0 0.65rem;
+    min-height: 28px;
+    padding: 0 0.52rem;
     border: 1px solid #fecaca;
     border-radius: 999px;
     background: #fff;
     color: #b91c1c;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 800;
     cursor: pointer;
     white-space: nowrap;
@@ -193,24 +199,26 @@
     }
 
     .announcement-card {
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
-        padding: 0.68rem;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.45rem;
+        padding: 0.54rem 0.58rem;
     }
 
     .announcement-card__link {
-        grid-template-columns: 1fr;
-        gap: 0.4rem;
+        min-width: 0;
     }
 
     .announcement-card__main {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 0.35rem;
+        flex-wrap: wrap;
+        gap: 0.28rem;
+    }
+
+    .announcement-card__date {
+        width: 100%;
     }
 
     .announcement-card__actions {
-        justify-content: space-between;
+        justify-content: flex-end;
     }
 }
 </style>
@@ -237,10 +245,10 @@
         {% for ann in announcements %}
         <article class="announcement-card {{ ann.announcement_type }} {% if ann.is_read %}is-read{% else %}is-unread{% endif %}" data-announcement-id="{{ ann.id }}">
             <a href="{{ url_for('user_announcement_detail_page', announcement_id=ann.id) }}" class="announcement-card__link">
-                <span class="announcement-card__badge">
-                    {% if ann.announcement_type == 'important' %}重要{% endif %}
-                </span>
                 <div class="announcement-card__main">
+                    <span class="announcement-card__badge">
+                        {% if ann.announcement_type == 'important' %}重要{% endif %}
+                    </span>
                     <span class="announcement-card__read-state">{% if ann.is_read %}既読{% else %}未読{% endif %}</span>
                     <h2 class="announcement-card__title">{{ ann.title }}</h2>
                     <span class="announcement-card__date">{{ ((ann.publish_at or ann.created_at)|string)[:16] }}</span>

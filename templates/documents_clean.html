@@ -141,6 +141,12 @@
     text-align: center;
 }
 
+.user-doc-table th:nth-child(5),
+.user-doc-table td:nth-child(5) {
+    width: 7rem;
+    min-width: 7rem;
+}
+
 .user-doc-table tr[data-detail-url] {
     cursor: pointer;
 }
@@ -159,6 +165,23 @@
     align-items: center;
     gap: 0.45rem;
     flex-wrap: wrap;
+}
+
+.doc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
+    word-break: keep-all;
+    line-height: 1.2;
+    padding: 0.24rem 0.58rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 800;
 }
 
 .doc-actions {
@@ -268,7 +291,7 @@
                         <td>{{ row.document_no }}</td>
                         <td>{{ row.issue_date }}</td>
                         <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
-                        <td>{{ row.status_label }}</td>
+                        <td><span class="doc-status-badge">{{ row.status_label }}</span></td>
                         <td>
                             <div class="doc-actions">
                                 {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}

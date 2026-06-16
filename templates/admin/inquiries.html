@@ -140,6 +140,7 @@
 
 .admin-inquiry-search-form input {
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
     min-height: 38px;
@@ -147,6 +148,15 @@
     border-radius: 6px;
     padding: 0.5rem 0.65rem;
     font: inherit;
+}
+
+.admin-inquiry-search-form input[type="date"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .filter-buttons {
@@ -311,8 +321,11 @@
         grid-template-columns: minmax(0, 1fr);
     }
     .admin-inquiry-search-form input[type="search"],
+    .admin-inquiry-search-form input[type="date"],
     .admin-inquiry-search-form .btn {
         grid-column: 1 / -1;
+        width: 100%;
+        max-width: 100%;
     }
 
     .inquiry-table-container {

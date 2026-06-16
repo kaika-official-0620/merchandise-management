@@ -80,6 +80,7 @@
 
 .inquiry-search-form input {
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
     min-height: 38px;
@@ -87,6 +88,15 @@
     border-radius: 6px;
     padding: 0.5rem 0.65rem;
     font: inherit;
+}
+
+.inquiry-search-form input[type="date"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .inquiry-container {
@@ -290,8 +300,11 @@
         margin-right: 0;
     }
     .inquiry-search-form input[type="search"],
+    .inquiry-search-form input[type="date"],
     .inquiry-search-form .btn {
         grid-column: 1 / -1;
+        width: 100%;
+        max-width: 100%;
     }
 
     .inquiry-card-wrapper {

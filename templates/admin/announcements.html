@@ -8,6 +8,15 @@
 </div>
 
 <div class="announcement-list-page">
+    <form method="GET" action="{{ url_for('admin_announcements') }}" class="admin-announcement-filter">
+        <input type="search" name="q" value="{{ search_query or '' }}" placeholder="タイトル・本文で検索">
+        <input type="date" name="date" value="{{ selected_date or '' }}" aria-label="日付で検索">
+        <button type="submit" class="btn btn-primary">検索</button>
+        {% if is_filtered %}
+        <a href="{{ url_for('admin_announcements') }}" class="btn btn-secondary">検索解除</a>
+        {% endif %}
+    </form>
+
     <div class="table-card">
         <div class="table-scroll">
             <table class="admin-table">
@@ -106,6 +115,31 @@
     min-width: 0;
 }
 
+.admin-announcement-filter {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 170px auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.admin-announcement-filter input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
 .table-card {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -187,6 +221,106 @@
     padding: 2.4rem 1rem;
     text-align: center;
     color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .admin-announcement-filter {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-announcement-filter .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .table-card,
+    .table-scroll {
+        border: 0;
+        box-shadow: none;
+        background: transparent;
+        overflow: visible;
+    }
+
+    .admin-table {
+        display: block;
+        min-width: 0;
+    }
+
+    .admin-table thead {
+        display: none;
+    }
+
+    .admin-table tbody {
+        display: grid;
+        gap: 0.55rem;
+    }
+
+    .admin-table tr {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.32rem 0.45rem;
+        padding: 0.58rem 0.65rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 9px;
+        background: #fff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+    }
+
+    .admin-table td {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    .admin-table td:nth-child(1) { order: 2; }
+    .admin-table td:nth-child(2) { order: 1; }
+    .admin-table td:nth-child(3) {
+        grid-column: 1 / -1;
+        order: 3;
+    }
+    .admin-table td:nth-child(4) {
+        grid-column: 1 / -1;
+        order: 5;
+        color: #64748b;
+    }
+    .admin-table td:nth-child(5),
+    .admin-table td:nth-child(6),
+    .admin-table td:nth-child(7) {
+        display: none;
+    }
+    .admin-table td:nth-child(8) {
+        order: 4;
+        justify-content: flex-end;
+        color: #94a3b8;
+        white-space: nowrap;
+    }
+    .admin-table td:nth-child(9) {
+        grid-column: 1 / -1;
+        order: 6;
+        justify-content: flex-end;
+    }
+
+    .title-cell {
+        min-width: 0;
+    }
+
+    .title-cell strong,
+    .title-cell small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .action-cell {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
 }
 </style>
 {% endblock %}

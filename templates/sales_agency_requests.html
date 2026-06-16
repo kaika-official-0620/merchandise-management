@@ -311,12 +311,17 @@
     flex-wrap: wrap;
 }
 
-.cancel-request-box input {
-    min-width: 220px;
-    flex: 1;
+.cancel-request-box textarea {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 260px;
+    min-height: 72px;
+    box-sizing: border-box;
     border: 1px solid #fdba74;
     border-radius: 6px;
     padding: 0.58rem 0.7rem;
+    font: inherit;
+    resize: vertical;
 }
 
 .request-items {
@@ -578,7 +583,7 @@
                 <div>対応状況によってはキャンセルできない場合があります。</div>
                 <form method="POST" action="{{ url_for('sales_agency_cancel_request', request_id=req.id) }}">
                     <input type="hidden" name="next" value="{{ request.full_path[:-1] if request.full_path.endswith('?') else request.full_path }}">
-                    <input type="text" name="cancel_note" placeholder="キャンセル理由（任意）">
+                    <textarea name="cancel_note" rows="3" placeholder="キャンセル理由（任意）"></textarea>
                     <button type="submit" class="btn btn-secondary">キャンセル申請</button>
                 </form>
             </div>

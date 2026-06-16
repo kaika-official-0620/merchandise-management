@@ -2425,7 +2425,9 @@ body.sidebar-open {
     }
     
     .page-actions {
-        justify-content: center;
+        justify-content: flex-start;
+        align-items: center;
+        flex-wrap: wrap;
     }
     
     .stats-grid,
@@ -2543,6 +2545,8 @@ body.sidebar-open {
     
     .header-actions {
         gap: 0.5rem;
+        justify-content: flex-start;
+        flex-wrap: wrap;
     }
     
     .header-actions .btn {

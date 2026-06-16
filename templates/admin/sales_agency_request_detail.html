@@ -239,12 +239,16 @@
     gap: 0.45rem;
 }
 
-.item-inline-form input[type="text"] {
+.item-inline-form textarea {
     width: 100%;
+    min-height: 72px;
+    box-sizing: border-box;
     border: 1px solid #cbd5e1;
     border-radius: 10px;
     padding: 0.55rem 0.7rem;
+    font: inherit;
     font-size: 0.88rem;
+    resize: vertical;
 }
 
 .item-inline-form .btn {
@@ -454,7 +458,7 @@
                                 </div>
                                 {% elif item.request_item_id %}
                                 <form method="post" action="{{ url_for('admin_sales_agency_request_item_cancel', request_id=req.id, item_id=item.request_item_id) }}" class="item-inline-form" onsubmit="return confirm('この商品を今回の申請からキャンセルしますか？');">
-                                    <input type="text" name="cancel_reason" placeholder="キャンセル理由（任意）">
+                                    <textarea name="cancel_reason" rows="3" placeholder="キャンセル理由（任意）"></textarea>
                                     <button type="submit" class="btn btn-reject">この商品をキャンセル</button>
                                 </form>
                                 {% endif %}

@@ -12,12 +12,20 @@
 
 .announcement-detail-nav {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    gap: 1rem;
+    gap: 0.55rem;
+    flex-wrap: wrap;
 }
 
 .announcement-detail-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0.42rem 0.78rem;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #fff;
     color: #2563eb;
     font-weight: 700;
     text-decoration: none;
@@ -88,8 +96,9 @@
 
 @media (max-width: 640px) {
     .announcement-detail-nav {
-        align-items: flex-start;
-        flex-direction: column;
+        align-items: center;
+        flex-direction: row;
+        gap: 0.45rem;
     }
 
     .announcement-detail {

@@ -42043,6 +42043,8 @@ def admin_user_kaitori_shoudaku_view(id):
 @login_required
 @permission_required('announcements')
 def admin_announcements_v2():
+    search_query = (request.args.get('q') or '').strip()
+    selected_date = (request.args.get('date') or '').strip()
     conn, cur = document_open_cursor()
     try:
         cur.execute(
@@ -42059,10 +42061,28 @@ def admin_announcements_v2():
             row['recipient_user_ids_list'] = parse_announcement_recipient_ids(row.get('recipient_user_ids'))
             row['recipient_summary'] = get_announcement_recipient_summary(row)
             announcements.append(row)
+        if search_query:
+            lowered_query = search_query.lower()
+            announcements = [
+                row for row in announcements
+                if lowered_query in str(row.get('title') or '').lower()
+                or lowered_query in str(row.get('content') or '').lower()
+            ]
+        if selected_date:
+            announcements = [
+                row for row in announcements
+                if str(row.get('publish_at') or row.get('created_at') or '')[:10] == selected_date
+            ]
     finally:
         cur.close()
         conn.close()
-    return render_template('admin/announcements.html', announcements=announcements)
+    return render_template(
+        'admin/announcements.html',
+        announcements=announcements,
+        search_query=search_query,
+        selected_date=selected_date,
+        is_filtered=bool(search_query or selected_date),
+    )
 
 
 @login_required
