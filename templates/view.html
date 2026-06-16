@@ -1086,8 +1086,8 @@
                 <dt>最終更新者</dt>
                 <dd>{{ item.updated_by_name or '-' }}</dd>
                 {% endif %}
-                <dt>登録日</dt>
-                <dd>{{ (item.created_at|string)[:10] if item.created_at else (item.purchase_date or '-') }}</dd>
+                <dt>保管開始日</dt>
+                <dd>{{ item.storage_started_at_display or ((item.created_at|string)[:10] if item.created_at else (item.purchase_date or '-')) }}</dd>
                 <dt>開花管理番号</dt>
                 <dd>{{ item.kaika_product_code or '-' }}</dd>
                 <dt>ブランド</dt>

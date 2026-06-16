@@ -3380,6 +3380,7 @@ if DATABASE_URL:
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id),
                 purchase_date DATE,
+                storage_start_date DATE,
                 photo_path TEXT,
                 product_name VARCHAR(200),
                 brand_name VARCHAR(100),
@@ -3408,6 +3409,11 @@ if DATABASE_URL:
         # brand_nameカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS brand_name VARCHAR(100)")
+        except:
+            pass
+
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS storage_start_date DATE")
         except:
             pass
         
@@ -4421,6 +4427,7 @@ else:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER REFERENCES users(id),
                 purchase_date DATE,
+                storage_start_date DATE,
                 photo_path TEXT,
                 product_name TEXT,
                 brand_name TEXT,
@@ -4449,6 +4456,11 @@ else:
         # brand_nameカラムを追加（既存テーブル用）
         try:
             cur.execute("ALTER TABLE merchandise ADD COLUMN brand_name TEXT")
+        except:
+            pass
+
+        try:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN storage_start_date DATE")
         except:
             pass
         
@@ -7750,7 +7762,37 @@ def ensure_merchandise_scope_column(conn):
             cur.close()
 
 # マイグレーション実行
+def ensure_merchandise_storage_start_date_column(conn=None):
+    """Ensure merchandise.storage_start_date exists for long-term storage checks."""
+    owns_conn = conn is None
+    cur = None
+    try:
+        if conn is None:
+            conn = get_db()
+        cur = conn.cursor()
+        if DATABASE_URL:
+            cur.execute("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS storage_start_date DATE")
+        else:
+            cur.execute("PRAGMA table_info(merchandise)")
+            columns = [col[1] for col in cur.fetchall()]
+            if 'storage_start_date' not in columns:
+                cur.execute("ALTER TABLE merchandise ADD COLUMN storage_start_date DATE")
+        conn.commit()
+    except Exception as e:
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
+        print(f"Merchandise storage_start_date guard warning: {e}")
+    finally:
+        if cur is not None:
+            cur.close()
+        if owns_conn and conn is not None:
+            conn.close()
+
 migrate_add_scope_column()
+ensure_merchandise_storage_start_date_column()
 
 # ===================
 # 認証関連ルート
@@ -13390,6 +13432,7 @@ def edit_item(id):
         return redirect(url_for('disposal_options'))
     
     conn = get_db()
+    ensure_merchandise_storage_start_date_column(conn)
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         # 管理者/オーナーは全商品編集可能、一般ユーザーは自分の商品のみ
@@ -13486,6 +13529,7 @@ def edit_item(id):
                 
                 # 基本情報はフォームから取得
                 new_purchase_date = request.form.get('purchase_date') or None
+                new_storage_start_date = request.form.get('storage_start_date') or None
                 new_product_name = request.form.get('product_name')
                 new_kaika_product_code = request.form.get('kaika_product_code')
                 new_brand_name = request.form.get('brand_name')
@@ -13550,6 +13594,7 @@ def edit_item(id):
                 
                 # 基本情報は元の値で維持（商品名のみ編集可、メモは既存値を保持）
                 new_purchase_date = item_dict['purchase_date']
+                new_storage_start_date = item_dict.get('storage_start_date')
                 new_product_name = request.form.get('product_name') or item_dict['product_name']
                 new_kaika_product_code = item_dict.get('kaika_product_code')
                 new_brand_name = item_dict['brand_name']
@@ -13607,7 +13652,7 @@ def edit_item(id):
                 if current_user.is_admin() or current_user.is_owner():
                     cur.execute('''
                         UPDATE merchandise SET 
-                            purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                            purchase_date = %s, storage_start_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                             supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
                             wholesale_price = %s, wholesale_fee_rate = %s,
                             purchase_price = %s, payment_method = %s, listing_price = %s, 
@@ -13618,6 +13663,7 @@ def edit_item(id):
                         WHERE id = %s
                     ''', (
                         new_purchase_date,
+                        new_storage_start_date,
                         photo_path,
                         additional_photos_json,
                         new_product_name,
@@ -13653,7 +13699,7 @@ def edit_item(id):
                 else:
                     cur.execute('''
                         UPDATE merchandise SET 
-                            purchase_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
+                            purchase_date = %s, storage_start_date = %s, photo_path = %s, additional_photos = %s, product_name = %s, kaika_product_code = %s, brand_name = %s, model_number = %s, item_condition = %s, store_name = %s,
                             supplier_detail = %s, id_document_path = %s, consent_form_path = %s,
                             wholesale_price = %s, wholesale_fee_rate = %s,
                             purchase_price = %s, payment_method = %s, listing_price = %s, 
@@ -13664,6 +13710,7 @@ def edit_item(id):
                         WHERE id = %s AND user_id = %s
                     ''', (
                         new_purchase_date,
+                        new_storage_start_date,
                         photo_path,
                         additional_photos_json,
                         new_product_name,
@@ -13700,7 +13747,7 @@ def edit_item(id):
                 if current_user.is_admin() or current_user.is_owner():
                     cur.execute('''
                         UPDATE merchandise SET 
-                            purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                            purchase_date = ?, storage_start_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                             supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
                             wholesale_price = ?, wholesale_fee_rate = ?,
                             purchase_price = ?, payment_method = ?, listing_price = ?, 
@@ -13711,6 +13758,7 @@ def edit_item(id):
                         WHERE id = ?
                     ''', (
                         new_purchase_date,
+                        new_storage_start_date,
                         photo_path,
                         additional_photos_json,
                         new_product_name,
@@ -13746,7 +13794,7 @@ def edit_item(id):
                 else:
                     cur.execute('''
                         UPDATE merchandise SET 
-                            purchase_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
+                            purchase_date = ?, storage_start_date = ?, photo_path = ?, additional_photos = ?, product_name = ?, kaika_product_code = ?, brand_name = ?, model_number = ?, item_condition = ?, store_name = ?,
                             supplier_detail = ?, id_document_path = ?, consent_form_path = ?,
                             wholesale_price = ?, wholesale_fee_rate = ?,
                             purchase_price = ?, payment_method = ?, listing_price = ?, 
@@ -13757,6 +13805,7 @@ def edit_item(id):
                         WHERE id = ? AND user_id = ?
                     ''', (
                         new_purchase_date,
+                        new_storage_start_date,
                         photo_path,
                         additional_photos_json,
                         new_product_name,
@@ -13986,6 +14035,8 @@ def view_item(id):
 
     enrich_item_sale_request_state(item_dict, include_all_users=current_user.is_admin() or current_user.is_owner())
     attach_long_term_request_state(item_dict)
+    item_dict['storage_started_at_display'] = format_storage_started_date(item_dict)
+    item_dict['days_since_purchase'] = calculate_days_in_storage(item_dict)
 
     if current_user.is_admin() or current_user.is_owner():
         actor_ids = [actor_id for actor_id in [item_dict.get('created_by'), item_dict.get('updated_by')] if actor_id]
@@ -24766,7 +24817,7 @@ def admin_user_products():
                 for item in all_long_term_items:
                     user_id = item.get('user_id')
                     user_info = user_map.get(user_id, {})
-                    storage_started_at = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+                    storage_started_at = get_storage_started_date(item)
                     summary = summary_map.setdefault(user_id, {
                         'user_id': user_id,
                         'username': user_info.get('username'),
@@ -24867,7 +24918,7 @@ def admin_user_products():
                 for item in all_long_term_items:
                     user_id = item.get('user_id')
                     user_info = user_map.get(user_id, {})
-                    storage_started_at = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+                    storage_started_at = get_storage_started_date(item)
                     summary = summary_map.setdefault(user_id, {
                         'user_id': user_id,
                         'username': user_info.get('username'),
@@ -25163,6 +25214,7 @@ def admin_add_item():
 
         conn = get_db()
         ensure_merchandise_scope_column(conn)
+        ensure_merchandise_storage_start_date_column(conn)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             placeholder = '%s'
@@ -25253,16 +25305,17 @@ def admin_add_item():
         try:
             cur.execute(f'''
                 INSERT INTO merchandise (
-                    user_id, purchase_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name,
+                    user_id, purchase_date, storage_start_date, photo_path, additional_photos, product_name, kaika_product_code, brand_name,
                     model_number, item_condition, store_name, supplier_detail,
                     id_document_path, consent_form_path,
                     wholesale_price, wholesale_fee_rate, purchase_price, payment_method, listing_price, expected_shipping,
                     expected_commission, is_listed, listing_date, sale_date, sale_type, sale_price,
                     shipping_cost, sales_destination, commission, is_shipped, notes, scope, appraisal_status
-                ) VALUES ({', '.join([placeholder] * 32)})
+                ) VALUES ({', '.join([placeholder] * 33)})
             ''', (
                 target_user_id,
                 request.form.get('purchase_date') or None,
+                request.form.get('storage_start_date') or None,
                 photo_path,
                 additional_photos_json,
                 request.form.get('product_name'),
@@ -31852,6 +31905,7 @@ def check_and_transfer_long_term_items():
     print(f"[{get_jst_now()}] Running long-term items check...")
     
     conn = get_db()
+    ensure_merchandise_storage_start_date_column(conn)
     
     # 150日（約5ヶ月）以上経過
     five_months_ago = get_jst_now() - timedelta(days=150)
@@ -31872,8 +31926,7 @@ def check_and_transfer_long_term_items():
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
             WHERE m.sale_date IS NULL
-              AND m.purchase_date IS NOT NULL
-              AND m.purchase_date <= %s
+              AND COALESCE(m.storage_start_date::date, m.created_at::date, m.purchase_date::date) <= %s
               AND u.role = 'user'
         """, (five_months_ago_str,))
         long_term_items = [dict(row) for row in cur.fetchall()]
@@ -31890,8 +31943,7 @@ def check_and_transfer_long_term_items():
             FROM merchandise m
             JOIN users u ON m.user_id = u.id
             WHERE m.sale_date IS NULL
-              AND m.purchase_date IS NOT NULL
-              AND m.purchase_date <= ?
+              AND COALESCE(date(m.storage_start_date), date(m.created_at), m.purchase_date) <= ?
               AND u.role = 'user'
         """, (five_months_ago_str,))
         
@@ -32178,7 +32230,7 @@ def submit_disposal_request():
 @app.route('/long-term-items')
 @login_required
 def long_term_items():
-    """長期保存商品（登録から90日以上経過）の一覧・処分オプションページ"""
+    """長期保存商品（保管開始日から61日目以降）の一覧・処分オプションページ"""
     if current_user.is_admin():
         return redirect(url_for('admin_user_products', long_term_only=1))
 
@@ -32387,7 +32439,7 @@ def submit_long_term_disposal_request():
 
 
 def get_long_term_item_count():
-    """登録から90日以上経過した未処理の長期保存商品数を取得"""
+    """保管開始日から61日目以降の未処理の長期保存商品数を取得"""
     if not current_user.is_authenticated:
         return 0
     
@@ -32509,11 +32561,12 @@ def admin_notify_long_term_item(item_id):
 
     try:
         conn = get_db()
+        ensure_merchandise_storage_start_date_column(conn)
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
                 SELECT m.id, m.user_id, m.product_name,
-                       COALESCE(m.created_at::date, m.purchase_date::date) AS storage_started_at,
+                       COALESCE(m.storage_start_date::date, m.created_at::date, m.purchase_date::date) AS storage_started_at,
                        u.username, u.display_name, u.line_user_id, u.role
                 FROM merchandise m
                 JOIN users u ON u.id = m.user_id
@@ -32526,7 +32579,7 @@ def admin_notify_long_term_item(item_id):
             cur = conn.cursor()
             cur.execute("""
                 SELECT m.id, m.user_id, m.product_name,
-                       COALESCE(date(m.created_at), m.purchase_date) AS storage_started_at,
+                       COALESCE(date(m.storage_start_date), date(m.created_at), m.purchase_date) AS storage_started_at,
                        u.username, u.display_name, u.line_user_id, u.role
                 FROM merchandise m
                 JOIN users u ON u.id = m.user_id
@@ -33120,7 +33173,7 @@ def inject_fee_settings():
     except Exception:
         return {'fee_settings': {}}
 
-LONG_TERM_STORAGE_DAYS = 90
+LONG_TERM_STORAGE_DAYS = 61
 
 LONG_TERM_AUTO_TRANSFER_DAYS = 150
 
@@ -33496,12 +33549,13 @@ def fetch_long_term_candidate_items(conn, user_id=None, user_ids=None):
     if user_id is None and not user_ids:
         return []
 
+    ensure_merchandise_storage_start_date_column(conn)
     cutoff_date = (get_jst_now() - timedelta(days=LONG_TERM_STORAGE_DAYS)).strftime('%Y-%m-%d')
 
     if DATABASE_URL:
         from psycopg2.extras import RealDictCursor
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        started_at_expr = "COALESCE(m.created_at::date, m.purchase_date::date)"
+        started_at_expr = "COALESCE(m.storage_start_date::date, m.created_at::date, m.purchase_date::date)"
         params = [cutoff_date]
         if user_id is not None:
             user_filter = "m.user_id = %s"
@@ -33530,7 +33584,7 @@ def fetch_long_term_candidate_items(conn, user_id=None, user_ids=None):
         items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        started_at_expr = "COALESCE(date(m.created_at), m.purchase_date)"
+        started_at_expr = "COALESCE(date(m.storage_start_date), date(m.created_at), m.purchase_date)"
         params = [cutoff_date]
         if user_id is not None:
             user_filter = "m.user_id = ?"
@@ -33624,9 +33678,9 @@ def normalize_date_value(value):
     return None
 
 def get_storage_started_date(record):
-    """長期保存判定に使う起点日（登録日優先、なければ仕入日）を返す"""
+    """長期保存判定に使う起点日（保管開始日優先、なければ登録日/仕入日）を返す"""
     if isinstance(record, dict):
-        value = record.get('created_at') or record.get('purchase_date')
+        value = record.get('storage_start_date') or record.get('created_at') or record.get('purchase_date')
     else:
         value = record
     return normalize_date_value(value)
@@ -33672,7 +33726,7 @@ def get_long_term_items_for_user(conn, user_id, merchandise_id=None):
         items = [item for item in items if item.get('id') == merchandise_id]
 
     for item in items:
-        item['storage_started_at'] = normalize_date_value(item.get('created_at') or item.get('purchase_date'))
+        item['storage_started_at'] = get_storage_started_date(item)
 
     items.sort(key=lambda item: (item.get('storage_started_at') or date.max, item.get('id') or 0))
     return items
@@ -33693,7 +33747,7 @@ def build_long_term_notification_message(customer_name, long_term_items):
 
     return (
         f"【長期保存商品のご案内】\n"
-        f"{customer_name}様の商品に、90日以上保管されている商品があります。\n"
+        f"{customer_name}様の商品に、保管開始日から61日目以降の商品があります。\n"
         f"対象件数: {len(long_term_items)}件\n"
         f"{item_lines}\n\n"
         f"アプリの「長期保存商品」から、\n"

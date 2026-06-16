@@ -2498,9 +2498,12 @@ def apply(module: Any) -> None:
             flash("商品の編集権限がありません。", "error")
             return redirect(url_for("disposal_options"))
 
+        ensure_storage_start_date_column = getattr(module, "ensure_merchandise_storage_start_date_column", None)
         conn, cur = open_cursor()
         placeholder = "%s" if DATABASE_URL else "?"
         try:
+            if callable(ensure_storage_start_date_column):
+                ensure_storage_start_date_column(conn)
             cur.execute(f"SELECT * FROM merchandise WHERE id = {placeholder}", (id,))
             item = cur.fetchone()
             if not item:
@@ -2595,6 +2598,7 @@ def apply(module: Any) -> None:
 
                 update_fields = [
                     ("purchase_date", form_value("purchase_date", item_dict.get("purchase_date")) or None),
+                    ("storage_start_date", form_value("storage_start_date", item_dict.get("storage_start_date")) or None),
                     ("photo_path", photo_path),
                     ("additional_photos", additional_photos_json),
                     ("product_name", form_value("product_name", item_dict.get("product_name"))),
@@ -2685,9 +2689,12 @@ def apply(module: Any) -> None:
             mode = "admin"
 
         if request.method == "POST":
+            ensure_storage_start_date_column = getattr(module, "ensure_merchandise_storage_start_date_column", None)
             conn, cur = open_cursor()
             placeholder = "%s" if DATABASE_URL else "?"
             try:
+                if callable(ensure_storage_start_date_column):
+                    ensure_storage_start_date_column(conn)
                 target_user_id = current_user.id
                 scope_value = "admin"
                 if mode == "user":
@@ -2759,6 +2766,7 @@ def apply(module: Any) -> None:
                 columns = [
                     "user_id",
                     "purchase_date",
+                    "storage_start_date",
                     "photo_path",
                     "additional_photos",
                     "product_name",
@@ -2793,6 +2801,7 @@ def apply(module: Any) -> None:
                 values = [
                     target_user_id,
                     request.form.get("purchase_date") or None,
+                    request.form.get("storage_start_date") or None,
                     photo_path,
                     additional_photos_json,
                     request.form.get("product_name"),

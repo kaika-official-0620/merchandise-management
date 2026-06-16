@@ -107,6 +107,7 @@ def apply(module: Any) -> None:
             add_column_if_missing(cur, "sale_requests", "additional_image_paths", "TEXT", "TEXT")
             add_column_if_missing(cur, "merchandise", "created_by", "INTEGER REFERENCES users(id)", "INTEGER")
             add_column_if_missing(cur, "merchandise", "other_cost", "INTEGER DEFAULT 0", "INTEGER DEFAULT 0")
+            add_column_if_missing(cur, "merchandise", "storage_start_date", "DATE", "DATE")
             conn.commit()
         finally:
             cur.close()

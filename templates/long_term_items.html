@@ -10,14 +10,14 @@
     <!-- 説明 -->
     <div class="info-card">
         <h3>📦 長期保存商品について</h3>
-        <p>商品一覧へ<strong>登録してから90日以上</strong>経過した未売却商品は、自動的にこの一覧へ反映されます。</p>
+        <p><strong>保管開始日から60日経過後（61日目以降）</strong>の未売却商品は、自動的にこの一覧へ反映されます。</p>
         <ul>
             <li><strong>オークション販売</strong> - 弊社でオークションに出品し販売</li>
             <li><strong>在庫処分</strong> - 弊社で処分</li>
             <li><strong>受け取り郵送</strong> - ご指定の住所に郵送（送料自己負担）</li>
         </ul>
         <div class="warning-note">
-            <strong>⚠️ ご注意</strong>：登録から<strong>150日</strong>を過ぎると、商品は自動的に管理者へ移管されます。
+            <strong>⚠️ ご注意</strong>：保管開始日から<strong>150日</strong>を過ぎると、商品は自動的に管理者へ移管されます。
         </div>
     </div>
     
@@ -53,7 +53,7 @@
                             <span class="auto-transfer-warning">まもなく自動移管</span>
                             {% endif %}
                         </div>
-                        <div class="item-price">登録日: {{ item.storage_started_at_display }}</div>
+                        <div class="item-price">保管開始日: {{ item.storage_started_at_display }}</div>
                         
                         {% if item.disposal_request_id %}
                         <div class="request-status">
@@ -131,7 +131,7 @@
     </form>
     {% else %}
     <div class="empty-message">
-        <p>登録から90日以上経過した商品はありません</p>
+        <p>保管開始日から61日目以降の商品はありません</p>
         
         {% if debug_info %}
         <!-- デバッグ情報 -->
@@ -139,8 +139,8 @@
             <h4 style="margin: 0 0 0.5rem 0; color: #475569;">🔍 デバッグ情報</h4>
             <ul style="margin: 0; padding-left: 1.5rem; color: #64748b;">
                 <li>現在日付: {{ debug_info.today or 'N/A' }}</li>
-                <li>基準日（90日前）: {{ debug_info.cutoff_date or 'N/A' }}</li>
-                <li>登録日条件に合う商品数: {{ debug_info.total_matching_date or 0 }}件</li>
+                <li>基準日（61日前）: {{ debug_info.cutoff_date or 'N/A' }}</li>
+                <li>保管開始日条件に合う商品数: {{ debug_info.total_matching_date or 0 }}件</li>
                 <li>申請未作成の商品数: {{ debug_info.no_request or 0 }}件</li>
                 <li>取得された商品数（申請なし）: {{ debug_info.items_no_request_count or 0 }}件</li>
                 <li>取得された商品数（申請あり）: {{ debug_info.items_with_request_count or 0 }}件</li>
@@ -150,7 +150,7 @@
                 <li style="margin-top: 0.5rem; color: #1e293b;"><strong>サンプル商品:</strong>
                     <ul style="margin-top: 0.25rem;">
                         {% for item in debug_info.sample_items %}
-                        <li>ID: {{ item.id }}, 商品名: {{ item.product_name }}, 登録日: {{ item.storage_started_at }}, 売却日: {{ item.sale_date or 'なし' }}</li>
+                        <li>ID: {{ item.id }}, 商品名: {{ item.product_name }}, 保管開始日: {{ item.storage_started_at }}, 売却日: {{ item.sale_date or 'なし' }}</li>
                         {% endfor %}
                     </ul>
                 </li>

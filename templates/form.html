@@ -454,6 +454,13 @@ input:disabled, select:disabled, textarea:disabled {
                        value="{{ item.purchase_date if item else '' }}"
                        {% if basic_readonly %}disabled{% endif %}>
             </div>
+            <div class="form-group">
+                <label for="storage_start_date">保管開始日</label>
+                <input type="date" id="storage_start_date" name="storage_start_date"
+                       value="{{ item.storage_start_date if item and item.storage_start_date else '' }}"
+                       {% if basic_readonly %}disabled{% endif %}>
+                <small class="form-help">長期保存判定はこの日付から計算します。未設定の場合は登録日を基準にします。</small>
+            </div>
             
             <div class="form-group">
                 <label for="product_name">商品名</label>

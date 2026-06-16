@@ -1441,7 +1441,7 @@
         <h1>{{ '長期保存商品' if long_term_only else 'ユーザーの商品一覧' }}</h1>
         <p class="page-description">
             {% if long_term_only %}
-            一般ユーザーの商品は、登録から90日を超えると長期保存商品へ自動反映されます。クライアント別の確認や並び替えにも対応しています。
+            一般ユーザーの商品は、保管開始日から60日経過後（61日目以降）に長期保存商品へ自動反映されます。クライアント別の確認や並び替えにも対応しています。
             {% else %}
             クライアントごとの商品一覧です。代行仕入れで反映した商品もこの一覧で確認できます。
             {% endif %}
@@ -1461,7 +1461,7 @@
     <div class="long-term-overview-header">
         <div>
             <h2>クライアント別長期保存商品</h2>
-            <p>未売却かつ90日以上保管されている商品が合計 {{ total_long_term_count }} 件あります。</p>
+            <p>未売却かつ保管開始日から61日目以降の商品が合計 {{ total_long_term_count }} 件あります。</p>
         </div>
     </div>
 
@@ -1525,8 +1525,8 @@
                 {% if long_term_only %}
                 <option value="storage_desc">保管期間が長い順</option>
                 <option value="storage_asc">保管期間が短い順</option>
-                <option value="purchase_oldest">登録日が古い順</option>
-                <option value="purchase_newest">登録日が新しい順</option>
+                <option value="purchase_oldest">保管開始日が古い順</option>
+                <option value="purchase_newest">保管開始日が新しい順</option>
                 <option value="product_asc">商品名順</option>
                 {% else %}
                 <option value="status_priority">未売却・対応待ち優先</option>
@@ -1545,7 +1545,7 @@
             </select>
         </div>
         {% if long_term_only %}
-        <span class="long-term-scope-note">一般ユーザー商品を登録から90日で自動表示</span>
+        <span class="long-term-scope-note">一般ユーザー商品を保管開始日から61日目以降で自動表示</span>
         {% else %}
         <a href="{{ url_for('admin_add_item', mode='user') }}" class="btn btn-primary">+ ユーザー商品登録</a>
         {% endif %}
@@ -1697,7 +1697,7 @@
                     <th class="sortable store-col" data-sort="store_name">仕入先</th>
                     <th class="sortable owner-col" data-sort="owner_name">{{ 'クライアント' if long_term_only else '登録者' }}</th>
                     <th class="updater-col">最終更新者</th>
-                    <th class="sortable" data-sort="purchase_date">{{ '登録日' if long_term_only else '仕入日' }}</th>
+                    <th class="sortable" data-sort="purchase_date">{{ '保管開始日' if long_term_only else '仕入日' }}</th>
                     <th class="sortable" data-sort="days_since_purchase">保管日数</th>
                     <th class="sortable" data-sort="purchase_price">価格</th>
                     <th class="sortable" data-sort="profit">利益</th>
