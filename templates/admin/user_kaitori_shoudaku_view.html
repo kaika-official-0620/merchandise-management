@@ -14,6 +14,7 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary">書類履歴へ戻る</a>
+            <a href="{{ url_for('admin_user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
     </div>
 

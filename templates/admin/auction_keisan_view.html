@@ -6,10 +6,11 @@
     <h1>計算書詳細</h1>
     <div class="admin-nav">
         <a href="{{ back_url }}" class="btn btn-secondary">← 処理送付へ戻る</a>
-        {% if keisan.status != 'submitted' %}
+        <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
+        {% if keisan.is_admin_created and keisan.status != 'submitted' %}
         <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id, next=next_url) if next_url else url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">計算書を編集</a>
         {% endif %}
-        {% if keisan.status == 'completed' %}
+        {% if keisan.is_admin_created and keisan.status == 'completed' %}
         <form action="{{ url_for('admin_auction_keisan_submit', id=keisan.id) }}" method="POST" style="display:inline;">
             {% if next_url %}
             <input type="hidden" name="next" value="{{ next_url }}">

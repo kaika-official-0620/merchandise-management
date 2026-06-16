@@ -15437,6 +15437,14 @@ def delete_user(id):
         cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = %s", (id,))
         cur.execute("DELETE FROM service_documents WHERE user_id = %s", (id,))
         cur.execute("""
+            DELETE FROM shikiriosho_items
+            WHERE shikiriosho_id IN (
+                SELECT id FROM shikiriosho
+                WHERE sender_id = %s OR recipient_id = %s
+            )
+        """, (id, id))
+        cur.execute("DELETE FROM shikiriosho WHERE sender_id = %s OR recipient_id = %s", (id, id))
+        cur.execute("""
             DELETE FROM invoice_items
             WHERE invoice_id IN (SELECT id FROM invoices WHERE sender_id = %s)
         """, (id,))
@@ -15507,6 +15515,14 @@ def delete_user(id):
         cur.execute("DELETE FROM proxy_service_users WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM proxy_service_auction_users WHERE user_id = ?", (id,))
         cur.execute("DELETE FROM service_documents WHERE user_id = ?", (id,))
+        cur.execute("""
+            DELETE FROM shikiriosho_items
+            WHERE shikiriosho_id IN (
+                SELECT id FROM shikiriosho
+                WHERE sender_id = ? OR recipient_id = ?
+            )
+        """, (id, id))
+        cur.execute("DELETE FROM shikiriosho WHERE sender_id = ? OR recipient_id = ?", (id, id))
         cur.execute("""
             DELETE FROM invoice_items
             WHERE invoice_id IN (SELECT id FROM invoices WHERE sender_id = ?)
@@ -20000,7 +20016,7 @@ def admin_auction_keisan_view(id):
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
             LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
-            WHERE k.id = %s AND k.is_admin_created = TRUE
+            WHERE k.id = %s
         """, (id,))
         keisan = cur.fetchone()
         if keisan:
@@ -20015,7 +20031,7 @@ def admin_auction_keisan_view(id):
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
             LEFT JOIN proxy_service_settings ps ON ps.id = k.proxy_service_auction_id
-            WHERE k.id = ? AND k.is_admin_created = 1
+            WHERE k.id = ?
         """, (id,))
         keisan = cur.fetchone()
         if keisan:
@@ -20058,7 +20074,7 @@ def admin_auction_keisan_view(id):
     if not back_url and keisan.get('proxy_service_auction_id'):
         back_url = url_for('admin_proxy_service_document_history', auction_id=keisan.get('proxy_service_auction_id'))
     if not back_url:
-        back_url = url_for('admin_auction_keisan_list')
+        back_url = url_for('admin_documents_history')
     proxy_detail_url = (
         url_for('admin_proxy_service_detail', auction_id=keisan.get('proxy_service_auction_id'), history_view=1)
         if keisan.get('proxy_service_auction_id')
@@ -20355,7 +20371,7 @@ def admin_auction_keisan_pdf(id):
             SELECT k.*, u.display_name as user_name
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
-            WHERE k.id = %s AND k.is_admin_created = TRUE
+            WHERE k.id = %s
         """, (id,))
         keisan = cur.fetchone()
         if keisan:
@@ -20370,7 +20386,7 @@ def admin_auction_keisan_pdf(id):
             SELECT k.*, u.display_name as user_name
             FROM user_keisan k
             JOIN users u ON k.user_id = u.id
-            WHERE k.id = ? AND k.is_admin_created = 1
+            WHERE k.id = ?
         """, (id,))
         keisan = cur.fetchone()
         if keisan:
@@ -42038,6 +42054,36 @@ def admin_user_kaitori_shoudaku_view(id):
         conn.close()
 
     return render_template('admin/user_kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
+
+@app.route('/admin/user-kaitori-shoudaku/<int:id>/pdf')
+@login_required
+@admin_required
+def admin_user_kaitori_shoudaku_pdf(id):
+    conn, cur = document_open_cursor()
+    try:
+        placeholder = '%s' if DATABASE_URL else '?'
+        cur.execute(f"SELECT * FROM user_kaitori_shoudaku WHERE id = {placeholder}", (id,))
+        kaitori = cur.fetchone()
+        if not kaitori:
+            flash('買取承諾書が見つかりません', 'error')
+            return redirect(url_for('admin_documents_history'))
+
+        kaitori = dict(kaitori)
+        cur.execute(
+            f"""
+            SELECT *
+            FROM user_kaitori_shoudaku_items
+            WHERE kaitori_shoudaku_id = {placeholder}
+            ORDER BY item_no
+            """,
+            (id,),
+        )
+        items = document_rows_to_dicts(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template('pdf/kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
 
 
 @login_required
