@@ -1707,18 +1707,15 @@
                     }
 
                     const targetUrl = link.href;
-                    setSidebarOpen(false);
+                    const currentUrl = window.location.href.split('#')[0];
+                    const nextUrl = targetUrl.split('#')[0];
+                    if (currentUrl === nextUrl) {
+                        setSidebarOpen(false);
+                        return;
+                    }
 
-                    window.setTimeout(function() {
-                        if (document.hidden) {
-                            return;
-                        }
-                        const currentUrl = window.location.href.split('#')[0];
-                        const nextUrl = targetUrl.split('#')[0];
-                        if (currentUrl !== nextUrl || window.location.hash !== new URL(targetUrl).hash) {
-                            window.location.assign(targetUrl);
-                        }
-                    }, 80);
+                    // Let normal navigation happen immediately. Closing the drawer first
+                    // leaves it half-open for a moment on mobile while the next page loads.
                 });
             }
         });

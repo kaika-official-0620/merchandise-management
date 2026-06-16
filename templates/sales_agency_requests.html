@@ -11,60 +11,137 @@
 }
 
 .guide-card,
+.filter-card,
 .request-card {
     background: #fff;
-    border-radius: 18px;
+    border-radius: 14px;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
     overflow: hidden;
 }
 
-.guide-card {
-    padding: 1.2rem 1.25rem;
-}
-
-.guide-card h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.05rem;
+.guide-card summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.82rem 1rem;
+    cursor: pointer;
+    list-style: none;
     color: #0f172a;
+    font-weight: 800;
 }
 
-.guide-card p {
+.guide-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.guide-card summary span:last-child {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.guide-card[open] summary {
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.guide-body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem 1rem;
+}
+
+.guide-body p {
     margin: 0;
     color: #64748b;
-    line-height: 1.8;
+    line-height: 1.7;
+    font-size: 0.92rem;
 }
 
 .guide-list {
     display: grid;
-    gap: 0.75rem;
-    margin-top: 1rem;
+    gap: 0.65rem;
 }
 
 .guide-item {
     display: grid;
-    grid-template-columns: 32px 1fr;
-    gap: 0.85rem;
-    align-items: start;
+    gap: 0.28rem;
+    padding: 0.7rem 0.75rem;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.guide-item-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    white-space: nowrap;
+    color: #0f172a;
+    font-weight: 800;
 }
 
 .guide-item-number {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 999px;
     background: #2563eb;
     color: #fff;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.82rem;
+    font-weight: 800;
+    flex: 0 0 auto;
 }
 
-.guide-item strong {
-    display: block;
-    margin-bottom: 0.2rem;
-    color: #0f172a;
+.guide-item p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.65;
+    font-size: 0.88rem;
+}
+
+.filter-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.85rem;
+}
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.filter-label {
+    min-width: 4.5rem;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0.28rem 0.72rem;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.filter-chip.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
 }
 
 .request-header {
@@ -81,23 +158,35 @@
 .request-info {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.7rem 0.9rem;
+    gap: 0.6rem 0.75rem;
     align-items: center;
 }
 
 .service-badge,
+.period-badge,
 .status-badge {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
     padding: 0.28rem 0.72rem;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
 .service-badge {
     background: #dbeafe;
     color: #1d4ed8;
+}
+
+.period-badge.current {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.period-badge.past {
+    background: #f1f5f9;
+    color: #475569;
 }
 
 .status-badge.pending {
@@ -190,6 +279,15 @@
     border-radius: 12px;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
+    color: inherit;
+    text-decoration: none;
+}
+
+.request-item-link:hover,
+.request-item-link:focus-visible {
+    border-color: #2563eb;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+    outline: none;
 }
 
 .request-item img,
@@ -202,14 +300,31 @@
     flex-shrink: 0;
 }
 
+.request-item-meta {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+}
+
 .request-item-name {
-    font-weight: 600;
+    font-weight: 800;
     color: #0f172a;
+    overflow-wrap: anywhere;
 }
 
 .request-item-brand {
     color: #64748b;
     font-size: 0.8rem;
+}
+
+.request-item-status {
+    width: fit-content;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 0.18rem 0.48rem;
+    font-size: 0.72rem;
+    font-weight: 800;
 }
 
 .request-item-warning {
@@ -268,8 +383,13 @@
         align-items: flex-start;
     }
 
-    .guide-item {
-        grid-template-columns: 1fr;
+    .filter-label {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .guide-item-title {
+        font-size: 0.92rem;
     }
 }
 </style>
@@ -281,33 +401,54 @@
 <div class="history-container">
     <a href="{{ url_for('index') }}" class="back-link">← 商品一覧に戻る</a>
 
-    <div class="guide-card">
-        <h2>進行状況の見方</h2>
-        <p>管理画面で更新された状態は、この申請履歴にも自動で反映されます。現在どこまで進んでいるかと、クライアント側で確認していただきたい点をまとめています。</p>
-        <div class="guide-list">
-            <div class="guide-item">
-                <div class="guide-item-number">1</div>
-                <div>
-                    <strong>承認待ち</strong>
-                    申請受付直後の状態です。管理側で確認後に次の工程へ進みます。
+    <details class="guide-card">
+        <summary>
+            <span>進行状況の見方</span>
+            <span>タップして確認</span>
+        </summary>
+        <div class="guide-body">
+            <p>管理画面で更新された状態は、この申請履歴にも自動で反映されます。</p>
+            <div class="guide-list">
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">1</span>
+                        <span>承認待ち</span>
+                    </div>
+                    <p>申請受付直後の状態です。管理側で確認後に次の工程へ進みます。</p>
                 </div>
-            </div>
-            <div class="guide-item">
-                <div class="guide-item-number">2</div>
-                <div>
-                    <strong>開花側で業者確認中</strong>
-                    管理画面で認証済み・出品準備中/査定中・検品中へ進むたびに、この画面にも反映されます。必要な連絡がある場合は備考欄に表示されます。
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">2</span>
+                        <span>開花側で業者確認中</span>
+                    </div>
+                    <p>認証済み・出品準備中・査定中・検品中へ進むたびに、この画面にも反映されます。</p>
                 </div>
-            </div>
-            <div class="guide-item">
-                <div class="guide-item-number">3</div>
-                <div>
-                    <strong>業者回答後に最終書類を作成</strong>
-                    開花側が業者からの回答を確認したあとに、最終的な買取明細書が書類履歴へ反映されます。処理完了・却下申請まで進むと結果もこの画面に反映されます。
+                <div class="guide-item">
+                    <div class="guide-item-title">
+                        <span class="guide-item-number">3</span>
+                        <span>業者回答後に最終書類を作成</span>
+                    </div>
+                    <p>業者からの回答確認後、最終的な買取明細書が書類履歴へ反映されます。</p>
                 </div>
             </div>
         </div>
-    </div>
+    </details>
+
+    <section class="filter-card" aria-label="申請履歴の絞り込み">
+        <div class="filter-row">
+            <span class="filter-label">サービス</span>
+            <a class="filter-chip {% if service_filter == 'all' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='all', period=period_filter) }}">すべて {{ service_counts.get('all', 0) }}</a>
+            <a class="filter-chip {% if service_filter == 'wholesale' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='wholesale', period=period_filter) }}">{{ service_types.get('wholesale', '業者卸販売') }} {{ service_counts.get('wholesale', 0) }}</a>
+            <a class="filter-chip {% if service_filter == 'auction' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='auction', period=period_filter) }}">{{ service_types.get('auction', '業者オークション') }} {{ service_counts.get('auction', 0) }}</a>
+            <a class="filter-chip {% if service_filter == 'simultaneous' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='simultaneous', period=period_filter) }}">{{ service_types.get('simultaneous', '同時出品') }} {{ service_counts.get('simultaneous', 0) }}</a>
+        </div>
+        <div class="filter-row">
+            <span class="filter-label">表示</span>
+            <a class="filter-chip {% if period_filter == 'current' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='current') }}">現行 {{ period_counts.get('current', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'past' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='past') }}">過去 {{ period_counts.get('past', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'all' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='all') }}">すべて {{ period_counts.get('all', 0) }}</a>
+        </div>
+    </section>
 
     {% if requests %}
     {% for req in requests %}
@@ -315,6 +456,7 @@
         <div class="request-header">
             <div class="request-info">
                 <span class="service-badge">{{ service_types.get(req.service_type, req.service_type) }}</span>
+                <span class="period-badge {{ 'past' if req.is_past else 'current' }}">{{ req.period_label }}</span>
                 <span class="request-date">申請日 {{ req.created_at[:16].replace('-', '/').replace('T', ' ') if req.created_at else '-' }}</span>
                 <span class="request-date">対象 {{ req.request_items|length }} 点</span>
             </div>
@@ -323,22 +465,33 @@
         <div class="request-body">
             <div class="request-items">
                 {% for item in req.request_items %}
+                {% if item.detail_url %}
+                <a href="{{ item.detail_url }}" class="request-item request-item-link">
+                {% else %}
                 <div class="request-item">
+                {% endif %}
                     {% if item.photo_path %}
                     <img src="/static/{{ item.photo_path }}" alt="{{ item.product_name|clean_display('商品名未登録') }}" loading="lazy" decoding="async" onerror="this.style.display='none'">
                     {% else %}
                     <div class="placeholder"></div>
                     {% endif %}
-                    <div>
+                    <div class="request-item-meta">
                         <div class="request-item-name">{{ item.product_name|clean_display('商品名未登録') }}</div>
                         {% if item.brand_name %}
                         <div class="request-item-brand">{{ item.brand_name|clean_display('ブランド未登録') }}</div>
+                        {% endif %}
+                        {% if item.item_status_label or item.appraisal_status_label %}
+                        <div class="request-item-status">{{ item.item_status_label or item.appraisal_status_label }}</div>
                         {% endif %}
                         {% if item.source_item_warning %}
                         <div class="request-item-warning">{{ item.source_item_warning }}</div>
                         {% endif %}
                     </div>
+                {% if item.detail_url %}
+                </a>
+                {% else %}
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
 
@@ -359,14 +512,14 @@
             </div>
             {% elif req.status in ['approved', 'appraising', 'inspecting', 'completed'] %}
             <div class="cancel-request-box">
-                <div>対応状況によってはキャンセルできない場合があります。現在の状態ではキャンセル申請できません。</div>
+                <div>現在の状態ではキャンセル申請できません。</div>
             </div>
             {% endif %}
 
             {% set clean_admin_note = req.admin_note|clean_display('') %}
             {% if clean_admin_note %}
             <div class="admin-note">
-                <label>管理側からの連絡</label>
+                <label>管理者からの連絡</label>
                 <p>{{ clean_admin_note }}</p>
             </div>
             {% endif %}
@@ -375,8 +528,8 @@
     {% endfor %}
     {% else %}
     <div class="empty-state">
-        <p>申請履歴はまだありません。</p>
-        <p style="margin-top: 0.5rem; font-size: 0.9rem;">商品一覧から販売代行申請を行うと、ここで進行状況を確認できます。</p>
+        <p>条件に一致する申請履歴はありません。</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">サービスや表示条件を切り替えて確認してください。</p>
     </div>
     {% endif %}
 </div>

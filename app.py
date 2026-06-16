@@ -11374,8 +11374,18 @@ def user_announcements_page():
     if current_user.is_admin() or current_user.is_owner():
         return redirect(url_for('admin_dashboard'))
 
+    selected_date = (request.args.get('date') or '').strip()
     announcements = get_active_announcements(current_user, limit=None)
-    return render_template('announcements.html', announcements=announcements)
+    if selected_date:
+        announcements = [
+            announcement for announcement in announcements
+            if str(announcement.get('publish_at') or announcement.get('created_at') or '')[:10] == selected_date
+        ]
+    return render_template(
+        'announcements.html',
+        announcements=announcements,
+        selected_date=selected_date,
+    )
 
 
 def get_visible_announcement_for_user(user, announcement_id):
@@ -11427,6 +11437,9 @@ def user_announcement_read_page(announcement_id):
 @app.route('/announcements/delete/<int:announcement_id>', methods=['POST'])
 @login_required
 def user_announcement_delete_page(announcement_id):
+    next_url = request.form.get('next') or url_for('user_announcements_page')
+    if not str(next_url).startswith('/'):
+        next_url = url_for('user_announcements_page')
     if current_user.is_admin() or current_user.is_owner():
         flash('クライアントのみ利用できます', 'error')
         return redirect(url_for('admin_dashboard'))
@@ -11438,7 +11451,7 @@ def user_announcement_delete_page(announcement_id):
 
     delete_announcement_for_user(current_user.id, [announcement_id])
     flash('お知らせを削除しました', 'success')
-    return redirect(url_for('user_announcements_page'))
+    return redirect(next_url)
 
 
 @app.route('/api/report/<report_type>')
@@ -39500,6 +39513,12 @@ def sales_agency_apply():
 @login_required
 def sales_agency_my_requests():
     """ユーザーの販売代行申請履歴"""
+    service_filter = (request.args.get('service') or 'all').strip()
+    if service_filter not in {'all', 'wholesale', 'auction', 'simultaneous'}:
+        service_filter = 'all'
+    period_filter = (request.args.get('period') or 'current').strip()
+    if period_filter not in {'current', 'past', 'all'}:
+        period_filter = 'current'
     requests = []
     try:
         conn, cur = sales_agency_open_cursor()
@@ -39522,16 +39541,40 @@ def sales_agency_my_requests():
             if not request_row:
                 continue
             request_row['request_items'] = request_items
+            request_row['is_past'] = (request_row.get('status') or '').strip() in {'completed', 'cancelled', 'rejected'}
+            request_row['period_label'] = '過去' if request_row['is_past'] else '現行'
             requests.append(request_row)
     except Exception as e:
         print(f"[ERROR] sales_agency_my_requests: {e}", flush=True)
         traceback.print_exc()
 
+    service_counts = {'all': len(requests), 'wholesale': 0, 'auction': 0, 'simultaneous': 0}
+    period_counts = {'all': len(requests), 'current': 0, 'past': 0}
+    for req in requests:
+        service_type = (req.get('service_type') or '').strip()
+        if service_type in service_counts:
+            service_counts[service_type] += 1
+        period_counts['past' if req.get('is_past') else 'current'] += 1
+
+    filtered_requests = []
+    for req in requests:
+        if service_filter != 'all' and (req.get('service_type') or '').strip() != service_filter:
+            continue
+        if period_filter == 'current' and req.get('is_past'):
+            continue
+        if period_filter == 'past' and not req.get('is_past'):
+            continue
+        filtered_requests.append(req)
+
     return render_template(
         'sales_agency_requests.html',
-        requests=requests,
+        requests=filtered_requests,
         service_types=SALES_AGENCY_SERVICE_TYPES,
         statuses=SALES_AGENCY_STATUS_CLIENT,
+        service_filter=service_filter,
+        period_filter=period_filter,
+        service_counts=service_counts,
+        period_counts=period_counts,
     )
 
 

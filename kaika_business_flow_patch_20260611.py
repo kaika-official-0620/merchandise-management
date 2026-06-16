@@ -692,6 +692,8 @@ def apply(module: Any) -> None:
             cards[-1]["has_unread"] = cards[-1]["unread_count"] > 0
         if not admin:
             cards.sort(key=lambda card: (0 if card.get("has_unread") else 1, safe_int(card.get("step"))))
+            for display_index, card in enumerate(cards, 1):
+                card["step"] = display_index
         return cards
 
     def load_clients() -> list[dict[str, Any]]:

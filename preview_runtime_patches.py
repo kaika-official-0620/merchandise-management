@@ -1898,6 +1898,12 @@ def apply(module: Any) -> None:
         if denied:
             return denied
 
+        service_filter = (request.args.get("service") or "all").strip()
+        if service_filter not in {"all", "wholesale", "auction", "simultaneous"}:
+            service_filter = "all"
+        period_filter = (request.args.get("period") or "current").strip()
+        if period_filter not in {"current", "past", "all"}:
+            period_filter = "current"
         requests_list = []
         conn, cur = open_cursor()
         try:
@@ -1922,16 +1928,47 @@ def apply(module: Any) -> None:
                 req_dict["service_name"] = get_service_display_name(req_dict.get("service_type"))
                 req_dict["status_label"] = get_sales_agency_status_label(req_dict.get("status"), viewer="client")
                 req_dict["pending_appraisal_count"] = source_request.get("pending_appraisal_count") if source_request else 0
+                req_dict["client_status_label"] = req_dict["status_label"]
+                req_dict["is_past"] = (req_dict.get("status") or "").strip() in {"completed", "cancelled", "rejected"}
+                req_dict["period_label"] = "過去" if req_dict["is_past"] else "現行"
+                for item in req_dict["request_items"]:
+                    if item.get("is_missing_source_item"):
+                        continue
+                    item_id = item.get("id") or item.get("merchandise_id")
+                    if item_id and not item.get("detail_url"):
+                        item["detail_url"] = url_for("view_item", id=item_id)
                 requests_list.append(req_dict)
         finally:
             cur.close()
             conn.close()
 
+        service_counts = {"all": len(requests_list), "wholesale": 0, "auction": 0, "simultaneous": 0}
+        period_counts = {"all": len(requests_list), "current": 0, "past": 0}
+        for req_dict in requests_list:
+            service_type = (req_dict.get("service_type") or "").strip()
+            if service_type in service_counts:
+                service_counts[service_type] += 1
+            period_counts["past" if req_dict.get("is_past") else "current"] += 1
+
+        filtered_requests = []
+        for req_dict in requests_list:
+            if service_filter != "all" and (req_dict.get("service_type") or "").strip() != service_filter:
+                continue
+            if period_filter == "current" and req_dict.get("is_past"):
+                continue
+            if period_filter == "past" and not req_dict.get("is_past"):
+                continue
+            filtered_requests.append(req_dict)
+
         return render_template(
             "sales_agency_requests.html",
-            requests=requests_list,
+            requests=filtered_requests,
             service_types=SALES_AGENCY_SERVICE_TYPES,
             statuses=SALES_AGENCY_STATUS_CLIENT,
+            service_filter=service_filter,
+            period_filter=period_filter,
+            service_counts=service_counts,
+            period_counts=period_counts,
         )
 
     def admin_sales_agency_requests_v3():
