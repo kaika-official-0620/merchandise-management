@@ -164,6 +164,6 @@
         } catch (error) {
             // URL解析に失敗した場合はフォールバックへ進む
         }
-        window.location.href = "{{ url_for('admin_documents_dashboard') if current_user.is_admin() else url_for('documents') }}";
+        window.location.href = "{{ url_for('admin_documents_history') if current_user.is_admin() else url_for('documents') }}";
     }
 </script>

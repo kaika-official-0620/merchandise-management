@@ -19,6 +19,7 @@
 {% set kaika_endpoints = [
     'admin_documents_dashboard',
     'admin_documents_history',
+    'admin_documents_history_category',
     'admin_vendor_documents',
     'admin_vendor_document_download',
     'admin_vendor_document_delete',
@@ -53,6 +54,8 @@
 ] %}
 {% set document_dashboard_endpoints = [
     'admin_documents_dashboard',
+    'admin_documents_history',
+    'admin_documents_history_category',
     'admin_vendor_documents',
     'admin_vendor_document_download',
     'admin_vendor_document_delete',
@@ -146,7 +149,7 @@
         <div class="sidebar-subcategory">
             <div class="subcategory-label">書類</div>
             <a href="{{ url_for('admin_documents_dashboard') }}" class="{% if request.endpoint in document_dashboard_endpoints %}active{% endif %}">書類管理</a>
-            <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint == 'admin_documents_history' %}active{% endif %}">書類履歴</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="{% if request.endpoint in ['admin_documents_history', 'admin_documents_history_category'] %}active{% endif %}">書類履歴</a>
         </div>
         <div class="sidebar-subcategory">
             <div class="subcategory-label">開花管理</div>

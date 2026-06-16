@@ -9,7 +9,7 @@
 {% set is_vendor_doc = doc_no[:3] == 'MT-' or doc_scope in ['vendor_outgoing', 'kaika_vendor_outgoing'] %}
 {% set is_kaika_doc = doc_scope in ['kaika_vendor_outgoing', 'kaika_estimate'] %}
 {% set detail_title = '開花商品用 業者向け見積依頼書' if doc_scope == 'kaika_vendor_outgoing' else '開花用 見積依頼書' if doc_scope == 'kaika_estimate' else '業者向け依頼書' if is_vendor_doc else '見積依頼書' %}
-{% set back_url = url_for('admin_documents_history', category='kaika_mitsumori') if is_kaika_doc else url_for('admin_documents_dashboard', group='vendor_outgoing' if is_vendor_doc else 'client_incoming') %}
+{% set back_url = url_for('admin_documents_history') %}
 
 <div class="admin-doc-page">
     <div class="admin-doc-toolbar">

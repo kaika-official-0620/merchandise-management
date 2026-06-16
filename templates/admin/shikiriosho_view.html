@@ -6,7 +6,7 @@
 <div class="admin-header">
     <h1>精算書詳細</h1>
     <div class="admin-nav">
-        <a href="{{ url_for('admin_shikiriosho_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+        <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if shikiriosho.status == 'draft' %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
         {% elif shikiriosho.status == 'completed' %}
@@ -79,6 +79,7 @@
         <span class="total-value">¥{{ "{:,}".format(shikiriosho.total_amount) }}</span>
     </div>
 
+    <div class="document-table-scroll">
     <table class="document-items">
         <thead>
             <tr>
@@ -133,6 +134,7 @@
             </tr>
         </tfoot>
     </table>
+    </div>
 
     <div class="document-footer">
         <div class="company-info">
@@ -144,11 +146,21 @@
 <style>
 .document-container {
     max-width: 800px;
+    width: 100%;
+    box-sizing: border-box;
     margin: 0 auto;
     background: white;
     padding: 40px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     border-radius: 8px;
+    overflow: hidden;
+}
+
+.admin-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
 }
 
 .document-header {
@@ -220,6 +232,12 @@
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 30px;
+}
+
+.document-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .document-items th,
@@ -317,6 +335,33 @@
     .document-container {
         box-shadow: none;
         padding: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .document-container {
+        padding: 18px;
+    }
+
+    .document-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .document-items {
+        min-width: 680px;
+    }
+
+    .document-items th,
+    .document-items td {
+        padding: 6px;
+        font-size: 12px;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-nav .btn {
+        width: auto;
     }
 }
 </style>

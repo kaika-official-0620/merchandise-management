@@ -39509,16 +39509,35 @@ def sales_agency_apply():
     
     return redirect(next_url)
 
+SALES_AGENCY_SERVICE_SLUGS = {
+    'wholesale': 'wholesale',
+    'auction': 'auction',
+    'simultaneous': 'multi-listing',
+}
+SALES_AGENCY_SLUG_TO_SERVICE = {slug: service for service, slug in SALES_AGENCY_SERVICE_SLUGS.items()}
+SALES_AGENCY_SLUG_TO_SERVICE['simultaneous'] = 'simultaneous'
+
+def sales_agency_service_slug(service_type):
+    return SALES_AGENCY_SERVICE_SLUGS.get((service_type or '').strip(), service_type or '')
+
 @app.route('/sales-agency/my-requests')
+@app.route('/sales-agency/my-requests/<service_slug>')
 @login_required
-def sales_agency_my_requests():
+def sales_agency_my_requests(service_slug=None):
     """ユーザーの販売代行申請履歴"""
-    service_filter = (request.args.get('service') or 'all').strip()
-    if service_filter not in {'all', 'wholesale', 'auction', 'simultaneous'}:
-        service_filter = 'all'
     period_filter = (request.args.get('period') or 'current').strip()
     if period_filter not in {'current', 'past', 'all'}:
         period_filter = 'current'
+    if service_slug:
+        service_filter = SALES_AGENCY_SLUG_TO_SERVICE.get((service_slug or '').strip(), '')
+        if service_filter not in {'wholesale', 'auction', 'simultaneous'}:
+            return redirect(url_for('sales_agency_my_requests'))
+    else:
+        requested_service = (request.args.get('service') or 'all').strip()
+        if requested_service in {'wholesale', 'auction', 'simultaneous'}:
+            return redirect(url_for('sales_agency_my_requests', service_slug=sales_agency_service_slug(requested_service), period=period_filter))
+        service_filter = 'all'
+    show_service_top = service_filter == 'all' and not service_slug
     requests = []
     try:
         conn, cur = sales_agency_open_cursor()
@@ -39549,22 +39568,44 @@ def sales_agency_my_requests():
         traceback.print_exc()
 
     service_counts = {'all': len(requests), 'wholesale': 0, 'auction': 0, 'simultaneous': 0}
+    service_period_counts = {
+        'wholesale': {'all': 0, 'current': 0, 'past': 0},
+        'auction': {'all': 0, 'current': 0, 'past': 0},
+        'simultaneous': {'all': 0, 'current': 0, 'past': 0},
+    }
     period_counts = {'all': len(requests), 'current': 0, 'past': 0}
     for req in requests:
         service_type = (req.get('service_type') or '').strip()
         if service_type in service_counts:
             service_counts[service_type] += 1
+            service_period_counts[service_type]['all'] += 1
+            service_period_counts[service_type]['past' if req.get('is_past') else 'current'] += 1
         period_counts['past' if req.get('is_past') else 'current'] += 1
 
+    service_cards = []
+    for key in ('wholesale', 'auction', 'simultaneous'):
+        counts = service_period_counts.get(key, {})
+        service_cards.append({
+            'key': key,
+            'slug': sales_agency_service_slug(key),
+            'title': SALES_AGENCY_SERVICE_TYPES.get(key, key),
+            'count': service_counts.get(key, 0),
+            'current_count': counts.get('current', 0),
+            'past_count': counts.get('past', 0),
+            'url': url_for('sales_agency_my_requests', service_slug=sales_agency_service_slug(key)),
+        })
+
     filtered_requests = []
-    for req in requests:
-        if service_filter != 'all' and (req.get('service_type') or '').strip() != service_filter:
-            continue
-        if period_filter == 'current' and req.get('is_past'):
-            continue
-        if period_filter == 'past' and not req.get('is_past'):
-            continue
-        filtered_requests.append(req)
+    if not show_service_top:
+        for req in requests:
+            if service_filter != 'all' and (req.get('service_type') or '').strip() != service_filter:
+                continue
+            if period_filter == 'current' and req.get('is_past'):
+                continue
+            if period_filter == 'past' and not req.get('is_past'):
+                continue
+            filtered_requests.append(req)
+    display_period_counts = service_period_counts.get(service_filter, period_counts) if service_filter in service_period_counts else period_counts
 
     return render_template(
         'sales_agency_requests.html',
@@ -39574,7 +39615,11 @@ def sales_agency_my_requests():
         service_filter=service_filter,
         period_filter=period_filter,
         service_counts=service_counts,
-        period_counts=period_counts,
+        service_cards=service_cards,
+        show_service_top=show_service_top,
+        selected_service_slug=sales_agency_service_slug(service_filter),
+        selected_service_name=SALES_AGENCY_SERVICE_TYPES.get(service_filter, ''),
+        period_counts=display_period_counts,
     )
 
 

@@ -6,14 +6,14 @@
 <div class="page-header">
     <h1 class="page-title">買取承諾書詳細</h1>
     <div class="header-actions">
-        <a href="{{ url_for('user_kaitori_shoudaku_list') }}" class="btn btn-secondary">← 一覧に戻る</a>
+        <a href="{{ url_for('documents') }}" class="btn btn-secondary">← 一覧に戻る</a>
         {% if kaitori.can_user_edit %}
         <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-edit">入力画面で修正</a>
         {% endif %}
         <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-export" target="_blank">PDF</a>
         {% if kaitori.can_user_delete %}
         <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
-            <input type="hidden" name="next" value="{{ url_for('user_document_list') }}">
+            <input type="hidden" name="next" value="{{ url_for('documents') }}">
             <button type="submit" class="btn btn-danger">削除</button>
         </form>
         {% endif %}
@@ -59,6 +59,7 @@
 
     <div class="document-section">
         <h3>買取商品明細</h3>
+        <div class="document-table-scroll">
         <table class="data-table">
             <thead>
                 <tr>
@@ -91,6 +92,7 @@
                 </tr>
             </tfoot>
         </table>
+        </div>
     </div>
 
     {% if kaitori.notes %}
@@ -106,6 +108,22 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     padding: 2rem;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.document-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .document-header {
@@ -178,8 +196,31 @@
 }
 
 @media (max-width: 768px) {
+    .document-view {
+        padding: 1rem;
+    }
+
+    .document-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
     .info-grid {
         grid-template-columns: 1fr;
+    }
+
+    .data-table {
+        min-width: 720px;
+    }
+
+    .data-table th,
+    .data-table td {
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .header-actions .btn {
+        width: auto;
     }
 }
 

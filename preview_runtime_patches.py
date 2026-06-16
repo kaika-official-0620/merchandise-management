@@ -1893,17 +1893,41 @@ def apply(module: Any) -> None:
             recent_sales=recent_sales,
         )
 
-    def sales_agency_my_requests_v2():
+    SALES_AGENCY_SERVICE_SLUGS = {
+        "wholesale": "wholesale",
+        "auction": "auction",
+        "simultaneous": "multi-listing",
+    }
+    SALES_AGENCY_SLUG_TO_SERVICE = {slug: service for service, slug in SALES_AGENCY_SERVICE_SLUGS.items()}
+    SALES_AGENCY_SLUG_TO_SERVICE["simultaneous"] = "simultaneous"
+
+    def service_slug_for(service_type: str) -> str:
+        return SALES_AGENCY_SERVICE_SLUGS.get((service_type or "").strip(), service_type or "")
+
+    def sales_agency_my_requests_v2(service_slug: str | None = None):
         denied = ensure_logged_in()
         if denied:
             return denied
 
-        service_filter = (request.args.get("service") or "all").strip()
-        if service_filter not in {"all", "wholesale", "auction", "simultaneous"}:
-            service_filter = "all"
         period_filter = (request.args.get("period") or "current").strip()
         if period_filter not in {"current", "past", "all"}:
             period_filter = "current"
+        if service_slug:
+            service_filter = SALES_AGENCY_SLUG_TO_SERVICE.get((service_slug or "").strip(), "")
+            if service_filter not in {"wholesale", "auction", "simultaneous"}:
+                return redirect(url_for("sales_agency_my_requests"))
+        else:
+            requested_service = (request.args.get("service") or "all").strip()
+            if requested_service in {"wholesale", "auction", "simultaneous"}:
+                return redirect(
+                    url_for(
+                        "sales_agency_my_requests_service",
+                        service_slug=service_slug_for(requested_service),
+                        period=period_filter,
+                    )
+                )
+            service_filter = "all"
+        show_service_top = service_filter == "all" and not service_slug
         requests_list = []
         conn, cur = open_cursor()
         try:
@@ -1943,22 +1967,46 @@ def apply(module: Any) -> None:
             conn.close()
 
         service_counts = {"all": len(requests_list), "wholesale": 0, "auction": 0, "simultaneous": 0}
+        service_period_counts = {
+            "wholesale": {"all": 0, "current": 0, "past": 0},
+            "auction": {"all": 0, "current": 0, "past": 0},
+            "simultaneous": {"all": 0, "current": 0, "past": 0},
+        }
         period_counts = {"all": len(requests_list), "current": 0, "past": 0}
         for req_dict in requests_list:
             service_type = (req_dict.get("service_type") or "").strip()
             if service_type in service_counts:
                 service_counts[service_type] += 1
+                service_period_counts[service_type]["all"] += 1
+                service_period_counts[service_type]["past" if req_dict.get("is_past") else "current"] += 1
             period_counts["past" if req_dict.get("is_past") else "current"] += 1
 
+        service_cards = []
+        for key in ("wholesale", "auction", "simultaneous"):
+            counts = service_period_counts.get(key, {})
+            service_cards.append(
+                {
+                    "key": key,
+                    "slug": service_slug_for(key),
+                    "title": SALES_AGENCY_SERVICE_TYPES.get(key, key),
+                    "count": service_counts.get(key, 0),
+                    "current_count": counts.get("current", 0),
+                    "past_count": counts.get("past", 0),
+                    "url": url_for("sales_agency_my_requests_service", service_slug=service_slug_for(key)),
+                }
+            )
+
         filtered_requests = []
-        for req_dict in requests_list:
-            if service_filter != "all" and (req_dict.get("service_type") or "").strip() != service_filter:
-                continue
-            if period_filter == "current" and req_dict.get("is_past"):
-                continue
-            if period_filter == "past" and not req_dict.get("is_past"):
-                continue
-            filtered_requests.append(req_dict)
+        if not show_service_top:
+            for req_dict in requests_list:
+                if service_filter != "all" and (req_dict.get("service_type") or "").strip() != service_filter:
+                    continue
+                if period_filter == "current" and req_dict.get("is_past"):
+                    continue
+                if period_filter == "past" and not req_dict.get("is_past"):
+                    continue
+                filtered_requests.append(req_dict)
+        display_period_counts = service_period_counts.get(service_filter, period_counts) if service_filter in service_period_counts else period_counts
 
         return render_template(
             "sales_agency_requests.html",
@@ -1968,8 +2016,15 @@ def apply(module: Any) -> None:
             service_filter=service_filter,
             period_filter=period_filter,
             service_counts=service_counts,
-            period_counts=period_counts,
+            service_cards=service_cards,
+            show_service_top=show_service_top,
+            selected_service_slug=service_slug_for(service_filter),
+            selected_service_name=SALES_AGENCY_SERVICE_TYPES.get(service_filter, ""),
+            period_counts=display_period_counts,
         )
+
+    def sales_agency_my_requests_service_v2(service_slug: str):
+        return sales_agency_my_requests_v2(service_slug=service_slug)
 
     def admin_sales_agency_requests_v3():
         denied = ensure_admin()
@@ -2919,6 +2974,15 @@ def apply(module: Any) -> None:
     if "admin_documents_dashboard" not in app.view_functions:
         app.view_functions["admin_documents_dashboard"] = login_required(admin_documents_dashboard_v2)
     app.view_functions["sales_agency_my_requests"] = login_required(sales_agency_my_requests_v2)
+    if "sales_agency_my_requests_service" in app.view_functions:
+        app.view_functions["sales_agency_my_requests_service"] = login_required(sales_agency_my_requests_service_v2)
+    else:
+        app.add_url_rule(
+            "/sales-agency/my-requests/<service_slug>",
+            endpoint="sales_agency_my_requests_service",
+            view_func=login_required(sales_agency_my_requests_service_v2),
+            methods=["GET"],
+        )
     # Keep the canonical app.py sales-agency admin routes active. The legacy
     # preview overrides do not include client grouping, cancel handling, inspect,
     # or completion sale-price reflection.

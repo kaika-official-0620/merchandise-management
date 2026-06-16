@@ -15,7 +15,7 @@
             <p>業者から届いた回答内容です。クライアント向け買取明細書へ進める前に内容を確認できます。</p>
         </div>
         <div class="admin-doc-actions">
-            <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary">書類履歴へ戻る</a>
             {% if kaitori.vendor_response_file_path %}
             <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" class="doc-btn doc-btn-secondary" target="_blank" rel="noopener">添付を開く</a>
             {% endif %}

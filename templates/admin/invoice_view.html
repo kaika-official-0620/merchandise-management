@@ -9,7 +9,7 @@
 {% set tax_amount_8 = invoice.tax_amount_8|default(0, true) or 0 %}
 {% set tax_amount_10 = invoice.tax_amount_10|default(0, true) or 0 %}
 {% set is_client_outgoing = invoice.document_scope == 'client_outgoing' or invoice.sales_agency_request_id %}
-{% set back_url = url_for('admin_documents_dashboard', group='client_outgoing') if is_client_outgoing else url_for('admin_invoice_list') %}
+{% set back_url = url_for('admin_documents_history') %}
 
 <div class="admin-doc-page">
     <div class="admin-doc-toolbar">

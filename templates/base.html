@@ -426,11 +426,11 @@
             
             <!-- 商品管理 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}" onclick="toggleCategory(this)">
                     <span class="menu-label">商品管理</span>
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['index', 'user_announcements_page', 'user_announcement_detail_page', 'admin_user_products', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}open{% endif %}">
                     {% if current_user.is_admin() %}
                     <a href="{{ url_for('admin_user_products') }}" class="{% if request.endpoint == 'admin_user_products' and not request.args.get('long_term_only') %}active{% endif %}">商品一覧</a>
                     <a href="{{ url_for('admin_user_products', long_term_only=1) }}" class="{% if request.endpoint == 'admin_user_products' and request.args.get('long_term_only') %}active{% endif %}">長期保存商品</a>
@@ -442,7 +442,7 @@
                         <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
                         {% endif %}
                     </a>
-                    <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint == 'sales_agency_my_requests' %}active{% endif %}">販売代行申請履歴</a>
+                    <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint in ['sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}">販売代行申請履歴</a>
                     {% endif %}
                     {% if not current_user.is_admin() %}
                     <a href="{{ url_for('user_announcements_page') }}" class="{% if request.endpoint == 'user_announcements_page' %}active{% endif %}">お知らせ</a>
@@ -452,11 +452,11 @@
 
             <!-- 書類一覧 -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['user_document_list', 'documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['user_document_list', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
                     書類一覧
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['user_document_list', 'documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['user_document_list', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">作成する書類</div>
                         <a href="{{ url_for('user_document_list') }}" class="{% if request.endpoint in ['user_document_list', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">書類一覧</a>
@@ -464,7 +464,7 @@
 
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">書類履歴</div>
-                        <a href="{{ url_for('documents') }}#document-history-tabs" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">
+                        <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">
                             <span class="menu-label">書類履歴</span>
                             {% if unread_document_history_count|default(0) > 0 %}
                             <span class="menu-badge-inline">{{ unread_document_history_count }}</span>
@@ -744,6 +744,7 @@
             'admin_documents_dashboard_v2',
             'admin_documents_history',
             'admin_documents_history_v2',
+            'admin_documents_history_category',
             'admin_mitsumori_add',
             'admin_mitsumori_pdf',
             'admin_kaitori_add',

@@ -5,28 +5,28 @@
 </div>
 
 <div class="sidebar-category">
-    <button class="sidebar-category-toggle {% if request.endpoint in ['user_document_list', 'documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
+    <button class="sidebar-category-toggle {% if request.endpoint in ['user_document_list', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}active{% endif %}" onclick="toggleCategory(this)">
         書類一覧
         <span class="category-arrow">▼</span>
     </button>
-    <div class="sidebar-category-items {% if request.endpoint in ['user_document_list', 'documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
+    <div class="sidebar-category-items {% if request.endpoint in ['user_document_list', 'documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_view', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_view', 'user_kaitori_shoudaku_edit'] %}open{% endif %}">
         <div class="sidebar-subcategory">
             <div class="subcategory-label">作成する書類</div>
             <a href="{{ url_for('user_document_list') }}" class="{% if request.endpoint in ['user_document_list', 'user_mitsumori_list', 'user_mitsumori_add', 'user_mitsumori_edit', 'user_kaitori_shoudaku_list', 'user_kaitori_shoudaku_add', 'user_kaitori_shoudaku_edit'] %}active{% endif %}">書類一覧</a>
         </div>
         <div class="sidebar-subcategory">
             <div class="subcategory-label">書類履歴</div>
-            <a href="{{ url_for('documents') }}#document-history-tabs" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">書類履歴</a>
+            <a href="{{ url_for('documents') }}" class="{% if request.endpoint in ['documents', 'documents_history_category', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">書類履歴</a>
         </div>
     </div>
 </div>
 
 <div class="sidebar-category">
-    <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'long_term_items', 'sales_agency_my_requests'] %}active{% endif %}" onclick="toggleCategory(this)">
+    <button class="sidebar-category-toggle {% if request.endpoint in ['index', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}" onclick="toggleCategory(this)">
         商品管理
         <span class="category-arrow">▼</span>
     </button>
-    <div class="sidebar-category-items {% if request.endpoint in ['index', 'long_term_items', 'sales_agency_my_requests'] %}open{% endif %}">
+    <div class="sidebar-category-items {% if request.endpoint in ['index', 'long_term_items', 'sales_agency_my_requests', 'sales_agency_my_requests_service'] %}open{% endif %}">
         <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">商品一覧</a>
         <a href="{{ url_for('long_term_items') }}" class="{% if request.endpoint == 'long_term_items' %}active{% endif %}">
             <span class="menu-label">長期保管商品</span>
@@ -34,7 +34,7 @@
             <span class="menu-badge-inline warning">{{ get_long_term_item_count() }}</span>
             {% endif %}
         </a>
-        <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint == 'sales_agency_my_requests' %}active{% endif %}">販売代行申請履歴</a>
+        <a href="{{ url_for('sales_agency_my_requests') }}" class="{% if request.endpoint in ['sales_agency_my_requests', 'sales_agency_my_requests_service'] %}active{% endif %}">販売代行申請履歴</a>
     </div>
 </div>
 

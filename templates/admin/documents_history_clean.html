@@ -8,9 +8,9 @@
 .history-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.history-head h1,.history-panel h2{margin:0;color:#0f172a}.history-head p{margin:.35rem 0 0;color:#64748b;line-height:1.7}
 .history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem}.history-card{display:grid;gap:.6rem;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff;color:inherit;text-decoration:none;padding:1rem}.history-card.active,.history-card:hover{border-color:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.12)}
 .history-card-head{display:flex;gap:.7rem;align-items:center}.history-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
-.history-table-wrap{max-width:100%;overflow-x:auto}.history-table{width:100%;border-collapse:collapse;min-width:900px}.history-table th,.history-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.history-table th{background:#f8fafc;color:#475569;font-size:.84rem}
+.history-table-wrap{max-width:100%;overflow-x:auto}.history-table{width:100%;border-collapse:collapse;min-width:900px}.history-table th,.history-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle}.history-table th{background:#f8fafc;color:#475569;font-size:.84rem}.history-table th:last-child,.history-table td:last-child{width:8.5rem;min-width:8.5rem;text-align:center}
 .history-table tr[data-detail-url]{cursor:pointer}.history-table tr[data-detail-url]:hover td,.history-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
-.history-actions{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
+.history-actions{display:flex;align-items:center;justify-content:center;gap:.45rem;flex-wrap:nowrap}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
 @media(max-width:768px){.history-panel{padding:1rem;border-radius:10px}.history-grid{grid-template-columns:1fr}.history-head{display:grid}.history-actions{gap:.35rem;overflow-x:auto}.history-actions .btn{width:auto;flex:0 0 auto;justify-content:center}.history-table{min-width:760px}}
 </style>
 <div class="history-clean">
@@ -54,14 +54,10 @@
             <td>{{ row.issue_date }}</td>
             <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
             <td>{{ row.status_label }}</td>
-            <td class="history-actions">
-              {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
-              {% if row.can_delete and row.delete_url %}
-              <form method="POST" action="{{ row.delete_url }}" onsubmit="return confirm('この書類を削除しますか？');" style="display:inline;">
-                <input type="hidden" name="next" value="{{ current_return_url }}">
-                <button type="submit" class="btn btn-danger btn-sm">削除</button>
-              </form>
-              {% endif %}
+            <td>
+              <div class="history-actions">
+                {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}

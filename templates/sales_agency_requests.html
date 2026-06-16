@@ -109,6 +109,60 @@
     padding: 0.85rem;
 }
 
+.service-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+}
+
+.service-card-link {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #fff;
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.service-card-link:hover,
+.service-card-link:focus-visible {
+    border-color: #2563eb;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+.service-card-title {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.service-card-meta {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.service-page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.service-page-head strong {
+    color: #0f172a;
+    font-size: 1rem;
+}
+
 .filter-row {
     display: flex;
     align-items: center;
@@ -391,6 +445,10 @@
     .guide-item-title {
         font-size: 0.92rem;
     }
+
+    .service-card-grid {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 
@@ -401,6 +459,7 @@
 <div class="history-container">
     <a href="{{ url_for('index') }}" class="back-link">← 商品一覧に戻る</a>
 
+    {% if not show_service_top %}
     <details class="guide-card">
         <summary>
             <span>進行状況の見方</span>
@@ -433,20 +492,33 @@
             </div>
         </div>
     </details>
+    {% endif %}
 
+    {% if show_service_top %}
+    <section class="service-card-grid" aria-label="サービス別履歴">
+        {% for card in service_cards %}
+        <a class="service-card-link" href="{{ card.url }}">
+            <span class="service-card-title">{{ card.title }}</span>
+            <span class="service-card-meta">
+                <span>現行 {{ card.current_count }}</span>
+                <span>過去 {{ card.past_count }}</span>
+                <span>合計 {{ card.count }}</span>
+            </span>
+        </a>
+        {% endfor %}
+    </section>
+    {% else %}
+    {% set service_page_base = url_for('sales_agency_my_requests') ~ '/' ~ selected_service_slug %}
     <section class="filter-card" aria-label="申請履歴の絞り込み">
-        <div class="filter-row">
-            <span class="filter-label">サービス</span>
-            <a class="filter-chip {% if service_filter == 'all' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='all', period=period_filter) }}">すべて {{ service_counts.get('all', 0) }}</a>
-            <a class="filter-chip {% if service_filter == 'wholesale' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='wholesale', period=period_filter) }}">{{ service_types.get('wholesale', '業者卸販売') }} {{ service_counts.get('wholesale', 0) }}</a>
-            <a class="filter-chip {% if service_filter == 'auction' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='auction', period=period_filter) }}">{{ service_types.get('auction', '業者オークション') }} {{ service_counts.get('auction', 0) }}</a>
-            <a class="filter-chip {% if service_filter == 'simultaneous' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service='simultaneous', period=period_filter) }}">{{ service_types.get('simultaneous', '同時出品') }} {{ service_counts.get('simultaneous', 0) }}</a>
+        <div class="service-page-head">
+            <strong>{{ selected_service_name }}</strong>
+            <a class="filter-chip" href="{{ url_for('sales_agency_my_requests') }}">サービス一覧へ</a>
         </div>
         <div class="filter-row">
             <span class="filter-label">表示</span>
-            <a class="filter-chip {% if period_filter == 'current' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='current') }}">現行 {{ period_counts.get('current', 0) }}</a>
-            <a class="filter-chip {% if period_filter == 'past' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='past') }}">過去 {{ period_counts.get('past', 0) }}</a>
-            <a class="filter-chip {% if period_filter == 'all' %}active{% endif %}" href="{{ url_for('sales_agency_my_requests', service=service_filter, period='all') }}">すべて {{ period_counts.get('all', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'current' %}active{% endif %}" href="{{ service_page_base }}?period=current">現行 {{ period_counts.get('current', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'past' %}active{% endif %}" href="{{ service_page_base }}?period=past">過去 {{ period_counts.get('past', 0) }}</a>
+            <a class="filter-chip {% if period_filter == 'all' %}active{% endif %}" href="{{ service_page_base }}?period=all">すべて {{ period_counts.get('all', 0) }}</a>
         </div>
     </section>
 
@@ -531,6 +603,7 @@
         <p>条件に一致する申請履歴はありません。</p>
         <p style="margin-top: 0.5rem; font-size: 0.9rem;">サービスや表示条件を切り替えて確認してください。</p>
     </div>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

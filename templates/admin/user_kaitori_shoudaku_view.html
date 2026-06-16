@@ -13,8 +13,7 @@
             <p>クライアントから届いた買取依頼書です。受付内容と商品明細を確認できます。</p>
         </div>
         <div class="admin-doc-actions">
-            <a href="{{ url_for('admin_documents_dashboard', group='client_incoming') }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
-            <a href="{{ url_for('admin_documents_history', doc_type='user_kaitori_shoudaku', direction='client_incoming') }}" class="doc-btn doc-btn-secondary">書類履歴を見る</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary">書類履歴へ戻る</a>
         </div>
     </div>
 

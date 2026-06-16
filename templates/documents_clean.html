@@ -134,6 +134,13 @@
     font-size: 0.84rem;
 }
 
+.user-doc-table th:last-child,
+.user-doc-table td:last-child {
+    width: 8.5rem;
+    min-width: 8.5rem;
+    text-align: center;
+}
+
 .user-doc-table tr[data-detail-url] {
     cursor: pointer;
 }
@@ -157,6 +164,7 @@
 .doc-actions {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.45rem;
     flex-wrap: nowrap;
 }
@@ -261,14 +269,10 @@
                         <td>{{ row.issue_date }}</td>
                         <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
                         <td>{{ row.status_label }}</td>
-                        <td class="doc-actions">
-                            {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
-                            {% if row.can_delete and row.delete_url %}
-                            <form method="POST" action="{{ row.delete_url }}" onsubmit="return confirm('この下書き書類を削除しますか？');">
-                                <input type="hidden" name="next" value="{{ current_return_url }}">
-                                <button type="submit" class="btn btn-danger btn-sm">削除</button>
-                            </form>
-                            {% endif %}
+                        <td>
+                            <div class="doc-actions">
+                                {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

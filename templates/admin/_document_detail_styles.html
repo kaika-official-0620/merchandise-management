@@ -260,6 +260,8 @@
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
     vertical-align: top;
+    word-break: normal;
+    overflow-wrap: anywhere;
 }
 
 .admin-doc-table th {
@@ -304,6 +306,16 @@
 }
 
 @media (max-width: 760px) {
+    .admin-doc-toolbar,
+    .admin-doc-actions {
+        align-items: flex-start;
+        justify-content: flex-start;
+    }
+
+    .admin-doc-actions .doc-btn {
+        width: auto;
+    }
+
     .admin-doc-info-grid {
         grid-template-columns: 1fr;
     }
@@ -315,6 +327,10 @@
     .admin-doc-body,
     .admin-doc-hero {
         padding: 1rem;
+    }
+
+    .admin-doc-table {
+        min-width: 680px;
     }
 }
 

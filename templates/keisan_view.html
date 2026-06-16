@@ -11,7 +11,7 @@
     {% endif %}
     {% if keisan.can_user_delete %}
     <form method="POST" action="{{ url_for('user_keisan_delete', id=keisan.id) }}" class="inline-delete-form" onsubmit="return confirm('この計算書を削除しますか？')">
-        <input type="hidden" name="next" value="{{ url_for('user_document_list') }}">
+        <input type="hidden" name="next" value="{{ url_for('documents') }}">
         <button type="submit" class="btn btn-danger">削除</button>
     </form>
     {% endif %}
@@ -47,6 +47,7 @@
         </div>
     </div>
 
+    <div class="keisan-table-scroll">
     <table class="keisan-items">
         <thead>
             <tr>
@@ -75,6 +76,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
 
     <div class="keisan-total-row">
         <span>合計金額</span>
@@ -102,6 +104,7 @@
     display: flex;
     gap: 10px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .btn {
@@ -126,6 +129,8 @@
 
 .keisan-sheet {
     max-width: 960px;
+    width: 100%;
+    box-sizing: border-box;
     min-height: 1180px;
     margin: 0 auto;
     padding: 72px 64px;
@@ -133,6 +138,7 @@
     color: #1f2937;
     box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
     border: 1px solid #e5e7eb;
+    overflow: hidden;
 }
 
 .keisan-title {
@@ -170,6 +176,12 @@
     border-collapse: collapse;
     margin-top: 8px;
     font-size: 17px;
+}
+
+.keisan-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .keisan-items th,
@@ -246,9 +258,8 @@
     }
 
     .keisan-sheet {
-        padding: 36px 20px;
+        padding: 28px 16px;
         min-height: 0;
-        overflow-x: auto;
     }
 
     .keisan-meta-grid {
@@ -257,7 +268,15 @@
     }
 
     .keisan-items {
-        min-width: 760px;
+        min-width: 680px;
+        font-size: 14px;
+    }
+
+    .keisan-items th,
+    .keisan-items td {
+        padding: 9px 10px;
+        word-break: normal;
+        overflow-wrap: anywhere;
     }
 
     .keisan-total-row strong {

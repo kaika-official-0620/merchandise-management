@@ -46,6 +46,19 @@ STATUS_LABELS = {
     "processing": "処理中",
 }
 
+HISTORY_CATEGORY_PUBLIC_SLUGS = {
+    "client_incoming": "mitsumori",
+    "vendor_estimate": "vendor-estimate",
+    "vendor": "vendor",
+    "kaitori": "kaitori",
+    "shikiriosho": "settlement",
+    "kaika_shoudaku": "kaika-shoudaku",
+    "user_shoudaku": "kaitori-shoudaku",
+    "keisan": "keisan",
+    "kaika_mitsumori": "kaika-mitsumori",
+}
+HISTORY_CATEGORY_SLUG_TO_KEY = {slug: key for key, slug in HISTORY_CATEGORY_PUBLIC_SLUGS.items()}
+
 
 def apply(module: Any) -> None:
     if getattr(module, "_kaika_business_flow_patch_20260611_applied", False):
@@ -666,14 +679,16 @@ def apply(module: Any) -> None:
         categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
         count_map = count_history_rows_bulk([key for key, _title, _description in categories], admin=admin)
         unread_map = {} if admin else get_user_document_history_unread_counts()
+        def category_slug(card_key: str) -> str:
+            return HISTORY_CATEGORY_PUBLIC_SLUGS.get(card_key, card_key)
         def count_history_rows(card_key: str, admin: bool = False) -> int:
             return safe_int(count_map.get(card_key))
         for idx, (key, title, description) in enumerate(categories, 1):
-            url_args = {"category": key}
+            url_args = {"category": category_slug(key)}
             if endpoint == "admin_documents_history":
-                card_url = url_for("admin_documents_history_category", category=key)
+                card_url = url_for("admin_documents_history_category", category=category_slug(key))
             elif endpoint == "documents":
-                card_url = url_for("documents_history_category", category=key)
+                card_url = url_for("documents_history_category", category=category_slug(key))
             else:
                 card_url = url_for(endpoint, **url_args)
             cards.append(
@@ -2197,6 +2212,8 @@ def apply(module: Any) -> None:
         tab_map = {
             "kaitori": "kaitori",
             "mitsumori": "client_incoming",
+            "settlement": "shikiriosho",
+            "kaitori-shoudaku": "user_shoudaku",
             "shoudaku": "user_shoudaku",
             "shikiri": "shikiriosho",
             "keisan": "keisan",
@@ -2213,6 +2230,7 @@ def apply(module: Any) -> None:
                     "kaika_estimate": "kaika_mitsumori",
                 }
             )
+        tab_map.update(HISTORY_CATEGORY_SLUG_TO_KEY)
         selected_category = tab_map.get(selected_category, selected_category)
         categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
         category_keys = {key for key, _title, _desc in categories}
@@ -2220,11 +2238,14 @@ def apply(module: Any) -> None:
             return ""
         return selected_category
 
+    def public_history_category_slug(selected_category: str) -> str:
+        return HISTORY_CATEGORY_PUBLIC_SLUGS.get(selected_category, selected_category)
+
     def admin_documents_history_clean():
         ensure_schema()
         selected_category = normalize_history_category(request.args.get("category") or request.args.get("doc_type"), admin=True)
         if selected_category:
-            return redirect(url_for("admin_documents_history_category", category=selected_category))
+            return redirect(url_for("admin_documents_history_category", category=public_history_category_slug(selected_category)))
         return render_template(
             "admin/documents_history_clean.html",
             category_cards=category_cards("admin_documents_history", "", admin=True),
@@ -2238,6 +2259,9 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(category, admin=True)
         if not selected_category:
             return redirect(url_for("admin_documents_history"))
+        canonical_category = public_history_category_slug(selected_category)
+        if (category or "").strip() != canonical_category:
+            return redirect(url_for("admin_documents_history_category", category=canonical_category))
         history_rows = build_history_rows(selected_category, admin=True)
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in ADMIN_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
@@ -2252,7 +2276,7 @@ def apply(module: Any) -> None:
         ensure_schema()
         selected_category = normalize_history_category(request.args.get("category") or request.args.get("tab"), admin=False)
         if selected_category:
-            return redirect(url_for("documents_history_category", category=selected_category))
+            return redirect(url_for("documents_history_category", category=public_history_category_slug(selected_category)))
         return render_template(
             "documents_clean.html",
             category_cards=category_cards("documents", "", admin=False),
@@ -2266,6 +2290,9 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(category, admin=False)
         if not selected_category:
             return redirect(url_for("documents"))
+        canonical_category = public_history_category_slug(selected_category)
+        if (category or "").strip() != canonical_category:
+            return redirect(url_for("documents_history_category", category=canonical_category))
         history_rows = build_history_rows(selected_category, admin=False, user_id=current_user.id) if selected_category else []
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in USER_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
