@@ -20403,7 +20403,12 @@ def admin_auction_keisan_pdf(id):
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('admin_auction_keisan_list'))
     
-    return render_template('pdf/keisan_pdf.html', keisan=keisan, items=items)
+    return render_template(
+        'pdf/keisan_pdf.html',
+        keisan=keisan,
+        items=items,
+        csv_url=url_for('user_keisan_download', id=id),
+    )
 
 @app.route('/proxy-service')
 def public_proxy_service_list():
@@ -26914,6 +26919,29 @@ def service_document_pdf(id):
     
     return render_template('pdf/service_document_pdf.html', doc=doc)
 
+def build_document_csv_response(filename, title, meta_rows, item_headers, item_rows, notes=None):
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow([title])
+    writer.writerow([])
+    for row in meta_rows:
+        writer.writerow(row)
+    writer.writerow([])
+    writer.writerow(item_headers)
+    for row in item_rows:
+        writer.writerow(row)
+    if notes:
+        writer.writerow([])
+        writer.writerow(['備考', notes])
+
+    csv_content = '\ufeff' + output.getvalue()
+    return send_file(
+        io.BytesIO(csv_content.encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename,
+    )
+
 @app.route('/shikiriosho')
 @login_required
 def user_shikiriosho_list():
@@ -26997,7 +27025,10 @@ def user_shikiriosho_download(id):
     conn = get_db()
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM shikiriosho WHERE id = %s AND recipient_id = %s", (id, current_user.id))
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM shikiriosho WHERE id = %s", (id,))
+        else:
+            cur.execute("SELECT * FROM shikiriosho WHERE id = %s AND recipient_id = %s", (id, current_user.id))
         shikiriosho = cur.fetchone()
         if shikiriosho:
             shikiriosho = dict(shikiriosho)
@@ -27005,7 +27036,10 @@ def user_shikiriosho_download(id):
         items = [dict(row) for row in cur.fetchall()]
     else:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM shikiriosho WHERE id = ? AND recipient_id = ?", (id, current_user.id))
+        if current_user.is_admin():
+            cur.execute("SELECT * FROM shikiriosho WHERE id = ?", (id,))
+        else:
+            cur.execute("SELECT * FROM shikiriosho WHERE id = ? AND recipient_id = ?", (id, current_user.id))
         shikiriosho = cur.fetchone()
         if shikiriosho:
             shikiriosho = dict(shikiriosho)
@@ -27998,6 +28032,65 @@ def user_mitsumori_view(id):
 
     return render_template('mitsumori_view.html', mitsumori=mitsumori, items=items)
 
+@app.route('/mitsumori/download/<int:id>')
+@login_required
+def user_mitsumori_download(id):
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if current_user.is_admin():
+                cur.execute("SELECT * FROM user_mitsumori WHERE id = %s", (id,))
+            else:
+                cur.execute("SELECT * FROM user_mitsumori WHERE id = %s AND user_id = %s", (id, current_user.id))
+            mitsumori = cur.fetchone()
+            if mitsumori:
+                mitsumori = dict(mitsumori)
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            if current_user.is_admin():
+                cur.execute("SELECT * FROM user_mitsumori WHERE id = ?", (id,))
+            else:
+                cur.execute("SELECT * FROM user_mitsumori WHERE id = ? AND user_id = ?", (id, current_user.id))
+            row = cur.fetchone()
+            mitsumori = dict(row) if row else None
+            cur.execute("SELECT * FROM user_mitsumori_items WHERE mitsumori_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not mitsumori:
+        flash('見積依頼書が見つかりません', 'error')
+        return redirect(url_for('documents') if not current_user.is_admin() else url_for('admin_documents_history'))
+
+    item_rows = [
+        [
+            item.get('item_no') or index,
+            item.get('item_name') or '',
+            item.get('quantity') or 1,
+            item.get('unit_price') or 0,
+            item.get('amount') or 0,
+        ]
+        for index, item in enumerate(items, start=1)
+    ]
+    return build_document_csv_response(
+        f"見積依頼書_{mitsumori.get('document_no') or id}.csv",
+        '見積依頼書',
+        [
+            ['書類番号', mitsumori.get('document_no') or ''],
+            ['発行日', mitsumori.get('issue_date') or ''],
+            ['会社名', mitsumori.get('company_name') or ''],
+            ['件名', mitsumori.get('subject') or ''],
+            ['合計', mitsumori.get('total_amount') or 0],
+        ],
+        ['No', '品名', '数量', '単価', '金額'],
+        item_rows,
+        mitsumori.get('notes'),
+    )
+
 @app.route('/mitsumori/pdf/<int:id>')
 @login_required
 def user_mitsumori_pdf(id):
@@ -28035,7 +28128,12 @@ def user_mitsumori_pdf(id):
         flash('見積依頼書が見つかりません', 'error')
         return redirect(url_for('documents'))
     
-    html_content = render_template('pdf/mitsumori_pdf.html', mitsumori=mitsumori, items=items)
+    html_content = render_template(
+        'pdf/mitsumori_pdf.html',
+        mitsumori=mitsumori,
+        items=items,
+        csv_url=url_for('user_mitsumori_download', id=id),
+    )
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/mitsumori/delete/<int:id>', methods=['GET', 'POST'])
@@ -28401,6 +28499,84 @@ def user_keisan_view(id):
 
     return render_template('keisan_view.html', keisan=keisan, items=items)
 
+@app.route('/keisan/download/<int:id>')
+@login_required
+def user_keisan_download(id):
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if current_user.is_admin():
+                cur.execute("SELECT * FROM user_keisan WHERE id = %s", (id,))
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM user_keisan
+                    WHERE id = %s
+                      AND user_id = %s
+                      AND (COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
+                    """,
+                    (id, current_user.id),
+                )
+            keisan = cur.fetchone()
+            if keisan:
+                keisan = dict(keisan)
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            if current_user.is_admin():
+                cur.execute("SELECT * FROM user_keisan WHERE id = ?", (id,))
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM user_keisan
+                    WHERE id = ?
+                      AND user_id = ?
+                      AND (COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
+                    """,
+                    (id, current_user.id),
+                )
+            row = cur.fetchone()
+            keisan = dict(row) if row else None
+            cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not keisan:
+        flash('計算書が見つかりません', 'error')
+        return redirect(url_for('documents') if not current_user.is_admin() else url_for('admin_documents_history'))
+
+    item_rows = [
+        [
+            item.get('item_no') or index,
+            item.get('item_name') or '',
+            item.get('quantity') or 1,
+            item.get('unit') or '',
+            item.get('unit_price') or 0,
+            item.get('amount') or 0,
+        ]
+        for index, item in enumerate(items, start=1)
+    ]
+    return build_document_csv_response(
+        f"計算書_{keisan.get('document_no') or id}.csv",
+        '計算書',
+        [
+            ['書類番号', keisan.get('document_no') or ''],
+            ['発行日', keisan.get('issue_date') or ''],
+            ['宛名', keisan.get('recipient_name') or ''],
+            ['件名', keisan.get('subject') or ''],
+            ['合計', keisan.get('total_amount') or 0],
+        ],
+        ['No', '項目', '数量', '単位', '単価', '金額'],
+        item_rows,
+        keisan.get('notes'),
+    )
+
 @app.route('/keisan/pdf/<int:id>')
 @login_required
 def user_keisan_pdf(id):
@@ -28458,7 +28634,12 @@ def user_keisan_pdf(id):
         flash('計算書が見つかりません', 'error')
         return redirect(url_for('documents'))
     
-    html_content = render_template('pdf/keisan_pdf.html', keisan=keisan, items=items)
+    html_content = render_template(
+        'pdf/keisan_pdf.html',
+        keisan=keisan,
+        items=items,
+        csv_url=url_for('user_keisan_download', id=id),
+    )
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/keisan/delete/<int:id>', methods=['GET', 'POST'])
@@ -29235,7 +29416,12 @@ def shikiriosho_pdf(id):
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
-    html_content = render_template('pdf/shikiriosho_pdf.html', shikiriosho=shikiriosho, items=items)
+    html_content = render_template(
+        'pdf/shikiriosho_pdf.html',
+        shikiriosho=shikiriosho,
+        items=items,
+        csv_url=url_for('user_shikiriosho_download', id=id),
+    )
     
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
@@ -29283,7 +29469,12 @@ def invoice_pdf(id):
         return redirect(url_for('index'))
     
     # PDF用HTMLをレンダリング
-    html_content = render_template('pdf/invoice_pdf.html', invoice=invoice, items=items)
+    html_content = render_template(
+        'pdf/invoice_pdf.html',
+        invoice=invoice,
+        items=items,
+        csv_url=url_for('invoice_download', id=id),
+    )
     
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
@@ -29776,7 +29967,12 @@ def admin_kaitori_pdf(id):
         flash('買取明細書が見つかりません', 'error')
         return redirect(url_for('admin_kaitori_list'))
     
-    html_content = render_template('pdf/invoice_pdf.html', invoice=invoice, items=items)
+    html_content = render_template(
+        'pdf/invoice_pdf.html',
+        invoice=invoice,
+        items=items,
+        csv_url=url_for('invoice_download', id=id),
+    )
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ===================
@@ -30212,7 +30408,12 @@ def admin_mitsumori_pdf(id):
         flash('見積依頼書が見つかりません', 'error')
         return redirect(url_for('admin_mitsumori_list'))
     
-    html_content = render_template('pdf/mitsumori_pdf.html', mitsumori=mitsumori, items=items)
+    html_content = render_template(
+        'pdf/mitsumori_pdf.html',
+        mitsumori=mitsumori,
+        items=items,
+        csv_url=url_for('user_mitsumori_download', id=id),
+    )
     return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ===================
@@ -35243,6 +35444,66 @@ def user_kaitori_shoudaku_view(id):
 
     return render_template('kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
 
+@app.route('/kaitori-shoudaku/<int:id>/download')
+@login_required
+def user_kaitori_shoudaku_download(id):
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            if current_user.is_admin():
+                cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s', (id,))
+            else:
+                cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = %s AND user_id = %s', (id, current_user.id))
+            kaitori = cur.fetchone()
+            if kaitori:
+                kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            if current_user.is_admin():
+                cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ?', (id,))
+            else:
+                cur.execute('SELECT * FROM user_kaitori_shoudaku WHERE id = ? AND user_id = ?', (id, current_user.id))
+            row = cur.fetchone()
+            kaitori = dict(row) if row else None
+            cur.execute('SELECT * FROM user_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('documents') if not current_user.is_admin() else url_for('admin_documents_history'))
+
+    item_rows = [
+        [
+            item.get('item_no') or index,
+            item.get('product_name') or '',
+            item.get('brand_name') or '',
+            item.get('condition') or '',
+            item.get('quantity') or 1,
+            item.get('unit_price') or 0,
+            item.get('amount') or 0,
+        ]
+        for index, item in enumerate(items, start=1)
+    ]
+    return build_document_csv_response(
+        f"買取承諾書_{kaitori.get('document_no') or id}.csv",
+        '買取承諾書',
+        [
+            ['書類番号', kaitori.get('document_no') or ''],
+            ['発行日', kaitori.get('issue_date') or ''],
+            ['顧客名', kaitori.get('customer_name') or ''],
+            ['合計', kaitori.get('total_amount') or 0],
+        ],
+        ['No', '商品名', 'ブランド', '状態', '数量', '単価', '金額'],
+        item_rows,
+        kaitori.get('notes'),
+    )
+
 @app.route('/kaitori-shoudaku/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def user_kaitori_shoudaku_edit(id):
@@ -35453,7 +35714,12 @@ def user_kaitori_shoudaku_pdf(id):
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('user_kaitori_shoudaku_list'))
     
-    return render_template('pdf/kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
+    return render_template(
+        'pdf/kaitori_shoudaku_pdf.html',
+        kaitori=kaitori,
+        items=items,
+        csv_url=url_for('user_kaitori_shoudaku_download', id=id),
+    )
 
 # =============================================
 # 買取承諾書（法人版・管理者用）
@@ -35651,6 +35917,64 @@ def admin_kaitori_shoudaku_view(id):
     
     return render_template('admin/kaitori_shoudaku_view.html', kaitori=kaitori, items=items)
 
+@app.route('/admin/kaitori-shoudaku/<int:id>/download')
+@login_required
+def admin_kaitori_shoudaku_download(id):
+    if not current_user.is_admin():
+        flash('権限がありません', 'error')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    try:
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = %s', (id,))
+            kaitori = cur.fetchone()
+            if kaitori:
+                kaitori = dict(kaitori)
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = %s ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+        else:
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku WHERE id = ?', (id,))
+            row = cur.fetchone()
+            kaitori = dict(row) if row else None
+            cur.execute('SELECT * FROM admin_kaitori_shoudaku_items WHERE kaitori_shoudaku_id = ? ORDER BY item_no', (id,))
+            items = [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not kaitori:
+        flash('買取承諾書が見つかりません', 'error')
+        return redirect(url_for('admin_kaitori_shoudaku_list'))
+
+    item_rows = [
+        [
+            item.get('item_no') or index,
+            item.get('product_name') or '',
+            item.get('brand_name') or '',
+            item.get('condition') or '',
+            item.get('quantity') or 1,
+            item.get('unit_price') or 0,
+            item.get('amount') or 0,
+        ]
+        for index, item in enumerate(items, start=1)
+    ]
+    return build_document_csv_response(
+        f"買取承諾書_{kaitori.get('document_no') or id}.csv",
+        '買取承諾書',
+        [
+            ['書類番号', kaitori.get('document_no') or ''],
+            ['発行日', kaitori.get('issue_date') or ''],
+            ['会社名', kaitori.get('company_name') or ''],
+            ['合計', kaitori.get('total_amount') or 0],
+        ],
+        ['No', '商品名', 'ブランド', '状態', '数量', '単価', '金額'],
+        item_rows,
+        kaitori.get('notes'),
+    )
+
 @app.route('/admin/kaitori-shoudaku/<int:id>/delete')
 @login_required
 def admin_kaitori_shoudaku_delete(id):
@@ -35720,7 +36044,12 @@ def admin_kaitori_shoudaku_pdf(id):
         flash('買取承諾書が見つかりません', 'error')
         return redirect(url_for('admin_kaitori_shoudaku_list'))
     
-    return render_template('pdf/admin_kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
+    return render_template(
+        'pdf/admin_kaitori_shoudaku_pdf.html',
+        kaitori=kaitori,
+        items=items,
+        csv_url=url_for('admin_kaitori_shoudaku_download', id=id),
+    )
 
 # ========== 問い合わせ機能 ==========
 
@@ -42083,7 +42412,12 @@ def admin_user_kaitori_shoudaku_pdf(id):
         cur.close()
         conn.close()
 
-    return render_template('pdf/kaitori_shoudaku_pdf.html', kaitori=kaitori, items=items)
+    return render_template(
+        'pdf/kaitori_shoudaku_pdf.html',
+        kaitori=kaitori,
+        items=items,
+        csv_url=url_for('user_kaitori_shoudaku_download', id=id),
+    )
 
 
 @login_required

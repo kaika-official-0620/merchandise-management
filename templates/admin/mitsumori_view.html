@@ -18,8 +18,10 @@
             <p>{% if is_kaika_doc %}開花用として作成した書類です。ユーザー側には表示されません。{% elif is_vendor_doc %}開花から業者へ送付する見積依頼書です。{% else %}クライアントから届いた見積依頼書です。{% endif %}</p>
         </div>
         <div class="admin-doc-actions">
-            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary">書類管理へ戻る</a>
+            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary context-back-inline">書類管理へ戻る</a>
+            <a href="{{ url_for('user_mitsumori_download', id=mitsumori.id) }}" class="doc-btn doc-btn-csv">CSV</a>
             <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
+            <button type="button" class="doc-btn doc-btn-print" onclick="window.print()">印刷</button>
         </div>
     </div>
 

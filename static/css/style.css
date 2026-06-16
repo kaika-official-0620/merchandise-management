@@ -3020,12 +3020,12 @@ li,
     color: #475569 !important;
 }
 
-.page-actions .btn-pdf,
 .page-actions .btn-download,
-.page-header .header-actions .btn-pdf,
-.page-header .header-actions .btn-export,
-.admin-header .admin-nav .btn-pdf,
-.admin-header .admin-nav .btn-export,
+.page-actions .btn-csv,
+.page-header .header-actions .btn-download,
+.page-header .header-actions .btn-csv,
+.admin-header .admin-nav .btn-download,
+.admin-header .admin-nav .btn-csv,
 .admin-header .admin-nav .btn-success,
 .document-container + .print-button .btn-print {
     background: #059669 !important;
@@ -3033,7 +3033,19 @@ li,
     color: #fff !important;
 }
 
-.page-actions .btn-print {
+.page-actions .btn-pdf,
+.page-header .header-actions .btn-pdf,
+.page-header .header-actions .btn-export,
+.admin-header .admin-nav .btn-pdf,
+.admin-header .admin-nav .btn-export {
+    background: #dc2626 !important;
+    border: 1px solid #dc2626 !important;
+    color: #fff !important;
+}
+
+.page-actions .btn-print,
+.page-header .header-actions .btn-print,
+.admin-header .admin-nav .btn-print {
     background: #0891b2 !important;
     border: 1px solid #0891b2 !important;
     color: #fff !important;
@@ -3055,6 +3067,13 @@ li,
     justify-content: flex-start !important;
     gap: 0.55rem;
     flex-wrap: wrap;
+}
+
+.page-actions:empty,
+.header-actions:empty,
+.admin-doc-actions:empty,
+.admin-header .admin-nav:empty {
+    display: none !important;
 }
 
 @media (max-width: 768px) {

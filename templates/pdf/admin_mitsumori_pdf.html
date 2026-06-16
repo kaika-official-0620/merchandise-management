@@ -359,7 +359,7 @@
             </thead>
             <tbody>
                 {% set item_count = items|length if items else 0 %}
-                {% set row_count = item_count if item_count > 15 else 15 %}
+                {% set row_count = item_count if item_count > 0 else 1 %}
                 {% for i in range(row_count) %}
                 <tr class="{% if i == 15 %}page-break-row{% endif %}">
                     <td class="text-center">{% if items and i < item_count and items[i].item_no %}{{ items[i].item_no }}{% else %}{{ i + 1 }}{% endif %}</td>

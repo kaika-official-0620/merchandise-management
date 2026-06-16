@@ -118,9 +118,9 @@
 </style>
 
 <div class="announcement-detail-page">
-    <div class="announcement-detail-nav">
-        <a href="{{ url_for('user_announcements_page') }}">お知らせ一覧へ戻る</a>
-        <a href="{{ url_for('user_home') }}">ホームへ戻る</a>
+    <div class="announcement-detail-nav context-back-inline-source">
+        <a href="{{ url_for('user_announcements_page') }}" class="context-back-inline">お知らせ一覧へ戻る</a>
+        <a href="{{ url_for('user_home') }}" class="context-back-inline">ホームへ戻る</a>
     </div>
 
     <article class="announcement-detail {{ announcement.announcement_type }}">

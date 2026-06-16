@@ -18,13 +18,14 @@
             <p>{{ 'クライアントへ返送する買取明細書です。' if is_client_outgoing else 'ユーザーから届いた買取明細書です。' }}</p>
         </div>
         <div class="admin-doc-actions">
-            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary">一覧へ戻る</a>
+            <a href="{{ back_url }}" class="doc-btn doc-btn-secondary context-back-inline">一覧へ戻る</a>
             {% if invoice.status == 'sent' %}
             <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="doc-btn doc-btn-success" onclick="return confirm('この買取明細書を承認しますか？')">承認</a>
             <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="doc-btn doc-btn-danger" onclick="return confirm('この買取明細書を差し戻しますか？')">差し戻し</a>
             {% endif %}
-            <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-secondary">CSV</a>
+            <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-csv">CSV</a>
             <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
+            <button type="button" class="doc-btn doc-btn-print" onclick="window.print()">印刷</button>
         </div>
     </div>
 

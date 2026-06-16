@@ -49,8 +49,20 @@
     }
 
     .pdf-screen-btn-primary {
+        border-color: #dc2626;
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .pdf-screen-btn-csv {
         border-color: #059669;
         background: #059669;
+        color: #fff;
+    }
+
+    .pdf-screen-btn-print {
+        border-color: #0891b2;
+        background: #0891b2;
         color: #fff;
     }
 
@@ -59,6 +71,25 @@
         font-size: 12px;
         line-height: 1.5;
         text-align: right;
+    }
+
+    body,
+    .container,
+    .sheet,
+    .container *,
+    .sheet * {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+    }
+
+    th,
+    td,
+    .document-title,
+    .title,
+    .status-badge {
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+        line-break: strict;
     }
 
     @media (max-width: 640px) {
@@ -124,7 +155,7 @@
 
         .pdf-screen-toolbar-actions {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
             gap: 6px;
         }
 
@@ -163,8 +194,11 @@
     <div class="pdf-screen-toolbar-inner">
         <div class="pdf-screen-toolbar-actions">
             <button type="button" class="pdf-screen-btn" onclick="goBackFromPdf()">戻る</button>
+            {% if csv_url is defined and csv_url %}
+            <a href="{{ csv_url }}" class="pdf-screen-btn pdf-screen-btn-csv">CSV</a>
+            {% endif %}
             <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">PDF保存</button>
-            <button type="button" class="pdf-screen-btn" onclick="window.print()">印刷</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-print" onclick="window.print()">印刷</button>
         </div>
         <div class="pdf-screen-note">ブラウザの印刷画面でPDF保存できます。</div>
     </div>

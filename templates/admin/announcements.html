@@ -129,7 +129,6 @@
 }
 
 .admin-announcement-filter input {
-    width: 100%;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -138,6 +137,14 @@
     border-radius: 8px;
     padding: 0.5rem 0.65rem;
     font: inherit;
+}
+
+.admin-announcement-filter input[type="search"] {
+    width: 100%;
+}
+
+.admin-announcement-filter input[type="date"] {
+    width: 170px;
 }
 
 .table-card {
@@ -228,8 +235,13 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .admin-announcement-filter input[type="date"] {
+        width: min(100%, 190px);
+    }
+
     .admin-announcement-filter .btn {
-        width: 100%;
+        width: auto;
+        min-width: 96px;
         justify-content: center;
     }
 

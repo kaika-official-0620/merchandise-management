@@ -14,10 +14,16 @@
     <meta name="theme-color" content="#1a1a2e">
     <style>
         .history-back-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0.55rem;
+            flex-wrap: wrap;
             margin-bottom: 0.9rem;
         }
 
-        .history-back-button {
+        .history-back-button,
+        .history-back-inline-item {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
@@ -27,16 +33,23 @@
             background: #fff;
             color: #475569;
             font-size: 0.85rem;
+            font-weight: 700;
             line-height: 1.5;
             letter-spacing: 0.02em;
             cursor: pointer;
+            text-decoration: none;
             transition: all 0.2s ease;
         }
 
-        .history-back-button:hover {
+        .history-back-button:hover,
+        .history-back-inline-item:hover {
             background: #f8fafc;
             border-color: #94a3b8;
             color: #0f172a;
+        }
+
+        .context-back-inline-source:empty {
+            display: none !important;
         }
 
         .analytics-detail-trigger {
@@ -1550,7 +1563,23 @@
 
         (function setupHistoryBackBar() {
             const historyBackBar = document.getElementById('historyBackBar');
-            if (!historyBackBar || historyBackBar.dataset.homeConditional !== 'true') {
+            if (!historyBackBar) {
+                return;
+            }
+
+            document.querySelectorAll('.context-back-inline').forEach((link) => {
+                if (link.closest('#historyBackBar')) {
+                    return;
+                }
+                const source = link.parentElement;
+                link.classList.add('history-back-inline-item');
+                historyBackBar.appendChild(link);
+                if (source && source.classList.contains('context-back-inline-source') && source.children.length === 0) {
+                    source.remove();
+                }
+            });
+
+            if (historyBackBar.dataset.homeConditional !== 'true') {
                 return;
             }
 

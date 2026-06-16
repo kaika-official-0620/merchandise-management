@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="page-actions">
-    <a href="{{ url_for('documents') }}" class="btn btn-back">← 一覧に戻る</a>
+    <a href="{{ url_for('documents') }}" class="btn btn-back context-back-inline">← 一覧に戻る</a>
     <div class="header-actions">
         {% if invoice.can_user_edit %}
         <a href="{{ url_for('user_invoice_edit', id=invoice.id) }}" class="btn btn-edit">編集</a>
