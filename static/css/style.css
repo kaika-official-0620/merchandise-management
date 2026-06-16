@@ -2304,7 +2304,7 @@ body.sidebar-open {
         --mobile-header-safe-top: max(env(safe-area-inset-top, 0px), 10px);
         --mobile-header-row-height: 58px;
         --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
-        --mobile-drawer-top: var(--mobile-header-safe-top);
+        --mobile-drawer-top: 0px;
     }
 
     html,
@@ -2414,7 +2414,7 @@ body.sidebar-open {
 
     .sidebar-header {
         flex: 0 0 auto;
-        padding-top: 0.55rem;
+        padding-top: max(0.55rem, var(--mobile-header-safe-top));
         padding-bottom: 0.6rem;
     }
 

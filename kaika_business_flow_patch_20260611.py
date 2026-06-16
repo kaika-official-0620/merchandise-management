@@ -521,6 +521,27 @@ def apply(module: Any) -> None:
             admin_flag = admin_flag.strip().lower() in {"1", "true", "t", "yes", "on"}
         return not admin_flag and is_history_draft_status(row.get("status"))
 
+    def is_truthy_db_value(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return int(value) != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "t", "yes", "on"}
+        return bool(value)
+
+    def is_admin_delivered_invoice_history_row(row: dict[str, Any]) -> bool:
+        document_no = str(row.get("invoice_no") or row.get("document_no") or "").strip().upper()
+        return (
+            bool(row.get("source_admin_kaitori_id"))
+            or (row.get("document_scope") or "").strip() == "admin_kaitori"
+            or document_no.startswith("KT-")
+        )
+
+    def is_admin_delivered_keisan_history_row(row: dict[str, Any]) -> bool:
+        document_no = str(row.get("document_no") or "").strip().upper()
+        return is_truthy_db_value(row.get("is_admin_created")) or document_no.startswith("AK-")
+
     def mark_user_document_history_read(category: str | None = None) -> None:
         if not current_user.is_authenticated or current_user.is_admin():
             return
@@ -580,10 +601,71 @@ def apply(module: Any) -> None:
             cur.close()
             conn.close()
 
+    def get_user_document_history_unread_counts(user_id: int | None = None) -> dict[str, int]:
+        if not current_user.is_authenticated or current_user.is_admin():
+            return {}
+        user_id_value = user_id or current_user.id
+        counts = {"kaitori": 0, "keisan": 0}
+        conn, cur = open_cursor(dict_rows=False)
+        try:
+            ph = placeholder()
+            if table_exists(cur, "invoices") and column_exists(cur, "invoices", "is_read"):
+                invoice_conditions = [f"COALESCE(invoice_no, '') LIKE {ph}"]
+                invoice_params: list[Any] = ["KT-%"]
+                if column_exists(cur, "invoices", "source_admin_kaitori_id"):
+                    invoice_conditions.append("COALESCE(source_admin_kaitori_id, 0) <> 0")
+                if column_exists(cur, "invoices", "document_scope"):
+                    invoice_conditions.append(f"COALESCE(document_scope, '') = {ph}")
+                    invoice_params.append("admin_kaitori")
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*) AS count
+                    FROM invoices
+                    WHERE sender_id = {ph}
+                      AND COALESCE(is_read, 0) = 0
+                      AND ({" OR ".join(invoice_conditions)})
+                    """,
+                    tuple([user_id_value] + invoice_params),
+                )
+                row = cur.fetchone()
+                counts["kaitori"] = safe_int((row or [0])[0] if not isinstance(row, dict) else row.get("count"))
+
+            if table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_read"):
+                keisan_conditions = [f"COALESCE(document_no, '') LIKE {ph}"]
+                keisan_params: list[Any] = ["AK-%"]
+                if column_exists(cur, "user_keisan", "is_admin_created"):
+                    keisan_conditions.append(
+                        "COALESCE(is_admin_created, FALSE) = TRUE"
+                        if DATABASE_URL
+                        else "COALESCE(is_admin_created, 0) = 1"
+                    )
+                status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*) AS count
+                    FROM user_keisan
+                    WHERE user_id = {ph}
+                      AND COALESCE(is_read, 0) = 0
+                      AND ({" OR ".join(keisan_conditions)})
+                      AND COALESCE(status, 'sent') NOT IN ({status_placeholders})
+                    """,
+                    tuple([user_id_value] + keisan_params + list(HISTORY_DRAFT_STATUSES)),
+                )
+                row = cur.fetchone()
+                counts["keisan"] = safe_int((row or [0])[0] if not isinstance(row, dict) else row.get("count"))
+            return counts
+        except Exception as exc:
+            print(f"[WARN] get_user_document_history_unread_counts skipped: {exc}", flush=True)
+            return {}
+        finally:
+            cur.close()
+            conn.close()
+
     def category_cards(endpoint: str, selected: str | None = None, admin: bool = False) -> list[dict[str, Any]]:
         cards = []
         categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
         count_map = count_history_rows_bulk([key for key, _title, _description in categories], admin=admin)
+        unread_map = {} if admin else get_user_document_history_unread_counts()
         def count_history_rows(card_key: str, admin: bool = False) -> int:
             return safe_int(count_map.get(card_key))
         for idx, (key, title, description) in enumerate(categories, 1):
@@ -602,10 +684,14 @@ def apply(module: Any) -> None:
                     "description": description,
                     "url": card_url,
                     "selected": selected == key,
+                    "unread_count": safe_int(unread_map.get(key)),
                     "count_label": f"{count_history_rows(key, admin=admin)}件",
                 }
             )
             cards[-1]["count_label"] = f"{safe_int(count_map.get(key))}件"
+            cards[-1]["has_unread"] = cards[-1]["unread_count"] > 0
+        if not admin:
+            cards.sort(key=lambda card: (0 if card.get("has_unread") else 1, safe_int(card.get("step"))))
         return cards
 
     def load_clients() -> list[dict[str, Any]]:
@@ -1097,9 +1183,9 @@ def apply(module: Any) -> None:
                 where_params = [] if admin else [params_user]
                 if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
                     where_parts.append(
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                         if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                     )
                 add_count("keisan", "user_keisan", where_parts, where_params)
 
@@ -1180,6 +1266,7 @@ def apply(module: Any) -> None:
                 delete_url: str | None = None,
                 source: str = "",
                 can_delete: bool = False,
+                is_unread: bool = False,
             ) -> None:
                 rows.append(
                     {
@@ -1195,6 +1282,7 @@ def apply(module: Any) -> None:
                         "delete_url": delete_url,
                         "source": source,
                         "can_delete": can_delete,
+                        "is_unread": is_unread,
                     }
                 )
 
@@ -1278,6 +1366,7 @@ def apply(module: Any) -> None:
                         delete_url=url_for("user_invoice_delete", id=doc["id"]) if can_user_delete else None,
                         source="invoices",
                         can_delete=can_user_delete,
+                        is_unread=(not admin) and is_admin_delivered_invoice_history_row(doc) and not is_truthy_db_value(doc.get("is_read")),
                     )
             elif category == "user_shoudaku":
                 where = "" if admin else f"WHERE user_id = {ph}"
@@ -1367,6 +1456,7 @@ def apply(module: Any) -> None:
                         delete_url=url_for("user_keisan_delete", id=doc["id"]) if can_user_delete else None,
                         source="user_keisan",
                         can_delete=can_user_delete,
+                        is_unread=(not admin) and is_admin_delivered_keisan_history_row(doc) and not is_truthy_db_value(doc.get("is_read")),
                     )
             elif category == "vendor":
                 where_parts = []
@@ -2161,7 +2251,6 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(request.args.get("category") or request.args.get("tab"), admin=False)
         if selected_category:
             return redirect(url_for("documents_history_category", category=selected_category))
-        mark_user_document_history_read()
         return render_template(
             "documents_clean.html",
             category_cards=category_cards("documents", "", admin=False),
@@ -2175,7 +2264,6 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(category, admin=False)
         if not selected_category:
             return redirect(url_for("documents"))
-        mark_user_document_history_read(selected_category)
         history_rows = build_history_rows(selected_category, admin=False, user_id=current_user.id) if selected_category else []
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in USER_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(

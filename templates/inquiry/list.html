@@ -11,8 +11,7 @@
 
 <form method="GET" class="inquiry-search-form">
     <input type="search" name="q" value="{{ search_filters.q if search_filters is defined else '' }}" placeholder="件名・本文・返信内容を検索">
-    <input type="date" name="date_from" value="{{ search_filters.date_from if search_filters is defined else '' }}" aria-label="開始日">
-    <input type="date" name="date_to" value="{{ search_filters.date_to if search_filters is defined else '' }}" aria-label="終了日">
+    <input type="date" name="date" value="{{ search_filters.date if search_filters is defined and search_filters.date else (search_filters.date_from if search_filters is defined and search_filters.date_from == search_filters.date_to else '') }}" aria-label="日付">
     <button type="submit" class="btn btn-primary">検索</button>
     {% if is_inquiry_filtered %}
     <a href="{{ url_for('inquiry_list') }}" class="btn btn-secondary">検索解除</a>
@@ -63,7 +62,7 @@
     max-width: 1100px;
     margin: 0 auto 1rem;
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) 150px 150px auto auto;
+    grid-template-columns: minmax(180px, 1fr) 150px auto auto;
     gap: 0.5rem;
     align-items: center;
     min-width: 0;
@@ -279,7 +278,7 @@
 
 @media (max-width: 760px) {
     .inquiry-search-form {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         max-width: none;
         margin-left: 0;
         margin-right: 0;

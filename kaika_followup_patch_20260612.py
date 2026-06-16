@@ -119,8 +119,10 @@ def apply(module: Any) -> None:
             return max(int(default), 0)
 
     def search_filters() -> dict[str, str]:
+        date_value = (request.args.get("date") or "").strip()
         return {
             "q": (request.args.get("q") or "").strip(),
+            "date": date_value,
             "date_from": (request.args.get("date_from") or "").strip(),
             "date_to": (request.args.get("date_to") or "").strip(),
         }
@@ -146,10 +148,13 @@ def apply(module: Any) -> None:
                 ])
                 params.extend([like, like, like])
             where.append("(" + " OR ".join(search_parts) + ")")
-        if filters["date_from"]:
+        if filters.get("date"):
+            where.append(f"DATE({table_alias}.created_at) = {placeholder()}")
+            params.append(filters["date"])
+        elif filters["date_from"]:
             where.append(f"DATE({table_alias}.created_at) >= {placeholder()}")
             params.append(filters["date_from"])
-        if filters["date_to"]:
+        if not filters.get("date") and filters["date_to"]:
             where.append(f"DATE({table_alias}.created_at) <= {placeholder()}")
             params.append(filters["date_to"])
         return filters
@@ -191,7 +196,7 @@ def apply(module: Any) -> None:
             categories=getattr(module, "INQUIRY_CATEGORIES", {}),
             statuses=getattr(module, "INQUIRY_STATUS", {}),
             search_filters=filters,
-            is_inquiry_filtered=bool(filters.get("q") or filters.get("date_from") or filters.get("date_to")),
+            is_inquiry_filtered=bool(filters.get("q") or filters.get("date") or filters.get("date_from") or filters.get("date_to")),
         )
 
     @login_required
@@ -252,7 +257,7 @@ def apply(module: Any) -> None:
             status_filter=status_filter,
             new_count=new_count,
             search_filters=filters,
-            is_inquiry_filtered=bool(status_filter or filters.get("q") or filters.get("date_from") or filters.get("date_to")),
+            is_inquiry_filtered=bool(status_filter or filters.get("q") or filters.get("date") or filters.get("date_from") or filters.get("date_to")),
         )
 
     original_profile = app.view_functions.get("profile")
