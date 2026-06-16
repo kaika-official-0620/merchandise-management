@@ -2318,19 +2318,19 @@ def apply(module: Any) -> None:
                     cur.execute(
                         """
                         INSERT INTO invoices
-                        (invoice_no, sender_id, issue_date, total_amount, notes, status, created_at, service_type)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        (invoice_no, sender_id, issue_date, total_amount, notes, status, created_at, service_type, is_read)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
-                        (invoice_no, target_user_id, issue_date, total_amount, auto_note, invoice_status, now, source_service_type),
+                        (invoice_no, target_user_id, issue_date, total_amount, auto_note, invoice_status, now, source_service_type, 0),
                     )
                     invoice_id = cur.fetchone()["id"]
                 else:
                     cur.execute(
                         """
                         INSERT INTO invoices
-                        (invoice_no, sender_id, issue_date, total_amount, notes, status, created_at, service_type)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        (invoice_no, sender_id, issue_date, total_amount, notes, status, created_at, service_type, is_read)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             invoice_no,
@@ -2341,6 +2341,7 @@ def apply(module: Any) -> None:
                             invoice_status,
                             now.strftime("%Y-%m-%d %H:%M:%S"),
                             source_service_type,
+                            0,
                         ),
                     )
                     invoice_id = cur.lastrowid
