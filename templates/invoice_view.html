@@ -11,7 +11,7 @@
         {% endif %}
         <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download">CSV</a>
         <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-        <button onclick="window.print()" class="btn btn-print">🖨️ 印刷</button>
+        <button onclick="window.print()" class="btn btn-print">印刷</button>
         {% if invoice.can_user_delete %}
         <form method="POST" action="{{ url_for('user_invoice_delete', id=invoice.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
             <input type="hidden" name="next" value="{{ url_for('documents') }}">
