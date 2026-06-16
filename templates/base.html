@@ -464,7 +464,12 @@
 
                     <div class="sidebar-subcategory">
                         <div class="subcategory-label">書類履歴</div>
-                        <a href="{{ url_for('documents') }}#document-history-tabs" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">書類履歴</a>
+                        <a href="{{ url_for('documents') }}#document-history-tabs" class="{% if request.endpoint in ['documents', 'user_shikiriosho_list', 'user_shikiriosho_view', 'user_invoice_list', 'user_invoice_view', 'service_document_view', 'user_mitsumori_view', 'user_kaitori_shoudaku_view'] %}active{% endif %}">
+                            <span class="menu-label">書類履歴</span>
+                            {% if unread_document_history_count|default(0) > 0 %}
+                            <span class="menu-badge-inline">{{ unread_document_history_count }}</span>
+                            {% endif %}
+                        </a>
                     </div>
                 </div>
             </div>

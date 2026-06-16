@@ -41,35 +41,6 @@
     <div class="draft-document-columns">
         <div class="draft-document-column">
             <div class="draft-document-column__header">
-                <h3>買取明細書</h3>
-                <span>{{ draft_invoice_list|length }}件</span>
-            </div>
-            {% if draft_invoice_list %}
-            <div class="draft-document-list">
-                {% for doc in draft_invoice_list %}
-                <article class="draft-document-row">
-                    <div>
-                        <strong>{{ doc.recipient_name or '買取明細書' }}</strong>
-                        <span>{{ doc.invoice_no }}</span>
-                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
-                    </div>
-                    <div class="draft-document-actions">
-                        <a href="{{ url_for('user_invoice_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
-                        <form method="POST" action="{{ url_for('user_invoice_delete', id=doc.id) }}" onsubmit="return confirm('この買取明細書を削除しますか？')">
-                            <input type="hidden" name="next" value="{{ current_return_url }}">
-                            <button type="submit" class="btn btn-danger">削除</button>
-                        </form>
-                    </div>
-                </article>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty-mini">作成中の買取明細書はありません。</div>
-            {% endif %}
-        </div>
-
-        <div class="draft-document-column">
-            <div class="draft-document-column__header">
                 <h3>見積依頼書</h3>
                 <span>{{ draft_mitsumori_list|length }}件</span>
             </div>
@@ -126,39 +97,16 @@
             {% endif %}
         </div>
 
-        <div class="draft-document-column">
-            <div class="draft-document-column__header">
-                <h3>計算書</h3>
-                <span>{{ draft_keisan_list|length }}件</span>
-            </div>
-            {% if draft_keisan_list %}
-            <div class="draft-document-list">
-                {% for doc in draft_keisan_list %}
-                <article class="draft-document-row">
-                    <div>
-                        <strong>{{ doc.subject or '計算書' }}</strong>
-                        <span>{{ doc.document_no }}</span>
-                        <small>{{ (doc.updated_at or doc.created_at or '')|string|truncate(16, True, '') }}</small>
-                    </div>
-                    <div class="draft-document-actions">
-                        <a href="{{ url_for('user_keisan_edit', id=doc.id) }}" class="btn btn-secondary">編集する</a>
-                        <form method="POST" action="{{ url_for('user_keisan_delete', id=doc.id) }}" onsubmit="return confirm('この計算書を削除しますか？')">
-                            <input type="hidden" name="next" value="{{ current_return_url }}">
-                            <button type="submit" class="btn btn-danger">削除</button>
-                        </form>
-                    </div>
-                </article>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty-mini">作成中の計算書はありません。</div>
-            {% endif %}
-        </div>
     </div>
 </section>
 
 <div class="history-link-panel">
-    <a href="{{ url_for('documents') }}" class="btn btn-info">完了済みの書類履歴を見る</a>
+    <a href="{{ url_for('documents') }}" class="btn btn-info">
+        <span>完了済みの書類履歴を見る</span>
+        {% if unread_document_history_count|default(0) > 0 %}
+        <span class="history-link-badge">{{ unread_document_history_count }}</span>
+        {% endif %}
+    </a>
 </div>
 
 <style>
@@ -293,6 +241,20 @@
 
 .history-link-panel {
     text-align: right;
+}
+
+.history-link-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.72rem;
+    line-height: 1;
 }
 
 .btn {

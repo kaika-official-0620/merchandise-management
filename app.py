@@ -3777,6 +3777,10 @@ if DATABASE_URL:
             cur.execute("ALTER TABLE user_keisan ADD COLUMN IF NOT EXISTS is_admin_created BOOLEAN DEFAULT FALSE")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE user_keisan ADD COLUMN IF NOT EXISTS is_read INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 代行サービス公開ユーザーテーブル
         cur.execute('''
@@ -3958,6 +3962,7 @@ if DATABASE_URL:
                 total_amount INTEGER DEFAULT 0,
                 notes TEXT,
                 status VARCHAR(20) DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -4843,6 +4848,10 @@ else:
             cur.execute("ALTER TABLE user_keisan ADD COLUMN is_admin_created INTEGER DEFAULT 0")
         except:
             pass
+        try:
+            cur.execute("ALTER TABLE user_keisan ADD COLUMN is_read INTEGER DEFAULT 0")
+        except:
+            pass
         
         # 代行サービス公開ユーザーテーブル
         cur.execute('''
@@ -5024,6 +5033,7 @@ else:
                 total_amount INTEGER DEFAULT 0,
                 notes TEXT,
                 status TEXT DEFAULT 'draft',
+                is_read INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -26500,7 +26510,7 @@ def documents():
         cur.execute("""
             SELECT * FROM user_keisan
             WHERE user_id = %s
-              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
@@ -26541,7 +26551,7 @@ def documents():
         cur.execute("""
             SELECT * FROM user_keisan
             WHERE user_id = ?
-              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+              AND (COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             ORDER BY created_at DESC
         """, (current_user.id,))
         user_keisan_list = [dict(row) for row in cur.fetchall()]
@@ -26571,6 +26581,38 @@ def documents():
         doc['can_user_delete'] = is_user_deletable_keisan_document(doc)
         doc['can_user_edit'] = doc['can_user_delete']
 
+    if DATABASE_URL:
+        cur.execute("""
+            UPDATE invoices
+            SET is_read = 1
+            WHERE sender_id = %s
+              AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+              AND COALESCE(is_read, 0) = 0
+        """, (current_user.id,))
+        cur.execute("""
+            UPDATE user_keisan
+            SET is_read = 1
+            WHERE user_id = %s
+              AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+              AND COALESCE(is_read, 0) = 0
+        """, (current_user.id,))
+    else:
+        cur.execute("""
+            UPDATE invoices
+            SET is_read = 1
+            WHERE sender_id = ?
+              AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+              AND COALESCE(is_read, 0) = 0
+        """, (current_user.id,))
+        cur.execute("""
+            UPDATE user_keisan
+            SET is_read = 1
+            WHERE user_id = ?
+              AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+              AND COALESCE(is_read, 0) = 0
+        """, (current_user.id,))
+    conn.commit()
+
     cur.close()
     conn.close()
     
@@ -26592,17 +26634,6 @@ def user_document_list():
     if DATABASE_URL:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
-            SELECT * FROM invoices
-            WHERE sender_id = %s
-              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
-            ORDER BY updated_at DESC, created_at DESC
-        """, (current_user.id,))
-        draft_invoice_list = [
-            dict(row) for row in cur.fetchall()
-            if is_user_deletable_invoice_document(row)
-        ]
-
-        cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = %s
               AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
@@ -26620,30 +26651,10 @@ def user_document_list():
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_kaitori_list = [dict(row) for row in cur.fetchall()]
-
-        cur.execute("""
-            SELECT * FROM user_keisan
-            WHERE user_id = %s
-              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
-              AND COALESCE(is_admin_created, FALSE) = FALSE
-            ORDER BY updated_at DESC, created_at DESC
-        """, (current_user.id,))
-        draft_keisan_list = [dict(row) for row in cur.fetchall()]
     else:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
-            SELECT * FROM invoices
-            WHERE sender_id = ?
-              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
-            ORDER BY updated_at DESC, created_at DESC
-        """, (current_user.id,))
-        draft_invoice_list = [
-            dict(row) for row in cur.fetchall()
-            if is_user_deletable_invoice_document(row)
-        ]
-
-        cur.execute("""
             SELECT * FROM user_mitsumori
             WHERE user_id = ?
               AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
@@ -26661,25 +26672,14 @@ def user_document_list():
             ORDER BY updated_at DESC, created_at DESC
         """, (current_user.id,))
         draft_kaitori_list = [dict(row) for row in cur.fetchall()]
-
-        cur.execute("""
-            SELECT * FROM user_keisan
-            WHERE user_id = ?
-              AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
-              AND COALESCE(is_admin_created, 0) = 0
-            ORDER BY updated_at DESC, created_at DESC
-        """, (current_user.id,))
-        draft_keisan_list = [dict(row) for row in cur.fetchall()]
 
     cur.close()
     conn.close()
 
     return render_template(
         'document_list.html',
-        draft_invoice_list=draft_invoice_list,
         draft_mitsumori_list=draft_mitsumori_list,
         draft_kaitori_list=draft_kaitori_list,
-        draft_keisan_list=draft_keisan_list,
     )
 
 @app.route('/service-document/create', methods=['POST'])
@@ -27064,6 +27064,89 @@ def inject_unread_invoice():
         pass
     return {'unread_invoice_count': 0}
 
+
+def get_unread_user_invoice_count(user_id):
+    """Return unread admin-delivered purchase detail documents for one user."""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT id, invoice_no, status, is_read, document_scope, source_admin_kaitori_id
+                FROM invoices
+                WHERE sender_id = %s
+                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+                  AND COALESCE(is_read, 0) = 0
+            """, (user_id,))
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, invoice_no, status, is_read, document_scope, source_admin_kaitori_id
+                FROM invoices
+                WHERE sender_id = ?
+                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+                  AND COALESCE(is_read, 0) = 0
+            """, (user_id,))
+        rows = cur.fetchall()
+        if not DATABASE_URL:
+            columns = [d[0] for d in cur.description] if cur.description else []
+            rows = [dict(zip(columns, row)) for row in rows]
+        count = sum(1 for row in rows if not is_user_created_invoice_document(row))
+        cur.close()
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
+def get_unread_user_keisan_count(user_id):
+    """Return unread admin-delivered calculation documents for one user."""
+    try:
+        conn = get_db()
+        if DATABASE_URL:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT COUNT(*) AS count
+                FROM user_keisan
+                WHERE user_id = %s
+                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+                  AND COALESCE(is_read, 0) = 0
+                  AND (COALESCE(is_admin_created, FALSE) = TRUE OR document_no LIKE 'AK-%%')
+            """, (user_id,))
+            row = cur.fetchone()
+            count = row['count'] if row else 0
+        else:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM user_keisan
+                WHERE user_id = ?
+                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
+                  AND COALESCE(is_read, 0) = 0
+                  AND (COALESCE(is_admin_created, 0) = 1 OR document_no LIKE 'AK-%')
+            """, (user_id,))
+            row = cur.fetchone()
+            count = row[0] if row else 0
+        cur.close()
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
+def get_unread_document_history_count(user_id):
+    return get_unread_user_invoice_count(user_id) + get_unread_user_keisan_count(user_id)
+
+
+@app.context_processor
+def inject_unread_document_history():
+    try:
+        if current_user.is_authenticated and not current_user.is_admin():
+            return {'unread_document_history_count': get_unread_document_history_count(current_user.id)}
+    except Exception:
+        pass
+    return {'unread_document_history_count': 0}
+
 @app.route('/invoices')
 @login_required
 def user_invoice_list():
@@ -27371,6 +27454,7 @@ def user_invoice_view(id):
         invoice = cur.fetchone()
         if invoice:
             invoice = dict(invoice)
+            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -27379,9 +27463,11 @@ def user_invoice_view(id):
         invoice = cur.fetchone()
         if invoice:
             invoice = dict(invoice)
+            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     
+    conn.commit()
     cur.close()
     conn.close()
     
@@ -27908,7 +27994,7 @@ def user_keisan_list():
                 SELECT *
                 FROM user_keisan
                 WHERE user_id = %s
-                  AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+                  AND (COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),
@@ -27921,7 +28007,7 @@ def user_keisan_list():
                 SELECT *
                 FROM user_keisan
                 WHERE user_id = ?
-                  AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+                  AND (COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
                 ORDER BY created_at DESC
                 """,
                 (current_user.id,),
@@ -28176,13 +28262,14 @@ def user_keisan_view(id):
             FROM user_keisan
             WHERE id = %s
               AND user_id = %s
-              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             """,
             (id, current_user.id),
         )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
+            cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = %s", (id,))
         cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -28193,16 +28280,18 @@ def user_keisan_view(id):
             FROM user_keisan
             WHERE id = ?
               AND user_id = ?
-              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+              AND (COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             """,
             (id, current_user.id),
         )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
+            cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = ?", (id,))
         cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     
+    conn.commit()
     cur.close()
     conn.close()
     
@@ -28229,13 +28318,14 @@ def user_keisan_pdf(id):
             FROM user_keisan
             WHERE id = %s
               AND user_id = %s
-              AND (COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')
+              AND (COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             """,
             (id, current_user.id),
         )
         keisan = cur.fetchone()
         if keisan:
             keisan = dict(keisan)
+            cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = %s", (id,))
             cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = %s ORDER BY item_no", (id,))
             items = [dict(row) for row in cur.fetchall()]
         else:
@@ -28248,7 +28338,7 @@ def user_keisan_pdf(id):
             FROM user_keisan
             WHERE id = ?
               AND user_id = ?
-              AND (COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')
+              AND (COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'draft') NOT IN ('draft', 'in_progress'))
             """,
             (id, current_user.id),
         )
@@ -28256,13 +28346,14 @@ def user_keisan_pdf(id):
         if row:
             columns = [d[0] for d in cur.description]
             keisan = dict(zip(columns, row))
+            cur.execute("UPDATE user_keisan SET is_read = 1 WHERE id = ?", (id,))
             cur.execute("SELECT * FROM user_keisan_items WHERE keisan_id = ? ORDER BY item_no", (id,))
             item_columns = [d[0] for d in cur.description] if cur.description else []
             items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
         else:
             keisan = None
             items = []
-    
+    conn.commit()
     cur.close()
     conn.close()
     
@@ -28612,6 +28703,8 @@ def invoice_download(id):
         invoice = cur.fetchone()
         if invoice:
             invoice = dict(invoice)
+            if not current_user.is_admin():
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -28623,9 +28716,12 @@ def invoice_download(id):
         invoice = cur.fetchone()
         if invoice:
             invoice = dict(invoice)
+            if not current_user.is_admin():
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     
+    conn.commit()
     cur.close()
     conn.close()
     
@@ -29072,12 +29168,14 @@ def invoice_pdf(id):
         if row:
             columns = [d[0] for d in cur.description]
             invoice = dict(zip(columns, row))
+            if not current_user.is_admin():
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
         else:
             invoice = None
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
         item_columns = [d[0] for d in cur.description] if cur.description else []
         items = [dict(zip(item_columns, r)) for r in cur.fetchall()]
-    
+    conn.commit()
     cur.close()
     conn.close()
     

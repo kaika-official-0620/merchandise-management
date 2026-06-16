@@ -2304,7 +2304,7 @@ body.sidebar-open {
         --mobile-header-safe-top: max(env(safe-area-inset-top, 0px), 10px);
         --mobile-header-row-height: 58px;
         --mobile-header-height: calc(var(--mobile-header-safe-top) + var(--mobile-header-row-height));
-        --mobile-drawer-top: var(--mobile-header-height);
+        --mobile-drawer-top: var(--mobile-header-safe-top);
     }
 
     html,
@@ -2414,14 +2414,14 @@ body.sidebar-open {
 
     .sidebar-header {
         flex: 0 0 auto;
-        padding-top: 0.75rem;
-        padding-bottom: 0.75rem;
+        padding-top: 0.55rem;
+        padding-bottom: 0.6rem;
     }
 
     .sidebar-nav {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 0.25rem 0 max(1rem, env(safe-area-inset-bottom, 0px));
+        padding: 0.1rem 0 max(1rem, env(safe-area-inset-bottom, 0px));
     }
     
     .page-actions {
