@@ -68,6 +68,10 @@
             border: 1.5px solid #475569;
             padding: 9px 10px;
             vertical-align: middle;
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            line-break: strict;
         }
 
         .items th {
@@ -146,10 +150,101 @@
             font-size: 11px;
         }
 
+        @media screen and (max-width: 640px) {
+            body {
+                font-size: 12px;
+            }
+
+            .sheet {
+                width: 100%;
+                min-width: 0;
+                min-height: 0;
+                padding: 14px 10px;
+                overflow: hidden;
+            }
+
+            .title {
+                margin-bottom: 14px;
+                font-size: 22px;
+                letter-spacing: 0.08em;
+            }
+
+            .meta-grid {
+                grid-template-columns: 1fr 1fr;
+                column-gap: 10px;
+                row-gap: 8px;
+                margin-bottom: 14px;
+                font-size: 11px;
+            }
+
+            .items {
+                table-layout: fixed;
+                font-size: 11px;
+            }
+
+            .items th,
+            .items td {
+                padding: 6px 5px;
+            }
+
+            .col-no {
+                width: 34px;
+            }
+
+            .col-qty {
+                width: 48px;
+            }
+
+            .col-amount {
+                width: 86px;
+            }
+
+            .items td:nth-child(2) {
+                word-break: normal;
+                overflow-wrap: break-word;
+            }
+
+            .empty-row td {
+                height: 24px;
+            }
+
+            .total-row {
+                margin: 18px 0 10px;
+                gap: 10px;
+            }
+
+            .total-row span {
+                font-size: 14px;
+            }
+
+            .total-row strong {
+                font-size: 24px;
+            }
+
+            .notes h2 {
+                margin-bottom: 8px;
+                font-size: 15px;
+            }
+
+            .notes p {
+                font-size: 12px;
+                line-height: 1.65;
+            }
+
+            .document-footer {
+                display: grid;
+                gap: 4px;
+                margin-top: 18px;
+                font-size: 10px;
+            }
+        }
+
         @media print {
             body {
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
+                font-size: 11px;
+                line-height: 1.35;
             }
 
             .sheet {
@@ -157,6 +252,58 @@
                 min-height: 0;
                 margin: 0;
                 padding: 0;
+            }
+
+            .title {
+                margin-bottom: 14px;
+                font-size: 24px;
+            }
+
+            .meta-grid {
+                row-gap: 9px;
+                margin-bottom: 12px;
+                font-size: 11px;
+            }
+
+            .items {
+                font-size: 11px;
+            }
+
+            .items th,
+            .items td {
+                padding: 5px 6px;
+                line-height: 1.25;
+            }
+
+            .empty-row td {
+                height: 24px;
+            }
+
+            .total-row {
+                margin: 16px 0 8px;
+            }
+
+            .total-row span {
+                font-size: 14px;
+            }
+
+            .total-row strong {
+                font-size: 24px;
+            }
+
+            .notes h2 {
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+
+            .notes p {
+                font-size: 11px;
+                line-height: 1.5;
+            }
+
+            .document-footer {
+                margin-top: 18px;
+                font-size: 9.5px;
             }
 
             .items,

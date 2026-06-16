@@ -17,7 +17,7 @@
             {% if mitsumori.can_user_edit %}
             <a href="{{ url_for('user_mitsumori_edit', id=mitsumori.id) }}" class="doc-btn doc-btn-success">編集する</a>
             {% endif %}
-            <a href="{{ url_for('user_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF</a>
+            <a href="{{ url_for('user_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
             {% if mitsumori.can_user_delete %}
             <form method="POST" action="{{ url_for('user_mitsumori_delete', id=mitsumori.id) }}" style="margin: 0;" onsubmit="return confirm('この見積依頼書を削除しますか？')">
                 <input type="hidden" name="next" value="{{ url_for('user_document_list') }}">

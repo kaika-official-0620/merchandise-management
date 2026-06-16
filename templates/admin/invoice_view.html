@@ -24,7 +24,7 @@
             <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="doc-btn doc-btn-danger" onclick="return confirm('この買取明細書を差し戻しますか？')">差し戻し</a>
             {% endif %}
             <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-secondary">CSV</a>
-            <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="doc-btn doc-btn-primary" target="_blank" rel="noopener">PDF</a>
+            <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
     </div>
 

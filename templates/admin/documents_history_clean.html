@@ -8,10 +8,10 @@
 .history-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}.history-head h1,.history-panel h2{margin:0;color:#0f172a}.history-head p{margin:.35rem 0 0;color:#64748b;line-height:1.7}
 .history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem}.history-card{display:grid;gap:.6rem;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff;color:inherit;text-decoration:none;padding:1rem}.history-card.active,.history-card:hover{border-color:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.12)}
 .history-card-head{display:flex;gap:.7rem;align-items:center}.history-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
-.history-table-wrap{max-width:100%;overflow-x:auto}.history-table{width:100%;border-collapse:collapse;min-width:900px}.history-table th,.history-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle}.history-table th{background:#f8fafc;color:#475569;font-size:.84rem}.history-table th:nth-child(6),.history-table td:nth-child(6){width:7rem;min-width:7rem}.history-table th:last-child,.history-table td:last-child{width:8.5rem;min-width:8.5rem;text-align:center}
+.history-table-wrap{max-width:100%;overflow-x:auto}.history-table{width:100%;border-collapse:collapse;min-width:980px;table-layout:auto}.history-table th,.history-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:middle;writing-mode:horizontal-tb;word-break:keep-all;overflow-wrap:normal;line-break:strict}.history-table th{background:#f8fafc;color:#475569;font-size:.84rem;white-space:nowrap}.history-table th:first-child,.history-table td:first-child{width:10rem;min-width:10rem}.history-table th:nth-child(6),.history-table td:nth-child(6){width:8rem;min-width:8rem}.history-table th:last-child,.history-table td:last-child{width:7.5rem;min-width:7.5rem;text-align:center}
 .history-table tr[data-detail-url]{cursor:pointer}.history-table tr[data-detail-url]:hover td,.history-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
-.history-actions{display:flex;align-items:center;justify-content:center;gap:.45rem;flex-wrap:nowrap}.history-status-badge{display:inline-flex;align-items:center;justify-content:center;width:max-content;max-width:100%;white-space:nowrap;word-break:keep-all;line-height:1.2;padding:.24rem .58rem;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.78rem;font-weight:800}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
-@media(max-width:768px){.history-panel{padding:1rem;border-radius:10px}.history-grid{grid-template-columns:1fr}.history-head{display:grid}.history-actions{gap:.35rem;overflow-x:auto}.history-actions .btn{width:auto;flex:0 0 auto;justify-content:center}.history-table{min-width:760px}}
+.history-actions{display:flex;align-items:center;justify-content:center;gap:.45rem;flex-wrap:nowrap}.history-actions .btn{min-height:36px;padding:.5rem .85rem;border-radius:999px;white-space:nowrap;line-height:1}.history-actions .btn-info{background:#2563eb;border-color:#2563eb;color:#fff}.history-status-badge{display:inline-flex;align-items:center;justify-content:center;width:max-content;max-width:100%;white-space:nowrap;word-break:keep-all;line-height:1.2;padding:.24rem .58rem;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.78rem;font-weight:800}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
+@media(max-width:768px){.history-panel{padding:1rem;border-radius:10px}.history-grid{grid-template-columns:1fr}.history-head{display:grid}.history-table{min-width:0;display:block}.history-table thead{display:none}.history-table tbody{display:grid;gap:.75rem}.history-table tr{display:grid;gap:.4rem;padding:.85rem;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.history-table th,.history-table td{display:grid;grid-template-columns:6.5rem minmax(0,1fr);gap:.65rem;align-items:center;padding:0;border-bottom:0}.history-table td::before{content:attr(data-label);color:#64748b;font-size:.78rem;font-weight:800;white-space:nowrap}.history-table th:first-child,.history-table td:first-child,.history-table th:nth-child(6),.history-table td:nth-child(6),.history-table th:last-child,.history-table td:last-child{width:auto;min-width:0;text-align:left}.history-table td:last-child{grid-template-columns:1fr}.history-table td:last-child::before{display:none}.history-actions{gap:.35rem;justify-content:flex-start;overflow-x:visible}.history-actions .btn{width:auto;flex:0 0 auto;justify-content:center}}
 </style>
 <div class="history-clean">
   <section class="history-panel history-head">
@@ -21,6 +21,7 @@
     </div>
     <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
   </section>
+  {% if not selected_category %}
   <section class="history-panel">
     <div class="history-grid">
       {% for card in category_cards %}
@@ -32,6 +33,7 @@
       {% endfor %}
     </div>
   </section>
+  {% endif %}
   {% if selected_category %}
   <section class="history-panel">
     <div class="history-head">
@@ -48,13 +50,13 @@
         <tbody>
           {% for row in history_rows %}
           <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
-            <td>{{ row.document_type }}</td>
-            <td>{{ row.document_no }}</td>
-            <td>{{ row.client_name }}</td>
-            <td>{{ row.issue_date }}</td>
-            <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
-            <td><span class="history-status-badge">{{ row.status_label }}</span></td>
-            <td>
+            <td data-label="書類">{{ row.document_type }}</td>
+            <td data-label="No./書類名">{{ row.document_no }}</td>
+            <td data-label="クライアント">{{ row.client_name }}</td>
+            <td data-label="日付">{{ row.issue_date }}</td>
+            <td data-label="金額">{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
+            <td data-label="状態"><span class="history-status-badge">{{ row.status_label }}</span></td>
+            <td data-label="操作">
               <div class="history-actions">
                 {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
               </div>

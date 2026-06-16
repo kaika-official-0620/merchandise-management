@@ -116,8 +116,9 @@
 
 .user-doc-table {
     width: 100%;
-    min-width: 720px;
+    min-width: 780px;
     border-collapse: collapse;
+    table-layout: auto;
 }
 
 .user-doc-table th,
@@ -126,25 +127,36 @@
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
     vertical-align: middle;
+    writing-mode: horizontal-tb;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    line-break: strict;
 }
 
 .user-doc-table th {
     background: #f8fafc;
     color: #475569;
     font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.user-doc-table th:first-child,
+.user-doc-table td:first-child {
+    width: 9.5rem;
+    min-width: 9.5rem;
 }
 
 .user-doc-table th:last-child,
 .user-doc-table td:last-child {
-    width: 8.5rem;
-    min-width: 8.5rem;
+    width: 7.5rem;
+    min-width: 7.5rem;
     text-align: center;
 }
 
 .user-doc-table th:nth-child(5),
 .user-doc-table td:nth-child(5) {
-    width: 7rem;
-    min-width: 7rem;
+    width: 8rem;
+    min-width: 8rem;
 }
 
 .user-doc-table tr[data-detail-url] {
@@ -192,6 +204,20 @@
     flex-wrap: nowrap;
 }
 
+.doc-actions .btn {
+    min-height: 36px;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.doc-actions .btn-info {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
 .doc-actions form {
     margin: 0;
 }
@@ -217,12 +243,69 @@
     }
 
     .user-doc-table {
-        min-width: 620px;
+        min-width: 0;
+        display: block;
+    }
+
+    .user-doc-table thead {
+        display: none;
+    }
+
+    .user-doc-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .user-doc-table tr {
+        display: grid;
+        gap: 0.4rem;
+        padding: 0.85rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .user-doc-table th,
+    .user-doc-table td {
+        display: grid;
+        grid-template-columns: 6rem minmax(0, 1fr);
+        gap: 0.65rem;
+        padding: 0;
+        border-bottom: 0;
+        align-items: center;
+    }
+
+    .user-doc-table td::before {
+        content: attr(data-label);
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .user-doc-table th:first-child,
+    .user-doc-table td:first-child,
+    .user-doc-table th:nth-child(5),
+    .user-doc-table td:nth-child(5),
+    .user-doc-table th:last-child,
+    .user-doc-table td:last-child {
+        width: auto;
+        min-width: 0;
+        text-align: left;
+    }
+
+    .user-doc-table td:last-child {
+        grid-template-columns: 1fr;
+    }
+
+    .user-doc-table td:last-child::before {
+        display: none;
     }
 
     .doc-actions {
         gap: 0.35rem;
-        overflow-x: auto;
+        justify-content: flex-start;
+        overflow-x: visible;
     }
 
     .doc-actions .btn {
@@ -241,6 +324,7 @@
         </div>
     </section>
 
+    {% if not selected_category %}
     <section class="user-doc-panel">
         <div class="user-doc-grid">
             {% for card in category_cards %}
@@ -255,6 +339,7 @@
             {% endfor %}
         </div>
     </section>
+    {% endif %}
 
     {% if selected_category %}
     <section class="user-doc-panel">
@@ -282,17 +367,17 @@
                 <tbody>
                     {% for row in history_rows %}
                     <tr class="{% if row.is_unread %}is-unread{% endif %}" {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
-                        <td>
+                        <td data-label="書類">
                             <span class="user-doc-title-cell">
                                 {{ row.document_type }}
                                 {% if row.is_unread %}<span class="user-doc-row-badge">新着</span>{% endif %}
                             </span>
                         </td>
-                        <td>{{ row.document_no }}</td>
-                        <td>{{ row.issue_date }}</td>
-                        <td>{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
-                        <td><span class="doc-status-badge">{{ row.status_label }}</span></td>
-                        <td>
+                        <td data-label="No./書類名">{{ row.document_no }}</td>
+                        <td data-label="日付">{{ row.issue_date }}</td>
+                        <td data-label="金額">{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
+                        <td data-label="状態"><span class="doc-status-badge">{{ row.status_label }}</span></td>
+                        <td data-label="操作">
                             <div class="doc-actions">
                                 {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
                             </div>

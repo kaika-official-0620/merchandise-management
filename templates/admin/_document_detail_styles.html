@@ -61,36 +61,43 @@
     align-items: center;
     justify-content: center;
     min-height: 40px;
-    padding: 0.68rem 0.95rem;
+    padding: 0.62rem 0.98rem;
     border-radius: 999px;
     border: 1px solid transparent;
-    font-weight: 700;
+    font-weight: 800;
     font-size: 0.9rem;
+    line-height: 1;
     text-decoration: none;
     cursor: pointer;
     white-space: nowrap;
+    writing-mode: horizontal-tb;
+    word-break: keep-all;
+    overflow-wrap: normal;
 }
 
 .doc-btn-primary {
-    background: #0f172a;
+    background: #2563eb;
     color: #fff;
+    border-color: #2563eb;
 }
 
 .doc-btn-secondary {
-    background: #fff;
+    background: #f8fafc;
     color: #475569;
     border-color: #cbd5e1;
 }
 
+.doc-btn-pdf,
 .doc-btn-success {
-    background: #047857;
+    background: #059669;
     color: #fff;
+    border-color: #059669;
 }
 
 .doc-btn-danger {
-    background: #fff;
-    color: #dc2626;
-    border-color: #fecaca;
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
 }
 
 .admin-doc-sheet {
@@ -260,8 +267,10 @@
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
     vertical-align: top;
-    word-break: normal;
-    overflow-wrap: anywhere;
+    writing-mode: horizontal-tb;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    line-break: strict;
 }
 
 .admin-doc-table th {
@@ -269,6 +278,12 @@
     color: #334155;
     font-size: 0.84rem;
     white-space: nowrap;
+}
+
+.admin-doc-table td:nth-child(2),
+.admin-doc-table td:nth-child(3) {
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .admin-doc-table tbody tr:last-child td,

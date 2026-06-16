@@ -43,11 +43,14 @@
         text-decoration: none;
         cursor: pointer;
         white-space: nowrap;
+        writing-mode: horizontal-tb;
+        word-break: keep-all;
+        overflow-wrap: normal;
     }
 
     .pdf-screen-btn-primary {
-        border-color: #2563eb;
-        background: #2563eb;
+        border-color: #059669;
+        background: #059669;
         color: #fff;
     }
 
@@ -65,12 +68,15 @@
             overflow-x: hidden;
         }
 
-        .container {
+        .container,
+        .sheet {
             width: 100% !important;
             max-width: 100% !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
             padding-left: 10px !important;
             padding-right: 10px !important;
-            overflow-wrap: anywhere;
+            overflow-wrap: normal;
         }
 
         .document-title {
@@ -86,13 +92,19 @@
         table {
             width: 100% !important;
             max-width: 100% !important;
-            table-layout: fixed;
+            table-layout: auto;
         }
 
         th,
         td {
-            overflow-wrap: anywhere;
-            word-break: break-word;
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            line-break: strict;
+        }
+
+        th {
+            white-space: nowrap;
         }
 
         .summary-table {
@@ -130,8 +142,20 @@
     }
 
     @media print {
+        @page {
+            size: A4 portrait;
+            margin: 7mm 8mm;
+        }
+
         .pdf-screen-toolbar {
             display: none !important;
+        }
+
+        th,
+        td {
+            writing-mode: horizontal-tb;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
     }
 </style>
