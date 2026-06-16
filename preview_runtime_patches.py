@@ -1250,6 +1250,22 @@ def apply(module: Any) -> None:
             run_if_table("proxy_service_users", f"DELETE FROM proxy_service_users WHERE user_id = {placeholder}", (id,))
             run_if_table("proxy_service_auction_users", f"DELETE FROM proxy_service_auction_users WHERE user_id = {placeholder}", (id,))
             run_if_table("service_documents", f"DELETE FROM service_documents WHERE user_id = {placeholder}", (id,))
+            if table_exists("shikiriosho"):
+                if table_exists("shikiriosho_items"):
+                    cur.execute(
+                        f"""
+                        DELETE FROM shikiriosho_items
+                        WHERE shikiriosho_id IN (
+                            SELECT id FROM shikiriosho
+                            WHERE sender_id = {placeholder} OR recipient_id = {placeholder}
+                        )
+                        """,
+                        (id, id),
+                    )
+                cur.execute(
+                    f"DELETE FROM shikiriosho WHERE sender_id = {placeholder} OR recipient_id = {placeholder}",
+                    (id, id),
+                )
             if table_exists("invoices"):
                 if table_exists("invoice_items"):
                     cur.execute(
