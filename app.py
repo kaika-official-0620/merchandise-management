@@ -29473,17 +29473,17 @@ def admin_kaitori_add():
             if DATABASE_URL:
                 cur.execute("""
                     INSERT INTO invoices (invoice_no, issue_date, sender_id, total_amount, 
-                        status, notes, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        status, notes, created_at, is_read)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
-                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now()))
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), 0))
                 invoice_id = cur.fetchone()['id']
             else:
                 cur.execute("""
                     INSERT INTO invoices (invoice_no, issue_date, sender_id, total_amount, 
-                        status, notes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now()))
+                        status, notes, created_at, is_read)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (document_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), 0))
                 invoice_id = cur.lastrowid
             
             # 商品明細を保存
@@ -43341,21 +43341,21 @@ def admin_kaitori_add_from_documents():
                 cur.execute(
                     """
                     INSERT INTO invoices
-                    (invoice_no, issue_date, sender_id, total_amount, status, notes, created_at, document_scope, sales_agency_request_id, source_admin_kaitori_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (invoice_no, issue_date, sender_id, total_amount, status, notes, created_at, document_scope, sales_agency_request_id, source_admin_kaitori_id, is_read)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id),
+                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id, 0),
                 )
                 invoice_id = _docs_row_to_dict(cur.fetchone())["id"]
             else:
                 cur.execute(
                     """
                     INSERT INTO invoices
-                    (invoice_no, issue_date, sender_id, total_amount, status, notes, created_at, document_scope, sales_agency_request_id, source_admin_kaitori_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_no, issue_date, sender_id, total_amount, status, notes, created_at, document_scope, sales_agency_request_id, source_admin_kaitori_id, is_read)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id),
+                    (invoice_no, issue_date, seller_id, total_amount, status, notes, get_jst_now(), "client_outgoing", request_id, source_vendor_kaitori_id, 0),
                 )
                 invoice_id = cur.lastrowid
             for item in items_data:
