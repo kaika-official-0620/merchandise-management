@@ -60,6 +60,12 @@
         color: #fff;
     }
 
+    .pdf-screen-btn-back {
+        border-color: #cbd5e1;
+        background: #fff;
+        color: #1f2937;
+    }
+
     .pdf-screen-btn-print {
         border-color: #0891b2;
         background: #0891b2;
@@ -193,7 +199,7 @@
 <div class="pdf-screen-toolbar no-print">
     <div class="pdf-screen-toolbar-inner">
         <div class="pdf-screen-toolbar-actions">
-            <button type="button" class="pdf-screen-btn" onclick="goBackFromPdf()">戻る</button>
+            <button type="button" class="pdf-screen-btn pdf-screen-btn-back" onclick="goBackFromPdf()">戻る</button>
             {% if csv_url is defined and csv_url %}
             <a href="{{ csv_url }}" class="pdf-screen-btn pdf-screen-btn-csv">CSV</a>
             {% endif %}
