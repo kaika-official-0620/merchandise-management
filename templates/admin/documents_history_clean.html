@@ -10,8 +10,8 @@
 .history-card-head{display:flex;gap:.7rem;align-items:center}.history-no{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;background:#2563eb;color:#fff;font-weight:900}
 .history-table-wrap{max-width:100%;overflow-x:auto}.history-table{width:100%;border-collapse:collapse;min-width:900px}.history-table th,.history-table td{padding:.72rem;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.history-table th{background:#f8fafc;color:#475569;font-size:.84rem}
 .history-table tr[data-detail-url]{cursor:pointer}.history-table tr[data-detail-url]:hover td,.history-table tr[data-detail-url]:focus-visible td{background:#f8fbff}
-.history-actions{display:flex;gap:.6rem;flex-wrap:wrap}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
-@media(max-width:768px){.history-panel{padding:1rem;border-radius:10px}.history-grid{grid-template-columns:1fr}.history-head{display:grid}.history-actions .btn{width:100%;justify-content:center}.history-table{min-width:760px}}
+.history-actions{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}.empty-box{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#64748b;padding:1.4rem;text-align:center}
+@media(max-width:768px){.history-panel{padding:1rem;border-radius:10px}.history-grid{grid-template-columns:1fr}.history-head{display:grid}.history-actions{gap:.35rem;overflow-x:auto}.history-actions .btn{width:auto;flex:0 0 auto;justify-content:center}.history-table{min-width:760px}}
 </style>
 <div class="history-clean">
   <section class="history-panel history-head">
@@ -47,7 +47,7 @@
         <thead><tr><th>書類種別</th><th>No./書類名</th><th>クライアント</th><th>日付</th><th>金額</th><th>状態</th><th>操作</th></tr></thead>
         <tbody>
           {% for row in history_rows %}
-          <tr {% if row.detail_url or row.download_url %}data-detail-url="{{ row.detail_url or row.download_url }}" tabindex="0" role="link"{% endif %}>
+          <tr {% if row.detail_url %}data-detail-url="{{ row.detail_url }}" tabindex="0" role="link"{% endif %}>
             <td>{{ row.document_type }}</td>
             <td>{{ row.document_no }}</td>
             <td>{{ row.client_name }}</td>
@@ -56,7 +56,6 @@
             <td>{{ row.status_label }}</td>
             <td class="history-actions">
               {% if row.detail_url %}<a href="{{ row.detail_url }}" class="btn btn-info btn-sm">詳細</a>{% endif %}
-              {% if row.download_url %}<a href="{{ row.download_url }}" class="btn btn-secondary btn-sm">ダウンロード</a>{% endif %}
               {% if row.can_delete and row.delete_url %}
               <form method="POST" action="{{ row.delete_url }}" onsubmit="return confirm('この書類を削除しますか？');" style="display:inline;">
                 <input type="hidden" name="next" value="{{ current_return_url }}">
