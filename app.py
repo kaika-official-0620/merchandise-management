@@ -26581,7 +26581,18 @@ def documents():
         doc['can_user_delete'] = is_user_deletable_keisan_document(doc)
         doc['can_user_edit'] = doc['can_user_delete']
 
+    admin_invoice_read_ids = [
+        invoice.get('id')
+        for invoice in invoices
+        if invoice.get('id') and not is_user_created_invoice_document(invoice)
+    ]
+
     if DATABASE_URL:
+        if admin_invoice_read_ids:
+            cur.execute(
+                "UPDATE invoices SET is_read = 1 WHERE id = ANY(%s)",
+                (admin_invoice_read_ids,),
+            )
         cur.execute("""
             UPDATE invoices
             SET is_read = 1
@@ -26597,6 +26608,12 @@ def documents():
               AND COALESCE(is_read, 0) = 0
         """, (current_user.id,))
     else:
+        if admin_invoice_read_ids:
+            placeholders = ','.join(['?'] * len(admin_invoice_read_ids))
+            cur.execute(
+                f"UPDATE invoices SET is_read = 1 WHERE id IN ({placeholders})",
+                tuple(admin_invoice_read_ids),
+            )
         cur.execute("""
             UPDATE invoices
             SET is_read = 1
@@ -27075,7 +27092,6 @@ def get_unread_user_invoice_count(user_id):
                 SELECT *
                 FROM invoices
                 WHERE sender_id = %s
-                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
                   AND COALESCE(is_read, 0) = 0
             """, (user_id,))
         else:
@@ -27084,7 +27100,6 @@ def get_unread_user_invoice_count(user_id):
                 SELECT *
                 FROM invoices
                 WHERE sender_id = ?
-                  AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
                   AND COALESCE(is_read, 0) = 0
             """, (user_id,))
         rows = cur.fetchall()
