@@ -27072,7 +27072,7 @@ def get_unread_user_invoice_count(user_id):
         if DATABASE_URL:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
-                SELECT id, invoice_no, status, is_read, document_scope, source_admin_kaitori_id
+                SELECT *
                 FROM invoices
                 WHERE sender_id = %s
                   AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
@@ -27081,7 +27081,7 @@ def get_unread_user_invoice_count(user_id):
         else:
             cur = conn.cursor()
             cur.execute("""
-                SELECT id, invoice_no, status, is_read, document_scope, source_admin_kaitori_id
+                SELECT *
                 FROM invoices
                 WHERE sender_id = ?
                   AND COALESCE(status, 'sent') IN ('sent', 'submitted', 'approved', 'completed')
