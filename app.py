@@ -29551,7 +29551,8 @@ def admin_kaitori_view(id):
             invoice = cur.fetchone()
             if invoice:
                 invoice = dict(invoice)
-                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
+                if is_user_created_invoice_document(invoice):
+                    cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
             items = [dict(row) for row in cur.fetchall()]
         else:
@@ -29565,7 +29566,8 @@ def admin_kaitori_view(id):
             row = cur.fetchone()
             if row:
                 invoice = dict(zip([d[0] for d in cur.description], row))
-                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
+                if is_user_created_invoice_document(invoice):
+                    cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
             else:
                 invoice = None
             cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
