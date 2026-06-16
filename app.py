@@ -28471,7 +28471,8 @@ def admin_invoice_view(id):
         if invoice:
             invoice = dict(invoice)
             # 既読にする
-            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
+            if is_user_created_invoice_document(invoice):
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = %s", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = %s ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     else:
@@ -28486,7 +28487,8 @@ def admin_invoice_view(id):
         if invoice:
             invoice = dict(invoice)
             # 既読にする
-            cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
+            if is_user_created_invoice_document(invoice):
+                cur.execute("UPDATE invoices SET is_read = 1 WHERE id = ?", (id,))
         cur.execute("SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no", (id,))
         items = [dict(row) for row in cur.fetchall()]
     

@@ -521,6 +521,65 @@ def apply(module: Any) -> None:
             admin_flag = admin_flag.strip().lower() in {"1", "true", "t", "yes", "on"}
         return not admin_flag and is_history_draft_status(row.get("status"))
 
+    def mark_user_document_history_read(category: str | None = None) -> None:
+        if not current_user.is_authenticated or current_user.is_admin():
+            return
+
+        categories = {category} if category else {"kaitori", "keisan"}
+        conn, cur = open_cursor(dict_rows=False)
+        try:
+            ph = placeholder()
+            user_id_value = current_user.id
+
+            if "kaitori" in categories and table_exists(cur, "invoices") and column_exists(cur, "invoices", "is_read"):
+                invoice_conditions = [f"COALESCE(invoice_no, '') LIKE {ph}"]
+                invoice_params: list[Any] = ["KT-%"]
+                if column_exists(cur, "invoices", "source_admin_kaitori_id"):
+                    invoice_conditions.append("COALESCE(source_admin_kaitori_id, 0) <> 0")
+                if column_exists(cur, "invoices", "document_scope"):
+                    invoice_conditions.append(f"COALESCE(document_scope, '') = {ph}")
+                    invoice_params.append("admin_kaitori")
+                cur.execute(
+                    f"""
+                    UPDATE invoices
+                    SET is_read = 1
+                    WHERE sender_id = {ph}
+                      AND COALESCE(is_read, 0) = 0
+                      AND ({" OR ".join(invoice_conditions)})
+                    """,
+                    tuple([user_id_value] + invoice_params),
+                )
+
+            if "keisan" in categories and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_read"):
+                keisan_conditions = [f"COALESCE(document_no, '') LIKE {ph}"]
+                keisan_params: list[Any] = ["AK-%"]
+                if column_exists(cur, "user_keisan", "is_admin_created"):
+                    keisan_conditions.append(
+                        "COALESCE(is_admin_created, FALSE) = TRUE"
+                        if DATABASE_URL
+                        else "COALESCE(is_admin_created, 0) = 1"
+                    )
+                status_placeholders = ", ".join(ph for _ in HISTORY_DRAFT_STATUSES)
+                cur.execute(
+                    f"""
+                    UPDATE user_keisan
+                    SET is_read = 1
+                    WHERE user_id = {ph}
+                      AND COALESCE(is_read, 0) = 0
+                      AND ({" OR ".join(keisan_conditions)})
+                      AND COALESCE(status, 'sent') NOT IN ({status_placeholders})
+                    """,
+                    tuple([user_id_value] + keisan_params + list(HISTORY_DRAFT_STATUSES)),
+                )
+
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            print(f"[WARN] mark_user_document_history_read skipped: {exc}", flush=True)
+        finally:
+            cur.close()
+            conn.close()
+
     def category_cards(endpoint: str, selected: str | None = None, admin: bool = False) -> list[dict[str, Any]]:
         cards = []
         categories = ADMIN_HISTORY_CATEGORIES if admin else USER_HISTORY_CATEGORIES
@@ -916,9 +975,9 @@ def apply(module: Any) -> None:
                 params = [] if admin else [params_user]
                 if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
                     where_parts.append(
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                         if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                     )
                 return count_from("user_keisan", where_parts, params)
 
@@ -1289,9 +1348,9 @@ def apply(module: Any) -> None:
                 params = () if admin else (params_user,)
                 if not admin and table_exists(cur, "user_keisan") and column_exists(cur, "user_keisan", "is_admin_created"):
                     where += (" AND " if where else "WHERE ") + (
-                        "(COALESCE(is_admin_created, FALSE) = FALSE OR status = 'submitted')"
+                        "(COALESCE(is_admin_created, FALSE) = FALSE OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                         if DATABASE_URL
-                        else "(COALESCE(is_admin_created, 0) = 0 OR status = 'submitted')"
+                        else "(COALESCE(is_admin_created, 0) = 0 OR COALESCE(status, 'sent') NOT IN ('draft', 'in_progress'))"
                     )
                 cur.execute(f"SELECT * FROM user_keisan {where} ORDER BY created_at DESC LIMIT {int(limit)}", params)
                 for doc in rows_to_dicts(cur.fetchall()):
@@ -2102,6 +2161,7 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(request.args.get("category") or request.args.get("tab"), admin=False)
         if selected_category:
             return redirect(url_for("documents_history_category", category=selected_category))
+        mark_user_document_history_read()
         return render_template(
             "documents_clean.html",
             category_cards=category_cards("documents", "", admin=False),
@@ -2115,6 +2175,7 @@ def apply(module: Any) -> None:
         selected_category = normalize_history_category(category, admin=False)
         if not selected_category:
             return redirect(url_for("documents"))
+        mark_user_document_history_read(selected_category)
         history_rows = build_history_rows(selected_category, admin=False, user_id=current_user.id) if selected_category else []
         selected_meta = next(({"key": k, "title": t, "description": d} for k, t, d in USER_HISTORY_CATEGORIES if k == selected_category), None)
         return render_template(
