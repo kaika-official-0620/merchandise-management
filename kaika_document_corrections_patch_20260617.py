@@ -248,6 +248,216 @@ def apply(module):
     app.jinja_env.globals["can_edit_final_documents"] = lambda: is_document_privileged_admin(current_user, "can_edit_final_documents")
     app.jinja_env.globals["can_cancel_documents"] = lambda: is_document_privileged_admin(current_user, "can_cancel_documents")
 
+    login_required = getattr(module, "login_required")
+    permission_required = getattr(module, "permission_required")
+    generate_password_hash = getattr(module, "generate_password_hash")
+    normalize_submitted_admin_permissions = getattr(module, "normalize_submitted_admin_permissions")
+    get_all_admin_permission_keys = getattr(module, "get_all_admin_permission_keys")
+    sync_users_id_sequence = getattr(module, "sync_users_id_sequence", lambda _cur: None)
+
+    def parse_permissions_summary(raw_permissions):
+        if not raw_permissions:
+            return ""
+        try:
+            permissions = json.loads(raw_permissions) if isinstance(raw_permissions, str) else list(raw_permissions)
+        except Exception:
+            permissions = []
+        labels = getattr(module.User, "ADMIN_PERMISSION_OPTIONS", {})
+        return "、".join(labels.get(permission, permission) for permission in permissions)
+
+    def load_operator_user(cur, user_id):
+        cur.execute(
+            f"""
+            SELECT *
+            FROM users
+            WHERE id = {mark()}
+              AND role IN ('admin', 'owner')
+            """,
+            (user_id,),
+        )
+        return fetch_one_dict(cur)
+
+    @login_required
+    @permission_required("users")
+    def admin_operator_users_view():
+        search_query = (request.args.get("search") or "").strip()
+        conn, cur = open_cursor()
+        try:
+            params = []
+            where = "WHERE role IN ('admin', 'owner')"
+            if search_query:
+                like = f"%{search_query}%"
+                where += f" AND (username LIKE {mark()} OR display_name LIKE {mark()} OR email LIKE {mark()})"
+                params.extend([like, like, like])
+            cur.execute(
+                f"""
+                SELECT id, username, email, role, display_name, admin_permissions, last_login
+                FROM users
+                {where}
+                ORDER BY CASE WHEN role = 'owner' THEN 0 ELSE 1 END, id DESC
+                """,
+                tuple(params),
+            )
+            users = rows_to_dicts(cur.fetchall())
+        finally:
+            cur.close()
+            conn.close()
+        for user in users:
+            user["permissions_summary"] = "" if user.get("role") == "owner" else parse_permissions_summary(user.get("admin_permissions"))
+        return render_template("admin/operators.html", users=users, search_query=search_query)
+
+    @login_required
+    @permission_required("users")
+    def admin_operator_add_view():
+        if request.method == "POST":
+            username = (request.form.get("username") or "").strip()
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password") or ""
+            display_name = (request.form.get("display_name") or "").strip()
+            role = request.form.get("role") or "admin"
+            if role == "owner" and not current_user.is_owner():
+                role = "admin"
+            if role not in {"admin", "owner"}:
+                role = "admin"
+            if not username or not email or not password:
+                flash("必須項目を入力してください", "error")
+                return render_template("admin/operator_form.html", user=None, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
+            if len(password) < 6:
+                flash("パスワードは6文字以上で入力してください", "error")
+                return render_template("admin/operator_form.html", user=None, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
+
+            admin_permissions = normalize_submitted_admin_permissions(role, request.form.getlist("admin_permissions"))
+            conn, cur = open_cursor(dict_cursor=False)
+            try:
+                cur.execute(
+                    f"""
+                    SELECT id
+                    FROM users
+                    WHERE LOWER(username) = LOWER({mark()}) OR LOWER(email) = LOWER({mark()})
+                    LIMIT 1
+                    """,
+                    (username, email),
+                )
+                if cur.fetchone():
+                    flash("同じユーザー名またはメールアドレスが既に存在します", "error")
+                    return render_template("admin/operator_form.html", user=None, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
+                if DATABASE_URL:
+                    sync_users_id_sequence(cur)
+                cur.execute(
+                    f"""
+                    INSERT INTO users
+                        (username, email, password_hash, role, display_name, created_at, admin_permissions)
+                    VALUES ({mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()}, {mark()})
+                    """,
+                    (
+                        username,
+                        email,
+                        generate_password_hash(password),
+                        role,
+                        display_name or username,
+                        get_jst_now(),
+                        admin_permissions,
+                    ),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
+                conn.close()
+            flash("運営アカウントを追加しました", "success")
+            return redirect(url_for("admin_operator_users"))
+        return render_template("admin/operator_form.html", user=None, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
+
+    @login_required
+    @permission_required("users")
+    def admin_operator_edit_view(id):
+        conn, cur = open_cursor()
+        try:
+            user = load_operator_user(cur, id)
+            if not user:
+                flash("運営アカウントが見つかりません", "error")
+                return redirect(url_for("admin_operator_users"))
+            if request.method == "POST":
+                display_name = (request.form.get("display_name") or "").strip()
+                email = (request.form.get("email") or "").strip().lower()
+                role = request.form.get("role") or user.get("role") or "admin"
+                if role == "owner" and not current_user.is_owner():
+                    role = "admin"
+                if role not in {"admin", "owner"}:
+                    role = "admin"
+                permissions_json = normalize_submitted_admin_permissions(role, request.form.getlist("admin_permissions"))
+                new_password = request.form.get("new_password") or ""
+                assignments = [
+                    f"display_name = {mark()}",
+                    f"email = {mark()}",
+                    f"role = {mark()}",
+                    f"admin_permissions = {mark()}",
+                ]
+                params = [display_name or user.get("username"), email, role, permissions_json]
+                if new_password:
+                    assignments.append(f"password_hash = {mark()}")
+                    params.append(generate_password_hash(new_password))
+                params.append(id)
+                cur.execute(
+                    f"""
+                    UPDATE users
+                    SET {", ".join(assignments)}
+                    WHERE id = {mark()}
+                    """,
+                    tuple(params),
+                )
+                conn.commit()
+                flash("運営アカウントを更新しました", "success")
+                return redirect(url_for("admin_operator_users"))
+            user["admin_permissions_list"] = []
+            if user.get("role") == "admin":
+                try:
+                    user["admin_permissions_list"] = json.loads(user.get("admin_permissions") or "[]")
+                except Exception:
+                    user["admin_permissions_list"] = get_all_admin_permission_keys()
+        finally:
+            cur.close()
+            conn.close()
+        return render_template("admin/operator_form.html", user=user, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
+
+    @login_required
+    @permission_required("users")
+    def admin_operator_delete_view(id):
+        if id == getattr(current_user, "id", None):
+            flash("自分自身は削除できません", "error")
+            return redirect(url_for("admin_operator_users"))
+        conn, cur = open_cursor()
+        try:
+            user = load_operator_user(cur, id)
+            if not user:
+                flash("運営アカウントが見つかりません", "error")
+                return redirect(url_for("admin_operator_users"))
+            if user.get("role") == "owner" and not current_user.is_owner():
+                flash("オーナーは削除できません", "error")
+                return redirect(url_for("admin_operator_users"))
+            cur.execute(f"DELETE FROM users WHERE id = {mark()}", (id,))
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+        flash("運営アカウントを削除しました", "success")
+        return redirect(url_for("admin_operator_users"))
+
+    app.view_functions["admin_operator_users"] = admin_operator_users_view
+    app.view_functions["admin_operator_add_user"] = admin_operator_add_view
+    app.view_functions["admin_operator_edit_user"] = admin_operator_edit_view
+    if "admin_delete_operator" in app.view_functions:
+        app.view_functions["admin_delete_operator"] = admin_operator_delete_view
+    else:
+        app.add_url_rule(
+            "/admin/operators/<int:id>/delete",
+            endpoint="admin_delete_operator",
+            view_func=admin_operator_delete_view,
+            methods=["GET", "POST"],
+        )
+
     def log_document_event(cur, document_kind, document_id, action, reason="", before_status=None, after_status=None, metadata=None):
         metadata_text = json.dumps(metadata or {}, ensure_ascii=False)
         cur.execute(
