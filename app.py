@@ -13988,7 +13988,7 @@ def view_item(id):
                 cur_sa = conn_sa.cursor(cursor_factory=RealDictCursor)
                 cur_sa.execute("""
                     SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at,
-                           sar.admin_note, sar.cancel_reason, sar.processed_at
+                           sar.admin_note, sar.processed_at
                     FROM sales_agency_request_items sari
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = %s
@@ -14004,7 +14004,7 @@ def view_item(id):
                 cur_sa = conn_sa.cursor()
                 cur_sa.execute("""
                     SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at,
-                           sar.admin_note, sar.cancel_reason, sar.processed_at
+                           sar.admin_note, sar.processed_at
                     FROM sales_agency_request_items sari
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = ?
@@ -14031,7 +14031,6 @@ def view_item(id):
                 if request_dict.get('status') in {'cancelled', 'rejected', 'deal_failed'}:
                     request_dict['reason'] = (
                         request_dict.get('admin_note')
-                        or request_dict.get('cancel_reason')
                         or ''
                     )
                     item_dict['sales_agency_terminal_request'] = request_dict

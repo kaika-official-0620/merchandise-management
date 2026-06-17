@@ -1138,7 +1138,6 @@ def apply(module):
                        sar.service_type,
                        sar.status,
                        sar.admin_note,
-                       sar.cancel_reason,
                        sari.cancel_reason AS item_cancel_reason
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
@@ -1174,7 +1173,6 @@ def apply(module):
             status_label = sales_agency_label(terminal_request.get("status"), viewer="client") or terminal_request.get("status") or ""
         reason = (
             terminal_request.get("admin_note")
-            or terminal_request.get("cancel_reason")
             or terminal_request.get("item_cancel_reason")
             or ""
         )
