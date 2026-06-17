@@ -24,8 +24,8 @@
         .container * {
             writing-mode: horizontal-tb !important;
             text-orientation: mixed !important;
-            word-break: normal;
-            overflow-wrap: break-word;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
 
         .container {
@@ -173,7 +173,7 @@
             width: auto;
             white-space: normal;
             word-break: normal;
-            overflow-wrap: anywhere;
+            overflow-wrap: break-word;
         }
 
         th:not(:nth-child(2)),
@@ -209,6 +209,7 @@
             width: 100%;
             min-width: 0;
             margin-top: 0;
+            table-layout: fixed;
         }
 
         .summary-table td {
@@ -216,7 +217,7 @@
         }
 
         .summary-table .label {
-            width: 86px;
+            width: 96px;
             background: #f3f4f6;
             font-weight: 700;
             text-align: center;
@@ -475,13 +476,9 @@
                     <td class="label">小計</td>
                     <td class="text-right">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>
-                <tr>
-                    <td rowspan="2" class="label"></td>
-                    <td rowspan="2"></td>
+                <tr class="total-row">
                     <td class="label">内税(10%)</td>
                     <td class="text-right">{{ "{:,}".format((mitsumori.total_amount|default(0)|int * 10 / 110)|int) }}</td>
-                </tr>
-                <tr class="total-row">
                     <td class="label">合計(税込)</td>
                     <td class="text-right">¥{{ "{:,}".format(mitsumori.total_amount|default(0)|int) }}</td>
                 </tr>

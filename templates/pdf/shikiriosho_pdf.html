@@ -162,7 +162,9 @@
         
         .summary-table {
             width: 100%;
-            border: none;
+            border: 1px solid #333;
+            border-collapse: collapse;
+            table-layout: fixed;
             margin-top: 0;
         }
         
@@ -175,8 +177,11 @@
         .summary-table .label {
             background: #d4e5f7;
             font-weight: 600;
-            width: 80px;
+            width: 108px;
             text-align: center;
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
         
         .summary-table .total-row td {
@@ -186,6 +191,23 @@
         
         .summary-table .total-row .value {
             color: #000;
+        }
+
+        .request-label,
+        .request-amount,
+        .col-amount,
+        .text-right {
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
+        }
+
+        td:nth-child(2),
+        .notes-section,
+        .company-address {
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: break-word;
         }
         
         .notes-section {
@@ -315,13 +337,9 @@
                 <td class="label">小 計</td>
                 <td class="text-right">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }}</td>
             </tr>
-            <tr>
-                <td rowspan="2" class="label" style="border-bottom: none;"></td>
-                <td rowspan="2" style="border-bottom: none;"></td>
+            <tr class="total-row">
                 <td class="label">内税(10%)</td>
                 <td class="text-right">{{ "{:,}".format((shikiriosho.total_amount|default(0)|int * 10 / 110)|int) }}</td>
-            </tr>
-            <tr class="total-row">
                 <td class="label">合計（税込）</td>
                 <td class="text-right value">¥{{ "{:,}".format(shikiriosho.total_amount|default(0)|int) }}</td>
             </tr>

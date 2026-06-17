@@ -153,8 +153,8 @@
             padding: 3.2px 5px;
             vertical-align: middle;
             writing-mode: horizontal-tb;
-            word-break: normal;
-            overflow-wrap: break-word;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
         
         th {
@@ -169,6 +169,14 @@
         .col-code { width: 72px; }
         .col-amount { width: 84px; }
 
+        .invoice-items-table td:nth-child(2),
+        .notes-section,
+        .company-address {
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: break-word;
+        }
+
         .invoice-items-table tbody tr {
             height: 22px;
         }
@@ -179,7 +187,7 @@
         }
         
         .text-center { text-align: center; }
-        .text-right { text-align: right; }
+        .text-right { text-align: right; white-space: nowrap; }
         
         .summary-section {
             display: flex;
@@ -201,7 +209,10 @@
         .summary-table .label {
             background: #f0f0f0;
             font-weight: 600;
-            width: 100px;
+            width: 118px;
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
         
         .summary-table .total-row td {

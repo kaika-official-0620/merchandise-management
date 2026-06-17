@@ -92,10 +92,65 @@
     td {
         writing-mode: horizontal-tb !important;
         text-orientation: mixed !important;
-        word-break: normal !important;
-        overflow-wrap: anywhere !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
         white-space: normal;
         line-break: strict;
+    }
+
+    th,
+    .text-center,
+    .text-right,
+    .request-label,
+    .request-amount,
+    .summary-table .label,
+    .summary-table .value,
+    .summary-table .text-right,
+    .total-row,
+    .total-row span,
+    .total-row strong,
+    .amount-label,
+    .amount-value,
+    .meta-label,
+    .meta-value,
+    .col-no,
+    .col-date,
+    .col-code,
+    .col-qty,
+    .col-price,
+    .col-amount,
+    .col-note,
+    .form-label,
+    .id-label {
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+    }
+
+    .col-name,
+    td:nth-child(2),
+    .notes-section,
+    .notes-section *,
+    .notes,
+    .notes *,
+    .company-address,
+    .footer-left,
+    .form-value,
+    .form-value-half,
+    .id-value {
+        white-space: normal;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+    }
+
+    td.text-center,
+    td.text-right,
+    .summary-table td.text-right,
+    .total-row td,
+    .total-row td.text-right {
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
     }
 
     .document-title,
@@ -144,8 +199,8 @@
         th,
         td {
             writing-mode: horizontal-tb;
-            word-break: normal;
-            overflow-wrap: anywhere;
+            word-break: keep-all;
+            overflow-wrap: normal;
             line-break: strict;
         }
 
@@ -200,8 +255,8 @@
         th,
         td {
             writing-mode: horizontal-tb;
-            word-break: normal;
-            overflow-wrap: anywhere;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
     }
 </style>

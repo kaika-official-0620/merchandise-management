@@ -133,6 +133,8 @@
         th, td {
             border: 1px solid #333;
             padding: 5px 6px;
+            word-break: keep-all;
+            overflow-wrap: normal;
         }
         
         th {
@@ -148,7 +150,19 @@
         .col-note { width: 80px; }
         
         .text-center { text-align: center; }
-        .text-right { text-align: right; }
+        .text-right { text-align: right; white-space: nowrap; }
+
+        td:nth-child(2),
+        td:nth-child(5),
+        .notes-box,
+        .privacy-notes,
+        .form-value,
+        .form-value-half,
+        .id-value {
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: break-word;
+        }
         
         .total-row {
             font-weight: 700;
