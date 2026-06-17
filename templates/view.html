@@ -1019,6 +1019,16 @@
     <p>対応中または処理完了のため、この画面からキャンセル申請はできません。</p>
     {% endif %}
     {% else %}
+    {% if item.sales_agency_terminal_request %}
+    <p class="sales-agency-status-note">
+        <span>直近の販売代行申請</span>
+        <span class="request-pill type">{{ item.sales_agency_terminal_request.service_name }}</span>
+        <span class="request-pill status {{ item.sales_agency_terminal_request.status }}">{{ item.sales_agency_terminal_request.status_label }}</span>
+    </p>
+    {% if item.sales_agency_terminal_request.reason %}
+    <p class="detail-action-note">{{ item.sales_agency_terminal_request.reason }}</p>
+    {% endif %}
+    {% endif %}
     <p>この商品の詳細を確認したまま、業者卸販売・同時出品・業者オークション出品の申請ができます。</p>
     <form method="POST" action="{{ url_for('sales_agency_apply') }}" class="sales-agency-detail-form">
         <input type="hidden" name="merchandise_ids" value="{{ item.id }}">

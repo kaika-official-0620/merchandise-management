@@ -13980,30 +13980,39 @@ def view_item(id):
 
     item_dict['pending_sales_agency'] = False
     item_dict['sales_agency_request'] = None
+    item_dict['sales_agency_terminal_request'] = None
     if not (current_user.is_admin() or current_user.is_owner()):
         try:
             conn_sa = get_db()
             if DATABASE_URL:
                 cur_sa = conn_sa.cursor(cursor_factory=RealDictCursor)
                 cur_sa.execute("""
-                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at
+                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at,
+                           sar.admin_note, sar.cancel_reason, sar.processed_at
                     FROM sales_agency_request_items sari
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = %s
                       AND sar.user_id = %s
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
+                      AND sar.status IN (
+                          'pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested',
+                          'cancelled', 'rejected', 'deal_failed'
+                      )
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
             else:
                 cur_sa = conn_sa.cursor()
                 cur_sa.execute("""
-                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at
+                    SELECT sar.id AS request_id, sar.service_type, sar.status, sar.created_at,
+                           sar.admin_note, sar.cancel_reason, sar.processed_at
                     FROM sales_agency_request_items sari
                     JOIN sales_agency_requests sar ON sari.request_id = sar.id
                     WHERE sari.merchandise_id = ?
                       AND sar.user_id = ?
-                      AND sar.status IN ('pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested')
+                      AND sar.status IN (
+                          'pending', 'approved', 'appraising', 'inspecting', 'completed', 'cancel_requested',
+                          'cancelled', 'rejected', 'deal_failed'
+                      )
                     ORDER BY sar.created_at DESC
                     LIMIT 1
                 """, (id, current_user.id))
@@ -14019,8 +14028,16 @@ def view_item(id):
                     service_type=request_dict.get('service_type'),
                 )
                 request_dict['can_request_cancel'] = request_dict.get('status') == 'pending'
-                item_dict['pending_sales_agency'] = True
-                item_dict['sales_agency_request'] = request_dict
+                if request_dict.get('status') in {'cancelled', 'rejected', 'deal_failed'}:
+                    request_dict['reason'] = (
+                        request_dict.get('admin_note')
+                        or request_dict.get('cancel_reason')
+                        or ''
+                    )
+                    item_dict['sales_agency_terminal_request'] = request_dict
+                else:
+                    item_dict['pending_sales_agency'] = True
+                    item_dict['sales_agency_request'] = request_dict
         except Exception as e:
             print(f"Error fetching item sales agency status: {e}", flush=True)
     
