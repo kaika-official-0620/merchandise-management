@@ -7,10 +7,12 @@
     <h1>精算書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary context-back-inline">← 一覧に戻る</a>
-        {% if shikiriosho.status == 'draft' %}
+        {% if shikiriosho.status == 'draft' and can_edit_final_documents() %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
         {% elif shikiriosho.status == 'completed' %}
+        {% if can_edit_final_documents() %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-secondary">再確認</a>
+        {% endif %}
         <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この完成書類を送信しますか？')">個別送信</a>
         {% endif %}
         <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
@@ -59,6 +61,21 @@
             </table>
         </div>
     </div>
+
+    {% if shikiriosho.status == 'cancelled' %}
+    <div class="final-doc-cancel-box is-cancelled">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ shikiriosho.cancel_reason or '-' }}</span>
+    </div>
+    {% elif can_cancel_documents() %}
+    <div class="final-doc-cancel-box">
+        <strong>&#26360;&#39006;&#21462;&#28040;</strong>
+        <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='shikiriosho', document_id=shikiriosho.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+            <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+            <button type="submit" class="btn btn-delete">&#21462;&#28040;&#12377;&#12427;</button>
+        </form>
+    </div>
+    {% endif %}
 
     <div class="document-recipient">
         <div class="recipient-name">
@@ -233,6 +250,35 @@
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 30px;
+}
+
+.final-doc-cancel-box {
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff7f7;
+}
+
+.final-doc-cancel-box.is-cancelled {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+}
+
+.final-doc-cancel-box form {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.final-doc-cancel-box textarea {
+    width: 100%;
+    resize: vertical;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    font: inherit;
 }
 
 .document-table-scroll {

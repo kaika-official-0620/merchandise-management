@@ -404,7 +404,7 @@
                         <td>
                             <div class="proxy-doc-actions">
                                 <a href="{{ url_for('admin_auction_keisan_view', id=doc.id, next=current_page_path) }}" class="btn btn-primary btn-sm">詳細</a>
-                                {% if doc.status != 'submitted' %}
+                                {% if doc.status != 'submitted' and can_edit_final_documents() %}
                                 <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id, next=current_page_path) }}" class="btn btn-secondary btn-sm">編集</a>
                                 {% endif %}
                                 {% if doc.status == 'completed' %}

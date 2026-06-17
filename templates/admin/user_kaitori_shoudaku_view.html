@@ -81,6 +81,21 @@
                 </section>
             </div>
 
+            {% if kaitori.status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ kaitori.cancel_reason or '-' }}</div>
+            </section>
+            {% elif can_cancel_documents() %}
+            <section class="admin-doc-cancel-panel">
+                <h2>&#26360;&#39006;&#21462;&#28040;</h2>
+                <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_kaitori_shoudaku', document_id=kaitori.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                    <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+                    <button type="submit" class="doc-btn doc-btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+                </form>
+            </section>
+            {% endif %}
+
             <div class="admin-doc-total">
                 <span>希望・申請合計金額</span>
                 <strong>¥{{ "{:,}".format(total_amount) }}</strong>

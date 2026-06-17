@@ -321,7 +321,9 @@
                         <td>
                             <div class="action-group">
                                 <a href="{{ url_for('admin_auction_keisan_view', id=doc.id) }}" class="btn btn-primary btn-sm">詳細</a>
+                                {% if can_edit_final_documents() %}
                                 <a href="{{ url_for('admin_auction_keisan_edit', id=doc.id) }}" class="btn btn-secondary btn-sm">{{ '確認' if doc.status == 'completed' else '編集' }}</a>
+                                {% endif %}
                                 {% if doc.status == 'completed' %}
                                 <form action="{{ url_for('admin_auction_keisan_submit', id=doc.id) }}" method="POST" style="display:inline;">
                                     {% if auction_id %}

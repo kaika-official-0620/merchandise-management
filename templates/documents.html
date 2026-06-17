@@ -4,6 +4,7 @@
 
 {% block content %}
 {% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set pending_mitsumori_count = pending_mitsumori_from_invoices|default([])|length %}
 <div class="page-header">
     <h1>書類履歴</h1>
     <p class="page-subtitle">作成完了・送付済みの書類だけを種類ごとに確認できます。作成中の見積依頼書と買取承諾書は「書類一覧」に残ります。</p>
@@ -16,6 +17,18 @@
     <button class="doc-tab {% if active_tab == 'shikiri' %}active{% endif %}" data-tab="shikiri">精算書</button>
     <button class="doc-tab {% if active_tab == 'keisan' %}active{% endif %}" data-tab="keisan">計算書</button>
 </div>
+
+{% if pending_mitsumori_count %}
+<div class="pending-mitsumori-box">
+    <strong>&#35211;&#31309;&#20381;&#38972;&#26360;&#20316;&#25104; {{ pending_mitsumori_count }}&#20214;</strong>
+    <span>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</span>
+    <div class="pending-mitsumori-links">
+        {% for inv in pending_mitsumori_from_invoices %}
+        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-info">{{ inv.invoice_no or inv.id }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <section class="tab-content {% if active_tab == 'kaitori' %}active{% endif %}" id="tab-kaitori">
     <div class="tab-header">
@@ -297,6 +310,23 @@
     color: #1d4ed8;
 }
 
+.pending-mitsumori-box {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0.85rem 0;
+    padding: 0.9rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.pending-mitsumori-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .doc-tab.active {
     box-shadow: inset 0 -3px 0 #2563eb;
 }
@@ -371,6 +401,10 @@
     border-left-color: #ef4444;
 }
 
+.doc-card.status-cancelled {
+    border-left-color: #6b7280;
+}
+
 .card-header,
 .card-actions {
     display: flex;
@@ -428,6 +462,11 @@
 .status-badge.status-rejected {
     background: #fee2e2;
     color: #991b1b;
+}
+
+.status-badge.status-cancelled {
+    background: #e5e7eb;
+    color: #374151;
 }
 
 .card-body {

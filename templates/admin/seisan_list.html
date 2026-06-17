@@ -61,7 +61,9 @@
                     <a href="{{ url_for('admin_seisan_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('admin_seisan_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
                     {% if doc.status == 'draft' %}
+                        {% if can_edit_final_documents() %}
                         <a href="{{ url_for('admin_seisan_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
+                        {% endif %}
                         <a href="{{ url_for('admin_seisan_send', id=doc.id) }}" class="btn btn-sm btn-success" onclick="return confirm('この精算書を送信しますか？')">送信</a>
                     {% endif %}
                     <a href="{{ url_for('admin_seisan_delete', id=doc.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>

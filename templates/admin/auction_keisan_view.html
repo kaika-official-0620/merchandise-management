@@ -8,7 +8,7 @@
         <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">← 処理送付へ戻る</a>
         <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
-        {% if keisan.is_admin_created and keisan.status != 'submitted' %}
+        {% if keisan.is_admin_created and keisan.status != 'submitted' and can_edit_final_documents() %}
         <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id, next=next_url) if next_url else url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">計算書を編集</a>
         {% endif %}
         {% if keisan.is_admin_created and keisan.status == 'completed' %}
@@ -51,6 +51,21 @@
             <span class="meta-value">指定口座振込</span>
         </div>
     </div>
+
+    {% if keisan.status == 'cancelled' %}
+    <div class="final-doc-cancel-box is-cancelled">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ keisan.cancel_reason or '-' }}</span>
+    </div>
+    {% elif can_cancel_documents() %}
+    <div class="final-doc-cancel-box">
+        <strong>&#26360;&#39006;&#21462;&#28040;</strong>
+        <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_keisan', document_id=keisan.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+            <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+            <button type="submit" class="btn btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+        </form>
+    </div>
+    {% endif %}
 
     <table class="keisan-items">
         <thead>
@@ -138,6 +153,35 @@
     row-gap: 22px;
     margin-bottom: 28px;
     font-size: 17px;
+}
+
+.final-doc-cancel-box {
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff7f7;
+}
+
+.final-doc-cancel-box.is-cancelled {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+}
+
+.final-doc-cancel-box form {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.final-doc-cancel-box textarea {
+    width: 100%;
+    resize: vertical;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    font: inherit;
 }
 
 .meta-label {

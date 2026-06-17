@@ -36,6 +36,13 @@
         </div>
     </div>
 
+    {% if kaitori.status == 'cancelled' %}
+    <div class="cancelled-document-box">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ kaitori.cancel_reason or '-' }}</span>
+    </div>
+    {% endif %}
+
     <div class="document-section">
         <h3>顧客情報</h3>
         <div class="info-grid">
@@ -228,6 +235,17 @@
 .inline-delete-form {
     margin: 0;
     display: inline-flex;
+}
+
+.cancelled-document-box {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #374151;
 }
 </style>
 {% endblock %}

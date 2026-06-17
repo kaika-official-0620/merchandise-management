@@ -389,7 +389,7 @@
                                 {% elif group.has_document and group.document_status != 'draft' %}
                                 <span class="result-status-badge {{ group.document_status_class }}">{{ group.document_status_label }}</span>
                                 {% endif %}
-                                {% if group.document_id and not group.is_document_submitted %}
+                                {% if group.document_id and not group.is_document_submitted and can_edit_final_documents() %}
                                 <a href="{{ url_for('admin_auction_keisan_edit', id=group.document_id, next=current_page_path) }}" class="client-document-edit-button">計算書を編集</a>
                                 {% endif %}
                             </div>

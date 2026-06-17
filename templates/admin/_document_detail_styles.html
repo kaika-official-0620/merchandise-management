@@ -112,6 +112,12 @@
     border-color: #dc2626;
 }
 
+.doc-btn-warning {
+    background: #d97706;
+    color: #fff;
+    border-color: #d97706;
+}
+
 .admin-doc-sheet {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -188,6 +194,11 @@
     color: #991b1b;
 }
 
+.admin-doc-page .status-cancelled {
+    background: #e5e7eb;
+    color: #374151;
+}
+
 .admin-doc-body {
     display: grid;
     gap: 1.25rem;
@@ -202,7 +213,8 @@
 
 .admin-doc-card,
 .admin-doc-section,
-.admin-doc-notes {
+.admin-doc-notes,
+.admin-doc-cancel-panel {
     border: 1px solid #e2e8f0;
     border-radius: 16px;
     background: #fff;
@@ -211,10 +223,60 @@
 
 .admin-doc-card h2,
 .admin-doc-section h2,
-.admin-doc-notes h2 {
+.admin-doc-notes h2,
+.admin-doc-cancel-panel h2 {
     margin: 0 0 0.9rem;
     color: #0f172a;
     font-size: 1rem;
+}
+
+.admin-doc-cancel-panel {
+    border-color: #fecaca;
+    background: #fff7f7;
+}
+
+.admin-doc-cancel-panel form {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-doc-cancel-panel textarea {
+    width: 100%;
+    min-height: 86px;
+    resize: vertical;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    font: inherit;
+}
+
+.admin-doc-notes.is-cancelled {
+    border-color: #d1d5db;
+    background: #f9fafb;
+}
+
+.admin-doc-event-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.admin-doc-event {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.admin-doc-event span {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.admin-doc-event p {
+    margin: 0.25rem 0 0;
+    white-space: pre-wrap;
 }
 
 .admin-doc-dl {

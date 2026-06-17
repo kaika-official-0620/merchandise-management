@@ -4,6 +4,7 @@
 
 {% block content %}
 {% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set pending_mitsumori_count = pending_mitsumori_from_invoices|default([])|length %}
 <div class="mitsumori-list-page">
     <div class="page-header">
         <div>
@@ -15,6 +16,18 @@
             <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">+ 新規作成</a>
         </div>
     </div>
+
+    {% if pending_mitsumori_count %}
+    <div class="pending-mitsumori-box">
+        <strong>&#35211;&#31309;&#20381;&#38972;&#26360;&#20316;&#25104; {{ pending_mitsumori_count }}&#20214;</strong>
+        <span>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</span>
+        <div class="pending-mitsumori-links">
+            {% for inv in pending_mitsumori_from_invoices %}
+            <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-info">{{ inv.invoice_no or inv.id }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     {% if mitsumori_list %}
     <div class="doc-grid">
@@ -116,6 +129,22 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
+}
+
+.pending-mitsumori-box {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.pending-mitsumori-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .doc-card,

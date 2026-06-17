@@ -50,6 +50,13 @@
         </header>
 
         <div class="admin-doc-body">
+            {% if status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ mitsumori.cancel_reason or '-' }}</div>
+            </section>
+            {% endif %}
+
             <div class="admin-doc-info-grid">
                 <section class="admin-doc-card">
                     <h2>送付先</h2>

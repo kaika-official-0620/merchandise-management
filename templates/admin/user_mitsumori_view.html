@@ -37,7 +37,7 @@
             </div>
         </header>
 
-        <div class="admin-doc-body">
+            <div class="admin-doc-body">
             <div class="admin-doc-info-grid">
                 <section class="admin-doc-card">
                     <h2>送信者</h2>
@@ -84,6 +84,31 @@
                     </dl>
                 </section>
             </div>
+
+            {% if source_invoice %}
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>&#20803;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;</h2>
+                    <a href="{{ url_for('admin_kaitori_view', id=source_invoice.id) }}" class="doc-btn doc-btn-secondary">{{ source_invoice.invoice_no or source_invoice.id }}</a>
+                </div>
+                <p class="admin-doc-note">{{ source_invoice.issue_date or '-' }} / &#21512;&#35336; &#165;{{ "{:,}".format(source_invoice.total_amount or 0) }}</p>
+            </section>
+            {% endif %}
+
+            {% if mitsumori.status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ mitsumori.cancel_reason or '-' }}</div>
+            </section>
+            {% elif can_cancel_documents() %}
+            <section class="admin-doc-cancel-panel">
+                <h2>&#26360;&#39006;&#21462;&#28040;</h2>
+                <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='user_mitsumori', document_id=mitsumori.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                    <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+                    <button type="submit" class="doc-btn doc-btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+                </form>
+            </section>
+            {% endif %}
 
             <section class="admin-doc-section">
                 <h2>件名</h2>
@@ -135,6 +160,22 @@
             <section class="admin-doc-notes">
                 <h2>備考・条件</h2>
                 <div class="admin-doc-notes-body">{{ mitsumori.notes }}</div>
+            </section>
+            {% endif %}
+
+            {% if document_events %}
+            <section class="admin-doc-section">
+                <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>
+                <div class="admin-doc-event-list">
+                    {% for event in document_events %}
+                    <div class="admin-doc-event">
+                        <strong>{{ event.action }}</strong>
+                        <span>{{ event.created_at }}</span>
+                        <span>{{ event.display_name or event.username or event.actor_id or '-' }}</span>
+                        {% if event.reason %}<p>{{ event.reason }}</p>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
             </section>
             {% endif %}
         </div>

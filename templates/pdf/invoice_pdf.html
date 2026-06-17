@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
     <title>買取明細書 - {{ invoice.invoice_no if invoice else '' }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,32 +18,34 @@
         
         body {
             font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
-            font-size: 11px;
-            line-height: 1.5;
+            font-size: 10.5px;
+            line-height: 1.35;
             color: #333;
             background: white;
+            writing-mode: horizontal-tb;
         }
         
         .container {
-            max-width: 210mm;
+            width: 100%;
+            max-width: 190mm;
             margin: 0 auto;
-            padding: 10mm 15mm;
+            padding: 0;
         }
         
         .document-title {
             text-align: center;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
             letter-spacing: 0.3em;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
             border-bottom: 2px solid #333;
         }
         
         .header-section {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 15px;
+            margin-bottom: 8px;
         }
         
         .header-left {
@@ -55,10 +62,10 @@
         }
         
         .recipient-name {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
             border-bottom: 1px solid #333;
             display: inline-block;
         }
@@ -71,7 +78,7 @@
         
         .request-text {
             text-align: center;
-            margin: 15px 0;
+            margin: 8px 0;
             font-size: 12px;
         }
         
@@ -80,13 +87,13 @@
             display: flex;
             justify-content: space-between;
             align-items: stretch;
-            gap: 20px;
-            margin: 15px 0;
+            gap: 12px;
+            margin: 8px 0 10px;
         }
         
         .request-amount-box {
             flex: 1;
-            padding: 15px;
+            padding: 9px 12px;
             border: 2px solid #333;
             background: #f5f5f5;
             display: flex;
@@ -102,14 +109,14 @@
         }
         
         .request-amount {
-            font-size: 26px;
+            font-size: 22px;
             font-weight: 700;
             color: #1a56db;
         }
         
         .company-info {
             flex: 1;
-            padding: 12px;
+            padding: 8px 10px;
             background: #f9f9f9;
             border: 1px solid #ddd;
             text-align: right;
@@ -136,13 +143,18 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 15px 0;
+            margin: 8px 0;
             font-size: 10px;
+            table-layout: fixed;
         }
         
         th, td {
             border: 1px solid #333;
-            padding: 6px 8px;
+            padding: 3.2px 5px;
+            vertical-align: middle;
+            writing-mode: horizontal-tb;
+            word-break: normal;
+            overflow-wrap: break-word;
         }
         
         th {
@@ -151,11 +163,20 @@
             text-align: center;
         }
         
-        .col-no { width: 35px; }
+        .col-no { width: 32px; }
         .col-name { }
-        .col-date { width: 80px; }
-        .col-code { width: 80px; }
-        .col-amount { width: 90px; }
+        .col-date { width: 72px; }
+        .col-code { width: 72px; }
+        .col-amount { width: 84px; }
+
+        .invoice-items-table tbody tr {
+            height: 22px;
+        }
+
+        .invoice-items-table .page-break-row {
+            break-before: page;
+            page-break-before: always;
+        }
         
         .text-center { text-align: center; }
         .text-right { text-align: right; }
@@ -163,7 +184,7 @@
         .summary-section {
             display: flex;
             justify-content: flex-end;
-            margin-top: 10px;
+            margin-top: 6px;
         }
         
         .summary-table {
@@ -173,7 +194,7 @@
         
         .summary-table td {
             border: 1px solid #333;
-            padding: 5px 10px;
+            padding: 4px 8px;
             font-size: 11px;
         }
         
@@ -193,9 +214,10 @@
         }
         
         .notes-section {
-            margin-top: 15px;
+            margin-top: 8px;
             font-size: 10px;
             color: #666;
+            line-height: 1.45;
         }
         
         @media print {
@@ -249,6 +271,25 @@
                 padding: 4px 6px;
             }
         }
+        @media print {
+            .container {
+                max-width: none;
+                max-height: none;
+                overflow: visible;
+                page-break-inside: auto;
+                page-break-after: auto;
+                page-break-before: auto;
+            }
+
+            table.summary-table,
+            .header-section,
+            .amount-company-row,
+            .summary-section,
+            .footer-section,
+            tr {
+                break-inside: avoid;
+            }
+        }
     </style>
 </head>
 <body>
@@ -289,7 +330,7 @@
             </div>
         </div>
         
-        <table>
+        <table class="invoice-items-table">
             <thead>
                 <tr>
                     <th class="col-no">No.</th>
@@ -302,7 +343,7 @@
             <tbody>
                 {% if items %}
                     {% for item in items %}
-                    <tr>
+                    <tr class="{% if loop.index == 16 %}page-break-row{% endif %}">
                         <td class="text-center">{{ item.item_no }}</td>
                         <td>{{ item.product_name }}</td>
                         <td class="text-center">{{ item.purchase_date if item.purchase_date else '-' }}</td>
@@ -310,6 +351,7 @@
                         <td class="text-right">¥{{ "{:,}".format(item.amount if item.amount else 0) }}</td>
                     </tr>
                     {% endfor %}
+                    {% if items|length <= 15 %}
                     {% for i in range(items|length, 15) %}
                     <tr>
                         <td class="text-center">{{ i + 1 }}</td>
@@ -319,6 +361,7 @@
                         <td></td>
                     </tr>
                     {% endfor %}
+                    {% endif %}
                 {% else %}
                     {% for i in range(15) %}
                     <tr>

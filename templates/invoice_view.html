@@ -11,6 +11,11 @@
         {% endif %}
         <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
+        {% if invoice.linked_mitsumori_id %}
+        <a href="{{ url_for('user_mitsumori_view', id=invoice.linked_mitsumori_id) }}" class="btn btn-create-mitsumori">&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#30906;&#35469;</a>
+        {% elif invoice.can_create_mitsumori_from_invoice %}
+        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=invoice.id) }}" class="btn btn-create-mitsumori">&#12371;&#12398;&#20869;&#23481;&#12391;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;</a>
+        {% endif %}
         {% if invoice.can_user_delete %}
         <form method="POST" action="{{ url_for('user_invoice_delete', id=invoice.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取明細書を削除しますか？')">
             <input type="hidden" name="next" value="{{ url_for('documents') }}">
@@ -57,6 +62,18 @@
             </table>
         </div>
     </div>
+
+    {% if invoice.status == 'cancelled' %}
+    <div class="source-action-box is-cancelled">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        {% if invoice.cancel_reason %}<span>{{ invoice.cancel_reason }}</span>{% endif %}
+    </div>
+    {% elif invoice.can_create_mitsumori_from_invoice %}
+    <div class="source-action-box">
+        <strong>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</strong>
+        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=invoice.id) }}" class="btn btn-create-mitsumori">&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;</a>
+    </div>
+    {% endif %}
 
     <div class="document-total-box">
         <span class="total-label">請求金額 (税込)</span>
@@ -181,6 +198,14 @@
     text-decoration: none;
 }
 
+.btn-create-mitsumori {
+    background: #1d4ed8;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+}
+
 .btn-print {
     background: #17a2b8;
     color: white;
@@ -279,6 +304,31 @@
 .status-badge.status-rejected {
     background: #f8d7da;
     color: #721c24;
+}
+
+.status-badge.status-cancelled {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.source-action-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
+.source-action-box.is-cancelled {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+    color: #374151;
 }
 
 .document-total-box {

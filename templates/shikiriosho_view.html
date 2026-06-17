@@ -36,6 +36,13 @@
         </div>
     </div>
 
+    {% if shikiriosho.status == 'cancelled' %}
+    <div class="cancelled-document-box">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ shikiriosho.cancel_reason or '-' }}</span>
+    </div>
+    {% endif %}
+
     <div class="document-recipient">
         <div class="recipient-name">
             {{ current_user.display_name }} 様
@@ -245,6 +252,17 @@
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 30px;
+}
+
+.cancelled-document-box {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #374151;
 }
 
 .document-table-scroll {

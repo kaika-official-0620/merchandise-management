@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
     <title>計算書 - {{ keisan.document_no if keisan else '' }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 10mm 12mm;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -23,11 +28,11 @@
             width: 210mm;
             min-height: 297mm;
             margin: 0 auto;
-            padding: 31mm 13mm;
+            padding: 22mm 13mm 18mm;
         }
 
         .title {
-            margin-bottom: 22px;
+            margin-bottom: 30px;
             text-align: center;
             color: #111827;
             font-size: 30px;
@@ -39,8 +44,8 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             column-gap: 34px;
-            row-gap: 16px;
-            margin-bottom: 20px;
+            row-gap: 18px;
+            margin-bottom: 24px;
             font-size: 14px;
         }
 
@@ -66,7 +71,7 @@
         .items th,
         .items td {
             border: 1.5px solid #475569;
-            padding: 9px 10px;
+            padding: 8px 9px;
             vertical-align: middle;
             writing-mode: horizontal-tb;
             word-break: keep-all;
@@ -110,7 +115,7 @@
             justify-content: flex-end;
             align-items: baseline;
             gap: 18px;
-            margin: 30px 0 14px;
+            margin: 24px 0 12px;
             color: #111827;
         }
 
@@ -126,7 +131,7 @@
 
         .divider {
             border-top: 1px solid #d1d5db;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .notes h2 {
@@ -164,7 +169,7 @@
             }
 
             .title {
-                margin-bottom: 14px;
+                margin-bottom: 20px;
                 font-size: 22px;
                 letter-spacing: 0.08em;
             }
@@ -172,8 +177,8 @@
             .meta-grid {
                 grid-template-columns: 1fr 1fr;
                 column-gap: 10px;
-                row-gap: 8px;
-                margin-bottom: 14px;
+                row-gap: 10px;
+                margin-bottom: 16px;
                 font-size: 11px;
             }
 
@@ -260,8 +265,8 @@
             }
 
             .meta-grid {
-                row-gap: 9px;
-                margin-bottom: 12px;
+                row-gap: 12px;
+                margin-bottom: 18px;
                 font-size: 11px;
             }
 

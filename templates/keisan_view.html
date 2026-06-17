@@ -48,6 +48,13 @@
         </div>
     </div>
 
+    {% if keisan.status == 'cancelled' %}
+    <div class="cancelled-document-box">
+        <strong>&#21462;&#28040;&#28168;&#12415;</strong>
+        <span>{{ keisan.cancel_reason or '-' }}</span>
+    </div>
+    {% endif %}
+
     <div class="keisan-table-scroll">
     <table class="keisan-items">
         <thead>
@@ -177,6 +184,17 @@
     border-collapse: collapse;
     margin-top: 8px;
     font-size: 17px;
+}
+
+.cancelled-document-box {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #374151;
 }
 
 .keisan-table-scroll {

@@ -87,6 +87,32 @@
                 </section>
             </div>
 
+            {% if linked_mitsumori %}
+            <section class="admin-doc-section">
+                <h2>&#12371;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;&#12363;&#12425;&#20316;&#25104;&#12373;&#12428;&#12383;&#35211;&#31309;&#20381;&#38972;&#26360;</h2>
+                <div class="admin-doc-event-list">
+                    {% for doc in linked_mitsumori %}
+                    <a href="{{ url_for('admin_user_mitsumori_view', id=doc.id) }}" class="doc-btn doc-btn-secondary">{{ doc.document_no or doc.id }} / {{ doc.issue_date or '-' }}</a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            {% if invoice.status == 'cancelled' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#21462;&#28040;&#28168;&#12415;</h2>
+                <div class="admin-doc-notes-body">{{ invoice.cancel_reason or '-' }}</div>
+            </section>
+            {% elif can_cancel_documents() %}
+            <section class="admin-doc-cancel-panel">
+                <h2>&#26360;&#39006;&#21462;&#28040;</h2>
+                <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='invoices', document_id=invoice.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                    <textarea name="reason" rows="3" required placeholder="&#21462;&#28040;&#29702;&#30001;"></textarea>
+                    <button type="submit" class="doc-btn doc-btn-danger">&#21462;&#28040;&#12377;&#12427;</button>
+                </form>
+            </section>
+            {% endif %}
+
             <div class="admin-doc-total">
                 <span>税込合計金額</span>
                 <strong>¥{{ "{:,}".format(total_amount) }}</strong>
@@ -164,6 +190,22 @@
             <section class="admin-doc-notes">
                 <h2>備考</h2>
                 <div class="admin-doc-notes-body">{{ invoice.notes }}</div>
+            </section>
+            {% endif %}
+
+            {% if document_events %}
+            <section class="admin-doc-section">
+                <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>
+                <div class="admin-doc-event-list">
+                    {% for event in document_events %}
+                    <div class="admin-doc-event">
+                        <strong>{{ event.action }}</strong>
+                        <span>{{ event.created_at }}</span>
+                        <span>{{ event.display_name or event.username or event.actor_id or '-' }}</span>
+                        {% if event.reason %}<p>{{ event.reason }}</p>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
             </section>
             {% endif %}
         </div>

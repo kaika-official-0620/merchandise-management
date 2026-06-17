@@ -389,6 +389,11 @@
     color: #dc2626;
 }
 
+.status-badge.deal_failed {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .request-body {
     padding: 1.2rem;
     display: grid;
@@ -695,6 +700,31 @@
     flex-wrap: wrap;
 }
 
+.admin-terminal-form {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 170px minmax(220px, 1fr) auto;
+    gap: 0.55rem;
+    align-items: stretch;
+    padding: 0.75rem;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    background: #fff7f7;
+}
+
+.admin-terminal-form select,
+.admin-terminal-form textarea {
+    min-width: 0;
+    padding: 0.58rem 0.65rem;
+    border: 1px solid #fca5a5;
+    border-radius: 9px;
+    font: inherit;
+}
+
+.admin-terminal-form textarea {
+    resize: vertical;
+}
+
 .action-buttons .btn-approve,
 .action-buttons .btn-primary {
     background: #2563eb;
@@ -785,6 +815,10 @@
         align-items: stretch;
     }
 
+    .admin-terminal-form {
+        grid-template-columns: 1fr;
+    }
+
     .action-buttons .btn,
     .request-doc-links .btn {
         flex: 1 1 auto;
@@ -826,6 +860,8 @@
                     <option value="appraising" {% if status_filter == 'appraising' %}selected{% endif %}>{{ '出品準備中' if service_filter == 'simultaneous' else '査定中' }}</option>
                     <option value="inspecting" {% if status_filter == 'inspecting' %}selected{% endif %}>検品中</option>
                     <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>処理完了</option>
+                    <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>キャンセル済み</option>
+                    <option value="deal_failed" {% if status_filter == 'deal_failed' %}selected{% endif %}>取引不成立</option>
                     <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>却下申請</option>
                 </select>
             </div>
@@ -973,9 +1009,10 @@
                         ('appraising', '出品準備中' if req.service_type == 'simultaneous' else '査定中'),
                         ('inspecting', '検品中'),
                         ('completed', '処理完了'),
-                        ('cancelled', 'キャンセル済み')
+                        ('cancelled', 'キャンセル済み'),
+                        ('deal_failed', '取引不成立')
                     ] %}
-                    {% set current_index = {'pending': 0, 'cancel_requested': 1, 'approved': 2, 'appraising': 3, 'inspecting': 4, 'completed': 5, 'cancelled': 6, 'rejected': -1}.get(req.status, -1) %}
+                    {% set current_index = {'pending': 0, 'cancel_requested': 1, 'approved': 2, 'appraising': 3, 'inspecting': 4, 'completed': 5, 'cancelled': 6, 'deal_failed': 6, 'rejected': -1}.get(req.status, -1) %}
                     <div class="request-progress" id="progress-{{ req.id }}" data-status="{{ req.status }}">
                         {% for timeline_key, timeline_label in timeline_statuses %}
                         {% set timeline_index = loop.index0 %}
@@ -1090,6 +1127,17 @@
                         <span class="muted-text">この申請は現在の状態から変更できる操作がありません。</span>
                         {% endif %}
                     </div>
+                    {% if req.status not in ['completed', 'cancelled', 'rejected', 'deal_failed'] %}
+                    <form method="POST" action="{{ url_for('admin_sales_agency_admin_cancel', id=req.id) }}" class="admin-terminal-form" onsubmit="return confirm('&#12371;&#12398;&#30003;&#35531;&#12434;&#29702;&#30001;&#20184;&#12365;&#12391;&#32066;&#20102;&#29366;&#24907;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
+                        <select name="status" required>
+                            <option value="cancelled">&#12461;&#12515;&#12531;&#12475;&#12523;&#28168;&#12415;</option>
+                            <option value="rejected">&#21463;&#20184;&#19981;&#21487;</option>
+                            <option value="deal_failed">&#21462;&#24341;&#19981;&#25104;&#31435;</option>
+                        </select>
+                        <textarea name="reason" rows="2" required placeholder="&#29702;&#30001;&#12539;&#31649;&#29702;&#32773;&#12513;&#12514;"></textarea>
+                        <button type="submit" class="btn btn-reject">&#29702;&#30001;&#20184;&#12365;&#12391;&#21453;&#26144;</button>
+                    </form>
+                    {% endif %}
                     <div class="request-feedback" id="feedback-{{ req.id }}"></div>
                 </div>
             </div>
@@ -1135,7 +1183,7 @@ const salesAgencyActionButtons = {
     reject_cancel: { label: 'キャンセルを却下', className: 'btn btn-reject' }
 };
 
-const progressStatusOrder = ['pending', 'cancel_requested', 'approved', 'appraising', 'inspecting', 'completed', 'cancelled'];
+const progressStatusOrder = ['pending', 'cancel_requested', 'approved', 'appraising', 'inspecting', 'completed', 'cancelled', 'deal_failed'];
 
 function escapeHtml(value) {
     return String(value || '')

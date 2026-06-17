@@ -140,10 +140,12 @@
                         <td>
                             <div class="actions">
                                 <a href="{{ url_for('admin_shikiriosho_view', id=doc.id) }}" class="btn btn-primary">詳細</a>
-                                {% if doc.status == 'draft' %}
+                                {% if doc.status == 'draft' and can_edit_final_documents() %}
                                     <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-secondary">編集</a>
                                 {% elif doc.status == 'completed' %}
+                                    {% if can_edit_final_documents() %}
                                     <a href="{{ url_for('admin_shikiriosho_edit', id=doc.id) }}" class="btn btn-secondary">再確認</a>
+                                    {% endif %}
                                     <a href="{{ url_for('admin_shikiriosho_send', id=doc.id) }}" class="btn btn-success" onclick="return confirm('この完成書類を送信しますか？')">個別送信</a>
                                 {% endif %}
                                 <a href="{{ url_for('admin_shikiriosho_delete', id=doc.id) }}" class="btn btn-danger" onclick="return confirm('この精算書を削除しますか？')">削除</a>

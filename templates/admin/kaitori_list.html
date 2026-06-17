@@ -66,7 +66,7 @@
                 <td class="actions">
                     <a href="{{ url_for('admin_kaitori_view', id=doc.id) }}" class="btn btn-sm btn-info">詳細</a>
                     <a href="{{ url_for('admin_kaitori_pdf', id=doc.id) }}" class="btn btn-sm btn-pdf" target="_blank">PDF</a>
-                    {% if doc.status == 'draft' %}
+                    {% if doc.status == 'draft' and can_edit_final_documents() %}
                         <a href="{{ url_for('admin_kaitori_edit', id=doc.id) }}" class="btn btn-sm btn-secondary">編集</a>
                     {% endif %}
                     {% if doc.status in ['draft', 'in_progress'] %}

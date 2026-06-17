@@ -96,6 +96,13 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] kaika followup patch skipped: {patch_exc}", flush=True)
 
+try:
+    from kaika_document_corrections_patch_20260617 import apply as apply_document_corrections_patch
+
+    apply_document_corrections_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] kaika document corrections patch skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"
