@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from html import escape
 from datetime import datetime
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
 
 
@@ -41,6 +42,7 @@ def apply(module):
             "admin_kaitori_edit",
             "admin_seisan_edit",
             "admin_mitsumori_edit",
+            "view_item",
         )
     }
     original_fetch_sales_agency_request_details = getattr(module, "fetch_sales_agency_request_details", None)
@@ -1125,6 +1127,85 @@ def apply(module):
         flash("業者系申請の状態を更新しました。", "success")
         return redirect(request.referrer or url_for("admin_sales_agency_requests"))
 
+    def load_terminal_sales_agency_request_for_item(item_id):
+        if not current_user.is_authenticated or current_user.is_admin() or current_user.is_owner():
+            return None
+        conn, cur = open_cursor()
+        try:
+            cur.execute(
+                f"""
+                SELECT sar.id AS request_id,
+                       sar.service_type,
+                       sar.status,
+                       sar.admin_note,
+                       sar.cancel_reason,
+                       sari.cancel_reason AS item_cancel_reason
+                FROM sales_agency_request_items sari
+                JOIN sales_agency_requests sar ON sari.request_id = sar.id
+                WHERE sari.merchandise_id = {mark()}
+                  AND sar.user_id = {mark()}
+                  AND sar.status IN ('cancelled', 'rejected', 'deal_failed')
+                ORDER BY COALESCE(sar.processed_at, sar.created_at) DESC, sar.id DESC
+                LIMIT 1
+                """,
+                (item_id, current_user.id),
+            )
+            return fetch_one_dict(cur)
+        finally:
+            cur.close()
+            conn.close()
+
+    def inject_terminal_sales_agency_status(html, terminal_request):
+        if not terminal_request or "直近の販売代行申請" in html:
+            return html
+        marker = "<p>この商品の詳細を確認したまま、業者卸販売・同時出品・業者オークション出品の申請ができます。</p>"
+        if marker not in html:
+            return html
+        service_types = getattr(module, "SALES_AGENCY_SERVICE_TYPES", {})
+        status_label_func = getattr(module, "get_sales_agency_status_label", None)
+        service_name = service_types.get(terminal_request.get("service_type"), terminal_request.get("service_type") or "")
+        if callable(status_label_func):
+            status_label = status_label_func(
+                terminal_request.get("status"),
+                viewer="client",
+                service_type=terminal_request.get("service_type"),
+            )
+        else:
+            status_label = sales_agency_label(terminal_request.get("status"), viewer="client") or terminal_request.get("status") or ""
+        reason = (
+            terminal_request.get("admin_note")
+            or terminal_request.get("cancel_reason")
+            or terminal_request.get("item_cancel_reason")
+            or ""
+        )
+        status_class = terminal_request.get("status") or ""
+        block = (
+            '<p class="sales-agency-status-note">'
+            "<span>直近の販売代行申請</span>"
+            f'<span class="request-pill type">{escape(str(service_name))}</span>'
+            f'<span class="request-pill status {escape(str(status_class))}">{escape(str(status_label))}</span>'
+            "</p>"
+        )
+        if reason:
+            block += f'<p class="detail-action-note">{escape(str(reason))}</p>'
+        return html.replace(marker, block + marker, 1)
+
+    def view_item_with_terminal_sales_agency_status(id):
+        original = original_views.get("view_item")
+        if not callable(original):
+            return redirect(url_for("index"))
+        response = make_response(original(id))
+        if response.status_code != 200 or not response.content_type.startswith("text/html"):
+            return response
+        terminal_request = load_terminal_sales_agency_request_for_item(id)
+        if not terminal_request:
+            return response
+        html = response.get_data(as_text=True)
+        patched = inject_terminal_sales_agency_status(html, terminal_request)
+        if patched != html:
+            response.set_data(patched)
+        return response
+
     if hasattr(module, "SALES_AGENCY_STATUS"):
         module.SALES_AGENCY_STATUS["deal_failed"] = "取引不成立"
         module.SALES_AGENCY_STATUS["rejected"] = "受付不可"
@@ -1141,6 +1222,7 @@ def apply(module):
     module.admin_kaitori_view = admin_kaitori_view_v3
     module.admin_user_mitsumori_view = admin_user_mitsumori_view_v3
     module.sales_agency_my_requests = sales_agency_my_requests_v3
+    module.view_item = view_item_with_terminal_sales_agency_status
 
     login_required = getattr(module, "login_required", None)
     require_login = login_required if callable(login_required) else (lambda view_func: view_func)
@@ -1153,6 +1235,8 @@ def apply(module):
     app.view_functions["admin_kaitori_view"] = admin_kaitori_view_v3
     app.view_functions["admin_user_mitsumori_view"] = admin_user_mitsumori_view_v3
     app.view_functions["sales_agency_my_requests"] = require_login(sales_agency_my_requests_v3)
+    if "view_item" in app.view_functions:
+        app.view_functions["view_item"] = view_item_with_terminal_sales_agency_status
     if "admin_kaitori_delete" in app.view_functions:
         app.view_functions["admin_kaitori_delete"] = protected_admin_delete("admin_kaitori_delete", "invoices")
     if "admin_mitsumori_delete" in app.view_functions:
