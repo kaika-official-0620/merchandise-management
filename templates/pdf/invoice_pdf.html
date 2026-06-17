@@ -230,6 +230,45 @@
             color: #666;
             line-height: 1.45;
         }
+
+        @media screen and (max-width: 640px) {
+            .container {
+                padding: 14px 10px;
+            }
+
+            .document-title {
+                font-size: 21px;
+                margin-bottom: 8px;
+            }
+
+            .amount-company-row {
+                gap: 10px;
+            }
+
+            table {
+                table-layout: fixed;
+                font-size: 9px;
+            }
+
+            th,
+            td {
+                padding: 4px 3px;
+            }
+
+            .col-no { width: 30px; }
+            .col-date { width: 52px; }
+            .col-code { width: 52px; }
+            .col-amount { width: 60px; }
+
+            .summary-table td {
+                padding: 5px 4px;
+                font-size: 10px;
+            }
+
+            .summary-table .label {
+                width: auto;
+            }
+        }
         
         @media print {
             body {

@@ -215,6 +215,46 @@
             font-size: 10px;
             color: #666;
         }
+
+        @media screen and (max-width: 640px) {
+            .container {
+                padding: 14px 10px;
+            }
+
+            .document-title {
+                font-size: 21px;
+                margin-bottom: 16px;
+            }
+
+            .amount-company-row {
+                gap: 10px;
+                margin: 12px 0;
+            }
+
+            table {
+                table-layout: fixed;
+                font-size: 9px;
+            }
+
+            th,
+            td {
+                padding: 4px 3px;
+            }
+
+            .col-no { width: 34px; }
+            .col-date { width: 68px; }
+            .col-code { width: 65px; }
+            .col-amount { width: 76px; }
+
+            .summary-table td {
+                padding: 5px 4px;
+                font-size: 10px;
+            }
+
+            .summary-table .label {
+                width: auto;
+            }
+        }
         
         @media print {
             body {

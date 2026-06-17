@@ -271,9 +271,25 @@
             }
 
             .meta-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                column-gap: 18px;
                 row-gap: 15px;
                 margin-bottom: 21px;
                 font-size: 11px;
+            }
+
+            .meta-grid > div {
+                display: flex;
+                align-items: baseline;
+                gap: 0 6px;
+                white-space: normal;
+            }
+
+            .meta-value {
+                min-width: 0;
+                white-space: normal;
+                word-break: normal;
+                overflow-wrap: break-word;
             }
 
             .items {
