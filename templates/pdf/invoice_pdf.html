@@ -398,6 +398,9 @@
         </div>
         
         <div class="notes-section">
+            {% if invoice and invoice.notes %}
+            <div>蛯呵・ｬ・ｼ壽 {{ invoice.notes }}</div>
+            {% endif %}
             備考欄：本精算書は消費税を含む内税表記となっております。
         </div>
     </div>
