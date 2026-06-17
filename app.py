@@ -14027,6 +14027,13 @@ def view_item(id):
                     viewer='client',
                     service_type=request_dict.get('service_type'),
                 )
+                terminal_status_labels = {
+                    'cancelled': 'キャンセル済み',
+                    'rejected': '受付不可',
+                    'deal_failed': '取引不成立',
+                }
+                if request_dict.get('status') in terminal_status_labels and request_dict['status_label'] == request_dict.get('status'):
+                    request_dict['status_label'] = terminal_status_labels[request_dict.get('status')]
                 request_dict['can_request_cancel'] = request_dict.get('status') == 'pending'
                 if request_dict.get('status') in {'cancelled', 'rejected', 'deal_failed'}:
                     request_dict['reason'] = (

@@ -1171,6 +1171,13 @@ def apply(module):
             )
         else:
             status_label = sales_agency_label(terminal_request.get("status"), viewer="client") or terminal_request.get("status") or ""
+        terminal_status_labels = {
+            "cancelled": "キャンセル済み",
+            "rejected": "受付不可",
+            "deal_failed": "取引不成立",
+        }
+        if terminal_request.get("status") in terminal_status_labels and status_label == terminal_request.get("status"):
+            status_label = terminal_status_labels[terminal_request.get("status")]
         reason = (
             terminal_request.get("admin_note")
             or terminal_request.get("item_cancel_reason")
