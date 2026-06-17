@@ -1142,17 +1142,17 @@ def apply(module):
     module.admin_user_mitsumori_view = admin_user_mitsumori_view_v3
     module.sales_agency_my_requests = sales_agency_my_requests_v3
 
-    app.view_functions["documents"] = documents_v3
-    app.view_functions["user_invoice_view"] = user_invoice_view_v3
-    app.view_functions["user_mitsumori_list"] = user_mitsumori_list_v3
-    app.view_functions["user_mitsumori_add"] = user_mitsumori_add_v3
-    app.view_functions["user_mitsumori_view"] = user_mitsumori_view_v3
+    login_required = getattr(module, "login_required", None)
+    require_login = login_required if callable(login_required) else (lambda view_func: view_func)
+
+    app.view_functions["documents"] = require_login(documents_v3)
+    app.view_functions["user_invoice_view"] = require_login(user_invoice_view_v3)
+    app.view_functions["user_mitsumori_list"] = require_login(user_mitsumori_list_v3)
+    app.view_functions["user_mitsumori_add"] = require_login(user_mitsumori_add_v3)
+    app.view_functions["user_mitsumori_view"] = require_login(user_mitsumori_view_v3)
     app.view_functions["admin_kaitori_view"] = admin_kaitori_view_v3
     app.view_functions["admin_user_mitsumori_view"] = admin_user_mitsumori_view_v3
-    login_required = getattr(module, "login_required", None)
-    app.view_functions["sales_agency_my_requests"] = (
-        login_required(sales_agency_my_requests_v3) if callable(login_required) else sales_agency_my_requests_v3
-    )
+    app.view_functions["sales_agency_my_requests"] = require_login(sales_agency_my_requests_v3)
     if "admin_kaitori_delete" in app.view_functions:
         app.view_functions["admin_kaitori_delete"] = protected_admin_delete("admin_kaitori_delete", "invoices")
     if "admin_mitsumori_delete" in app.view_functions:
