@@ -89,12 +89,21 @@
     }
 
     th,
-    td,
+    td {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        word-break: normal !important;
+        overflow-wrap: anywhere !important;
+        white-space: normal;
+        line-break: strict;
+    }
+
     .document-title,
     .title,
     .status-badge {
         word-break: keep-all !important;
         overflow-wrap: normal !important;
+        white-space: nowrap;
         line-break: strict;
     }
 
@@ -135,13 +144,13 @@
         th,
         td {
             writing-mode: horizontal-tb;
-            word-break: keep-all;
-            overflow-wrap: normal;
+            word-break: normal;
+            overflow-wrap: anywhere;
             line-break: strict;
         }
 
         th {
-            white-space: nowrap;
+            white-space: normal;
         }
 
         .summary-table {
@@ -191,8 +200,8 @@
         th,
         td {
             writing-mode: horizontal-tb;
-            word-break: keep-all;
-            overflow-wrap: normal;
+            word-break: normal;
+            overflow-wrap: anywhere;
         }
     }
 </style>
@@ -200,9 +209,6 @@
     <div class="pdf-screen-toolbar-inner">
         <div class="pdf-screen-toolbar-actions">
             <button type="button" class="pdf-screen-btn pdf-screen-btn-back" onclick="goBackFromPdf()">戻る</button>
-            {% if csv_url is defined and csv_url %}
-            <a href="{{ csv_url }}" class="pdf-screen-btn pdf-screen-btn-csv">CSV</a>
-            {% endif %}
             <button type="button" class="pdf-screen-btn pdf-screen-btn-primary" onclick="window.print()">PDF保存</button>
             <button type="button" class="pdf-screen-btn pdf-screen-btn-print" onclick="window.print()">印刷</button>
         </div>

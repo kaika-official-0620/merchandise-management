@@ -19,9 +19,8 @@
             {% if kaitori.vendor_response_file_path %}
             <a href="{{ url_for('static', filename=kaitori.vendor_response_file_path) }}" class="doc-btn doc-btn-secondary" target="_blank" rel="noopener">添付を開く</a>
             {% endif %}
-            <a href="{{ url_for('admin_kaitori_shoudaku_download', id=kaitori.id) }}" class="doc-btn doc-btn-csv">CSV</a>
+            <a href="{{ url_for('admin_kaitori_shoudaku_download', id=kaitori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
             <a href="{{ url_for('admin_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
-            <button type="button" class="doc-btn doc-btn-print" onclick="window.print()">印刷</button>
         </div>
     </div>
 

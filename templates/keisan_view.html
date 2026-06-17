@@ -5,9 +5,8 @@
 {% block content %}
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-secondary context-back-inline">← 書類履歴へ戻る</a>
-    <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download">CSV</a>
+    <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
     <a href="{{ url_for('user_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-    <button type="button" onclick="window.print()" class="btn btn-print">印刷</button>
     {% if keisan.can_user_edit %}
     <a href="{{ url_for('user_keisan_edit', id=keisan.id) }}" class="btn btn-primary">編集</a>
     {% endif %}

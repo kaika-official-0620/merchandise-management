@@ -10,9 +10,8 @@
         {% if kaitori.can_user_edit %}
         <a href="{{ url_for('user_kaitori_shoudaku_edit', id=kaitori.id) }}" class="btn btn-edit">入力画面で修正</a>
         {% endif %}
-        <a href="{{ url_for('user_kaitori_shoudaku_download', id=kaitori.id) }}" class="btn btn-download">CSV</a>
+        <a href="{{ url_for('user_kaitori_shoudaku_download', id=kaitori.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="btn btn-export" target="_blank">PDF</a>
-        <button type="button" onclick="window.print()" class="btn btn-print">印刷</button>
         {% if kaitori.can_user_delete %}
         <form method="POST" action="{{ url_for('user_kaitori_shoudaku_delete', id=kaitori.id) }}" class="inline-delete-form" onsubmit="return confirm('この買取承諾書を削除しますか？')">
             <input type="hidden" name="next" value="{{ url_for('documents') }}">

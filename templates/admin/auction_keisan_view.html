@@ -6,9 +6,8 @@
     <h1>計算書詳細</h1>
     <div class="admin-nav">
         <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">← 処理送付へ戻る</a>
-        <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download">CSV</a>
+        <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
-        <button type="button" onclick="window.print()" class="btn btn-print">印刷</button>
         {% if keisan.is_admin_created and keisan.status != 'submitted' %}
         <a href="{{ url_for('admin_auction_keisan_edit', id=keisan.id, next=next_url) if next_url else url_for('admin_auction_keisan_edit', id=keisan.id) }}" class="btn btn-primary">計算書を編集</a>
         {% endif %}

@@ -46,8 +46,8 @@
 .announcement-filter label {
     display: grid;
     gap: 0.25rem;
-    flex: 0 1 190px;
-    width: min(100%, 190px);
+    flex: 0 1 162px;
+    width: min(100%, 162px);
     color: #475569;
     font-size: 0.78rem;
     font-weight: 800;
@@ -56,7 +56,7 @@
 
 .announcement-filter input[type="date"] {
     width: 100%;
-    max-width: 190px;
+    max-width: 162px;
     min-width: 0;
     box-sizing: border-box;
     min-height: 38px;
@@ -200,6 +200,13 @@
     .announcement-filter {
         align-items: flex-start;
         flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .announcement-filter label,
+    .announcement-filter input[type="date"] {
+        width: min(100%, 170px);
+        max-width: 170px;
     }
 
     .announcement-filter .btn {
@@ -235,7 +242,7 @@
 <div class="announcements-page">
     <div class="announcements-header">
         <h1>お知らせ</h1>
-        <a href="{{ url_for('user_home') }}" class="announcements-home-link">ホームへ戻る</a>
+        <a href="{{ url_for('user_home') }}" class="announcements-home-link context-back-inline">ホームへ戻る</a>
     </div>
 
     <form method="GET" action="{{ url_for('user_announcements_page') }}" class="announcement-filter">

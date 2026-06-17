@@ -293,6 +293,11 @@ h1, h2, h3, h4, h5, h6 {
     left: 0;
 }
 
+body.sidebar-navigating .sidebar,
+body.sidebar-navigating .sidebar-overlay {
+    transition: none !important;
+}
+
 .sidebar-header {
     display: flex;
     align-items: center;

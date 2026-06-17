@@ -614,12 +614,13 @@
             
             <!-- サービス（一般ユーザーのみ表示） -->
             <div class="sidebar-category">
-                <button class="sidebar-category-toggle {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service'] %}active{% endif %}" onclick="toggleCategory(this)">
+                <button class="sidebar-category-toggle {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service', 'public_proxy_service_history'] %}active{% endif %}" onclick="toggleCategory(this)">
                     サービス
                     <span class="category-arrow">▼</span>
                 </button>
-                <div class="sidebar-category-items {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service'] %}open{% endif %}">
+                <div class="sidebar-category-items {% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service', 'public_proxy_service_history'] %}open{% endif %}">
                     <a href="{{ url_for('public_proxy_service_list') }}" class="{% if request.endpoint in ['public_proxy_service_list', 'public_proxy_service'] %}active{% endif %}">代行仕入れサービス</a>
+                    <a href="{{ url_for('public_proxy_service_history') }}" class="{% if request.endpoint == 'public_proxy_service_history' %}active{% endif %}">オークション履歴</a>
                 </div>
             </div>
             {% endif %}
@@ -1744,11 +1745,79 @@
                         return;
                     }
 
-                    // Let normal navigation happen immediately. Closing the drawer first
-                    // leaves it half-open for a moment on mobile while the next page loads.
+                    event.preventDefault();
+                    document.body.classList.add('sidebar-navigating');
+                    setSidebarOpen(false);
+                    requestAnimationFrame(function() {
+                        window.location.href = targetUrl;
+                    });
                 });
             }
         });
+
+        (function setupCsvDownloadLinks() {
+            function filenameFromDisposition(disposition) {
+                if (!disposition) {
+                    return '';
+                }
+                const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+                if (encoded) {
+                    try {
+                        return decodeURIComponent(encoded[1]);
+                    } catch (error) {
+                        return encoded[1];
+                    }
+                }
+                const plain = disposition.match(/filename="?([^";]+)"?/i);
+                return plain ? plain[1] : '';
+            }
+
+            function fallbackIframeDownload(url) {
+                let frame = document.getElementById('csvDownloadFrame');
+                if (!frame) {
+                    frame = document.createElement('iframe');
+                    frame.id = 'csvDownloadFrame';
+                    frame.name = 'csvDownloadFrame';
+                    frame.style.display = 'none';
+                    document.body.appendChild(frame);
+                }
+                frame.src = url;
+            }
+
+            document.addEventListener('click', async function(event) {
+                const link = event.target instanceof Element ? event.target.closest('a.js-csv-download[href]') : null;
+                if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                event.preventDefault();
+                const href = link.href;
+                const isAppleMobile = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                if (isAppleMobile) {
+                    fallbackIframeDownload(href);
+                    return;
+                }
+                try {
+                    const response = await fetch(href, { credentials: 'same-origin' });
+                    if (!response.ok) {
+                        throw new Error('CSV download failed');
+                    }
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const temp = document.createElement('a');
+                    temp.href = objectUrl;
+                    temp.download = link.getAttribute('download') || filenameFromDisposition(response.headers.get('content-disposition')) || 'document.csv';
+                    document.body.appendChild(temp);
+                    temp.click();
+                    temp.remove();
+                    setTimeout(function() {
+                        URL.revokeObjectURL(objectUrl);
+                    }, 1000);
+                } catch (error) {
+                    fallbackIframeDownload(href);
+                }
+            });
+        })();
         
         // ユーザーメニュートグル（スマホ対応）
         function toggleUserMenu(e) {

@@ -128,11 +128,14 @@
             border-collapse: collapse;
             margin: 15px 0;
             font-size: 10px;
+            table-layout: fixed;
         }
         
         th, td {
             border: 1px solid #333;
             padding: 6px 8px;
+            writing-mode: horizontal-tb !important;
+            text-orientation: mixed !important;
         }
         
         th {
@@ -141,11 +144,18 @@
             text-align: center;
         }
         
-        .col-no { width: 35px; }
-        .col-name { }
-        .col-date { width: 80px; }
-        .col-code { width: 80px; }
-        .col-amount { width: 90px; }
+        .col-no { width: 30px; }
+        .col-name { width: auto; }
+        .col-date { width: 70px; }
+        .col-code { width: 64px; }
+        .col-amount { width: 76px; }
+
+        th.col-name,
+        td:nth-child(2) {
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: anywhere;
+        }
         
         .text-center { text-align: center; }
         .text-right { text-align: right; }
@@ -303,9 +313,12 @@
             }
             table {
                 font-size: 9px;
+                table-layout: fixed;
             }
             th, td {
-                padding: 4px 6px;
+                padding: 3px 4px;
+                writing-mode: horizontal-tb !important;
+                text-orientation: mixed !important;
             }
         }
     </style>

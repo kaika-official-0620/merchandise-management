@@ -6,9 +6,8 @@
 <div class="page-actions">
     <a href="{{ url_for('documents') }}" class="btn btn-back context-back-inline">← 一覧に戻る</a>
     <div class="header-actions">
-        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">CSV</a>
+        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-        <button type="button" onclick="window.print()" class="btn btn-print">印刷</button>
     </div>
 </div>
 
@@ -113,10 +112,6 @@
             <p><strong>株式会社 開花</strong></p>
         </div>
     </div>
-</div>
-
-<div class="print-button">
-    <button onclick="window.print()" class="btn btn-print">🖨️ 印刷する</button>
 </div>
 
 <style>

@@ -13,9 +13,8 @@
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-secondary">再確認</a>
         <a href="{{ url_for('admin_shikiriosho_send', id=shikiriosho.id) }}" class="btn btn-success" onclick="return confirm('この完成書類を送信しますか？')">個別送信</a>
         {% endif %}
-        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download">CSV</a>
+        <a href="{{ url_for('user_shikiriosho_download', id=shikiriosho.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('shikiriosho_pdf', id=shikiriosho.id) }}" class="btn btn-pdf" target="_blank">PDF</a>
-        <button type="button" onclick="window.print()" class="btn btn-print">印刷</button>
     </div>
 </div>
 
