@@ -1790,30 +1790,10 @@
                     return;
                 }
 
-                event.preventDefault();
                 const href = link.href;
                 const isAppleMobile = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
                 if (isAppleMobile) {
-                    fallbackIframeDownload(href);
-                    return;
-                }
-                try {
-                    const response = await fetch(href, { credentials: 'same-origin' });
-                    if (!response.ok) {
-                        throw new Error('CSV download failed');
-                    }
-                    const blob = await response.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    const temp = document.createElement('a');
-                    temp.href = objectUrl;
-                    temp.download = link.getAttribute('download') || filenameFromDisposition(response.headers.get('content-disposition')) || 'document.csv';
-                    document.body.appendChild(temp);
-                    temp.click();
-                    temp.remove();
-                    setTimeout(function() {
-                        URL.revokeObjectURL(objectUrl);
-                    }, 1000);
-                } catch (error) {
+                    event.preventDefault();
                     fallbackIframeDownload(href);
                 }
             });

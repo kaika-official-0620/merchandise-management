@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.title }} &#20462;&#27491; - &#26666;&#24335;&#20250;&#31038; &#38283;&#33457;{% endblock %}
+
+{% block content %}
+{% include "admin/_document_detail_styles.html" %}
+
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>{{ config.title }} &#20462;&#27491;</h1>
+            <p>&#20462;&#27491;&#29702;&#30001;&#12392;&#22793;&#26356;&#20869;&#23481;&#12399;&#23653;&#27508;&#12395;&#20445;&#23384;&#12373;&#12428;&#12414;&#12377;&#12290;</p>
+        </div>
+        <div class="admin-doc-actions">
+            <a href="{{ url_for(config.detail_endpoint, id=document_id) }}" class="doc-btn doc-btn-secondary context-back-inline">&#35443;&#32048;&#12408;&#25147;&#12427;</a>
+        </div>
+    </div>
+
+    <article class="admin-doc-sheet">
+        <div class="admin-doc-body">
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>{{ config.title }}</h2>
+                    <strong>ID: {{ document_id }}</strong>
+                </div>
+                {% if document.document_no %}
+                <p class="admin-doc-note">{{ document.document_no }}</p>
+                {% elif document.invoice_no %}
+                <p class="admin-doc-note">{{ document.invoice_no }}</p>
+                {% endif %}
+            </section>
+
+            {% if error %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>&#20445;&#23384;&#12391;&#12365;&#12414;&#12379;&#12435;</h2>
+                <div class="admin-doc-notes-body">{{ error }}</div>
+            </section>
+            {% endif %}
+
+            <form method="POST" class="admin-doc-cancel-panel final-document-edit-form">
+                {% for field in fields %}
+                <div class="final-document-edit-field">
+                    <label for="{{ field.name }}">{{ field.label }}</label>
+                    {% if field.type == 'textarea' %}
+                    <textarea id="{{ field.name }}" name="{{ field.name }}" rows="6">{{ field.value }}</textarea>
+                    {% else %}
+                    <input id="{{ field.name }}" name="{{ field.name }}" type="text" value="{{ field.value }}">
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <div class="final-document-edit-field">
+                    <label for="correction_reason">&#20462;&#27491;&#29702;&#30001; <span class="required">*</span></label>
+                    <textarea id="correction_reason" name="reason" rows="4" required placeholder="&#20363;: &#35352;&#36617;&#20869;&#23481;&#12395;&#35492;&#12426;&#12364;&#12354;&#12387;&#12383;&#12383;&#12417;"></textarea>
+                </div>
+
+                <div class="admin-doc-actions">
+                    <button type="submit" class="doc-btn doc-btn-success">&#20462;&#27491;&#12434;&#20445;&#23384;</button>
+                    <a href="{{ url_for(config.detail_endpoint, id=document_id) }}" class="doc-btn doc-btn-secondary">&#12461;&#12515;&#12531;&#12475;&#12523;</a>
+                </div>
+            </form>
+        </div>
+    </article>
+</div>
+
+<style>
+.final-document-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.final-document-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.final-document-edit-field label {
+    font-weight: 700;
+    color: #334155;
+}
+
+.final-document-edit-field input,
+.final-document-edit-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.required {
+    color: #dc2626;
+}
+
+@media (max-width: 640px) {
+    .admin-doc-page {
+        padding: 12px;
+    }
+}
+</style>
+{% endblock %}

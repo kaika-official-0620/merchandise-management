@@ -14,6 +14,9 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary context-back-inline">書類履歴へ戻る</a>
+            {% if can_edit_final_documents() %}
+            <a href="{{ url_for('admin_final_document_edit', document_kind='user_kaitori_shoudaku', document_id=kaitori.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
+            {% endif %}
             <a href="{{ url_for('user_kaitori_shoudaku_download', id=kaitori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
             <a href="{{ url_for('admin_user_kaitori_shoudaku_pdf', id=kaitori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
@@ -146,6 +149,10 @@
                 <div class="admin-doc-notes-body">{{ kaitori.notes }}</div>
             </section>
             {% endif %}
+
+            {% set final_document_kind = 'user_kaitori_shoudaku' %}
+            {% set final_document_id = kaitori.id %}
+            {% include "admin/_final_document_event_history.html" %}
         </div>
     </article>
 </div>

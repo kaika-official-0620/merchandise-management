@@ -1,0 +1,28 @@
+{% set final_events = document_events if document_events is defined else load_final_document_events(final_document_kind, final_document_id) %}
+{% if final_events %}
+<section class="admin-doc-section final-document-events">
+    <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>
+    <div class="admin-doc-event-list">
+        {% for event in final_events %}
+        <div class="admin-doc-event">
+            <strong>{{ event.action }}</strong>
+            <span>{{ event.created_at }}</span>
+            <span>{{ event.display_name or event.username or event.actor_id or '-' }}</span>
+            {% if event.reason %}<p>{{ event.reason }}</p>{% endif %}
+            {% if event.changes %}
+            <div class="final-document-event-changes">
+                {% for change in event.changes %}
+                <div class="final-document-event-change">
+                    <b>{{ change.label or change.field }}</b>
+                    <span class="event-before">{{ change.before or '-' }}</span>
+                    <span class="event-arrow">&#8594;</span>
+                    <span class="event-after">{{ change.after or '-' }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

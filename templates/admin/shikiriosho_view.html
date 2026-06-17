@@ -3,10 +3,14 @@
 {% block title %}精算書詳細 - {{ shikiriosho.document_no }} - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% include "admin/_document_detail_styles.html" %}
 <div class="admin-header">
     <h1>精算書詳細</h1>
     <div class="admin-nav">
         <a href="{{ url_for('admin_documents_history') }}" class="btn btn-secondary context-back-inline">← 一覧に戻る</a>
+        {% if can_edit_final_documents() %}
+        <a href="{{ url_for('admin_final_document_edit', document_kind='shikiriosho', document_id=shikiriosho.id) }}" class="btn btn-primary">&#20462;&#27491;</a>
+        {% endif %}
         {% if shikiriosho.status == 'draft' and can_edit_final_documents() %}
         <a href="{{ url_for('admin_shikiriosho_edit', id=shikiriosho.id) }}" class="btn btn-primary">編集</a>
         {% elif shikiriosho.status == 'completed' %}
@@ -159,6 +163,10 @@
             <p><strong>株式会社 開花</strong></p>
         </div>
     </div>
+
+    {% set final_document_kind = 'shikiriosho' %}
+    {% set final_document_id = shikiriosho.id %}
+    {% include "admin/_final_document_event_history.html" %}
 </div>
 
 <style>

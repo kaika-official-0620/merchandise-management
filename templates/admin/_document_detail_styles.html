@@ -394,6 +394,35 @@
     padding: 1.5rem;
 }
 
+.final-document-event-changes {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.final-document-event-change {
+    display: grid;
+    grid-template-columns: minmax(72px, 120px) minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    font-size: 0.86rem;
+}
+
+.final-document-event-change span {
+    min-width: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.event-before {
+    color: #64748b;
+}
+
+.event-after {
+    color: #0f766e;
+    font-weight: 600;
+}
+
 @media (max-width: 760px) {
     .admin-doc-toolbar,
     .admin-doc-actions {
@@ -420,6 +449,10 @@
 
     .admin-doc-table {
         min-width: 680px;
+    }
+
+    .final-document-event-change {
+        grid-template-columns: 1fr;
     }
 }
 

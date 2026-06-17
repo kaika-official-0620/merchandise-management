@@ -6,7 +6,7 @@ import sqlite3
 from html import escape
 from datetime import datetime
 
-from flask import flash, make_response, redirect, render_template, request, url_for
+from flask import abort, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
 
 
@@ -280,7 +280,32 @@ def apply(module):
             """,
             (document_kind, document_id),
         )
-        return rows_to_dicts(cur.fetchall())
+        events = rows_to_dicts(cur.fetchall())
+        for event in events:
+            metadata = {}
+            metadata_text = event.get("metadata")
+            if metadata_text:
+                try:
+                    metadata = json.loads(metadata_text)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    metadata = {}
+            event["metadata_obj"] = metadata
+            event["changes"] = metadata.get("changes") if isinstance(metadata.get("changes"), list) else []
+        return events
+
+    def load_final_document_events_for_template(document_kind, document_id):
+        if not document_kind or not document_id:
+            return []
+        conn, cur = open_cursor()
+        try:
+            return load_document_events(cur, document_kind, document_id)
+        except Exception:
+            return []
+        finally:
+            cur.close()
+            conn.close()
+
+    app.jinja_env.globals["load_final_document_events"] = load_final_document_events_for_template
 
     def generate_user_mitsumori_no(cur, user_id):
         now = get_jst_now()
@@ -729,6 +754,176 @@ def apply(module):
         "user_kaitori_shoudaku": ("user_kaitori_shoudaku", "admin_user_kaitori_shoudaku_view"),
         "admin_kaitori_shoudaku": ("admin_kaitori_shoudaku", "admin_kaitori_shoudaku_view"),
     }
+
+    DOCUMENT_EDIT_CONFIG = {
+        "invoices": {
+            "table": "invoices",
+            "detail_endpoint": "admin_kaitori_view",
+            "title": "\u8cb7\u53d6\u660e\u7d30\u66f8",
+            "fields": [
+                {"name": "notes", "label": "\u5099\u8003", "type": "textarea"},
+            ],
+        },
+        "user_mitsumori": {
+            "table": "user_mitsumori",
+            "detail_endpoint": "admin_user_mitsumori_view",
+            "title": "\u898b\u7a4d\u4f9d\u983c\u66f8",
+            "fields": [
+                {"name": "subject", "label": "\u4ef6\u540d", "type": "text"},
+                {"name": "notes", "label": "\u5099\u8003\u30fb\u6761\u4ef6", "type": "textarea"},
+            ],
+        },
+        "shikiriosho": {
+            "table": "shikiriosho",
+            "detail_endpoint": "admin_shikiriosho_view",
+            "title": "\u7cbe\u7b97\u66f8",
+            "fields": [
+                {"name": "notes", "label": "\u5099\u8003", "type": "textarea"},
+            ],
+        },
+        "user_keisan": {
+            "table": "user_keisan",
+            "detail_endpoint": "admin_auction_keisan_view",
+            "title": "\u8a08\u7b97\u66f8",
+            "fields": [
+                {"name": "subject", "label": "\u4ef6\u540d", "type": "text"},
+                {"name": "notes", "label": "\u5099\u8003", "type": "textarea"},
+            ],
+        },
+        "user_kaitori_shoudaku": {
+            "table": "user_kaitori_shoudaku",
+            "detail_endpoint": "admin_user_kaitori_shoudaku_view",
+            "title": "\u30e6\u30fc\u30b6\u30fc\u8cb7\u53d6\u627f\u8afe\u66f8",
+            "fields": [
+                {"name": "notes", "label": "\u5099\u8003", "type": "textarea"},
+            ],
+        },
+    }
+
+    def get_editable_document_fields(cur, config, document):
+        table = config["table"]
+        fields = []
+        for field in config["fields"]:
+            name = field["name"]
+            if column_exists(cur, table, name):
+                prepared = dict(field)
+                prepared["value"] = document.get(name) or ""
+                fields.append(prepared)
+        return fields
+
+    def final_document_detail_redirect(config, document_id):
+        endpoint = config.get("detail_endpoint")
+        if endpoint in app.view_functions:
+            return redirect(url_for(endpoint, id=document_id))
+        return redirect(url_for("admin_documents_history"))
+
+    def admin_final_document_edit(document_kind, document_id):
+        if not is_document_privileged_admin(current_user, "can_edit_final_documents"):
+            abort(403)
+        config = DOCUMENT_EDIT_CONFIG.get(document_kind)
+        if not config:
+            abort(404)
+
+        conn, cur = open_cursor()
+        try:
+            table = config["table"]
+            if not table_exists(cur, table):
+                abort(404)
+            cur.execute(f"SELECT * FROM {table} WHERE id = {mark()}", (document_id,))
+            document = fetch_one_dict(cur)
+            if not document:
+                abort(404)
+
+            fields = get_editable_document_fields(cur, config, document)
+            if not fields:
+                flash("\u4fee\u6b63\u53ef\u80fd\u306a\u9805\u76ee\u304c\u3042\u308a\u307e\u305b\u3093\u3002", "error")
+                return final_document_detail_redirect(config, document_id)
+
+            error = None
+            if request.method == "POST":
+                reason = (request.form.get("reason") or request.form.get("correction_reason") or "").strip()
+                if not reason:
+                    error = "\u4fee\u6b63\u7406\u7531\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
+                changes = []
+                update_names = []
+                update_values = []
+                for field in fields:
+                    name = field["name"]
+                    before = "" if document.get(name) is None else str(document.get(name))
+                    after = request.form.get(name)
+                    after = "" if after is None else after.strip()
+                    if before != after:
+                        changes.append(
+                            {
+                                "field": name,
+                                "label": field["label"],
+                                "before": before,
+                                "after": after,
+                            }
+                        )
+                        update_names.append(name)
+                        update_values.append(after)
+
+                if not error and not changes:
+                    error = "\u4fee\u6b63\u3059\u308b\u9805\u76ee\u304c\u5909\u66f4\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002"
+
+                if not error:
+                    set_clauses = [f"{name} = {mark()}" for name in update_names]
+                    if column_exists(cur, table, "updated_at"):
+                        set_clauses.append(f"updated_at = {mark()}")
+                        update_values.append(get_jst_now())
+                    if column_exists(cur, table, "updated_by"):
+                        set_clauses.append(f"updated_by = {mark()}")
+                        update_values.append(getattr(current_user, "id", None))
+                    update_values.append(document_id)
+                    cur.execute(
+                        f"UPDATE {table} SET {', '.join(set_clauses)} WHERE id = {mark()}",
+                        tuple(update_values),
+                    )
+                    log_document_event(
+                        cur,
+                        document_kind,
+                        document_id,
+                        "edit",
+                        reason,
+                        document.get("status"),
+                        document.get("status"),
+                        {"changes": changes, "document_kind": document_kind, "document_id": document_id},
+                    )
+                    conn.commit()
+                    flash("\u66f8\u985e\u3092\u4fee\u6b63\u3057\u307e\u3057\u305f\u3002", "success")
+                    return final_document_detail_redirect(config, document_id)
+
+                for field in fields:
+                    field["value"] = request.form.get(field["name"], field.get("value", ""))
+                return (
+                    render_template(
+                        "admin/final_document_edit.html",
+                        document=document,
+                        document_kind=document_kind,
+                        document_id=document_id,
+                        config=config,
+                        fields=fields,
+                        error=error,
+                    ),
+                    400,
+                )
+
+            return render_template(
+                "admin/final_document_edit.html",
+                document=document,
+                document_kind=document_kind,
+                document_id=document_id,
+                config=config,
+                fields=fields,
+                error=None,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     def admin_cancel_final_document(document_kind, document_id):
         if not is_document_privileged_admin(current_user, "can_cancel_documents"):
@@ -1270,3 +1465,15 @@ def apply(module):
             view_func=admin_sales_agency_admin_cancel,
             methods=["POST"],
         )
+    if "admin_final_document_edit" not in app.view_functions:
+        app.add_url_rule(
+            "/admin/documents/<document_kind>/<int:document_id>/edit",
+            endpoint="admin_final_document_edit",
+            view_func=admin_final_document_edit,
+            methods=["GET", "POST"],
+        )
+    if "admin_kaitori_edit" in app.view_functions:
+        def admin_kaitori_edit_final_document(id):
+            return admin_final_document_edit("invoices", id)
+
+        app.view_functions["admin_kaitori_edit"] = require_login(admin_kaitori_edit_final_document)

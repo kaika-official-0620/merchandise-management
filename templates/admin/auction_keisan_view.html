@@ -2,10 +2,14 @@
 {% block title %}計算書詳細 - 株式会社 開花{% endblock %}
 
 {% block content %}
+{% include "admin/_document_detail_styles.html" %}
 <div class="admin-header">
     <h1>計算書詳細</h1>
     <div class="admin-nav">
         <a href="{{ back_url }}" class="btn btn-secondary context-back-inline">← 処理送付へ戻る</a>
+        {% if can_edit_final_documents() %}
+        <a href="{{ url_for('admin_final_document_edit', document_kind='user_keisan', document_id=keisan.id) }}" class="btn btn-primary">&#20462;&#27491;</a>
+        {% endif %}
         <a href="{{ url_for('user_keisan_download', id=keisan.id) }}" class="btn btn-download js-csv-download" download>CSV</a>
         <a href="{{ url_for('admin_auction_keisan_pdf', id=keisan.id) }}" class="btn btn-pdf" target="_blank" rel="noopener">PDF</a>
         {% if keisan.is_admin_created and keisan.status != 'submitted' and can_edit_final_documents() %}
@@ -119,6 +123,10 @@
         <p>代行仕入れサービスの終了結果に基づき作成しています。計算書送付後、対象商品はクライアントの商品一覧へ反映されます。</p>
         {% endif %}
     </section>
+
+    {% set final_document_kind = 'user_keisan' %}
+    {% set final_document_id = keisan.id %}
+    {% include "admin/_final_document_event_history.html" %}
 
     <div class="keisan-status-line">
         <span>計算書番号 {{ keisan.document_no }}</span>

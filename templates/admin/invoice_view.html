@@ -23,6 +23,9 @@
             <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="doc-btn doc-btn-success" onclick="return confirm('この買取明細書を承認しますか？')">承認</a>
             <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="doc-btn doc-btn-danger" onclick="return confirm('この買取明細書を差し戻しますか？')">差し戻し</a>
             {% endif %}
+            {% if can_edit_final_documents() %}
+            <a href="{{ url_for('admin_final_document_edit', document_kind='invoices', document_id=invoice.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
+            {% endif %}
             <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
             <a href="{{ url_for('invoice_pdf', id=invoice.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
@@ -193,21 +196,9 @@
             </section>
             {% endif %}
 
-            {% if document_events %}
-            <section class="admin-doc-section">
-                <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>
-                <div class="admin-doc-event-list">
-                    {% for event in document_events %}
-                    <div class="admin-doc-event">
-                        <strong>{{ event.action }}</strong>
-                        <span>{{ event.created_at }}</span>
-                        <span>{{ event.display_name or event.username or event.actor_id or '-' }}</span>
-                        {% if event.reason %}<p>{{ event.reason }}</p>{% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </section>
-            {% endif %}
+            {% set final_document_kind = 'invoices' %}
+            {% set final_document_id = invoice.id %}
+            {% include "admin/_final_document_event_history.html" %}
         </div>
     </article>
 </div>

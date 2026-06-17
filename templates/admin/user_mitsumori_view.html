@@ -13,6 +13,9 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ url_for('admin_documents_history') }}" class="doc-btn doc-btn-secondary context-back-inline">書類履歴へ戻る</a>
+            {% if can_edit_final_documents() %}
+            <a href="{{ url_for('admin_final_document_edit', document_kind='user_mitsumori', document_id=mitsumori.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
+            {% endif %}
             <a href="{{ url_for('user_mitsumori_download', id=mitsumori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
             <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
@@ -163,21 +166,9 @@
             </section>
             {% endif %}
 
-            {% if document_events %}
-            <section class="admin-doc-section">
-                <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>
-                <div class="admin-doc-event-list">
-                    {% for event in document_events %}
-                    <div class="admin-doc-event">
-                        <strong>{{ event.action }}</strong>
-                        <span>{{ event.created_at }}</span>
-                        <span>{{ event.display_name or event.username or event.actor_id or '-' }}</span>
-                        {% if event.reason %}<p>{{ event.reason }}</p>{% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </section>
-            {% endif %}
+            {% set final_document_kind = 'user_mitsumori' %}
+            {% set final_document_id = mitsumori.id %}
+            {% include "admin/_final_document_event_history.html" %}
         </div>
     </article>
 </div>
