@@ -1250,6 +1250,28 @@ def apply(module: Any) -> None:
             run_if_table("proxy_service_users", f"DELETE FROM proxy_service_users WHERE user_id = {placeholder}", (id,))
             run_if_table("proxy_service_auction_users", f"DELETE FROM proxy_service_auction_users WHERE user_id = {placeholder}", (id,))
             run_if_table("service_documents", f"DELETE FROM service_documents WHERE user_id = {placeholder}", (id,))
+            run_if_table(
+                "final_document_events",
+                f"""
+                DELETE FROM final_document_events
+                WHERE (document_kind = 'sales_agency_requests'
+                       AND document_id IN (SELECT id FROM sales_agency_requests WHERE user_id = {placeholder}))
+                   OR (document_kind = 'invoices'
+                       AND document_id IN (SELECT id FROM invoices WHERE sender_id = {placeholder}))
+                   OR (document_kind = 'shikiriosho'
+                       AND document_id IN (
+                           SELECT id FROM shikiriosho
+                           WHERE sender_id = {placeholder} OR recipient_id = {placeholder}
+                       ))
+                   OR (document_kind = 'user_mitsumori'
+                       AND document_id IN (SELECT id FROM user_mitsumori WHERE user_id = {placeholder}))
+                   OR (document_kind = 'user_keisan'
+                       AND document_id IN (SELECT id FROM user_keisan WHERE user_id = {placeholder}))
+                   OR (document_kind = 'user_kaitori_shoudaku'
+                       AND document_id IN (SELECT id FROM user_kaitori_shoudaku WHERE user_id = {placeholder}))
+                """,
+                (id, id, id, id, id, id, id),
+            )
             if table_exists("shikiriosho"):
                 if table_exists("shikiriosho_items"):
                     cur.execute(
