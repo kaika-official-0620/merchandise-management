@@ -327,6 +327,12 @@
                 <li>写真と実物に大きな差異があった場合、コピー商品の場合は返却させていただきます。</li>
             </ul>
         </div>
+        {% if kaitori and kaitori.notes %}
+        <div class="notes-box">
+            <div class="notes-title">備考</div>
+            <div>{{ kaitori.notes }}</div>
+        </div>
+        {% endif %}
         
         <table>
             <thead>
