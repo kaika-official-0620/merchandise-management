@@ -4,6 +4,7 @@
 
 {% block content %}
 {% set current_return_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set pending_mitsumori_count = pending_mitsumori_from_invoices|default([])|length %}
 <div class="page-header">
     <h1>書類一覧</h1>
     <p class="page-subtitle">作成する書類を選び、下書き保存中の書類を続きから編集できます。完了した書類は書類履歴へ移動します。</p>
@@ -20,8 +21,15 @@
         <article class="document-create-card">
             <span class="document-create-kicker">開花へ送る依頼</span>
             <h3>見積依頼書</h3>
+            {% if pending_mitsumori_count %}
+            <span class="document-create-badge">見積依頼書作成 {{ pending_mitsumori_count }}件</span>
+            {% endif %}
             <p>商品内容や金額を入力し、開花へ見積依頼を送るための書類です。</p>
+            {% if pending_mitsumori_count %}
+            <a href="#pending-mitsumori-requests" class="btn btn-primary">作成依頼を確認</a>
+            {% else %}
             <a href="{{ url_for('user_mitsumori_add') }}" class="btn btn-primary">見積依頼書を作成</a>
+            {% endif %}
         </article>
         <article class="document-create-card">
             <span class="document-create-kicker">買取内容の承諾</span>
@@ -31,6 +39,27 @@
         </article>
     </div>
 </section>
+
+{% if pending_mitsumori_count %}
+<section class="pending-source-panel" id="pending-mitsumori-requests">
+    <div class="section-heading">
+        <h2>見積依頼書を作成してください</h2>
+        <p>買取明細書を確認し、その内容をもとに開花へ送信する見積依頼書を作成します。</p>
+    </div>
+    <div class="pending-source-list">
+        {% for inv in pending_mitsumori_from_invoices %}
+        <article class="pending-source-row">
+            <div>
+                <strong>{{ inv.invoice_no or inv.document_no or ('ID:' ~ inv.id) }}</strong>
+                <span>発行日 {{ inv.issue_date or '-' }}</span>
+                <small>合計 {% if inv.total_amount %}¥{{ "{:,}".format(inv.total_amount) }}{% else %}-{% endif %}</small>
+            </div>
+            <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-primary">この内容で作成</a>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 <section class="draft-documents-panel">
     <div class="section-heading">
@@ -117,6 +146,7 @@
 }
 
 .document-create-panel,
+.pending-source-panel,
 .draft-documents-panel,
 .history-link-panel {
     margin-bottom: 1.25rem;
@@ -180,6 +210,66 @@
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.04em;
+}
+
+.document-create-badge {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.pending-source-panel {
+    display: grid;
+    gap: 1rem;
+    border-color: #bfdbfe;
+    background: #f8fbff;
+}
+
+.pending-source-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.pending-source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.9rem;
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.pending-source-row div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.pending-source-row strong,
+.pending-source-row span,
+.pending-source-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pending-source-row strong {
+    color: #0f172a;
+}
+
+.pending-source-row span,
+.pending-source-row small {
+    color: #64748b;
+    font-size: 0.84rem;
 }
 
 .draft-document-column__header,
@@ -287,8 +377,14 @@
         flex-direction: column;
     }
 
+    .pending-source-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
     .draft-document-actions,
-    .draft-document-actions .btn {
+    .draft-document-actions .btn,
+    .pending-source-row .btn {
         width: 100%;
     }
 }

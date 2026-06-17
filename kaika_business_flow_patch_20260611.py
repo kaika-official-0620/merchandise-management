@@ -51,13 +51,19 @@ HISTORY_CATEGORY_PUBLIC_SLUGS = {
     "vendor_estimate": "vendor-estimate",
     "vendor": "vendor",
     "kaitori": "kaitori",
-    "shikiriosho": "settlement",
+    "shikiriosho": "shikiriosho",
     "kaika_shoudaku": "kaika-shoudaku",
-    "user_shoudaku": "kaitori-shoudaku",
+    "user_shoudaku": "kaitori_shoudaku",
     "keisan": "keisan",
     "kaika_mitsumori": "kaika-mitsumori",
 }
 HISTORY_CATEGORY_SLUG_TO_KEY = {slug: key for key, slug in HISTORY_CATEGORY_PUBLIC_SLUGS.items()}
+HISTORY_CATEGORY_SLUG_TO_KEY.update(
+    {
+        "settlement": "shikiriosho",
+        "kaitori-shoudaku": "user_shoudaku",
+    }
+)
 
 
 def apply(module: Any) -> None:
@@ -2213,7 +2219,9 @@ def apply(module: Any) -> None:
             "kaitori": "kaitori",
             "mitsumori": "client_incoming",
             "settlement": "shikiriosho",
+            "shikiriosho": "shikiriosho",
             "kaitori-shoudaku": "user_shoudaku",
+            "kaitori_shoudaku": "user_shoudaku",
             "shoudaku": "user_shoudaku",
             "shikiri": "shikiriosho",
             "keisan": "keisan",

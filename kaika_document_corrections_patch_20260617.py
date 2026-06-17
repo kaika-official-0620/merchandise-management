@@ -819,6 +819,48 @@ def apply(module):
             pending_mitsumori_from_invoices=pending_source_invoices(current_user.id),
         )
 
+    def user_document_list_v3():
+        is_user_deletable_mitsumori_document = getattr(module, "is_user_deletable_mitsumori_document", lambda _doc: True)
+        conn, cur = open_cursor()
+        try:
+            cur.execute(
+                f"""
+                SELECT *
+                FROM user_mitsumori
+                WHERE user_id = {mark()}
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+                ORDER BY updated_at DESC, created_at DESC
+                """,
+                (current_user.id,),
+            )
+            draft_mitsumori_list = [
+                dict(row)
+                for row in rows_to_dicts(cur.fetchall())
+                if is_user_deletable_mitsumori_document(row)
+            ]
+
+            cur.execute(
+                f"""
+                SELECT *
+                FROM user_kaitori_shoudaku
+                WHERE user_id = {mark()}
+                  AND COALESCE(status, 'draft') IN ('draft', 'in_progress')
+                ORDER BY updated_at DESC, created_at DESC
+                """,
+                (current_user.id,),
+            )
+            draft_kaitori_list = rows_to_dicts(cur.fetchall())
+        finally:
+            cur.close()
+            conn.close()
+
+        return render_template(
+            "document_list.html",
+            draft_mitsumori_list=draft_mitsumori_list,
+            draft_kaitori_list=draft_kaitori_list,
+            pending_mitsumori_from_invoices=pending_source_invoices(current_user.id),
+        )
+
     def user_mitsumori_add_v3():
         source_invoice_id = request.args.get("source_invoice_id", type=int) or request.form.get("source_invoice_id", type=int)
         if not source_invoice_id:
@@ -832,7 +874,7 @@ def apply(module):
         source_items = normalize_source_items(source_invoice_items)
         if not source_invoice:
             flash("元の買取明細書が見つからないか、見積依頼書を作成できない状態です。", "error")
-            return redirect(url_for("documents", tab="kaitori") + "#document-history-tabs")
+            return redirect(url_for("user_document_list"))
 
         conn, cur = open_cursor()
         try:
@@ -1634,8 +1676,8 @@ def apply(module):
         module.SALES_AGENCY_STATUS_CLIENT["rejected"] = "受付不可"
 
     module.fetch_sales_agency_request_details = fetch_sales_agency_request_details_v3
-    module.documents = documents_v3
     module.user_invoice_view = user_invoice_view_v3
+    module.user_document_list = user_document_list_v3
     module.user_mitsumori_list = user_mitsumori_list_v3
     module.user_mitsumori_add = user_mitsumori_add_v3
     module.user_mitsumori_view = user_mitsumori_view_v3
@@ -1647,8 +1689,8 @@ def apply(module):
     login_required = getattr(module, "login_required", None)
     require_login = login_required if callable(login_required) else (lambda view_func: view_func)
 
-    app.view_functions["documents"] = require_login(documents_v3)
     app.view_functions["user_invoice_view"] = require_login(user_invoice_view_v3)
+    app.view_functions["user_document_list"] = require_login(user_document_list_v3)
     app.view_functions["user_mitsumori_list"] = require_login(user_mitsumori_list_v3)
     app.view_functions["user_mitsumori_add"] = require_login(user_mitsumori_add_v3)
     app.view_functions["user_mitsumori_view"] = require_login(user_mitsumori_view_v3)

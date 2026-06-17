@@ -200,11 +200,10 @@
             gap: 0.9rem;
             padding: 1rem 1.05rem;
             border-radius: 18px;
-            background: rgba(15, 23, 42, 0.96);
-            color: #f8fafc;
-            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.34);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            backdrop-filter: blur(10px);
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.16);
+            border: 1px solid #dbeafe;
         }
 
         .announcement-toast.is-visible {
@@ -220,8 +219,8 @@
             height: 34px;
             padding: 0 0.85rem;
             border-radius: 999px;
-            background: rgba(59, 130, 246, 0.18);
-            color: #bfdbfe;
+            background: #dbeafe;
+            color: #1d4ed8;
             font-size: 0.8rem;
             font-weight: 700;
             letter-spacing: 0.04em;
@@ -229,18 +228,18 @@
         }
 
         .announcement-toast[data-type="important"] .announcement-toast-badge {
-            background: rgba(248, 113, 113, 0.18);
-            color: #fecaca;
+            background: #fee2e2;
+            color: #991b1b;
         }
 
         .announcement-toast[data-type="warning"] .announcement-toast-badge {
-            background: rgba(251, 191, 36, 0.18);
-            color: #fde68a;
+            background: #fef3c7;
+            color: #92400e;
         }
 
         .announcement-toast[data-type="success"] .announcement-toast-badge {
-            background: rgba(52, 211, 153, 0.18);
-            color: #bbf7d0;
+            background: #dcfce7;
+            color: #166534;
         }
 
         .announcement-toast-body {
@@ -261,13 +260,13 @@
             margin: 0;
             font-size: 0.98rem;
             line-height: 1.6;
-            color: #fff;
+            color: #0f172a;
             word-break: break-word;
         }
 
         .announcement-toast-content {
             margin: 0;
-            color: #e2e8f0;
+            color: #334155;
             line-height: 1.75;
             font-size: 0.9rem;
             word-break: break-word;
@@ -275,24 +274,28 @@
 
         .announcement-toast-meta {
             margin: 0;
-            color: #94a3b8;
+            color: #64748b;
             font-size: 0.8rem;
             line-height: 1.6;
         }
 
         .announcement-toast-close {
             border: none;
-            background: transparent;
-            color: #cbd5e1;
+            background: #f1f5f9;
+            color: #334155;
             font-size: 1.2rem;
             line-height: 1;
             cursor: pointer;
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 999px;
             padding: 0;
             flex: 0 0 auto;
         }
 
         .announcement-toast-close:hover {
-            color: #fff;
+            background: #e2e8f0;
+            color: #0f172a;
         }
 
         @keyframes announcement-toast-slide-in {
