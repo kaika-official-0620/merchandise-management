@@ -55,7 +55,7 @@
                 {% for key, label in permission_options.items() %}
                 <label class="checkbox-label">
                     <input type="checkbox" name="admin_permissions" value="{{ key }}"
-                           {% if user and user.role == 'admin' and ((user.admin_permissions_list and key in user.admin_permissions_list) or (not user.admin_permissions_list)) %}checked{% endif %}>
+                           {% if user and user.role == 'admin' and user.admin_permissions_list and key in user.admin_permissions_list %}checked{% endif %}>
                     <span>{{ label }}</span>
                 </label>
                 {% endfor %}

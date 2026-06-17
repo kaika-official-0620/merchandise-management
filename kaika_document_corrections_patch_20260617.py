@@ -265,6 +265,16 @@ def apply(module):
         labels = getattr(module.User, "ADMIN_PERMISSION_OPTIONS", {})
         return "、".join(labels.get(permission, permission) for permission in permissions)
 
+    def normalize_operator_admin_permissions(role, selected_permissions):
+        if role != "admin":
+            return None
+        valid_permissions = [
+            permission
+            for permission in (selected_permissions or [])
+            if permission in module.User.ADMIN_PERMISSION_OPTIONS
+        ]
+        return json.dumps(valid_permissions, ensure_ascii=False)
+
     def load_operator_user(cur, user_id):
         cur.execute(
             f"""
@@ -326,7 +336,7 @@ def apply(module):
                 flash("パスワードは6文字以上で入力してください", "error")
                 return render_template("admin/operator_form.html", user=None, permission_options=module.User.ADMIN_PERMISSION_OPTIONS)
 
-            admin_permissions = normalize_submitted_admin_permissions(role, request.form.getlist("admin_permissions"))
+            admin_permissions = normalize_operator_admin_permissions(role, request.form.getlist("admin_permissions"))
             conn, cur = open_cursor(dict_cursor=False)
             try:
                 cur.execute(
@@ -387,7 +397,7 @@ def apply(module):
                     role = "admin"
                 if role not in {"admin", "owner"}:
                     role = "admin"
-                permissions_json = normalize_submitted_admin_permissions(role, request.form.getlist("admin_permissions"))
+                permissions_json = normalize_operator_admin_permissions(role, request.form.getlist("admin_permissions"))
                 new_password = request.form.get("new_password") or ""
                 assignments = [
                     f"display_name = {mark()}",
@@ -416,7 +426,7 @@ def apply(module):
                 try:
                     user["admin_permissions_list"] = json.loads(user.get("admin_permissions") or "[]")
                 except Exception:
-                    user["admin_permissions_list"] = get_all_admin_permission_keys()
+                    user["admin_permissions_list"] = []
         finally:
             cur.close()
             conn.close()
