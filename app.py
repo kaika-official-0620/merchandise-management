@@ -15403,6 +15403,21 @@ def delete_user(id):
         ensure_proxy_service_auction_user_table(conn, cur)
         cleanup_sale_request_uploads_for_user(cur, id)
         cur.execute("""
+            DELETE FROM final_document_events
+            WHERE (document_kind = 'sales_agency_requests'
+                   AND document_id IN (SELECT id FROM sales_agency_requests WHERE user_id = %s))
+               OR (document_kind = 'invoices'
+                   AND document_id IN (SELECT id FROM invoices WHERE sender_id = %s))
+               OR (document_kind = 'shikiriosho'
+                   AND document_id IN (SELECT id FROM shikiriosho WHERE sender_id = %s OR recipient_id = %s))
+               OR (document_kind = 'user_mitsumori'
+                   AND document_id IN (SELECT id FROM user_mitsumori WHERE user_id = %s))
+               OR (document_kind = 'user_keisan'
+                   AND document_id IN (SELECT id FROM user_keisan WHERE user_id = %s))
+               OR (document_kind = 'user_kaitori_shoudaku'
+                   AND document_id IN (SELECT id FROM user_kaitori_shoudaku WHERE user_id = %s))
+        """, (id, id, id, id, id, id, id))
+        cur.execute("""
             DELETE FROM sale_request_events
             WHERE sale_request_id IN (
                 SELECT id FROM sale_requests
@@ -15481,6 +15496,21 @@ def delete_user(id):
         cur = conn.cursor()
         ensure_proxy_service_auction_user_table(conn, cur)
         cleanup_sale_request_uploads_for_user(cur, id)
+        cur.execute("""
+            DELETE FROM final_document_events
+            WHERE (document_kind = 'sales_agency_requests'
+                   AND document_id IN (SELECT id FROM sales_agency_requests WHERE user_id = ?))
+               OR (document_kind = 'invoices'
+                   AND document_id IN (SELECT id FROM invoices WHERE sender_id = ?))
+               OR (document_kind = 'shikiriosho'
+                   AND document_id IN (SELECT id FROM shikiriosho WHERE sender_id = ? OR recipient_id = ?))
+               OR (document_kind = 'user_mitsumori'
+                   AND document_id IN (SELECT id FROM user_mitsumori WHERE user_id = ?))
+               OR (document_kind = 'user_keisan'
+                   AND document_id IN (SELECT id FROM user_keisan WHERE user_id = ?))
+               OR (document_kind = 'user_kaitori_shoudaku'
+                   AND document_id IN (SELECT id FROM user_kaitori_shoudaku WHERE user_id = ?))
+        """, (id, id, id, id, id, id, id))
         cur.execute("""
             DELETE FROM sale_request_events
             WHERE sale_request_id IN (
