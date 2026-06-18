@@ -4,9 +4,9 @@ services:
     env: python
     plan: standard
     autoDeployTrigger: commit
-    buildCommand: (apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-jpn || true) && pip install -r requirements.txt
+    buildCommand: bash scripts/install_tesseract_render.sh && pip install -r requirements.txt && python scripts/verify_render_build.py
     healthCheckPath: /healthz
-    startCommand: gunicorn render_app:app --bind 0.0.0.0:$PORT --timeout 300
+    startCommand: bash scripts/start_render.sh
     disk:
       name: uploads-storage
       mountPath: /opt/render/project/src/static/uploads

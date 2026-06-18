@@ -25,6 +25,7 @@ venv.bak/
 # Generated backups
 static/uploads/_system_backups/
 backups/
+.render/
 
 # Logs
 *.log

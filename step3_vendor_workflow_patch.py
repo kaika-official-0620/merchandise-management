@@ -5,6 +5,7 @@ import difflib
 import mimetypes
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import unicodedata
@@ -385,6 +386,29 @@ def apply(module: Any) -> None:
             try:
                 import pytesseract
 
+                tesseract_cmd = os.environ.get("TESSERACT_CMD") or shutil.which("tesseract")
+                if not tesseract_cmd:
+                    project_root = Path.cwd()
+                    local_cmd = project_root / ".render" / "tesseract" / "usr" / "bin" / "tesseract"
+                    if local_cmd.exists():
+                        tesseract_cmd = str(local_cmd)
+                        local_bin = str(local_cmd.parent)
+                        os.environ["PATH"] = f"{local_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+                        lib_paths = [
+                            str(project_root / ".render" / "tesseract" / "usr" / "lib" / "x86_64-linux-gnu"),
+                            str(project_root / ".render" / "tesseract" / "lib" / "x86_64-linux-gnu"),
+                        ]
+                        os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(lib_paths + [os.environ.get("LD_LIBRARY_PATH", "")])
+                    for tessdata_dir in [
+                        project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "5" / "tessdata",
+                        project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "4.00" / "tessdata",
+                        project_root / ".render" / "tesseract" / "usr" / "share" / "tessdata",
+                    ]:
+                        if tessdata_dir.exists() and not os.environ.get("TESSDATA_PREFIX"):
+                            os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+                            break
+                if tesseract_cmd:
+                    pytesseract.pytesseract.tesseract_cmd = str(tesseract_cmd)
                 ocr_text = pytesseract.image_to_string(image, lang="jpn+eng").strip()
                 if ocr_text:
                     return "\n".join(metadata_texts + [ocr_text]).strip(), "; ".join(errors)
