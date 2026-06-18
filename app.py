@@ -45341,5 +45341,568 @@ try:
 except Exception as _kaika_followup_patch_error:
     print(f"[WARN] kaika followup patch apply failed: {_kaika_followup_patch_error}", flush=True)
 
+
+# Step A: admin document workflow for user sales-agency requests.
+# This layer intentionally overrides only document steps 1 and 2.
+_stepa_previous_admin_documents_dashboard = app.view_functions.get("admin_documents_dashboard")
+
+
+def _stepa_time_value():
+    now = get_jst_now()
+    return now if DATABASE_URL else now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _stepa_format_date(value, with_time=False):
+    if not value:
+        return "-"
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d %H:%M" if with_time else "%Y-%m-%d")
+    text = str(value)
+    return text[:16] if with_time else text[:10]
+
+
+def _ensure_stepa_document_workflow_columns():
+    _ensure_sales_agency_document_columns()
+    specs = {
+        "sales_agency_request_items": [
+            ("workflow_status", "ALTER TABLE sales_agency_request_items ADD COLUMN workflow_status VARCHAR(40) DEFAULT 'step1_pending'", "ALTER TABLE sales_agency_request_items ADD COLUMN workflow_status TEXT DEFAULT 'step1_pending'"),
+            ("verified_at", "ALTER TABLE sales_agency_request_items ADD COLUMN verified_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN verified_at TEXT"),
+            ("verified_by", "ALTER TABLE sales_agency_request_items ADD COLUMN verified_by INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN verified_by INTEGER"),
+            ("cancelled_at", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_at TEXT"),
+            ("cancelled_by", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_by INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_by INTEGER"),
+            ("vendor_mitsumori_id", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_mitsumori_id INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_mitsumori_id INTEGER"),
+            ("moved_to_step3_at", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step3_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step3_at TEXT"),
+            ("updated_at", "ALTER TABLE sales_agency_request_items ADD COLUMN updated_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN updated_at TEXT"),
+        ],
+        "user_mitsumori": [
+            ("vendor_id", "ALTER TABLE user_mitsumori ADD COLUMN vendor_id INTEGER", "ALTER TABLE user_mitsumori ADD COLUMN vendor_id INTEGER"),
+            ("created_by_admin_id", "ALTER TABLE user_mitsumori ADD COLUMN created_by_admin_id INTEGER", "ALTER TABLE user_mitsumori ADD COLUMN created_by_admin_id INTEGER"),
+        ],
+    }
+    conn, cur = _docs_open_cursor()
+    try:
+        for table_name, columns in specs.items():
+            for column_name, pg_sql, sqlite_sql in columns:
+                if _docs_column_exists(cur, table_name, column_name):
+                    continue
+                cur.execute(pg_sql if DATABASE_URL else sqlite_sql)
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _stepa_workflow_status_label(status):
+    return {
+        "step1_pending": "未確認",
+        "step2_ready": "認証済み待ち",
+        "step3_vendor_wait": "業者書類待ち",
+        "cancelled": "キャンセル",
+        "canceled": "キャンセル",
+    }.get((status or "").strip() or "step1_pending", status or "未確認")
+
+
+def _stepa_clean_int_list(values):
+    cleaned = []
+    for value in values or []:
+        try:
+            item_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if item_id > 0 and item_id not in cleaned:
+            cleaned.append(item_id)
+    return cleaned
+
+
+def _stepa_fetch_linked_documents(request_ids):
+    request_ids = _stepa_clean_int_list(request_ids)
+    if not request_ids:
+        return {}
+    linked = {request_id: [] for request_id in request_ids}
+    conn, cur = _docs_open_cursor()
+    try:
+        marks = ", ".join([_docs_mark()] * len(request_ids))
+        if _docs_table_exists(cur, "user_mitsumori") and _docs_column_exists(cur, "user_mitsumori", "sales_agency_request_id"):
+            cur.execute(
+                f"""
+                SELECT id, sales_agency_request_id, document_no, issue_date, status, document_scope
+                FROM user_mitsumori
+                WHERE sales_agency_request_id IN ({marks})
+                  AND COALESCE(document_scope, 'client_incoming') NOT IN ('vendor_outgoing', 'kaika_vendor_outgoing', 'kaika_estimate')
+                ORDER BY id DESC
+                """,
+                tuple(request_ids),
+            )
+            for row in _docs_rows_to_dicts(cur.fetchall()):
+                request_id = row.get("sales_agency_request_id")
+                if request_id in linked:
+                    linked[request_id].append(
+                        {
+                            "label": row.get("document_no") or f"見積依頼書ID:{row.get('id')}",
+                            "url": url_for("admin_mitsumori_view", id=row.get("id")),
+                            "date_label": _stepa_format_date(row.get("issue_date")),
+                        }
+                    )
+        for request_id in request_ids:
+            linked.setdefault(request_id, []).insert(
+                0,
+                {
+                    "label": f"申請詳細 #{request_id}",
+                    "url": url_for("admin_sales_agency_request_detail", id=request_id),
+                    "date_label": "",
+                },
+            )
+    finally:
+        cur.close()
+        conn.close()
+    return linked
+
+
+def _stepa_normalize_photo_path(path):
+    return (path or "").replace("\\", "/")
+
+
+def _stepa_fetch_items(workflow_statuses, user_id=None, item_ids=None, limit=500):
+    _ensure_stepa_document_workflow_columns()
+    statuses = [status for status in workflow_statuses if status]
+    if not statuses:
+        return []
+    item_ids = _stepa_clean_int_list(item_ids)
+    conn, cur = _docs_open_cursor()
+    try:
+        status_expr = "COALESCE(NULLIF(sari.workflow_status, ''), 'step1_pending')"
+        item_status_expr = "COALESCE(NULLIF(sari.item_status, ''), 'active')"
+        marks = ", ".join([_docs_mark()] * len(statuses))
+        where_parts = [
+            f"{status_expr} IN ({marks})",
+            f"{item_status_expr} NOT IN ('cancelled', 'canceled')",
+        ]
+        params = list(statuses)
+        if user_id:
+            where_parts.append(f"sar.user_id = {_docs_mark()}")
+            params.append(user_id)
+        if item_ids:
+            item_marks = ", ".join([_docs_mark()] * len(item_ids))
+            where_parts.append(f"sari.id IN ({item_marks})")
+            params.extend(item_ids)
+        params.append(max(1, min(int(limit or 500), 1000)))
+        cur.execute(
+            f"""
+            SELECT
+                sari.id AS request_item_id,
+                sari.request_id,
+                sari.merchandise_id,
+                {status_expr} AS workflow_status,
+                {item_status_expr} AS item_status,
+                sari.verified_at,
+                sari.vendor_mitsumori_id,
+                sari.updated_at,
+                sar.user_id,
+                sar.service_type,
+                sar.status AS request_status,
+                sar.created_at AS requested_at,
+                u.display_name AS user_display_name,
+                u.username,
+                u.email AS user_email,
+                m.id AS actual_merchandise_id,
+                COALESCE(m.product_name, sari.snapshot_product_name, '') AS product_name,
+                COALESCE(m.brand_name, sari.snapshot_brand_name, '') AS brand_name,
+                COALESCE(m.model_number, sari.snapshot_model_number, '') AS model_number,
+                COALESCE(m.kaika_product_code, sari.snapshot_kaika_product_code, '') AS kaika_product_code,
+                COALESCE(m.photo_path, sari.snapshot_photo_path, '') AS photo_path,
+                m.item_condition,
+                m.purchase_date,
+                m.purchase_price,
+                m.listing_price,
+                m.store_name
+            FROM sales_agency_request_items sari
+            JOIN sales_agency_requests sar ON sari.request_id = sar.id
+            JOIN users u ON sar.user_id = u.id
+            LEFT JOIN merchandise m ON sari.merchandise_id = m.id
+            WHERE {' AND '.join(where_parts)}
+            ORDER BY COALESCE(sari.updated_at, sari.verified_at, sar.created_at) DESC, sari.id DESC
+            LIMIT {_docs_mark()}
+            """,
+            tuple(params),
+        )
+        rows = _docs_rows_to_dicts(cur.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+    linked_documents = _stepa_fetch_linked_documents([row.get("request_id") for row in rows])
+    for row in rows:
+        product_name = (row.get("product_name") or "").strip()
+        fallback = " / ".join(
+            str(part).strip()
+            for part in [row.get("brand_name"), row.get("model_number"), row.get("kaika_product_code")]
+            if str(part or "").strip()
+        )
+        row["product_name"] = product_name or fallback or f"商品ID {row.get('merchandise_id') or row.get('request_item_id')}"
+        row["photo_path"] = _stepa_normalize_photo_path(row.get("photo_path"))
+        row["user_name"] = row.get("user_display_name") or row.get("username") or f"ユーザーID {row.get('user_id')}"
+        row["service_name"] = get_sales_agency_service_name(row.get("service_type"))
+        row["workflow_status_label"] = _stepa_workflow_status_label(row.get("workflow_status"))
+        row["request_status_label"] = get_sales_agency_status_label(row.get("request_status"), viewer="admin", service_type=row.get("service_type"))
+        row["requested_at_label"] = _stepa_format_date(row.get("requested_at"))
+        row["updated_at_label"] = _stepa_format_date(row.get("updated_at") or row.get("verified_at") or row.get("requested_at"), with_time=True)
+        row["detail_url"] = url_for("view_item", id=row.get("actual_merchandise_id")) if row.get("actual_merchandise_id") else None
+        row["request_detail_url"] = url_for("admin_sales_agency_request_detail", id=row.get("request_id"))
+        row["documents"] = linked_documents.get(row.get("request_id"), [])
+    return rows
+
+
+def _stepa_group_items_by_user(items):
+    groups = {}
+    for item in items:
+        user_id = int(item.get("user_id") or 0)
+        if user_id not in groups:
+            groups[user_id] = {
+                "user_id": user_id,
+                "user_name": item.get("user_name") or f"ユーザーID {user_id}",
+                "username": item.get("username") or "",
+                "items": [],
+                "latest_sort": "",
+            }
+        groups[user_id]["items"].append(item)
+        latest = str(item.get("updated_at") or item.get("verified_at") or item.get("requested_at") or "")
+        if latest > groups[user_id]["latest_sort"]:
+            groups[user_id]["latest_sort"] = latest
+            groups[user_id]["last_date_label"] = item.get("updated_at_label") or item.get("requested_at_label")
+
+    prepared = []
+    for group in groups.values():
+        status_counts = {}
+        service_counts = {}
+        for item in group["items"]:
+            status_label = item.get("workflow_status_label") or "-"
+            status_counts[status_label] = status_counts.get(status_label, 0) + 1
+            service_name = item.get("service_name") or "未設定"
+            service_counts[service_name] = service_counts.get(service_name, 0) + 1
+        group["item_count"] = len(group["items"])
+        group["status_summary"] = " / ".join([f"{label} {count}点" for label, count in status_counts.items()])
+        group["service_summary"] = " / ".join([f"{label} {count}点" for label, count in service_counts.items()])
+        group["last_date_label"] = group.get("last_date_label") or "-"
+        prepared.append(group)
+    prepared.sort(key=lambda group: group.get("latest_sort") or "", reverse=True)
+    return prepared
+
+
+def _stepa_load_dashboard_context(selected_group):
+    step1_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step1_pending"]))
+    step2_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step2_ready"]))
+    if selected_group == "vendor_outgoing":
+        active_groups = step2_groups
+        step_title = "ステップ2: 業者へ依頼する見積依頼書作成"
+        step_summary = "ステップ1で認証済みにした商品だけをユーザー単位で確認し、専用ページで業者ごとに見積依頼書を作成します。"
+        step_mode = "step2"
+    else:
+        active_groups = step1_groups
+        step_title = "ステップ1: 顧客からの書類受付"
+        step_summary = "顧客から届いた申請商品をユーザー単位で確認し、商品ごとに認証済みまたはキャンセルへ振り分けます。"
+        step_mode = "step1"
+    return {
+        "stepa_mode": step_mode,
+        "selected_group": selected_group,
+        "step_title": step_title,
+        "step_summary": step_summary,
+        "stepa_groups": active_groups,
+        "stepa_counts": {
+            "step1": sum(group["item_count"] for group in step1_groups),
+            "step2": sum(group["item_count"] for group in step2_groups),
+        },
+    }
+
+
+@login_required
+@admin_required
+def admin_documents_dashboard_stepa():
+    selected_group = (request.args.get("group") or "all").strip() or "all"
+    if selected_group not in {"client_incoming", "vendor_outgoing"}:
+        if _stepa_previous_admin_documents_dashboard:
+            return _stepa_previous_admin_documents_dashboard()
+        return admin_documents_dashboard_preview()
+    context = _stepa_load_dashboard_context(selected_group)
+    return render_template("admin/documents_stepa_dashboard.html", **context)
+
+
+@login_required
+@admin_required
+def admin_sales_agency_item_verify(item_id):
+    _ensure_stepa_document_workflow_columns()
+    conn, cur = _docs_open_cursor()
+    try:
+        cur.execute(
+            f"""
+            SELECT id, COALESCE(item_status, 'active') AS item_status,
+                   COALESCE(workflow_status, 'step1_pending') AS workflow_status
+            FROM sales_agency_request_items
+            WHERE id = {_docs_mark()}
+            """,
+            (item_id,),
+        )
+        item = _docs_row_to_dict(cur.fetchone())
+        if not item:
+            flash("対象商品が見つかりません", "error")
+            return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+        if item.get("item_status") in {"cancelled", "canceled"} or item.get("workflow_status") in {"cancelled", "canceled"}:
+            flash("キャンセル済み商品は認証済みにできません", "error")
+            return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+        now_value = _stepa_time_value()
+        cur.execute(
+            f"""
+            UPDATE sales_agency_request_items
+            SET workflow_status = {_docs_mark()},
+                verified_at = {_docs_mark()},
+                verified_by = {_docs_mark()},
+                updated_at = {_docs_mark()}
+            WHERE id = {_docs_mark()}
+            """,
+            ("step2_ready", now_value, current_user.id, now_value, item_id),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    flash("商品を認証済みにしました。ステップ2へ移動しました。", "success")
+    return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+
+
+@login_required
+@admin_required
+def admin_sales_agency_item_cancel_stepa(item_id):
+    _ensure_stepa_document_workflow_columns()
+    cancel_reason = (request.form.get("cancel_reason") or "").strip()
+    conn, cur = _docs_open_cursor()
+    try:
+        cur.execute(
+            f"SELECT id FROM sales_agency_request_items WHERE id = {_docs_mark()}",
+            (item_id,),
+        )
+        item = _docs_row_to_dict(cur.fetchone())
+        if not item:
+            flash("対象商品が見つかりません", "error")
+            return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+        now_value = _stepa_time_value()
+        cur.execute(
+            f"""
+            UPDATE sales_agency_request_items
+            SET workflow_status = {_docs_mark()},
+                item_status = {_docs_mark()},
+                cancelled_at = {_docs_mark()},
+                cancelled_by = {_docs_mark()},
+                canceled_at = {_docs_mark()},
+                canceled_by = {_docs_mark()},
+                cancel_reason = {_docs_mark()},
+                updated_at = {_docs_mark()}
+            WHERE id = {_docs_mark()}
+            """,
+            ("cancelled", "cancelled", now_value, current_user.id, now_value, current_user.id, cancel_reason, now_value, item_id),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    flash("商品をキャンセルしました。ステップ2へは移動しません。", "success")
+    return redirect(url_for("admin_documents_dashboard", group="client_incoming"))
+
+
+def _stepa_build_vendor_document_defaults(user_id, items, vendor):
+    user_name = items[0].get("user_name") if items else f"ユーザーID {user_id}"
+    service_names = []
+    request_ids = []
+    for item in items:
+        if item.get("service_name") and item.get("service_name") not in service_names:
+            service_names.append(item.get("service_name"))
+        if item.get("request_id") and item.get("request_id") not in request_ids:
+            request_ids.append(item.get("request_id"))
+    subject = " / ".join(service_names) or "業者向け"
+    return {
+        "user_name": user_name,
+        "subject": f"{subject} 見積依頼書",
+        "notes": f"ステップ2から作成。対象申請: {', '.join(str(request_id) for request_id in request_ids)}",
+        "company_name": vendor.get("name") if vendor else "",
+        "contact_person": vendor.get("contact_name") if vendor else "",
+        "address": vendor.get("address") if vendor else "",
+    }
+
+
+@login_required
+@admin_required
+def admin_vendor_mitsumori_create(user_id):
+    _ensure_stepa_document_workflow_columns()
+    vendors = _docs_load_vendors()
+    step2_items = _stepa_fetch_items(["step2_ready"], user_id=user_id)
+    if not step2_items:
+        flash("このユーザーにステップ2対象商品はありません", "info")
+        return redirect(url_for("admin_documents_dashboard", group="vendor_outgoing"))
+
+    selected_item_ids = _stepa_clean_int_list(request.form.getlist("request_item_ids")) if request.method == "POST" else []
+    selected_vendor_id = request.form.get("vendor_id", type=int) if request.method == "POST" else None
+    selected_vendor = next((vendor for vendor in vendors if int(vendor.get("id") or 0) == int(selected_vendor_id or 0)), None)
+
+    if request.method == "POST":
+        if not selected_vendor:
+            flash("流し先業者を1社選択してください", "error")
+            return redirect(request.url)
+        if not selected_item_ids:
+            flash("業者へ流す商品を1点以上選択してください", "error")
+            return redirect(request.url)
+        selected_items = _stepa_fetch_items(["step2_ready"], user_id=user_id, item_ids=selected_item_ids)
+        selected_ids_found = {int(item.get("request_item_id")) for item in selected_items}
+        if selected_ids_found != set(selected_item_ids):
+            flash("選択商品の中にステップ2対象外の商品が含まれています", "error")
+            return redirect(request.url)
+
+        defaults = _stepa_build_vendor_document_defaults(user_id, selected_items, selected_vendor)
+        issue_date = request.form.get("issue_date") or get_jst_now().strftime("%Y-%m-%d")
+        valid_until = request.form.get("valid_until") or (get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        subject = (request.form.get("subject") or defaults["subject"]).strip()
+        notes = (request.form.get("notes") or defaults["notes"]).strip()
+        status = request.form.get("status") or "draft"
+        total_amount = 0
+        first_request_id = selected_items[0].get("request_id") if selected_items else None
+        document_no = _generate_prefixed_document_no("MT", "user_mitsumori", "document_no")
+        conn, cur = _docs_open_cursor()
+        try:
+            if DATABASE_URL:
+                cur.execute(
+                    """
+                    INSERT INTO user_mitsumori
+                    (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, document_scope, sales_agency_request_id, vendor_id, created_by_admin_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        document_no,
+                        user_id,
+                        issue_date,
+                        valid_until,
+                        selected_vendor.get("name") or defaults["company_name"],
+                        selected_vendor.get("department") or "",
+                        selected_vendor.get("contact_name") or defaults["contact_person"],
+                        selected_vendor.get("address") or defaults["address"],
+                        subject,
+                        total_amount,
+                        notes,
+                        status,
+                        "vendor_outgoing",
+                        first_request_id,
+                        selected_vendor.get("id"),
+                        current_user.id,
+                    ),
+                )
+                mitsumori_id = _docs_row_to_dict(cur.fetchone())["id"]
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO user_mitsumori
+                    (document_no, user_id, issue_date, valid_until, company_name, department, contact_person, address, subject, total_amount, notes, status, document_scope, sales_agency_request_id, vendor_id, created_by_admin_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        document_no,
+                        user_id,
+                        issue_date,
+                        valid_until,
+                        selected_vendor.get("name") or defaults["company_name"],
+                        selected_vendor.get("department") or "",
+                        selected_vendor.get("contact_name") or defaults["contact_person"],
+                        selected_vendor.get("address") or defaults["address"],
+                        subject,
+                        total_amount,
+                        notes,
+                        status,
+                        "vendor_outgoing",
+                        first_request_id,
+                        selected_vendor.get("id"),
+                        current_user.id,
+                    ),
+                )
+                mitsumori_id = cur.lastrowid
+
+            for index, item in enumerate(selected_items, start=1):
+                item_name = " / ".join(
+                    part
+                    for part in [
+                        item.get("product_name"),
+                        item.get("brand_name"),
+                        item.get("model_number"),
+                    ]
+                    if part
+                )
+                cur.execute(
+                    f"""
+                    INSERT INTO user_mitsumori_items
+                    (mitsumori_id, item_no, item_name, merchandise_id, quantity, unit, unit_price, amount)
+                    VALUES ({_docs_mark()}, {_docs_mark()}, {_docs_mark()}, {_docs_mark()}, {_docs_mark()}, {_docs_mark()}, {_docs_mark()}, {_docs_mark()})
+                    """,
+                    (mitsumori_id, index, item_name or item.get("product_name"), item.get("actual_merchandise_id") or item.get("merchandise_id"), 1, "点", 0, 0),
+                )
+
+            now_value = _stepa_time_value()
+            update_marks = ", ".join([_docs_mark()] * len(selected_item_ids))
+            cur.execute(
+                f"""
+                UPDATE sales_agency_request_items
+                SET workflow_status = {_docs_mark()},
+                    vendor_mitsumori_id = {_docs_mark()},
+                    moved_to_step3_at = {_docs_mark()},
+                    updated_at = {_docs_mark()}
+                WHERE id IN ({update_marks})
+                """,
+                tuple(["step3_vendor_wait", mitsumori_id, now_value, now_value] + selected_item_ids),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        flash(f"見積依頼書 {document_no} を作成しました", "success")
+        return redirect(url_for("admin_mitsumori_view", id=mitsumori_id))
+
+    default_vendor = vendors[0] if vendors else None
+    defaults = _stepa_build_vendor_document_defaults(user_id, step2_items, default_vendor)
+    return render_template(
+        "admin/vendor_mitsumori_create.html",
+        user_id=user_id,
+        user_name=defaults["user_name"],
+        items=step2_items,
+        vendors=vendors,
+        today=get_jst_now().strftime("%Y-%m-%d"),
+        default_valid_until=(get_jst_now() + timedelta(days=7)).strftime("%Y-%m-%d"),
+        document_no=_generate_prefixed_document_no("MT", "user_mitsumori", "document_no"),
+        subject_default=defaults["subject"],
+        notes_default=defaults["notes"],
+        back_url=url_for("admin_documents_dashboard", group="vendor_outgoing"),
+    )
+
+
+try:
+    app.add_url_rule(
+        "/admin/documents/sales-agency-item/<int:item_id>/verify",
+        endpoint="admin_sales_agency_item_verify",
+        view_func=admin_sales_agency_item_verify,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/admin/documents/sales-agency-item/<int:item_id>/cancel",
+        endpoint="admin_sales_agency_item_cancel_stepa",
+        view_func=admin_sales_agency_item_cancel_stepa,
+        methods=["POST"],
+    )
+    app.add_url_rule(
+        "/admin/documents/step2/user/<int:user_id>/vendor-mitsumori",
+        endpoint="admin_vendor_mitsumori_create",
+        view_func=admin_vendor_mitsumori_create,
+        methods=["GET", "POST"],
+    )
+    app.view_functions["admin_documents_dashboard"] = admin_documents_dashboard_stepa
+except AssertionError as stepa_route_error:
+    print(f"[WARN] step A route registration skipped: {stepa_route_error}", flush=True)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

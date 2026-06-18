@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}書類管理 - 株式会社開花{% endblock %}
+
+{% block content %}
+<style>
+.stepa-page {
+    display: grid;
+    gap: 1rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.stepa-page,
+.stepa-page * {
+    box-sizing: border-box;
+}
+
+.stepa-panel,
+.stepa-user {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.stepa-header,
+.stepa-nav,
+.stepa-summary,
+.stepa-item-head,
+.stepa-item-main,
+.stepa-item-actions,
+.stepa-doc-list {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+}
+
+.stepa-header {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.stepa-header h1,
+.stepa-user-title,
+.stepa-item-title {
+    margin: 0;
+    color: #0f172a;
+}
+
+.stepa-header p,
+.stepa-muted,
+.stepa-meta {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.stepa-nav a {
+    text-decoration: none;
+}
+
+.stepa-user-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.stepa-user {
+    padding: 0;
+    overflow: hidden;
+}
+
+.stepa-user summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.stepa-user summary::-webkit-details-marker {
+    display: none;
+}
+
+.stepa-summary {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.4fr) minmax(90px, 0.7fr) minmax(110px, 0.7fr) minmax(130px, 0.9fr) minmax(160px, 1fr);
+    align-items: center;
+    padding: 0.9rem 1rem;
+}
+
+.stepa-user-title {
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.stepa-chip,
+.stepa-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.7rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.stepa-chip {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.stepa-status {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.stepa-user-body {
+    border-top: 1px solid #e2e8f0;
+    padding: 0.75rem 1rem 1rem;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.stepa-step2-action {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.stepa-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.stepa-item-head {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.stepa-item-title {
+    font-size: 0.98rem;
+    line-height: 1.5;
+}
+
+.stepa-item-main {
+    align-items: flex-start;
+}
+
+.stepa-thumb {
+    width: 86px;
+    aspect-ratio: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.stepa-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.stepa-details {
+    flex: 1 1 260px;
+    min-width: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.stepa-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.stepa-detail-cell {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    min-width: 0;
+}
+
+.stepa-detail-cell span {
+    display: block;
+    color: #64748b;
+    font-size: 0.76rem;
+}
+
+.stepa-detail-cell strong {
+    display: block;
+    color: #0f172a;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.stepa-doc-list {
+    align-items: flex-start;
+}
+
+.stepa-cancel-form {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.stepa-cancel-form input {
+    min-width: min(240px, 100%);
+    max-width: 100%;
+}
+
+.stepa-empty {
+    padding: 1.25rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    color: #64748b;
+    text-align: center;
+    background: #f8fafc;
+}
+
+@media (max-width: 720px) {
+    .stepa-panel,
+    .stepa-user-body {
+        padding: 0.85rem;
+    }
+
+    .stepa-summary {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.55rem;
+        padding: 0.85rem;
+    }
+
+    .stepa-summary-main {
+        grid-column: 1 / -1;
+    }
+
+    .stepa-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stepa-thumb {
+        width: 72px;
+    }
+
+    .stepa-item-actions,
+    .stepa-cancel-form {
+        align-items: stretch;
+    }
+
+    .stepa-item-actions .btn,
+    .stepa-cancel-form .btn,
+    .stepa-cancel-form input,
+    .stepa-step2-action .btn {
+        width: 100%;
+    }
+}
+</style>
+
+<div class="stepa-page">
+    <section class="stepa-panel stepa-header">
+        <div>
+            <h1>{{ step_title }}</h1>
+            <p>{{ step_summary }}</p>
+        </div>
+        <div class="stepa-nav">
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+            <a href="{{ url_for('admin_documents_history') }}" class="btn btn-outline">書類履歴</a>
+        </div>
+    </section>
+
+    <section class="stepa-panel">
+        <div class="stepa-nav">
+            <a href="{{ url_for('admin_documents_dashboard', group='client_incoming') }}" class="btn {% if stepa_mode == 'step1' %}btn-primary{% else %}btn-outline{% endif %}">ステップ1 {{ stepa_counts.step1 }}点</a>
+            <a href="{{ url_for('admin_documents_dashboard', group='vendor_outgoing') }}" class="btn {% if stepa_mode == 'step2' %}btn-primary{% else %}btn-outline{% endif %}">ステップ2 {{ stepa_counts.step2 }}点</a>
+        </div>
+    </section>
+
+    <section class="stepa-panel">
+        {% if stepa_groups %}
+        <div class="stepa-user-list">
+            {% for group in stepa_groups %}
+            <details class="stepa-user">
+                <summary>
+                    <div class="stepa-summary">
+                        <div class="stepa-summary-main">
+                            <h2 class="stepa-user-title">{{ group.user_name }}</h2>
+                            <p class="stepa-meta">{{ group.username or '-' }}</p>
+                        </div>
+                        <span class="stepa-chip">ユーザーID {{ group.user_id }}</span>
+                        <span class="stepa-chip">{{ group.item_count }}点</span>
+                        <span class="stepa-chip">最終 {{ group.last_date_label }}</span>
+                        <span class="stepa-status">{{ group.status_summary }}</span>
+                    </div>
+                </summary>
+                <div class="stepa-user-body">
+                    {% if stepa_mode == 'step2' %}
+                    <div class="stepa-step2-action">
+                        <a href="{{ url_for('admin_vendor_mitsumori_create', user_id=group.user_id) }}" class="btn btn-primary">見積依頼書を作成</a>
+                    </div>
+                    {% endif %}
+                    {% for item in group.items %}
+                    <article class="stepa-item">
+                        <div class="stepa-item-head">
+                            <div>
+                                <h3 class="stepa-item-title">{{ item.product_name }}</h3>
+                                <p class="stepa-meta">申請 #{{ item.request_id }} / {{ item.service_name or '-' }} / {{ item.requested_at_label }}</p>
+                            </div>
+                            <span class="stepa-status">{{ item.workflow_status_label }}</span>
+                        </div>
+                        <div class="stepa-item-main">
+                            <div class="stepa-thumb">
+                                {% if item.photo_path %}
+                                    {% if item.photo_path.startswith('http') %}
+                                    <img src="{{ item.photo_path }}" alt="{{ item.product_name }}">
+                                    {% else %}
+                                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                                    {% endif %}
+                                {% else %}
+                                <span>No Image</span>
+                                {% endif %}
+                            </div>
+                            <div class="stepa-details">
+                                <div class="stepa-detail-grid">
+                                    <div class="stepa-detail-cell">
+                                        <span>ブランド</span>
+                                        <strong>{{ item.brand_name or '-' }}</strong>
+                                    </div>
+                                    <div class="stepa-detail-cell">
+                                        <span>型番</span>
+                                        <strong>{{ item.model_number or '-' }}</strong>
+                                    </div>
+                                    <div class="stepa-detail-cell">
+                                        <span>商品コード</span>
+                                        <strong>{{ item.kaika_product_code or '-' }}</strong>
+                                    </div>
+                                    <div class="stepa-detail-cell">
+                                        <span>状態</span>
+                                        <strong>{{ item.item_condition or '-' }}</strong>
+                                    </div>
+                                    <div class="stepa-detail-cell">
+                                        <span>仕入価格</span>
+                                        <strong>{{ "{:,}".format(item.purchase_price or 0) }}円</strong>
+                                    </div>
+                                    <div class="stepa-detail-cell">
+                                        <span>販売予定</span>
+                                        <strong>{{ "{:,}".format(item.listing_price or 0) }}円</strong>
+                                    </div>
+                                </div>
+                                <div class="stepa-doc-list">
+                                    <a href="{{ item.request_detail_url }}" class="btn btn-outline btn-sm">申請内容</a>
+                                    {% if item.detail_url %}
+                                    <a href="{{ item.detail_url }}" class="btn btn-outline btn-sm">商品詳細</a>
+                                    {% endif %}
+                                    {% for doc in item.documents %}
+                                    <a href="{{ doc.url }}" class="btn btn-outline btn-sm">{{ doc.label }}</a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% if stepa_mode == 'step1' %}
+                        <div class="stepa-item-actions">
+                            <form method="post" action="{{ url_for('admin_sales_agency_item_verify', item_id=item.request_item_id) }}">
+                                <button type="submit" class="btn btn-primary btn-sm">認証済み</button>
+                            </form>
+                            <form method="post" action="{{ url_for('admin_sales_agency_item_cancel_stepa', item_id=item.request_item_id) }}" class="stepa-cancel-form">
+                                <input type="text" name="cancel_reason" class="form-control" placeholder="キャンセル理由">
+                                <button type="submit" class="btn btn-danger btn-sm">キャンセル</button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="stepa-empty">
+            このステップで処理対象の商品はありません。
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
