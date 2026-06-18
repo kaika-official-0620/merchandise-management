@@ -339,6 +339,49 @@
                 page-break-inside: avoid;
             }
         }
+
+        @media print and (max-width: 640px) {
+            .sheet {
+                width: 100%;
+                min-width: 0;
+                padding: 0 10px;
+                overflow: hidden;
+            }
+
+            .meta-grid {
+                grid-template-columns: 1fr 1fr;
+                column-gap: 10px;
+                row-gap: 12px;
+                font-size: 10px;
+            }
+
+            .items {
+                table-layout: fixed;
+                font-size: 10px;
+            }
+
+            .items th,
+            .items td {
+                padding: 5px 4px;
+            }
+
+            .col-no {
+                width: 34px;
+            }
+
+            .col-qty {
+                width: 48px;
+            }
+
+            .col-amount {
+                width: 72px;
+            }
+
+            .items td:nth-child(2) {
+                word-break: normal;
+                overflow-wrap: break-word;
+            }
+        }
     </style>
 </head>
 <body>
