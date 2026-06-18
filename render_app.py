@@ -104,9 +104,19 @@ except Exception as patch_exc:
     print(f"[WARN] kaika document corrections patch skipped: {patch_exc}", flush=True)
 
 try:
+    from step3_vendor_workflow_patch import apply as apply_step3_vendor_workflow_patch
+
+    setattr(module, "_step3_vendor_workflow_patch_applied", False)
+    apply_step3_vendor_workflow_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] step3 vendor workflow patch skipped: {patch_exc}", flush=True)
+
+try:
     stepa_dashboard = getattr(module, "admin_documents_dashboard_stepa", None)
     if callable(stepa_dashboard):
-        setattr(module, "_stepa_previous_admin_documents_dashboard", module.app.view_functions.get("admin_documents_dashboard"))
+        current_dashboard = module.app.view_functions.get("admin_documents_dashboard")
+        if current_dashboard is not stepa_dashboard:
+            setattr(module, "_stepa_previous_admin_documents_dashboard", current_dashboard)
         module.app.view_functions["admin_documents_dashboard"] = stepa_dashboard
 except Exception as patch_exc:
     print(f"[WARN] step A render override skipped: {patch_exc}", flush=True)

@@ -4,7 +4,7 @@ services:
     env: python
     plan: standard
     autoDeployTrigger: commit
-    buildCommand: pip install -r requirements.txt
+    buildCommand: (apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-jpn || true) && pip install -r requirements.txt
     healthCheckPath: /healthz
     startCommand: gunicorn render_app:app --bind 0.0.0.0:$PORT --timeout 300
     disk:

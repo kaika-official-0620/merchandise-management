@@ -292,6 +292,13 @@
     </section>
 
     <section class="stepa-panel">
+        <div class="stepa-nav">
+            <a href="{{ url_for('admin_documents_dashboard', group='vendor_incoming') }}" class="btn btn-outline">ステップ3 {{ stepa_counts.step3 }}点</a>
+            <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn {% if stepa_mode == 'step4' %}btn-primary{% else %}btn-outline{% endif %}">ステップ4 {{ stepa_counts.step4 }}点</a>
+        </div>
+    </section>
+
+    <section class="stepa-panel">
         {% if stepa_groups %}
         <div class="stepa-user-list">
             {% for group in stepa_groups %}

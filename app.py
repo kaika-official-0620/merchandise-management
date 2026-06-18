@@ -22631,6 +22631,7 @@ ADMIN_BACKUP_TABLES = [
     'item_disposal_requests',
     'proxy_service_users', 'proxy_service_bids',
     'sales_agency_requests', 'sales_agency_request_items',
+    'vendor_documents', 'vendor_document_item_links',
 ]
 
 BACKUP_MANIFEST_FILENAME = 'backup_manifest.json'
@@ -22752,6 +22753,9 @@ def write_admin_backup_zip(zip_file, backup_data):
     for req in backup_data.get('sale_requests', []):
         add_uploaded_file_to_backup_zip(zip_file, req.get('qr_image_path'), added_files)
         add_uploaded_file_to_backup_zip(zip_file, req.get('qr_image_path2'), added_files)
+
+    for doc in backup_data.get('vendor_documents', []):
+        add_uploaded_file_to_backup_zip(zip_file, doc.get('stored_path'), added_files)
 
     return added_files
 
@@ -23050,7 +23054,9 @@ def export_backup():
         'proxy_service_users': [],
         'proxy_service_bids': [],
         'sales_agency_requests': [],
-        'sales_agency_request_items': []
+        'sales_agency_request_items': [],
+        'vendor_documents': [],
+        'vendor_document_item_links': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -23069,7 +23075,8 @@ def export_backup():
         'item_disposal_requests',
         # v3.2で追加（代行サービス関連）
         'proxy_service_users', 'proxy_service_bids',
-        'sales_agency_requests', 'sales_agency_request_items'
+        'sales_agency_requests', 'sales_agency_request_items',
+        'vendor_documents', 'vendor_document_item_links'
     ]
     
     if DATABASE_URL:
@@ -23166,7 +23173,9 @@ def export_backup_with_images():
         'proxy_service_users': [],
         'proxy_service_bids': [],
         'sales_agency_requests': [],
-        'sales_agency_request_items': []
+        'sales_agency_request_items': [],
+        'vendor_documents': [],
+        'vendor_document_item_links': []
     }
     
     # テーブル一覧（存在しない場合はスキップ）
@@ -23185,7 +23194,8 @@ def export_backup_with_images():
         'item_disposal_requests',
         # v3.2で追加（代行サービス関連）
         'proxy_service_users', 'proxy_service_bids',
-        'sales_agency_requests', 'sales_agency_request_items'
+        'sales_agency_requests', 'sales_agency_request_items',
+        'vendor_documents', 'vendor_document_item_links'
     ]
     
     if DATABASE_URL:
@@ -23279,6 +23289,8 @@ def export_backup_with_images():
             for req in backup_data.get('sale_requests', []):
                 add_file_to_zip(req.get('qr_image_path'), added_files)
                 add_file_to_zip(req.get('qr_image_path2'), added_files)
+            for doc in backup_data.get('vendor_documents', []):
+                add_file_to_zip(doc.get('stored_path'), added_files)
     
     zip_buffer.seek(0)
     
@@ -45341,9 +45353,26 @@ try:
 except Exception as _kaika_followup_patch_error:
     print(f"[WARN] kaika followup patch apply failed: {_kaika_followup_patch_error}", flush=True)
 
+try:
+    import importlib.util as _step3_vendor_importlib_util
+    import sys as _step3_vendor_sys
+
+    _step3_vendor_patch_path = os.path.join(os.path.dirname(__file__), "step3_vendor_workflow_patch.py")
+    if os.path.exists(_step3_vendor_patch_path):
+        _step3_vendor_spec = _step3_vendor_importlib_util.spec_from_file_location(
+            "step3_vendor_workflow_patch",
+            _step3_vendor_patch_path,
+        )
+        _step3_vendor_patch = _step3_vendor_importlib_util.module_from_spec(_step3_vendor_spec)
+        _step3_vendor_sys.modules["step3_vendor_workflow_patch"] = _step3_vendor_patch
+        _step3_vendor_spec.loader.exec_module(_step3_vendor_patch)
+        _step3_vendor_patch.apply(_step3_vendor_sys.modules.get(__name__))
+except Exception as _step3_vendor_patch_error:
+    print(f"[WARN] step3 vendor workflow patch apply failed: {_step3_vendor_patch_error}", flush=True)
+
 
 # Step A: admin document workflow for user sales-agency requests.
-# This layer intentionally overrides only document steps 1 and 2.
+# This layer owns item-level steps 1, 2, and the handoff into steps 3/4.
 _stepa_previous_admin_documents_dashboard = app.view_functions.get("admin_documents_dashboard")
 
 
@@ -45372,6 +45401,8 @@ def _ensure_stepa_document_workflow_columns():
             ("cancelled_by", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_by INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN cancelled_by INTEGER"),
             ("vendor_mitsumori_id", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_mitsumori_id INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_mitsumori_id INTEGER"),
             ("moved_to_step3_at", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step3_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step3_at TEXT"),
+            ("vendor_document_id", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_document_id INTEGER", "ALTER TABLE sales_agency_request_items ADD COLUMN vendor_document_id INTEGER"),
+            ("moved_to_step4_at", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step4_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN moved_to_step4_at TEXT"),
             ("updated_at", "ALTER TABLE sales_agency_request_items ADD COLUMN updated_at TIMESTAMP", "ALTER TABLE sales_agency_request_items ADD COLUMN updated_at TEXT"),
         ],
         "user_mitsumori": [
@@ -45393,6 +45424,17 @@ def _ensure_stepa_document_workflow_columns():
 
 
 def _stepa_workflow_status_label(status):
+    normalized_status = (status or "").strip() or "step1_pending"
+    clean_labels = {
+        "step1_pending": "未確認",
+        "step2_ready": "認証済み待ち",
+        "step3_vendor_wait": "業者書類待ち",
+        "step4_ready": "顧客返送準備",
+        "cancelled": "キャンセル",
+        "canceled": "キャンセル",
+    }
+    if normalized_status in clean_labels:
+        return clean_labels[normalized_status]
     return {
         "step1_pending": "未確認",
         "step2_ready": "認証済み待ち",
@@ -45591,7 +45633,14 @@ def _stepa_group_items_by_user(items):
 def _stepa_load_dashboard_context(selected_group):
     step1_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step1_pending"]))
     step2_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step2_ready"]))
-    if selected_group == "vendor_outgoing":
+    step3_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step3_vendor_wait"]))
+    step4_groups = _stepa_group_items_by_user(_stepa_fetch_items(["step4_ready"]))
+    if selected_group == "client_outgoing":
+        active_groups = step4_groups
+        step_title = "ステップ4: 顧客へ送付する買取明細書作成"
+        step_summary = "業者書類と商品紐づけが完了した商品だけをユーザー単位で確認します。未紐づけ商品はステップ3に残ります。"
+        step_mode = "step4"
+    elif selected_group == "vendor_outgoing":
         active_groups = step2_groups
         step_title = "ステップ2: 業者へ依頼する見積依頼書作成"
         step_summary = "ステップ1で認証済みにした商品だけをユーザー単位で確認し、専用ページで業者ごとに見積依頼書を作成します。"
@@ -45610,6 +45659,8 @@ def _stepa_load_dashboard_context(selected_group):
         "stepa_counts": {
             "step1": sum(group["item_count"] for group in step1_groups),
             "step2": sum(group["item_count"] for group in step2_groups),
+            "step3": sum(group["item_count"] for group in step3_groups),
+            "step4": sum(group["item_count"] for group in step4_groups),
         },
     }
 
@@ -45618,7 +45669,11 @@ def _stepa_load_dashboard_context(selected_group):
 @admin_required
 def admin_documents_dashboard_stepa():
     selected_group = (request.args.get("group") or "all").strip() or "all"
-    if selected_group not in {"client_incoming", "vendor_outgoing"}:
+    if selected_group == "vendor_incoming":
+        vendor_documents_view = app.view_functions.get("admin_vendor_documents")
+        if callable(vendor_documents_view):
+            return vendor_documents_view()
+    if selected_group not in {"client_incoming", "vendor_outgoing", "client_outgoing"}:
         if _stepa_previous_admin_documents_dashboard:
             return _stepa_previous_admin_documents_dashboard()
         return admin_documents_dashboard_preview()

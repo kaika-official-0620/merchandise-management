@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+
+{% block title %}ステップ3 業者関連書類登録 - 開花{% endblock %}
+
+{% block content %}
+<style>
+.step3-page,
+.step3-page * {
+    box-sizing: border-box;
+}
+
+.step3-page {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.step3-panel,
+.step3-doc,
+.step3-candidate,
+.step3-item {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    min-width: 0;
+}
+
+.step3-panel {
+    padding: 1rem;
+}
+
+.step3-header,
+.step3-actions,
+.step3-meta,
+.step3-doc-head,
+.step3-doc-actions,
+.step3-upload-grid,
+.step3-filter,
+.step3-linked-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    min-width: 0;
+}
+
+.step3-header {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.step3-header h1,
+.step3-panel h2,
+.step3-doc h3,
+.step3-candidate-title {
+    margin: 0;
+    color: #0f172a;
+    line-height: 1.35;
+}
+
+.step3-muted,
+.step3-header p,
+.step3-help,
+.step3-small {
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.step3-upload-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+}
+
+.step3-field {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.step3-field.wide {
+    grid-column: 1 / -1;
+}
+
+.step3-field label {
+    font-size: 0.84rem;
+    color: #475569;
+    font-weight: 700;
+}
+
+.step3-field input,
+.step3-field select,
+.step3-field textarea {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.65rem 0.75rem;
+    font: inherit;
+    background: #fff;
+}
+
+.step3-field textarea {
+    min-height: 84px;
+    resize: vertical;
+}
+
+.step3-counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.step3-count {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.8rem;
+    background: #f8fafc;
+}
+
+.step3-count span {
+    display: block;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.step3-count strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1.35rem;
+}
+
+.step3-doc-list,
+.step3-candidate-list,
+.step3-item-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.step3-doc {
+    padding: 0.95rem;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.step3-doc.is-focused {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.step3-doc-head {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.step3-chip,
+.step3-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.step3-chip {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.step3-status {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.step3-text-preview {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 11rem;
+    overflow: auto;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-size: 0.86rem;
+}
+
+.step3-filter {
+    align-items: end;
+}
+
+.step3-filter .step3-field {
+    flex: 1 1 240px;
+}
+
+.step3-candidate {
+    padding: 0.75rem;
+    display: grid;
+    grid-template-columns: auto 72px minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.step3-candidate input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.25rem;
+}
+
+.step3-thumb {
+    width: 72px;
+    aspect-ratio: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #f8fafc;
+    color: #94a3b8;
+    font-size: 0.74rem;
+    text-align: center;
+}
+
+.step3-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.step3-candidate-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.5rem;
+}
+
+.step3-candidate-cell {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    min-width: 0;
+}
+
+.step3-candidate-cell span {
+    display: block;
+    color: #64748b;
+    font-size: 0.76rem;
+}
+
+.step3-candidate-cell strong {
+    display: block;
+    color: #0f172a;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.step3-linked-list {
+    align-items: stretch;
+}
+
+.step3-linked {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    border-radius: 6px;
+    padding: 0.55rem 0.65rem;
+    min-width: min(240px, 100%);
+}
+
+.step3-item {
+    padding: 0.75rem;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 0.7rem;
+}
+
+.step3-empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 1.1rem;
+    text-align: center;
+    color: #64748b;
+    background: #f8fafc;
+}
+
+@media (max-width: 760px) {
+    .step3-panel,
+    .step3-doc {
+        padding: 0.85rem;
+    }
+
+    .step3-upload-grid,
+    .step3-counts,
+    .step3-candidate-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .step3-candidate {
+        grid-template-columns: auto 58px minmax(0, 1fr);
+        gap: 0.55rem;
+    }
+
+    .step3-thumb {
+        width: 58px;
+    }
+
+    .step3-actions .btn,
+    .step3-doc-actions .btn,
+    .step3-filter .btn,
+    .step3-upload-grid .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+
+<div class="step3-page">
+    <section class="step3-panel step3-header">
+        <div>
+            <h1>ステップ3: 業者関連書類登録</h1>
+            <p>業者から届いたPDF/画像を登録し、抽出した商品名からステップ2で依頼済みの商品候補を確認して紐づけます。自動確定はしません。</p>
+        </div>
+        <div class="step3-actions">
+            <a href="{{ url_for('admin_documents_dashboard') }}" class="btn btn-secondary">書類管理へ戻る</a>
+            <a href="{{ url_for('admin_documents_dashboard', group='client_outgoing') }}" class="btn btn-outline">ステップ4を見る</a>
+            <a href="{{ url_for('admin_vendors') }}" class="btn btn-outline">業者マスター</a>
+        </div>
+    </section>
+
+    <section class="step3-panel">
+        <div class="step3-counts">
+            <div class="step3-count">
+                <span>業者書類待ち</span>
+                <strong>{{ pending_items|length }}点</strong>
+            </div>
+            <div class="step3-count">
+                <span>登録済み業者書類</span>
+                <strong>{{ documents|length }}件</strong>
+            </div>
+            <div class="step3-count">
+                <span>ステップ4へ移動済み</span>
+                <strong>{{ step4_items|length }}点</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="step3-panel">
+        <h2>業者書類を登録</h2>
+        <form method="POST" enctype="multipart/form-data" class="step3-upload-grid">
+            <input type="hidden" name="scope" value="user_flow">
+            <div class="step3-field">
+                <label for="vendor_id">流し先業者</label>
+                <select id="vendor_id" name="vendor_id" required>
+                    <option value="">1社選択してください</option>
+                    {% for vendor in vendors %}
+                    <option value="{{ vendor.id }}">{{ vendor.display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="step3-field">
+                <label for="status">状態</label>
+                <select id="status" name="status">
+                    <option value="received">受領済み</option>
+                    <option value="registered">登録済み</option>
+                </select>
+            </div>
+            <div class="step3-field">
+                <label for="title">書類名</label>
+                <input id="title" name="title" placeholder="例: 業者買取明細書">
+            </div>
+            <div class="step3-field wide">
+                <label for="file">ファイル（{{ allowed_extensions }}）</label>
+                <input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required>
+                <div class="step3-help">PDFはテキスト抽出します。画像はTesseractが利用できる環境ではOCRし、抽出できない場合も下の補助テキストと手動検索で紐づけできます。</div>
+            </div>
+            <div class="step3-field wide">
+                <label for="manual_text">抽出補助テキスト（任意）</label>
+                <textarea id="manual_text" name="manual_text" placeholder="OCRが読みにくい書類の場合、商品名や型番をここに入力して候補精度を上げられます。"></textarea>
+            </div>
+            <div class="step3-field wide">
+                <label for="notes">管理メモ</label>
+                <textarea id="notes" name="notes" placeholder="確認事項、業者回答メモなど"></textarea>
+            </div>
+            <div class="step3-actions wide">
+                <button type="submit" class="btn btn-primary">登録して候補表示</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="step3-panel">
+        <h2>登録済み書類と候補</h2>
+        {% if documents %}
+        <div class="step3-doc-list">
+            {% for doc in documents %}
+            <article class="step3-doc {% if doc.is_focused %}is-focused{% endif %}">
+                <div class="step3-doc-head">
+                    <div>
+                        <h3>{{ doc.title or doc.original_filename }}</h3>
+                        <div class="step3-meta">
+                            <span class="step3-chip">書類ID {{ doc.id }}</span>
+                            <span class="step3-chip">{{ doc.vendor_display_name }}</span>
+                            <span class="step3-chip">{{ doc.registered_label }}</span>
+                            <span class="step3-status">{{ doc.extraction_status_label }}</span>
+                            <span class="step3-status">{{ doc.match_status_label }}</span>
+                        </div>
+                    </div>
+                    <div class="step3-doc-actions">
+                        <a href="{{ doc.download_url }}" class="btn btn-info btn-sm">ファイルを開く</a>
+                        <form method="POST" action="{{ doc.delete_url }}" onsubmit="return confirm('この業者書類を削除しますか？ 紐づけ済み商品はステップ3へ戻ります。');">
+                            <button type="submit" class="btn btn-danger btn-sm">削除</button>
+                        </form>
+                    </div>
+                </div>
+
+                {% if doc.extracted_preview %}
+                <pre class="step3-text-preview">{{ doc.extracted_preview }}</pre>
+                {% else %}
+                <div class="step3-empty">抽出テキストはありません。手動検索でユーザー/商品を探して紐づけてください。</div>
+                {% endif %}
+
+                {% if doc.extraction_error %}
+                <div class="step3-small">抽出ログ: {{ doc.extraction_error }}</div>
+                {% endif %}
+
+                {% if doc.linked_items %}
+                <div>
+                    <strong>紐づけ済み</strong>
+                    <div class="step3-linked-list">
+                        {% for linked in doc.linked_items %}
+                        <div class="step3-linked">
+                            <div><strong>{{ linked.product_name }}</strong></div>
+                            <div class="step3-small">ユーザー: {{ linked.user_name }} / ID {{ linked.user_id }}</div>
+                            <div class="step3-small">見積: {{ linked.estimate_label }} / {{ linked.linked_label }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <form method="GET" action="{{ url_for('admin_documents_dashboard') }}" class="step3-filter">
+                    <input type="hidden" name="group" value="vendor_incoming">
+                    <input type="hidden" name="focus_doc_id" value="{{ doc.id }}">
+                    <div class="step3-field">
+                        <label for="q-{{ doc.id }}">手動検索</label>
+                        <input id="q-{{ doc.id }}" name="q" value="{{ doc.manual_query }}" placeholder="ユーザー名、ユーザーID、商品名、ブランド、見積番号で検索">
+                    </div>
+                    <button type="submit" class="btn btn-outline">候補を絞り込む</button>
+                </form>
+
+                <form method="POST" action="{{ doc.link_url }}">
+                    {% if doc.candidates %}
+                    <div class="step3-candidate-list">
+                        {% for item in doc.candidates %}
+                        <label class="step3-candidate">
+                            <input type="checkbox" name="request_item_ids" value="{{ item.request_item_id }}">
+                            <span class="step3-thumb">
+                                {% if item.photo_path %}
+                                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                                {% else %}
+                                No Image
+                                {% endif %}
+                            </span>
+                            <span>
+                                <span class="step3-candidate-title">{{ item.product_name or '-' }}</span>
+                                <span class="step3-small">候補スコア {{ item.match_score }} / {{ item.match_reasons }}</span>
+                                <span class="step3-candidate-grid">
+                                    <span class="step3-candidate-cell">
+                                        <span>ユーザー</span>
+                                        <strong>{{ item.user_name }} / ID {{ item.user_id }}</strong>
+                                    </span>
+                                    <span class="step3-candidate-cell">
+                                        <span>ブランド</span>
+                                        <strong>{{ item.brand_name or '-' }}</strong>
+                                    </span>
+                                    <span class="step3-candidate-cell">
+                                        <span>型番</span>
+                                        <strong>{{ item.model_number or '-' }}</strong>
+                                    </span>
+                                    <span class="step3-candidate-cell">
+                                        <span>流し先業者</span>
+                                        <strong>{{ item.vendor_name or '-' }}</strong>
+                                    </span>
+                                    <span class="step3-candidate-cell">
+                                        <span>見積依頼書番号 / グループID</span>
+                                        <strong>{{ item.estimate_label }}</strong>
+                                    </span>
+                                    <span class="step3-candidate-cell">
+                                        <span>申請</span>
+                                        <strong>#{{ item.request_id }} / 商品行 {{ item.request_item_id }}</strong>
+                                    </span>
+                                </span>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="step3-actions">
+                        <button type="submit" class="btn btn-primary">選択商品を紐づけてステップ4へ移動</button>
+                    </div>
+                    {% else %}
+                    <div class="step3-empty">候補がありません。検索条件を変えるか、ステップ3に未紐づけ商品が残っているか確認してください。</div>
+                    {% endif %}
+                </form>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="step3-empty">登録済みの業者書類はありません。</div>
+        {% endif %}
+    </section>
+
+    <section class="step3-panel">
+        <h2>未紐づけでステップ3に残っている商品</h2>
+        {% if pending_items %}
+        <div class="step3-item-list">
+            {% for item in pending_items %}
+            <article class="step3-item">
+                <span class="step3-thumb">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                    {% else %}
+                    No Image
+                    {% endif %}
+                </span>
+                <span>
+                    <strong>{{ item.product_name }}</strong>
+                    <span class="step3-meta">
+                        <span class="step3-chip">{{ item.user_name }} / ID {{ item.user_id }}</span>
+                        <span class="step3-chip">{{ item.brand_name or '-' }}</span>
+                        <span class="step3-chip">{{ item.vendor_name or '-' }}</span>
+                        <span class="step3-chip">{{ item.estimate_label }}</span>
+                    </span>
+                </span>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="step3-empty">未紐づけの商品はありません。</div>
+        {% endif %}
+    </section>
+
+    <section class="step3-panel">
+        <h2>ステップ4へ移動済みの商品</h2>
+        {% if step4_items %}
+        <div class="step3-item-list">
+            {% for item in step4_items[:20] %}
+            <article class="step3-item">
+                <span class="step3-thumb">
+                    {% if item.photo_path %}
+                    <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                    {% else %}
+                    No Image
+                    {% endif %}
+                </span>
+                <span>
+                    <strong>{{ item.product_name }}</strong>
+                    <span class="step3-meta">
+                        <span class="step3-chip">{{ item.user_name }} / ID {{ item.user_id }}</span>
+                        <span class="step3-chip">{{ item.vendor_name or '-' }}</span>
+                        <span class="step3-chip">紐づけ書類: {{ item.linked_vendor_doc_title or item.linked_vendor_filename or '-' }}</span>
+                    </span>
+                </span>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="step3-empty">ステップ4へ移動済みの商品はまだありません。</div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
