@@ -314,7 +314,7 @@
                         <a href="{{ url_for('admin_vendor_mitsumori_create', user_id=group.user_id) }}" class="btn btn-primary">見積依頼書を作成</a>
                     </div>
                     {% endif %}
-                    {% for item in group.items %}
+                    {% for item in group["items"] %}
                     <article class="stepa-item">
                         <div class="stepa-item-head">
                             <div>
