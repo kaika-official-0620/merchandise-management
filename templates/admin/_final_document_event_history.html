@@ -1,4 +1,10 @@
-{% set final_events = document_events if document_events is defined else load_final_document_events(final_document_kind, final_document_id) %}
+{% if document_events is defined %}
+{% set final_events = document_events %}
+{% elif load_final_document_events is defined %}
+{% set final_events = load_final_document_events(final_document_kind, final_document_id) %}
+{% else %}
+{% set final_events = [] %}
+{% endif %}
 {% if final_events %}
 <section class="admin-doc-section final-document-events">
     <h2>&#20462;&#27491;&#12539;&#21462;&#28040;&#23653;&#27508;</h2>

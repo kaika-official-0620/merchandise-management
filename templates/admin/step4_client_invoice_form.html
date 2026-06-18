@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block title %}買取明細書作成 - 株式会社 開花{% endblock %}
+
+{% block content %}
+<style>
+.client-invoice-page,
+.client-invoice-page * {
+    box-sizing: border-box;
+}
+
+.client-invoice-page {
+    display: grid;
+    gap: 1rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.client-invoice-panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    min-width: 0;
+}
+
+.client-invoice-header,
+.client-invoice-actions,
+.client-invoice-row-head,
+.client-invoice-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.client-invoice-header {
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.client-invoice-header h1,
+.client-invoice-item-title,
+.preview-title {
+    margin: 0;
+    color: #0f172a;
+    line-height: 1.35;
+}
+
+.client-invoice-header p,
+.client-invoice-meta,
+.client-invoice-muted {
+    margin: 0.25rem 0 0;
+    color: #64748b;
+    line-height: 1.55;
+}
+
+.client-invoice-fields {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.client-invoice-field {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.client-invoice-field label,
+.amount-field label {
+    color: #334155;
+    font-weight: 700;
+    font-size: 0.86rem;
+}
+
+.client-invoice-field.is-wide {
+    grid-column: span 4;
+}
+
+.client-invoice-items {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.client-invoice-item {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.85rem;
+    min-width: 0;
+}
+
+.client-invoice-row-head {
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.client-invoice-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2rem;
+    color: #0f172a;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.client-invoice-product {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.client-invoice-thumb {
+    width: 76px;
+    aspect-ratio: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.client-invoice-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.client-invoice-item-title {
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.client-invoice-facts,
+.amount-grid {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.client-invoice-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.client-invoice-fact {
+    min-width: 0;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.client-invoice-fact span {
+    display: block;
+    color: #64748b;
+    font-size: 0.74rem;
+}
+
+.client-invoice-fact strong {
+    display: block;
+    color: #0f172a;
+    font-size: 0.88rem;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+}
+
+.amount-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+}
+
+.amount-field {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 0;
+}
+
+.amount-readout {
+    min-height: 2.35rem;
+    display: flex;
+    align-items: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    color: #0f172a;
+    font-weight: 700;
+    background: #f8fafc;
+    white-space: nowrap;
+}
+
+.client-invoice-summary {
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+}
+
+.summary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    padding: 0.3rem 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.summary-pill.is-total {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.preview-box {
+    display: grid;
+    gap: 0.55rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.85rem;
+    background: #f8fafc;
+}
+
+.preview-title {
+    font-size: 1rem;
+}
+
+@media (max-width: 900px) {
+    .client-invoice-fields,
+    .client-invoice-facts,
+    .amount-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .client-invoice-field.is-wide {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 640px) {
+    .client-invoice-panel {
+        padding: 0.82rem;
+    }
+
+    .client-invoice-fields,
+    .client-invoice-facts,
+    .amount-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .client-invoice-field.is-wide {
+        grid-column: span 1;
+    }
+
+    .client-invoice-product {
+        grid-template-columns: 64px minmax(0, 1fr);
+    }
+
+    .client-invoice-thumb {
+        width: 64px;
+    }
+
+    .client-invoice-actions .btn,
+    .client-invoice-summary .summary-pill,
+    .client-invoice-summary .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+
+<div class="client-invoice-page">
+    <section class="client-invoice-panel client-invoice-header">
+        <div>
+            <h1>買取明細書を作成</h1>
+            <p>{{ user.user_name }}（ユーザーID {{ user.id }}）へ送付する買取明細書を作成します。選択した商品だけが送付済みになり、ステップ4から消えます。</p>
+        </div>
+        <div class="client-invoice-actions">
+            <a href="{{ back_url }}" class="btn btn-secondary">ステップ4へ戻る</a>
+        </div>
+    </section>
+
+    <form method="POST" class="client-invoice-page" id="client-invoice-form">
+        <section class="client-invoice-panel">
+            <div class="client-invoice-fields">
+                <div class="client-invoice-field">
+                    <label for="issue_date">作成日</label>
+                    <input type="date" id="issue_date" name="issue_date" class="form-control" value="{{ today }}" required>
+                </div>
+                <div class="client-invoice-field">
+                    <label for="payment_due_date">支払予定日</label>
+                    <input type="date" id="payment_due_date" name="payment_due_date" class="form-control">
+                </div>
+                <div class="client-invoice-field">
+                    <label for="recipient_name">送付先名</label>
+                    <input type="text" id="recipient_name" name="recipient_name" class="form-control" value="{{ user.user_name }}" required>
+                </div>
+                <div class="client-invoice-field">
+                    <label>対象商品</label>
+                    <div class="amount-readout">{{ items|length }}点</div>
+                </div>
+                <div class="client-invoice-field is-wide">
+                    <label for="notes">備考</label>
+                    <textarea id="notes" name="notes" class="form-control" rows="3" placeholder="顧客向けに必要な備考を入力"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="client-invoice-panel">
+            <div class="client-invoice-items">
+                {% for item in items %}
+                <article class="client-invoice-item" data-invoice-item>
+                    <div class="client-invoice-row-head">
+                        <label class="client-invoice-check">
+                            <input type="checkbox" name="request_item_ids" value="{{ item.request_item_id }}" checked data-item-check>
+                            明細に入れる
+                        </label>
+                        <span class="client-invoice-meta">ステップ3紐づけ: {{ item.linked_label }}</span>
+                    </div>
+
+                    <div class="client-invoice-product">
+                        <div class="client-invoice-thumb">
+                            {% if item.photo_path %}
+                                {% if item.photo_path.startswith('http') %}
+                                <img src="{{ item.photo_path }}" alt="{{ item.product_name }}">
+                                {% else %}
+                                <img src="{{ url_for('static', filename=item.photo_path) }}" alt="{{ item.product_name }}">
+                                {% endif %}
+                            {% else %}
+                            <span>No Image</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h2 class="client-invoice-item-title">{{ item.product_name }}</h2>
+                            <p class="client-invoice-meta">{{ item.brand_name or '-' }} / {{ item.model_number or item.kaika_product_code or '-' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="client-invoice-facts">
+                        <div class="client-invoice-fact"><span>業者</span><strong>{{ item.vendor_name or '-' }}</strong></div>
+                        <div class="client-invoice-fact"><span>紐づいた業者書類</span><strong>{{ item.vendor_document_label }}</strong></div>
+                        <div class="client-invoice-fact"><span>業者書類登録日</span><strong>{{ item.vendor_document_registered_label }}</strong></div>
+                        <div class="client-invoice-fact"><span>見積依頼書</span><strong>{{ item.vendor_estimate_no or '-' }}</strong></div>
+                    </div>
+
+                    <div class="amount-grid">
+                        <div class="amount-field">
+                            <label for="vendor_reference_amount_{{ item.request_item_id }}">業者側買取額</label>
+                            <input type="number" min="0" step="1" class="form-control" id="vendor_reference_amount_{{ item.request_item_id }}" name="vendor_reference_amount_{{ item.request_item_id }}" value="{{ item.vendor_reference_amount or 0 }}" data-vendor-amount>
+                        </div>
+                        <div class="amount-field">
+                            <label for="client_payment_amount_{{ item.request_item_id }}">顧客向け支払額</label>
+                            <input type="number" min="0" step="1" class="form-control" id="client_payment_amount_{{ item.request_item_id }}" name="client_payment_amount_{{ item.request_item_id }}" value="{{ item.client_payment_amount or item.vendor_reference_amount or 0 }}" data-client-amount>
+                        </div>
+                        <div class="amount-field">
+                            <label>差額</label>
+                            <div class="amount-readout" data-difference>¥0</div>
+                        </div>
+                        <div class="amount-field">
+                            <label>差額率</label>
+                            <div class="amount-readout" data-difference-rate>0%</div>
+                        </div>
+                        <div class="amount-field" style="grid-column: 1 / -1;">
+                            <label for="item_note_{{ item.request_item_id }}">商品別備考</label>
+                            <input type="text" class="form-control" id="item_note_{{ item.request_item_id }}" name="item_note_{{ item.request_item_id }}" placeholder="必要な場合のみ入力">
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="client-invoice-panel">
+            <div class="preview-box">
+                <h2 class="preview-title">プレビュー</h2>
+                <p class="client-invoice-muted" id="invoice-preview-text">選択した商品と顧客向け支払額を確認してください。</p>
+            </div>
+            <div class="client-invoice-summary">
+                <span class="summary-pill">選択 <strong id="selected-count">0</strong> 点</span>
+                <span class="summary-pill">業者側合計 <strong id="vendor-total">¥0</strong></span>
+                <span class="summary-pill is-total">顧客支払合計 <strong id="client-total">¥0</strong></span>
+                <button type="submit" class="btn btn-primary" onclick="return confirm('この内容で買取明細書を作成し、顧客へ送付済みにします。よろしいですか？')">作成して送付</button>
+            </div>
+        </section>
+    </form>
+</div>
+
+<script>
+(function() {
+    const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
+    const rows = Array.from(document.querySelectorAll('[data-invoice-item]'));
+    const selectedCount = document.getElementById('selected-count');
+    const vendorTotal = document.getElementById('vendor-total');
+    const clientTotal = document.getElementById('client-total');
+    const previewText = document.getElementById('invoice-preview-text');
+
+    function toNumber(value) {
+        const numeric = Number(String(value || '').replace(/,/g, ''));
+        return Number.isFinite(numeric) ? numeric : 0;
+    }
+
+    function recalc() {
+        let selected = 0;
+        let vendor = 0;
+        let client = 0;
+        rows.forEach((row) => {
+            const checkbox = row.querySelector('[data-item-check]');
+            const vendorInput = row.querySelector('[data-vendor-amount]');
+            const clientInput = row.querySelector('[data-client-amount]');
+            const differenceOutput = row.querySelector('[data-difference]');
+            const rateOutput = row.querySelector('[data-difference-rate]');
+            const vendorAmount = toNumber(vendorInput.value);
+            const clientAmount = toNumber(clientInput.value);
+            const diff = vendorAmount - clientAmount;
+            const rate = vendorAmount ? ((diff / vendorAmount) * 100) : 0;
+            differenceOutput.textContent = yen.format(diff);
+            rateOutput.textContent = `${rate.toFixed(1)}%`;
+            row.style.opacity = checkbox.checked ? '1' : '0.55';
+            if (checkbox.checked) {
+                selected += 1;
+                vendor += vendorAmount;
+                client += clientAmount;
+            }
+        });
+        selectedCount.textContent = selected;
+        vendorTotal.textContent = yen.format(vendor);
+        clientTotal.textContent = yen.format(client);
+        previewText.textContent = `${selected}点を買取明細書に反映します。顧客向け支払合計は${yen.format(client)}です。`;
+    }
+
+    rows.forEach((row) => {
+        row.querySelectorAll('input').forEach((input) => input.addEventListener('input', recalc));
+        row.querySelectorAll('input').forEach((input) => input.addEventListener('change', recalc));
+    });
+    recalc();
+})();
+</script>
+{% endblock %}

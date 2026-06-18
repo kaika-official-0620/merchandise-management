@@ -9,6 +9,7 @@
 {% set tax_amount_8 = invoice.tax_amount_8|default(0, true) or 0 %}
 {% set tax_amount_10 = invoice.tax_amount_10|default(0, true) or 0 %}
 {% set is_client_outgoing = invoice.document_scope == 'client_outgoing' or invoice.sales_agency_request_id %}
+{% set is_step4_invoice = invoice.source_workflow_step == 'step4_client_outgoing' %}
 {% set back_url = url_for('admin_documents_history') %}
 
 <div class="admin-doc-page">
@@ -19,11 +20,11 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ back_url }}" class="doc-btn doc-btn-secondary context-back-inline">一覧へ戻る</a>
-            {% if invoice.status == 'sent' %}
+            {% if invoice.status == 'sent' and not is_step4_invoice %}
             <a href="{{ url_for('admin_invoice_approve', id=invoice.id) }}" class="doc-btn doc-btn-success" onclick="return confirm('この買取明細書を承認しますか？')">承認</a>
             <a href="{{ url_for('admin_invoice_reject', id=invoice.id) }}" class="doc-btn doc-btn-danger" onclick="return confirm('この買取明細書を差し戻しますか？')">差し戻し</a>
             {% endif %}
-            {% if can_edit_final_documents() %}
+            {% if can_edit_final_documents is defined and can_edit_final_documents() %}
             <a href="{{ url_for('admin_final_document_edit', document_kind='invoices', document_id=invoice.id) }}" class="doc-btn doc-btn-primary">&#20462;&#27491;</a>
             {% endif %}
             <a href="{{ url_for('invoice_download', id=invoice.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
@@ -40,7 +41,8 @@
             </div>
             <div class="admin-doc-status">
                 <span class="status-badge status-{{ invoice.status or 'draft' }}">
-                    {% if invoice.status == 'sent' %}審査中
+                    {% if invoice.status == 'sent' and is_step4_invoice %}送付済み
+                    {% elif invoice.status == 'sent' %}審査中
                     {% elif invoice.status == 'approved' %}承認済み
                     {% elif invoice.status == 'rejected' %}差し戻し
                     {% elif invoice.status == 'completed' %}完成
@@ -90,6 +92,48 @@
                 </section>
             </div>
 
+            {% if is_step4_invoice %}
+            <section class="admin-doc-section">
+                <h2>ステップ4作成情報</h2>
+                <div class="admin-doc-info-grid">
+                    <section class="admin-doc-card">
+                        <h2>作成・更新</h2>
+                        <dl class="admin-doc-dl">
+                            <div>
+                                <dt>作成者</dt>
+                                <dd>{{ invoice.created_by_admin_name or invoice.created_by_admin_username or invoice.created_by_admin_id or '-' }}</dd>
+                            </div>
+                            <div>
+                                <dt>作成日時</dt>
+                                <dd>{{ invoice.created_at or '-' }}</dd>
+                            </div>
+                            <div>
+                                <dt>更新者</dt>
+                                <dd>{{ invoice.updated_by_admin_name or invoice.updated_by_admin_username or invoice.updated_by_admin_id or '-' }}</dd>
+                            </div>
+                            <div>
+                                <dt>更新日時</dt>
+                                <dd>{{ invoice.updated_at or '-' }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+                    <section class="admin-doc-card">
+                        <h2>送付状態</h2>
+                        <dl class="admin-doc-dl">
+                            <div>
+                                <dt>送付日時</dt>
+                                <dd>{{ invoice.sent_at or '-' }}</dd>
+                            </div>
+                            <div>
+                                <dt>作成元</dt>
+                                <dd>管理者側 書類管理 ステップ4</dd>
+                            </div>
+                        </dl>
+                    </section>
+                </div>
+            </section>
+            {% endif %}
+
             {% if linked_mitsumori %}
             <section class="admin-doc-section">
                 <h2>&#12371;&#12398;&#36023;&#21462;&#26126;&#32048;&#26360;&#12363;&#12425;&#20316;&#25104;&#12373;&#12428;&#12383;&#35211;&#31309;&#20381;&#38972;&#26360;</h2>
@@ -106,7 +150,7 @@
                 <h2>&#21462;&#28040;&#28168;&#12415;</h2>
                 <div class="admin-doc-notes-body">{{ invoice.cancel_reason or '-' }}</div>
             </section>
-            {% elif can_cancel_documents() %}
+            {% elif can_cancel_documents is defined and can_cancel_documents() %}
             <section class="admin-doc-cancel-panel">
                 <h2>&#26360;&#39006;&#21462;&#28040;</h2>
                 <form method="POST" action="{{ url_for('admin_cancel_final_document', document_kind='invoices', document_id=invoice.id) }}" onsubmit="return confirm('&#12371;&#12398;&#26360;&#39006;&#12434;&#21462;&#28040;&#28168;&#12415;&#12395;&#12375;&#12414;&#12377;&#12363;&#65311;');">
@@ -181,6 +225,52 @@
                     </table>
                 </div>
             </section>
+
+            {% if is_step4_invoice %}
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>ステップ4 紐づき元情報</h2>
+                    <strong>{{ items|length }}件</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>商品</th>
+                                <th>ブランド</th>
+                                <th>業者</th>
+                                <th>紐づいた業者書類</th>
+                                <th>業者側買取額</th>
+                                <th>顧客支払額</th>
+                                <th>差額</th>
+                                <th>差額率</th>
+                                <th>備考</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            {% set vendor_amount = item.vendor_reference_amount|default(0, true) or 0 %}
+                            {% set client_amount = item.client_payment_amount|default(item.amount, true) or item.amount or 0 %}
+                            {% set diff_amount = item.difference_amount|default(vendor_amount - client_amount, true) %}
+                            <tr>
+                                <td>{{ item.item_no or loop.index }}</td>
+                                <td>{{ item.product_name or '-' }}</td>
+                                <td>{{ item.brand_name or '-' }}</td>
+                                <td>{{ item.vendor_name or '-' }}</td>
+                                <td>{{ item.vendor_document_title or item.vendor_document_filename or item.vendor_document_id or '-' }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(vendor_amount) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(client_amount) }}</td>
+                                <td class="text-right">¥{{ "{:,}".format(diff_amount) }}</td>
+                                <td class="text-right">{{ item.difference_rate|default(0, true) or 0 }}%</td>
+                                <td>{{ item.item_note or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            {% endif %}
 
             {% if invoice.bank_info %}
             <section class="admin-doc-notes">

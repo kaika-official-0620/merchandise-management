@@ -18,6 +18,7 @@ import traceback
 import re
 import hmac
 import uuid
+import sys
 from decimal import Decimal
 from datetime import datetime, timedelta, date, timezone
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -45957,6 +45958,13 @@ try:
     app.view_functions["admin_documents_dashboard"] = admin_documents_dashboard_stepa
 except AssertionError as stepa_route_error:
     print(f"[WARN] step A route registration skipped: {stepa_route_error}", flush=True)
+
+
+try:
+    import step4_client_invoice_workflow_patch as _step4_client_invoice_workflow_patch
+    _step4_client_invoice_workflow_patch.apply(sys.modules[__name__])
+except Exception as _step4_client_invoice_patch_error:
+    print(f"[WARN] step4 client invoice workflow patch apply failed: {_step4_client_invoice_patch_error}", flush=True)
 
 
 if __name__ == '__main__':
