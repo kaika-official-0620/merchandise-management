@@ -237,9 +237,10 @@
 
 @media (max-width: 768px) {
     .admin-announcement-filter {
-        grid-template-columns: minmax(0, 170px) auto;
+        grid-template-columns: minmax(0, 170px) minmax(86px, max-content);
         align-items: center;
-        gap: 0.625rem;
+        column-gap: 10px;
+        row-gap: 10px;
     }
 
     .admin-announcement-filter input[type="search"] {
@@ -252,8 +253,10 @@
     }
 
     .admin-announcement-filter .btn {
+        margin-left: 0;
         width: auto;
         min-width: 86px;
+        border-radius: 8px;
         justify-content: center;
     }
 

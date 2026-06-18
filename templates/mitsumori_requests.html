@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}見積依頼書作成依頼 - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% set pending_count = pending_mitsumori_from_invoices|default([])|length %}
+<div class="page-header">
+    <h1>見積依頼書作成依頼</h1>
+    <p class="page-subtitle">開花から届いた買取明細書を確認し、必要な見積依頼書を作成してください。</p>
+</div>
+
+<section class="mitsumori-request-panel">
+    <div class="mitsumori-request-heading">
+        <div>
+            <span class="mitsumori-request-kicker">未対応 {{ pending_count }}件</span>
+            <h2>見積依頼書を作成してください</h2>
+            <p>対象の買取明細書を選ぶと、その内容をもとに見積依頼書を作成できます。</p>
+        </div>
+        <a href="{{ url_for('user_document_list') }}" class="btn btn-secondary">書類一覧へ戻る</a>
+    </div>
+
+    {% if pending_count %}
+    <div class="mitsumori-request-list">
+        {% for inv in pending_mitsumori_from_invoices %}
+        <article class="mitsumori-request-row">
+            <div class="mitsumori-request-row__body">
+                <strong>{{ inv.invoice_no or inv.document_no or ('ID:' ~ inv.id) }}</strong>
+                <span>発行日 {{ inv.issue_date or '-' }}</span>
+                <small>合計 {% if inv.total_amount %}¥{{ "{:,}".format(inv.total_amount) }}{% else %}-{% endif %}</small>
+            </div>
+            <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-primary">この内容で作成</a>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="mitsumori-request-empty">
+        現在、見積依頼書の作成依頼はありません。
+    </div>
+    {% endif %}
+</section>
+
+<style>
+.mitsumori-request-panel {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.mitsumori-request-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.mitsumori-request-heading h2 {
+    margin: 0.25rem 0 0.35rem;
+    color: #0f172a;
+    font-size: 1.2rem;
+}
+
+.mitsumori-request-heading p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.mitsumori-request-kicker {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 0.6rem;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.mitsumori-request-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.mitsumori-request-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.85rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.mitsumori-request-row__body {
+    display: grid;
+    gap: 0.22rem;
+    min-width: 0;
+}
+
+.mitsumori-request-row__body strong {
+    color: #0f172a;
+}
+
+.mitsumori-request-row__body span,
+.mitsumori-request-row__body small {
+    color: #64748b;
+}
+
+.mitsumori-request-empty {
+    padding: 1.25rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    color: #64748b;
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .mitsumori-request-heading,
+    .mitsumori-request-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .mitsumori-request-heading .btn,
+    .mitsumori-request-row .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}

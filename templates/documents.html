@@ -18,17 +18,6 @@
     <button class="doc-tab {% if active_tab == 'keisan' %}active{% endif %}" data-tab="keisan">計算書</button>
 </div>
 
-{% if pending_mitsumori_count %}
-<div class="pending-mitsumori-box">
-    <strong>&#35211;&#31309;&#20381;&#38972;&#26360;&#20316;&#25104; {{ pending_mitsumori_count }}&#20214;</strong>
-    <span>&#36023;&#21462;&#26126;&#32048;&#26360;&#12434;&#30906;&#35469;&#12375;&#12289;&#35211;&#31309;&#20381;&#38972;&#26360;&#12434;&#20316;&#25104;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</span>
-    <div class="pending-mitsumori-links">
-        {% for inv in pending_mitsumori_from_invoices %}
-        <a href="{{ url_for('user_mitsumori_add', source_invoice_id=inv.id) }}" class="btn btn-info">{{ inv.invoice_no or inv.id }}</a>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
 
 <section class="tab-content {% if active_tab == 'kaitori' %}active{% endif %}" id="tab-kaitori">
     <div class="tab-header">

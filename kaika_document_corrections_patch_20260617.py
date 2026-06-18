@@ -861,6 +861,12 @@ def apply(module):
             pending_mitsumori_from_invoices=pending_source_invoices(current_user.id),
         )
 
+    def user_mitsumori_requests_v3():
+        return render_template(
+            "mitsumori_requests.html",
+            pending_mitsumori_from_invoices=pending_source_invoices(current_user.id),
+        )
+
     def user_mitsumori_add_v3():
         source_invoice_id = request.args.get("source_invoice_id", type=int) or request.form.get("source_invoice_id", type=int)
         if not source_invoice_id:
@@ -1678,6 +1684,7 @@ def apply(module):
     module.fetch_sales_agency_request_details = fetch_sales_agency_request_details_v3
     module.user_invoice_view = user_invoice_view_v3
     module.user_document_list = user_document_list_v3
+    module.user_mitsumori_requests = user_mitsumori_requests_v3
     module.user_mitsumori_list = user_mitsumori_list_v3
     module.user_mitsumori_add = user_mitsumori_add_v3
     module.user_mitsumori_view = user_mitsumori_view_v3
@@ -1691,6 +1698,15 @@ def apply(module):
 
     app.view_functions["user_invoice_view"] = require_login(user_invoice_view_v3)
     app.view_functions["user_document_list"] = require_login(user_document_list_v3)
+    if "user_mitsumori_requests" not in app.view_functions:
+        app.add_url_rule(
+            "/documents/mitsumori-requests",
+            endpoint="user_mitsumori_requests",
+            view_func=require_login(user_mitsumori_requests_v3),
+            methods=["GET"],
+        )
+    else:
+        app.view_functions["user_mitsumori_requests"] = require_login(user_mitsumori_requests_v3)
     app.view_functions["user_mitsumori_list"] = require_login(user_mitsumori_list_v3)
     app.view_functions["user_mitsumori_add"] = require_login(user_mitsumori_add_v3)
     app.view_functions["user_mitsumori_view"] = require_login(user_mitsumori_view_v3)

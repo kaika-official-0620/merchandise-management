@@ -200,9 +200,10 @@
 
     .announcement-filter {
         display: grid;
-        grid-template-columns: minmax(0, 170px) auto;
+        grid-template-columns: minmax(0, 170px) minmax(86px, max-content);
         align-items: end;
-        gap: 0.625rem;
+        column-gap: 10px;
+        row-gap: 10px;
     }
 
     .announcement-filter label,
@@ -212,8 +213,10 @@
     }
 
     .announcement-filter .btn {
+        margin-left: 0;
         width: auto;
         min-width: 86px;
+        border-radius: 8px;
     }
 
     .announcement-card {
