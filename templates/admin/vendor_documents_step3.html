@@ -350,7 +350,7 @@
 
     <section class="step3-panel">
         <h2>業者書類を登録</h2>
-        <form method="POST" enctype="multipart/form-data" class="step3-upload-grid">
+        <form method="POST" action="{{ url_for('admin_vendor_documents') }}" enctype="multipart/form-data" class="step3-upload-grid">
             <input type="hidden" name="scope" value="user_flow">
             <div class="step3-field">
                 <label for="vendor_id">流し先業者</label>
