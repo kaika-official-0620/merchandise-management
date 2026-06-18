@@ -24,6 +24,7 @@ venv.bak/
 
 # Generated backups
 static/uploads/_system_backups/
+static/uploads/_system_runtime/
 backups/
 .render/
 

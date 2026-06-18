@@ -4,11 +4,13 @@ from __future__ import annotations
 import difflib
 import mimetypes
 import os
+import platform
 import re
 import shutil
 import sqlite3
 import subprocess
 import unicodedata
+import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -358,6 +360,77 @@ def apply(module: Any) -> None:
             errors.append(f"pdf-fallback: {exc}")
         return "", "; ".join(errors)
 
+    def add_tesseract_environment(cmd_path: Path, tessdata_dir: Path | None = None) -> str:
+        os.environ["PATH"] = f"{cmd_path.parent}{os.pathsep}{os.environ.get('PATH', '')}"
+        lib_paths = [
+            str(cmd_path.parents[2] / "usr" / "lib" / "x86_64-linux-gnu") if len(cmd_path.parents) > 2 else "",
+            str(cmd_path.parents[2] / "lib" / "x86_64-linux-gnu") if len(cmd_path.parents) > 2 else "",
+        ]
+        os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([part for part in lib_paths + [os.environ.get("LD_LIBRARY_PATH", "")] if part])
+        if tessdata_dir and tessdata_dir.exists():
+            os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+        return str(cmd_path)
+
+    def download_runtime_file(url: str, destination: Path, mode: int | None = None) -> None:
+        if destination.exists() and destination.stat().st_size > 0:
+            if mode is not None:
+                destination.chmod(mode)
+            return
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = destination.with_name(f"{destination.name}.tmp")
+        with urllib.request.urlopen(url, timeout=120) as response:
+            temp_path.write_bytes(response.read())
+        temp_path.replace(destination)
+        if mode is not None:
+            destination.chmod(mode)
+
+    def ensure_tesseract_command() -> str:
+        existing = os.environ.get("TESSERACT_CMD") or shutil.which("tesseract")
+        if existing:
+            return str(existing)
+
+        project_root = Path.cwd()
+        build_cmd = project_root / ".render" / "tesseract" / "usr" / "bin" / "tesseract"
+        if build_cmd.exists():
+            tessdata_candidates = [
+                project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "5" / "tessdata",
+                project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "4.00" / "tessdata",
+                project_root / ".render" / "tesseract" / "usr" / "share" / "tessdata",
+            ]
+            return add_tesseract_environment(build_cmd, next((path for path in tessdata_candidates if path.exists()), None))
+
+        arch = platform.machine().lower()
+        asset_name = "tesseract.aarch64" if arch in {"aarch64", "arm64"} else "tesseract.x86_64"
+        release_base = "https://github.com/DanielMYT/tesseract-static/releases/download/tesseract-5.5.2"
+        tessdata_base = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main"
+        runtime_roots = [
+            Path(app.static_folder or "static") / "uploads" / "_system_runtime" / "tesseract",
+            Path(os.environ.get("TMPDIR") or "/tmp") / "kaika_tesseract",
+        ]
+        setup_errors = []
+        for runtime_root in runtime_roots:
+            try:
+                cmd_path = runtime_root / "tesseract"
+                tessdata_dir = runtime_root / "tessdata"
+                download_runtime_file(f"{release_base}/{asset_name}", cmd_path, 0o755)
+                download_runtime_file(f"{tessdata_base}/eng.traineddata", tessdata_dir / "eng.traineddata")
+                download_runtime_file(f"{tessdata_base}/jpn.traineddata", tessdata_dir / "jpn.traineddata")
+                command = add_tesseract_environment(cmd_path, tessdata_dir)
+                check = subprocess.run(
+                    [command, "--list-langs"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=os.environ.copy(),
+                )
+                languages = check.stdout + "\n" + check.stderr
+                if check.returncode == 0 and "eng" in languages and "jpn" in languages:
+                    return command
+                setup_errors.append(f"{runtime_root}: language check failed: {languages.strip()}")
+            except Exception as exc:
+                setup_errors.append(f"{runtime_root}: {exc}")
+        raise RuntimeError("; ".join(setup_errors) or "tesseract setup failed")
+
     def extract_image_text(path: Path) -> tuple[str, str]:
         errors = []
         metadata_texts = []
@@ -386,29 +459,7 @@ def apply(module: Any) -> None:
             try:
                 import pytesseract
 
-                tesseract_cmd = os.environ.get("TESSERACT_CMD") or shutil.which("tesseract")
-                if not tesseract_cmd:
-                    project_root = Path.cwd()
-                    local_cmd = project_root / ".render" / "tesseract" / "usr" / "bin" / "tesseract"
-                    if local_cmd.exists():
-                        tesseract_cmd = str(local_cmd)
-                        local_bin = str(local_cmd.parent)
-                        os.environ["PATH"] = f"{local_bin}{os.pathsep}{os.environ.get('PATH', '')}"
-                        lib_paths = [
-                            str(project_root / ".render" / "tesseract" / "usr" / "lib" / "x86_64-linux-gnu"),
-                            str(project_root / ".render" / "tesseract" / "lib" / "x86_64-linux-gnu"),
-                        ]
-                        os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(lib_paths + [os.environ.get("LD_LIBRARY_PATH", "")])
-                    for tessdata_dir in [
-                        project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "5" / "tessdata",
-                        project_root / ".render" / "tesseract" / "usr" / "share" / "tesseract-ocr" / "4.00" / "tessdata",
-                        project_root / ".render" / "tesseract" / "usr" / "share" / "tessdata",
-                    ]:
-                        if tessdata_dir.exists() and not os.environ.get("TESSDATA_PREFIX"):
-                            os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
-                            break
-                if tesseract_cmd:
-                    pytesseract.pytesseract.tesseract_cmd = str(tesseract_cmd)
+                pytesseract.pytesseract.tesseract_cmd = ensure_tesseract_command()
                 ocr_text = pytesseract.image_to_string(image, lang="jpn+eng").strip()
                 if ocr_text:
                     return "\n".join(metadata_texts + [ocr_text]).strip(), "; ".join(errors)
