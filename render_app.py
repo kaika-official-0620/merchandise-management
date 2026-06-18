@@ -103,6 +103,14 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] kaika document corrections patch skipped: {patch_exc}", flush=True)
 
+try:
+    stepa_dashboard = getattr(module, "admin_documents_dashboard_stepa", None)
+    if callable(stepa_dashboard):
+        setattr(module, "_stepa_previous_admin_documents_dashboard", module.app.view_functions.get("admin_documents_dashboard"))
+        module.app.view_functions["admin_documents_dashboard"] = stepa_dashboard
+except Exception as patch_exc:
+    print(f"[WARN] step A render override skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"
