@@ -121,6 +121,14 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] step A render override skipped: {patch_exc}", flush=True)
 
+try:
+    from step4_client_invoice_workflow_patch import apply as apply_step4_client_invoice_workflow_patch
+
+    setattr(module, "_step4_client_invoice_workflow_patch_applied", False)
+    apply_step4_client_invoice_workflow_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] step4 client invoice workflow patch skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"
