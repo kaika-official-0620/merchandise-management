@@ -129,6 +129,14 @@ try:
 except Exception as patch_exc:
     print(f"[WARN] step4 client invoice workflow patch skipped: {patch_exc}", flush=True)
 
+try:
+    from stepd_document_rebuild_patch import apply as apply_stepd_document_rebuild_patch
+
+    setattr(module, "_stepd_document_rebuild_patch_applied", False)
+    apply_stepd_document_rebuild_patch(module)
+except Exception as patch_exc:
+    print(f"[WARN] stepD document rebuild patch skipped: {patch_exc}", flush=True)
+
 app = module.app
 PREVIEW_CLEAN_DIR = REPO_DIR / ".preview-site-documents-clean"
 PREVIEW_V4_DIR = REPO_DIR / ".preview-site-documents-v4"

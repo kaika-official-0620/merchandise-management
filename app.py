@@ -45966,6 +45966,12 @@ try:
 except Exception as _step4_client_invoice_patch_error:
     print(f"[WARN] step4 client invoice workflow patch apply failed: {_step4_client_invoice_patch_error}", flush=True)
 
+try:
+    import stepd_document_rebuild_patch as _stepd_document_rebuild_patch
+    _stepd_document_rebuild_patch.apply(sys.modules[__name__])
+except Exception as _stepd_document_rebuild_patch_error:
+    print(f"[WARN] stepD document rebuild patch apply failed: {_stepd_document_rebuild_patch_error}", flush=True)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

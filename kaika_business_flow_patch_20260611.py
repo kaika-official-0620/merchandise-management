@@ -44,6 +44,8 @@ STATUS_LABELS = {
     "shared": "共有済み",
     "rejected": "却下",
     "processing": "処理中",
+    "cancelled": "取消済み",
+    "replaced": "差替え済み",
 }
 
 HISTORY_CATEGORY_PUBLIC_SLUGS = {
@@ -1290,6 +1292,10 @@ def apply(module: Any) -> None:
                 source: str = "",
                 can_delete: bool = False,
                 is_unread: bool = False,
+                replacement_document_id: Any = None,
+                replacement_detail_url: str | None = None,
+                revision_of_document_id: Any = None,
+                rebuild_reason: Any = "",
             ) -> None:
                 rows.append(
                     {
@@ -1306,6 +1312,10 @@ def apply(module: Any) -> None:
                         "source": source,
                         "can_delete": can_delete,
                         "is_unread": is_unread,
+                        "replacement_document_id": replacement_document_id,
+                        "replacement_detail_url": replacement_detail_url,
+                        "revision_of_document_id": revision_of_document_id,
+                        "rebuild_reason": rebuild_reason or "",
                     }
                 )
 
@@ -1357,6 +1367,16 @@ def apply(module: Any) -> None:
                         delete_url=url_for("user_mitsumori_delete", id=doc["id"]) if can_user_delete else None,
                         source="user_mitsumori",
                         can_delete=can_user_delete,
+                        replacement_document_id=doc.get("replacement_document_id"),
+                        replacement_detail_url=(
+                            url_for("admin_mitsumori_view", id=doc.get("replacement_document_id"))
+                            if admin and doc.get("replacement_document_id")
+                            else url_for("user_mitsumori_view", id=doc.get("replacement_document_id"))
+                            if doc.get("replacement_document_id")
+                            else None
+                        ),
+                        revision_of_document_id=doc.get("revision_of_document_id"),
+                        rebuild_reason=doc.get("rebuild_reason"),
                     )
             elif category == "kaitori":
                 where_parts: list[str] = []
@@ -1390,6 +1410,16 @@ def apply(module: Any) -> None:
                         source="invoices",
                         can_delete=can_user_delete,
                         is_unread=(not admin) and is_admin_delivered_invoice_history_row(doc) and not is_truthy_db_value(doc.get("is_read")),
+                        replacement_document_id=doc.get("replacement_document_id"),
+                        replacement_detail_url=(
+                            url_for("admin_kaitori_view", id=doc.get("replacement_document_id"))
+                            if admin and doc.get("replacement_document_id")
+                            else url_for("user_invoice_view", id=doc.get("replacement_document_id"))
+                            if doc.get("replacement_document_id")
+                            else None
+                        ),
+                        revision_of_document_id=doc.get("revision_of_document_id"),
+                        rebuild_reason=doc.get("rebuild_reason"),
                     )
             elif category == "user_shoudaku":
                 where = "" if admin else f"WHERE user_id = {ph}"

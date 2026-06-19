@@ -36,6 +36,8 @@
                 <span class="status-badge status-{{ status }}">
                     {% if status == 'draft' %}下書き
                     {% elif status == 'sent' %}送付済み
+                    {% elif status == 'replaced' %}差替え済み
+                    {% elif status == 'cancelled' %}取消済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
                     {% else %}{{ status }}{% endif %}
@@ -45,6 +47,12 @@
                 <div class="info-row"><span>発行日</span><strong>{{ inv.issue_date or '-' }}</strong></div>
                 <div class="info-row"><span>支払期限</span><strong>{{ inv.payment_due_date or '-' }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(inv.total_amount or 0) }}</strong></div>
+                {% if status == 'replaced' %}
+                <div class="info-row"><span>状態</span><strong>差替え済み</strong></div>
+                {% if inv.replacement_document_id %}
+                <div class="info-row"><span>最新版</span><strong><a href="{{ url_for('user_invoice_view', id=inv.replacement_document_id) }}">#{{ inv.replacement_document_id }}を確認</a></strong></div>
+                {% endif %}
+                {% endif %}
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_invoice_edit', id=inv.id) if inv.can_user_edit else url_for('user_invoice_view', id=inv.id) }}" class="btn btn-info">内容を見る</a>
@@ -87,6 +95,8 @@
                     {% elif status == 'draft' %}下書き
                     {% elif status == 'in_progress' %}作成中
                     {% elif status == 'submitted' or status == 'sent' %}送付済み
+                    {% elif status == 'replaced' %}差替え済み
+                    {% elif status == 'cancelled' %}取消済み
                     {% elif status == 'approved' %}承認済み
                     {% elif status == 'rejected' %}差し戻し
                     {% else %}{{ status }}{% endif %}
@@ -97,6 +107,12 @@
                 <div class="info-row"><span>宛先</span><strong>{{ doc.company_name|clean_display('株式会社 開花') }}</strong></div>
                 <div class="info-row"><span>件名</span><strong>{{ doc.subject|clean_display('見積依頼書') }}</strong></div>
                 <div class="info-row total"><span>合計金額</span><strong>¥{{ "{:,}".format(doc.total_amount or 0) }}</strong></div>
+                {% if status == 'replaced' %}
+                <div class="info-row"><span>状態</span><strong>差替え済み</strong></div>
+                {% if doc.replacement_document_id %}
+                <div class="info-row"><span>最新版</span><strong><a href="{{ url_for('user_mitsumori_view', id=doc.replacement_document_id) }}">#{{ doc.replacement_document_id }}を確認</a></strong></div>
+                {% endif %}
+                {% endif %}
             </div>
             <div class="card-actions">
                 <a href="{{ url_for('user_mitsumori_view', id=doc.id) }}" class="btn btn-info">内容を見る</a>
@@ -390,7 +406,8 @@
     border-left-color: #ef4444;
 }
 
-.doc-card.status-cancelled {
+.doc-card.status-cancelled,
+.doc-card.status-replaced {
     border-left-color: #6b7280;
 }
 
@@ -453,7 +470,8 @@
     color: #991b1b;
 }
 
-.status-badge.status-cancelled {
+.status-badge.status-cancelled,
+.status-badge.status-replaced {
     background: #e5e7eb;
     color: #374151;
 }

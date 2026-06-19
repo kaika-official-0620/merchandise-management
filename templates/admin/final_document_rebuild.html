@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.title }} 作り直し - 株式会社 開花{% endblock %}
+
+{% block content %}
+{% include "admin/_document_detail_styles.html" %}
+
+<div class="admin-doc-page">
+    <div class="admin-doc-toolbar">
+        <div>
+            <h1>{{ config.title }} 作り直し</h1>
+            <p>元書類は削除せず、差替え済みとして履歴に残します。対象商品だけを{{ config.target_step }}へ戻します。</p>
+        </div>
+        <div class="admin-doc-actions">
+            <a href="{{ detail_url }}" class="doc-btn doc-btn-secondary context-back-inline">詳細へ戻る</a>
+        </div>
+    </div>
+
+    <article class="admin-doc-sheet">
+        <div class="admin-doc-body">
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>対象書類</h2>
+                    <strong>ID: {{ document_id }}</strong>
+                </div>
+                <dl class="admin-doc-dl">
+                    <div>
+                        <dt>書類番号</dt>
+                        <dd>{{ document.document_no or document.invoice_no or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>現在の状態</dt>
+                        <dd>{{ document.status or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>対象ユーザー</dt>
+                        <dd>{{ document.user_name or document.username or document.recipient_name or '-' }}</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>{{ config.target_step }}へ戻す商品</h2>
+                    <strong>{{ items|length }}件</strong>
+                </div>
+                <div class="table-scroll">
+                    <table class="admin-doc-table">
+                        <thead>
+                            <tr>
+                                <th>申請商品ID</th>
+                                <th>商品名</th>
+                                <th>ブランド</th>
+                                <th>現在ステップ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ item.request_item_id or '-' }}</td>
+                                <td>{{ item.product_name or '-' }}</td>
+                                <td>{{ item.brand_name or '-' }}</td>
+                                <td>{{ item.workflow_status or '-' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="admin-doc-empty">戻せる対象商品がありません。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% if error %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>作り直しできません</h2>
+                <div class="admin-doc-notes-body">{{ error }}</div>
+            </section>
+            {% endif %}
+
+            {% if can_execute|default(true) %}
+            <form method="POST" class="admin-doc-cancel-panel final-document-rebuild-form">
+                <div class="final-document-rebuild-field">
+                    <label for="rebuild_reason">作り直し理由 <span class="required">*</span></label>
+                    <textarea id="rebuild_reason" name="reason" rows="5" required placeholder="例: 金額の記載ミスがあったため、対象商品を戻して書類を作り直します。"></textarea>
+                </div>
+                <div class="admin-doc-actions">
+                    <button type="submit" class="doc-btn doc-btn-danger">差替えとして作り直す</button>
+                    <a href="{{ detail_url }}" class="doc-btn doc-btn-secondary">キャンセル</a>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+</div>
+
+<style>
+.final-document-rebuild-form {
+    display: grid;
+    gap: 18px;
+}
+
+.final-document-rebuild-field {
+    display: grid;
+    gap: 8px;
+}
+
+.final-document-rebuild-field label {
+    color: #334155;
+    font-weight: 700;
+}
+
+.final-document-rebuild-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    line-height: 1.7;
+}
+
+.required {
+    color: #dc2626;
+}
+
+@media (max-width: 640px) {
+    .admin-doc-page {
+        padding: 12px;
+    }
+}
+</style>
+{% endblock %}

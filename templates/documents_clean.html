@@ -196,6 +196,22 @@
     font-weight: 800;
 }
 
+.doc-version-note {
+    display: block;
+    margin-top: 0.28rem;
+    color: #64748b;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: normal;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.doc-version-note a {
+    color: #2563eb;
+    font-weight: 800;
+}
+
 .doc-actions {
     display: flex;
     align-items: center;
@@ -393,7 +409,19 @@
                                 {% if row.is_unread %}<span class="user-doc-row-badge">新着</span>{% endif %}
                             </span>
                         </td>
-                        <td data-label="No./書類名">{{ row.document_no }}</td>
+            <td data-label="No./書類名">
+              {{ row.document_no }}
+              {% if row.status == 'replaced' %}
+              <span class="doc-version-note">
+                差替え済み
+                {% if row.replacement_detail_url %}
+                / <a href="{{ row.replacement_detail_url }}">最新版を確認</a>
+                {% endif %}
+              </span>
+              {% elif row.revision_of_document_id %}
+              <span class="doc-version-note">旧版 #{{ row.revision_of_document_id }} の最新版</span>
+              {% endif %}
+            </td>
                         <td data-label="日付">{{ row.issue_date }}</td>
                         <td data-label="金額">{% if row.total_amount %}¥{{ "{:,}".format(row.total_amount) }}{% else %}-{% endif %}</td>
                         <td data-label="状態"><span class="doc-status-badge">{{ row.status_label }}</span></td>

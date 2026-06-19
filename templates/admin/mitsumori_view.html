@@ -7,6 +7,7 @@
 {% set doc_no = mitsumori.document_no or '' %}
 {% set doc_scope = mitsumori.document_scope or '' %}
 {% set is_vendor_doc = doc_no[:3] == 'MT-' or doc_scope in ['vendor_outgoing', 'kaika_vendor_outgoing'] %}
+{% set is_rebuildable_vendor_doc = doc_no[:3] == 'MT-' or doc_scope == 'vendor_outgoing' %}
 {% set is_kaika_doc = doc_scope in ['kaika_vendor_outgoing', 'kaika_estimate'] %}
 {% set detail_title = '開花商品用 業者向け見積依頼書' if doc_scope == 'kaika_vendor_outgoing' else '開花用 見積依頼書' if doc_scope == 'kaika_estimate' else '業者向け依頼書' if is_vendor_doc else '見積依頼書' %}
 {% set back_url = url_for('admin_documents_history') %}
@@ -19,6 +20,9 @@
         </div>
         <div class="admin-doc-actions">
             <a href="{{ back_url }}" class="doc-btn doc-btn-secondary context-back-inline">書類管理へ戻る</a>
+            {% if is_rebuildable_vendor_doc and mitsumori.status not in ['replaced', 'cancelled'] and can_rebuild_documents is defined and can_rebuild_documents() %}
+            <a href="{{ url_for('admin_rebuild_final_document', document_kind='user_mitsumori', document_id=mitsumori.id) }}" class="doc-btn doc-btn-danger">作り直し</a>
+            {% endif %}
             <a href="{{ url_for('user_mitsumori_download', id=mitsumori.id) }}" class="doc-btn doc-btn-csv js-csv-download" download>CSV</a>
             <a href="{{ url_for('admin_mitsumori_pdf', id=mitsumori.id) }}" class="doc-btn doc-btn-pdf" target="_blank" rel="noopener">PDF</a>
         </div>
@@ -33,7 +37,9 @@
             </div>
             <div class="admin-doc-status">
                 <span class="status-badge status-{{ mitsumori.status or 'draft' }}">
-                    {% if mitsumori.status == 'draft' %}下書き
+                    {% if mitsumori.status == 'replaced' %}差替え済み
+                    {% elif mitsumori.status == 'cancelled' %}取消済み
+                    {% elif mitsumori.status == 'draft' %}下書き
                     {% elif mitsumori.status in ['sent', 'submitted'] %}送信済み
                     {% elif mitsumori.status == 'approved' %}承認済み
                     {% elif mitsumori.status == 'rejected' %}差し戻し
@@ -139,12 +145,75 @@
                 </div>
             </section>
 
+            {% set rebuild_events = load_document_rebuild_events('user_mitsumori', mitsumori.id) if load_document_rebuild_events is defined else [] %}
+            {% if mitsumori.status == 'replaced' or mitsumori.revision_of_document_id or mitsumori.replacement_document_id or rebuild_events %}
+            <section class="admin-doc-section">
+                <div class="admin-doc-section-head">
+                    <h2>作り直し関係</h2>
+                    <strong>{{ rebuild_events|length }}件</strong>
+                </div>
+                <dl class="admin-doc-dl">
+                    {% if mitsumori.revision_of_document_id %}
+                    <div>
+                        <dt>旧見積依頼書ID</dt>
+                        <dd>
+                            <a href="{{ url_for('admin_mitsumori_view', id=mitsumori.revision_of_document_id) }}">#{{ mitsumori.revision_of_document_id }}</a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if mitsumori.replacement_document_id %}
+                    <div>
+                        <dt>最新版見積依頼書ID</dt>
+                        <dd>
+                            <a href="{{ url_for('admin_mitsumori_view', id=mitsumori.replacement_document_id) }}">#{{ mitsumori.replacement_document_id }}</a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if mitsumori.rebuild_reason %}
+                    <div>
+                        <dt>作り直し理由</dt>
+                        <dd>{{ mitsumori.rebuild_reason }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if mitsumori.rebuild_requested_at %}
+                    <div>
+                        <dt>作り直し実行日時</dt>
+                        <dd>{{ mitsumori.rebuild_requested_at }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+                {% if rebuild_events %}
+                <div class="admin-doc-event-list">
+                    {% for event in rebuild_events %}
+                    <div class="admin-doc-event">
+                        <strong>{{ event.created_at or '-' }} / {{ event.actor_name or '-' }}</strong>
+                        <span>旧ID: {{ event.old_document_id or '-' }} / 新ID: {{ event.new_document_id or '-' }} / 戻し先: {{ event.target_step or '-' }}</span>
+                        <p>{{ event.reason or '-' }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            {% if mitsumori.status == 'replaced' %}
+            <section class="admin-doc-notes is-cancelled">
+                <h2>差替え済み</h2>
+                <div class="admin-doc-notes-body">
+                    この見積依頼書は作り直しにより差替え済みです。元書類として履歴に残し、対象商品はStep2へ戻されています。
+                </div>
+            </section>
+            {% endif %}
+
             {% if mitsumori.notes %}
             <section class="admin-doc-notes">
                 <h2>備考・条件</h2>
                 <div class="admin-doc-notes-body">{{ mitsumori.notes }}</div>
             </section>
             {% endif %}
+            {% set final_document_kind = 'user_mitsumori' %}
+            {% set final_document_id = mitsumori.id %}
+            {% include "admin/_final_document_event_history.html" %}
         </div>
     </article>
 </div>
