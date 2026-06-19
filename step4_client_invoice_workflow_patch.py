@@ -104,10 +104,11 @@ def apply(module: Any) -> None:
     def _fetch_step4_items(user_id: int | None = None, item_ids: list[int] | None = None) -> list[dict[str, Any]]:
         ensure_step4_schema()
         item_ids = _clean_ids(item_ids or [])
+        linked_doc_expr = "COALESCE(sari.vendor_document_id, vdl.vendor_document_id)"
         where = [
-            "COALESCE(NULLIF(sari.workflow_status, ''), 'step1_pending') = 'step4_ready'",
+            "(COALESCE(NULLIF(sari.workflow_status, ''), 'step1_pending') = 'step4_ready' OR vdl.vendor_document_id IS NOT NULL)",
             "COALESCE(sari.item_status, 'active') NOT IN ('cancelled', 'canceled')",
-            "sari.vendor_document_id IS NOT NULL",
+            f"{linked_doc_expr} IS NOT NULL",
         ]
         params: list[Any] = []
         if user_id:
@@ -125,7 +126,7 @@ def apply(module: Any) -> None:
                     sari.request_id,
                     sari.merchandise_id,
                     sari.vendor_mitsumori_id,
-                    sari.vendor_document_id,
+                    {linked_doc_expr} AS vendor_document_id,
                     sari.moved_to_step4_at,
                     sari.updated_at,
                     sari.client_payment_amount,
@@ -153,17 +154,21 @@ def apply(module: Any) -> None:
                     vd.vendor_name AS vendor_document_vendor_name,
                     vd.vendor_amount AS vendor_document_amount,
                     vd.stored_path AS vendor_document_path,
-                    l.linked_at AS vendor_linked_at
+                    vdl.linked_at AS vendor_linked_at
                 FROM sales_agency_request_items sari
                 JOIN sales_agency_requests sar ON sari.request_id = sar.id
                 JOIN users u ON sar.user_id = u.id
                 LEFT JOIN merchandise m ON sari.merchandise_id = m.id
                 LEFT JOIN user_mitsumori um ON sari.vendor_mitsumori_id = um.id
                 LEFT JOIN vendors v ON um.vendor_id = v.id
-                LEFT JOIN vendor_documents vd ON sari.vendor_document_id = vd.id
-                LEFT JOIN vendor_document_item_links l
-                  ON l.request_item_id = sari.id
-                 AND l.vendor_document_id = sari.vendor_document_id
+                LEFT JOIN (
+                    SELECT request_item_id,
+                           MAX(vendor_document_id) AS vendor_document_id,
+                           MAX(linked_at) AS linked_at
+                    FROM vendor_document_item_links
+                    GROUP BY request_item_id
+                ) vdl ON vdl.request_item_id = sari.id
+                LEFT JOIN vendor_documents vd ON {linked_doc_expr} = vd.id
                 WHERE {' AND '.join(where)}
                 ORDER BY COALESCE(sari.updated_at, sari.moved_to_step4_at, vd.registered_at, sar.created_at) DESC, sari.id DESC
                 """,
