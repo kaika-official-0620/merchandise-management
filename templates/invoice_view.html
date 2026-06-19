@@ -55,6 +55,8 @@
                             {% elif invoice.status == 'sent' %}送信済
                             {% elif invoice.status == 'approved' %}✔ 承認済
                             {% elif invoice.status == 'rejected' %}✖ 却下
+                            {% elif invoice.status == 'replaced' %}差替え済み
+                            {% elif invoice.status == 'cancelled' %}取消済み
                             {% endif %}
                         </span>
                     </td>
@@ -63,7 +65,18 @@
         </div>
     </div>
 
-    {% if invoice.status == 'cancelled' %}
+    {% if invoice.status == 'replaced' %}
+    <div class="source-action-box is-replaced">
+        <strong>差替え済み</strong>
+        <span>この買取明細書は作り直されています。</span>
+        {% if invoice.replacement_document_id %}
+        <a href="{{ url_for('user_invoice_view', id=invoice.replacement_document_id) }}" class="btn btn-create-mitsumori">最新版を確認</a>
+        {% endif %}
+        {% if invoice.rebuild_reason %}
+        <span>理由: {{ invoice.rebuild_reason }}</span>
+        {% endif %}
+    </div>
+    {% elif invoice.status == 'cancelled' %}
     <div class="source-action-box is-cancelled">
         <strong>&#21462;&#28040;&#28168;&#12415;</strong>
         {% if invoice.cancel_reason %}<span>{{ invoice.cancel_reason }}</span>{% endif %}
@@ -311,6 +324,11 @@
     color: #374151;
 }
 
+.status-badge.status-replaced {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .source-action-box {
     display: flex;
     align-items: center;
@@ -329,6 +347,12 @@
     border-color: #d1d5db;
     background: #f3f4f6;
     color: #374151;
+}
+
+.source-action-box.is-replaced {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    color: #92400e;
 }
 
 .document-total-box {
