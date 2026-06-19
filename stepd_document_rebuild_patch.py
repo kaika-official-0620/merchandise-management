@@ -606,7 +606,7 @@ def apply(module: Any) -> None:
                 raise ValueError("Step4で作成した買取明細書だけ作り直しできます。")
             cur.execute(
                 f"""
-                SELECT request_item_id, merchandise_id, product_name
+                SELECT request_item_id, merchandise_id, product_name, vendor_document_id
                 FROM invoice_items
                 WHERE invoice_id = {mark()}
                   AND request_item_id IS NOT NULL
@@ -627,13 +627,27 @@ def apply(module: Any) -> None:
                 SET workflow_status = {mark()},
                     client_invoice_id = NULL,
                     client_invoice_sent_at = NULL,
+                    moved_to_step4_at = {mark()},
                     redo_source_invoice_id = {mark()},
                     redo_requested_at = {mark()},
                     updated_at = {mark()}
                 WHERE id IN ({placeholders})
                 """,
-                tuple(["step4_ready", document_id, now, now] + request_item_ids),
+                tuple(["step4_ready", now, document_id, now, now] + request_item_ids),
             )
+            for item in items:
+                vendor_document_id = item.get("vendor_document_id")
+                request_item_id = item.get("request_item_id")
+                if vendor_document_id and request_item_id:
+                    cur.execute(
+                        f"""
+                        UPDATE sales_agency_request_items
+                        SET vendor_document_id = {mark()}
+                        WHERE id = {mark()}
+                          AND (vendor_document_id IS NULL OR vendor_document_id = 0)
+                        """,
+                        (vendor_document_id, request_item_id),
+                    )
             before_status = document.get("status")
             update_document_status_to_replaced(cur, "invoices", document_id, reason, before_status)
             insert_rebuild_event(
