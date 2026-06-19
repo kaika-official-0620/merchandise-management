@@ -106,7 +106,7 @@ def apply(module: Any) -> None:
         item_ids = _clean_ids(item_ids or [])
         linked_doc_expr = "COALESCE(sari.vendor_document_id, vdl.vendor_document_id)"
         where = [
-            "(COALESCE(NULLIF(sari.workflow_status, ''), 'step1_pending') = 'step4_ready' OR vdl.vendor_document_id IS NOT NULL)",
+            "COALESCE(NULLIF(sari.workflow_status, ''), 'step1_pending') = 'step4_ready'",
             "COALESCE(sari.item_status, 'active') NOT IN ('cancelled', 'canceled')",
             f"{linked_doc_expr} IS NOT NULL",
         ]
