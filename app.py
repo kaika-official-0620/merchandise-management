@@ -3313,13 +3313,20 @@ if DATABASE_URL:
     
     def get_db():
         url = urlparse(DATABASE_URL)
+        tls_options = {'sslmode': 'require'}
+        if os.environ.get('KAIKA_RUNTIME_ENV') == 'staging':
+            # The staging preflight permits only these TLS query parameters.
+            # Preserve verify-ca/full instead of weakening the requested mode.
+            from urllib.parse import parse_qsl
+            tls_options.update({key: value for key, value in parse_qsl(url.query)
+                                if key in {'sslmode', 'sslrootcert'}})
         conn = psycopg2.connect(
             host=url.hostname,
             port=url.port,
             database=url.path[1:],
             user=url.username,
             password=url.password,
-            sslmode='require'
+            **tls_options
         )
         original_autocommit = conn.autocommit
         try:

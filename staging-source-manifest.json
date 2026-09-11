@@ -1,10 +1,10 @@
 {
-  "created_at": "2026-09-11T21:14:30.741467+00:00",
+  "created_at": "2026-09-11T21:28:25.493300+00:00",
   "source_files": [
     {
       "path": "app.py",
-      "sha256": "a5b44f7fb766602b5a3f4bcfde9dd91c907bf57e856db09b68beda1bd8f295c2",
-      "source_sha256": "8b0db2f850906fa875292c6fcc8b524330eff2b9882848e3a4da792308a570d7"
+      "sha256": "8886996fbd31ac29d0048e2e27189f8ec7a739c545a3ee03aba6b0422e4bba79",
+      "source_sha256": "2f95cd8684f05e7965d8da97abf2f3f29a71e7ae939c30836d13e1addc4b849c"
     },
     {
       "path": "backup_restore_guard.py",
@@ -23,13 +23,13 @@
     },
     {
       "path": "docs/recovery-runbook.md",
-      "sha256": "9c3aa2b00bd8e1ac553c5364f554e526068c2d2db88154b6efb6c944176d5c87",
-      "source_sha256": "9c3aa2b00bd8e1ac553c5364f554e526068c2d2db88154b6efb6c944176d5c87"
+      "sha256": "b1f962118bd0f3059426ccde7e879343dbed62948bef75d3a383a5f70ec81532",
+      "source_sha256": "b1f962118bd0f3059426ccde7e879343dbed62948bef75d3a383a5f70ec81532"
     },
     {
       "path": "docs/staging-environment.md",
-      "sha256": "da3c872be668351938273c5f5e41d0f4c89324dd5eb98f239fac8075d9dbf1cc",
-      "source_sha256": "da3c872be668351938273c5f5e41d0f4c89324dd5eb98f239fac8075d9dbf1cc"
+      "sha256": "7c64d0af5c0de8c47069f94b29ecab5d4cc884893500aa1cf64d8b19b1d2b6e9",
+      "source_sha256": "7c64d0af5c0de8c47069f94b29ecab5d4cc884893500aa1cf64d8b19b1d2b6e9"
     },
     {
       "path": "feature_plans.py",
@@ -93,8 +93,8 @@
     },
     {
       "path": "render.staging.yaml",
-      "sha256": "dff559d4f9063049deaf179e76a1f75912699599155726e03863168211edb47c",
-      "source_sha256": "dff559d4f9063049deaf179e76a1f75912699599155726e03863168211edb47c"
+      "sha256": "938435db7e76528aeb9669f50659cdff36ae750a59a2b184db5e40d6a078c406",
+      "source_sha256": "938435db7e76528aeb9669f50659cdff36ae750a59a2b184db5e40d6a078c406"
     },
     {
       "path": "render_app.py",
@@ -172,6 +172,11 @@
       "source_sha256": "4632dfa4b752517c8b86ff32afce169744d73c378ac54e50a5102191c189f49c"
     },
     {
+      "path": "scripts/verify_postgres_recovery.py",
+      "sha256": "23cc3ef9eecec2a435b21395460bac81dde8009a991f1a23ae1a41c9e8b01844",
+      "source_sha256": "23cc3ef9eecec2a435b21395460bac81dde8009a991f1a23ae1a41c9e8b01844"
+    },
+    {
       "path": "scripts/verify_render_build.py",
       "sha256": "8f87f4f91d114cc448577ee51d585fd893f055c4e8ce3b934d60ad82d0d0c8fd",
       "source_sha256": "c88bc50cb8c8977bb9a4f3e25b9d1f5fa1722b9736cf240480ff4a3ee9dd62b7"
@@ -192,6 +197,11 @@
       "source_sha256": "8651210a3b8e8d704db8f69606161bb73690970bebfacde7afe22c070b7317d0"
     },
     {
+      "path": "scripts/verify_staging_postgres.py",
+      "sha256": "84123a3609578d57548693a898e6aee4e0cea68a1aa051fb062a7ba0a17247f6",
+      "source_sha256": "84123a3609578d57548693a898e6aee4e0cea68a1aa051fb062a7ba0a17247f6"
+    },
+    {
       "path": "scripts/verify_staging_runtime.py",
       "sha256": "ee12262aca80718a14b39d191e7d8c500143fa1e5a51f0a1649d585b5f7f0098",
       "source_sha256": "ee12262aca80718a14b39d191e7d8c500143fa1e5a51f0a1649d585b5f7f0098"
@@ -208,8 +218,8 @@
     },
     {
       "path": "staging_environment.py",
-      "sha256": "eae629fb715bdfd9a823d5b5341a7c6b811218ac4f13ea949fb25128781553b0",
-      "source_sha256": "eae629fb715bdfd9a823d5b5341a7c6b811218ac4f13ea949fb25128781553b0"
+      "sha256": "b9f3dd5bd074a45166cca1bbf960810db6bd7abe827b95c024535378044f51bc",
+      "source_sha256": "b9f3dd5bd074a45166cca1bbf960810db6bd7abe827b95c024535378044f51bc"
     },
     {
       "path": "static/apple-touch-icon.png",
@@ -1168,8 +1178,8 @@
     },
     {
       "path": "tests/test_staging_environment.py",
-      "sha256": "b1b06ec61e229fddfc49fb2abbb3bc068fd385ad2b049f17e0554694b1c90178",
-      "source_sha256": "b1b06ec61e229fddfc49fb2abbb3bc068fd385ad2b049f17e0554694b1c90178"
+      "sha256": "669707ceb5317bfcd14f193530a6a01d2d83feaf4e12d3f70f9732a3441e590e",
+      "source_sha256": "669707ceb5317bfcd14f193530a6a01d2d83feaf4e12d3f70f9732a3441e590e"
     },
     {
       "path": "tests/test_staging_package.py",
@@ -1177,7 +1187,7 @@
       "source_sha256": "3c4f9f67c764b9f60ffab6c7f10af5c190d409a902f37a7f74bccbbd980975d2"
     }
   ],
-  "included": 235,
+  "included": 237,
   "data_policy": "source only; no database, uploaded business file, credential or Git history",
   "line_endings": "Text files normalized to LF; source_sha256 records the original working-copy bytes.",
   "generated_files": [

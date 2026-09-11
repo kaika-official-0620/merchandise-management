@@ -7,7 +7,7 @@
 | 対象 | 検証専用の構成 |
 | --- | --- |
 | Web サービス | `kaika-platform-staging`。現行 Python ソースを `staging_app:app` で起動 |
-| データベース | 別 PostgreSQL `kaika-platform-staging-db`、DB 名 `kaika_staging`。外部 IP 接続は不許可 |
+| データベース | 別 PostgreSQL 16 `kaika-platform-staging-db`、DB 名 `kaika_staging`。既存本番のメジャー版に合わせ、外部 IP 接続は不許可 |
 | 商品画像 | 別の 5 GB 永続ディスク。既存サイトと同じパスでも、本番とは別サービスのボリューム |
 | URL | Render が割り当てる検証サービスの HTTPS URL。現行本番ドメインへの転送は停止 |
 | 認証 | サイトと同じログイン。HTTP Basic 認証は追加せず、アプリ内のログインと API 認証も確認できる |
@@ -21,7 +21,7 @@ Render の設定形式・生成シークレット・データベース参照・�
 
 `staging_app.py` は既存アプリを読み込む前に、次を確認します。
 
-1. `KAIKA_RUNTIME_ENV=staging`、専用 DB 名、別ホスト名、十分な長さの生成シークレットを要求する。
+1. `KAIKA_RUNTIME_ENV=staging`、専用 DB 名、別ホスト名、十分な長さの生成シークレットを要求する。接続 URL の host/dbname 上書きや TLS 無効化を拒否し、指定された `verify-ca` / `verify-full` は初期化・通常接続の両方で維持する。
 2. 本番用課金・LINE・メール・Google・Expo の認証情報が入っていたら、値を表示せず起動を拒否する。
 3. 商品画像ディスクがマウントされていることを確認する。初回は空のディスクに `.kaika-staging-volume` を付ける。未識別の既存ファイルがあるディスクは利用しない。
 4. 新しい空 DB に `kaika_environment` の `staging` 印を付ける。既存データがある未識別 DB、本番印、復元隔離用の `kaika_recovery_quarantine` がある DB は利用しない。
@@ -75,9 +75,11 @@ python scripts/seed_staging.py
 
 ## 確認済み範囲と残る確認
 
-- `tests/test_staging_environment.py`：22 件成功。設定拒否・分離印・隔離 DB・seed の再実行・旧 admin 失効・認証・外部遷移・連携遮断・scheduler 停止を、架空の一時 DB で確認。
+- `tests/test_staging_environment.py`：24 件成功。設定拒否・分離印・隔離 DB・seed の再実行・旧 admin 失効・認証・外部遷移・連携遮断・scheduler 停止・接続先上書き拒否・TLS 指定の維持を、架空の一時 DB と接続モックで確認。
 - `scripts/verify_staging_runtime.py`：19 件成功。実際の `render_app` をソースから一時領域へ複製し、staging seed・管理者/利用者の実ログイン・プラン画面・native API 認証と共通在庫を確認。実データ・実課金・外部送信なし。機械可読結果は `docs/staging-runtime-verification.json`。
-- この段階では Render 上の PostgreSQL 実接続、実ボリューム、TLS 経由のスマホ接続、再デプロイ後の画像保持、実通知、実課金は未確認。デプロイした検証環境で残りを通す。
+- `scripts/verify_staging_postgres.py`：**ローカルの架空 PostgreSQL 17.11** で初回起動 15 件・別 Python プロセスによる再起動 20 件、計 35 件成功。専用 `kaika_staging` DB の初期化、4 商品の seed、3 アカウントの PC ログイン、native API の共通在庫、編集済み商品・パスワード・権限期限の保持を確認した。TLS 補強後の再起動では、初期化と通常接続の両方が `verify-full` を維持することも確認した。接続資格情報は一時領域に置き、結果には含めていない。結果は `docs/staging-postgres-verification.json`。
+- ローカル試験は PostgreSQL 17.11 であり、本番の PostgreSQL 16 と同一版の試験ではない。検証 Blueprint は本番に合わせて `postgresMajorVersion: "16"` を明示し、無指定時の既定版への追従を避ける。[Render の PostgreSQL バージョン指定](https://render.com/docs/blueprint-spec#postgresmajorversion)
+- この段階では Render 上の PostgreSQL 16 実接続、実ボリューム、TLS 経由のスマホ接続、再デプロイ後の画像保持、実通知、実課金は未確認。デプロイした検証環境で残りを通す。
 - 既存サイト全体の PostgreSQL 移行 SQL をこの文書だけで保証しない。起動失敗時は検証サービスで修正し、本番へは進めない。
 
 担当者側で必要になるのは Render / GitHub へのログイン・権限付与、Render 表示費用の確認、検証アカウントでの実務確認、後段の Apple / Google 開発者登録です。アカウントのパスワードや API 秘密鍵をチャットへ送る必要はありません。

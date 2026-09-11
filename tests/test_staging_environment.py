@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 import socket
 import sqlite3
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from flask import Flask, jsonify, redirect, request
 from flask_login import LoginManager, UserMixin, login_user
@@ -19,7 +20,7 @@ from feature_plans import FeaturePlans
 from self_inventory import SelfInventory
 from staging_environment import (DISABLED_FLAGS, StagingConfigurationError,
     check_upload_disk, install_outbound_guard, register_staging_boundary,
-    seed_test_data, validate_environment, verify_database_marker)
+    seed_test_data, staging_bootstrap, validate_environment, verify_database_marker)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,11 +41,32 @@ class StagingConfigurationTests(unittest.TestCase):
         self.assertEqual(config.database_name, "kaika_staging")
         self.assertNotIn("fixture-password", repr(config))
 
+    def test_bootstrap_keeps_strict_tls_and_defaults_only_when_missing(self):
+        for suffix, default in (("?sslmode=verify-full", False), ("?sslmode=verify-ca", False), ("", True)):
+            env = self.environment()
+            env["DATABASE_URL"] += suffix
+            connection = MagicMock()
+            connection.cursor.return_value.fetchall.return_value = []
+            connect = MagicMock(return_value=connection)
+            with patch.dict(sys.modules, {"psycopg2": SimpleNamespace(connect=connect)}):
+                with staging_bootstrap(validate_environment(env)) as opened:
+                    self.assertIs(opened, connection)
+            self.assertEqual(connect.call_args.kwargs.get("sslmode"), "require" if default else None)
+            connection.close.assert_called_once()
+
     def test_refuses_production_database_and_missing_database(self):
         for url in ("", "sqlite:///fixture.db", "postgres://x:y@host/merchandise", "postgres://x:y@host/kaika_recovery_12345678"):
             env = self.environment()
             env["DATABASE_URL"] = url
             with self.subTest(url=url), self.assertRaises(StagingConfigurationError):
+                validate_environment(env)
+
+    def test_refuses_database_url_overrides_and_disabled_tls(self):
+        for suffix in ("?dbname=production", "?host=other.invalid", "?sslmode=disable",
+                       "?sslmode=require&sslmode=disable", "#unexpected"):
+            env = self.environment()
+            env["DATABASE_URL"] += suffix
+            with self.subTest(suffix=suffix), self.assertRaises(StagingConfigurationError):
                 validate_environment(env)
 
     def test_refuses_missing_environment_or_weak_password(self):

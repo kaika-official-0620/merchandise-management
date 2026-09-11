@@ -16,7 +16,7 @@ import re
 import secrets
 import socket
 import time
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from flask import abort, jsonify, redirect, request, url_for
 from flask_login import current_user, logout_user
@@ -61,8 +61,13 @@ def validate_environment(environ=None):
         raise StagingConfigurationError("KAIKA_STAGING_DATABASE_NAME must be a dedicated staging name.")
     try:
         parsed = urlsplit(env.get("DATABASE_URL", ""))
+        query_items = parse_qsl(parsed.query, keep_blank_values=True)
+        query = dict(query_items)
         valid = (parsed.scheme in {"postgres", "postgresql"} and parsed.hostname
-                 and parsed.username and parsed.password and unquote(parsed.path[1:]) == expected)
+                 and parsed.username and parsed.password and unquote(parsed.path[1:]) == expected
+                 and not parsed.fragment and len(query) == len(query_items)
+                 and not (set(query) - {"sslmode", "sslrootcert"})
+                 and query.get("sslmode", "require") in {"require", "verify-ca", "verify-full"})
         _ = parsed.port
     except ValueError:
         valid = False
@@ -147,7 +152,9 @@ def staging_bootstrap(config):
     """Hold an advisory lock across source initialization and idempotent seed."""
     import psycopg2
     try:
-        connection = psycopg2.connect(config.database_url, sslmode="require", connect_timeout=15)
+        query = dict(parse_qsl(urlsplit(config.database_url).query))
+        defaults = {} if "sslmode" in query else {"sslmode": "require"}
+        connection = psycopg2.connect(config.database_url, connect_timeout=15, **defaults)
     except Exception:
         raise StagingConfigurationError("Cannot connect to the dedicated staging database.") from None
     try:
@@ -155,7 +162,7 @@ def staging_bootstrap(config):
         cursor.execute("SELECT pg_advisory_lock(574920269)")
         verify_database_marker(cursor)
         connection.commit()
-        yield
+        yield connection
     finally:
         connection.close()  # Also releases the session advisory lock on failure.
 

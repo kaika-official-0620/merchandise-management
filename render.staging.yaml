@@ -59,6 +59,7 @@ databases:
     region: singapore
     plan: 0.1c-256mb
     databaseName: kaika_staging
+    postgresMajorVersion: "16"
     user: kaika_staging
     diskSizeGB: 5
     ipAllowList: []

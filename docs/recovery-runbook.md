@@ -11,10 +11,10 @@
 - 架空 SQLite の 16 テーブルと写真による全体保存・復元の往復を確認済み。自己保管・配送中・開花保管の区別、受付と商品 ID の関連、契約・ストア履歴、帳票、追加テーブル、画像、日本語ファイル名、連番、ビューを保持します。
 - 保存元を変更せず、復元側のプッシュ端末を無効にし、未送信・送信中・受領確認待ちのキューを停止することを確認済み。
 - 元と同じ接続先、本番と同じ URL、通常の `kaika_staging`、既存データ、画像破損、コード違い、危険なアーカイブ、秘密値のログ漏出を拒否する専用テストがあります。
-- **PostgreSQL と age の実行試験は未実施。** この PC の PATH では `pg_dump` / `pg_restore` / `age` を確認できませんでした。PostgreSQL の CLI 引数と拒否条件はモックで確認しています。アーカイブ展開試験の age は架空の置換であり、暗号化の往復試験としては数えません。
+- **PC 内の PostgreSQL 17.11 と実 age 1.3.2 による暗号化保存・復号・復元の 29 チェックが成功しました。** 公式 portable 配布を専用一時領域だけに置き、TLS `verify-full`、localhost 専用クラスタ、superuser / DB 作成 / role 作成の権限を持たない専用 DB 所有者で実 CLI を動かしました。16 テーブルと写真の往復、新しい関連データ、連番、再送停止、空でない復元先の拒否を確認しました。結果は `docs/postgres-recovery-verification.json` にあります。
 - 本番 DB、実際の利用者の写真、`.env` は読み取っていません。本番の保存・復旧・停止・公開は行っていません。
 
-リリース判定には、次に説明する本番と同じ PostgreSQL 世代・age・実際の保存先を使った**架空データの復旧演習**を通す必要があります。
+ローカルの往復は確認済みです。リリース判定には、次に説明する本番と同じ PostgreSQL 世代・Linux/Render 権限・実際に採用する保存先を使った**架空データの運用演習**も必要です。今回の Windows 内の検証だけで、Render の容量・権限・実データの処理時間まで確認したとはみなしません。
 
 ## 保存するもの / 別管理するもの
 
@@ -125,4 +125,16 @@ python -m unittest discover -s tests -p test_platform_recovery.py -v
 
 テストはアプリを import せず、使い捨ての架空 DB・写真とモックだけを使います。SQLite は DB の親に `.kaika-recovery-fixture` と正しい架空データ用ラベルがある場合しか扱いません。通常運用の SQLite 復旧をサポートしたものではありません。
 
-次の運用演習では、架空データを PostgreSQL に投入し、age 公開鍵で保存 → 分離した秘密鍵で復号 → 新しい専用 PostgreSQL へ復旧 → レポートと業務値照合まで確認します。所要時間・容量を測り、保存頻度、保持期間、許容するデータ損失時間と復旧時間を決定します。本番データの復旧演習は、その後に権限と対象を明示して行います。
+Windows で実 PostgreSQL / age の架空演習を再現するスクリプトも追加しています。OS サービスを作らず、新しい空のフォルダへ専用クラスタと短期の架空 TLS 証明書を作ります。`prepare` の出力は接続情報ファイルのパスだけです。その JSON は使い捨ての認証情報を含むため、内容を表示・共有・コミットしないでください。
+
+```powershell
+python scripts/verify_postgres_recovery.py prepare --root C:\private-drill\empty-fixture --pg-bin C:\portable-postgresql\pgsql\bin
+python scripts/verify_postgres_recovery.py verify --context C:\private-drill\empty-fixture\fixture-context.json --age-bin C:\portable-age\age --report docs/postgres-recovery-verification.json
+python scripts/verify_postgres_recovery.py stop --context C:\private-drill\empty-fixture\fixture-context.json
+```
+
+検証用 Python には `psycopg2-binary` と `cryptography` が必要です。CLI の保存・復元は元の `platform_recovery.py` を使い、Web アプリは import / 起動しません。クラスタを他の独立検証と共有する場合は、すべての検証が終わってから所有担当者だけが `stop` を実行します。バイナリ・架空 DB・鍵はリポジトリ外の一時領域に置き、配布ソースへ含めません。
+
+今回使った配布元は [PostgreSQL 17.11 の EDB 公式アーカイブ](https://get.enterprisedb.com/postgresql/postgresql-17.11-1-windows-x64-binaries.zip) と [age 1.3.2 の公式リリース](https://github.com/FiloSottile/age/releases/tag/v1.3.2) です。age の Windows amd64 ZIP の SHA-256 は公式 release asset digest と一致しました。システム全体の PATH・常駐サービス・設定は変更していません。
+
+次の運用演習では、Render に近い環境でも同じ手順を実行し、実際の権限・保存先への書き込み・容量・所要時間を確認します。保存頻度、保持期間、許容するデータ損失時間と復旧時間を決定します。本番データの復旧演習は、その後に権限と対象を明示して行います。
